@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "Product": {
+      "description": "Danh sách sản phẩm phụ kiện thủ công Paracord và EDC của NOT A KNOT",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh sản phẩm" },
+        "name": { "type": "string", "description": "Tên sản phẩm" },
+        "category": { "type": "string", "description": "Danh mục sản phẩm" },
+        "price": { "type": "number", "description": "Giá bán sản phẩm" },
+        "originalPrice": { "type": "number", "description": "Giá niêm yết cũ", "optional": true },
+        "discountBadge": { "type": "string", "description": "Huy hiệu giảm giá", "optional": true },
+        "image": { "type": "string", "description": "URL hoặc Data URL ảnh sản phẩm" },
+        "images": { "type": "array", "items": { "type": "string" }, "description": "Danh sách ảnh bổ sung", "optional": true },
+        "description": { "type": "string", "description": "Mô tả sản phẩm" },
+        "details": { "type": "array", "items": { "type": "string" }, "description": "Thông số chi tiết sản phẩm" },
+        "availableColors": { "type": "array", "items": { "type": "string" }, "description": "Các màu khả dụng", "optional": true },
+        "availableSizes": { "type": "array", "items": { "type": "string" }, "description": "Các size khả dụng", "optional": true },
+        "inStock": { "type": "boolean", "description": "Trạng thái tồn kho (true: còn hàng, false: hết hàng)" },
+        "isEvent0209": { "type": "boolean", "description": "Thuộc BST Quốc Khánh 02.09", "optional": true },
+        "isBestSeller": { "type": "boolean", "description": "Sản phẩm bán chạy", "optional": true },
+        "isNew": { "type": "boolean", "description": "Sản phẩm mới ra mắt", "optional": true },
+        "rating": { "type": "number", "description": "Đánh giá sao trung bình", "optional": true },
+        "reviewsCount": { "type": "number", "description": "Số lượt đánh giá", "optional": true }
+      }
+    },
+    "Order": {
+      "description": "Danh sách đơn đặt hàng của khách hàng (Pre-order 02.09 và Đơn hàng giỏ)",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh đơn hàng" },
+        "date": { "type": "string", "description": "Thời gian tạo đơn" },
+        "createdAt": { "type": "string", "description": "Thời gian ISO tạo đơn" },
+        "name": { "type": "string", "description": "Tên khách hàng" },
+        "customerName": { "type": "string", "description": "Tên khách hàng định dạng chuẩn" },
+        "phone": { "type": "string", "description": "Số điện thoại nhận hàng" },
+        "address": { "type": "string", "description": "Địa chỉ nhận hàng" },
+        "note": { "type": "string", "description": "Ghi chú đơn hàng", "optional": true },
+        "items": { "type": "array", "items": { "type": "string" }, "description": "Danh sách mặt hàng đặt mua" },
+        "totalPrice": { "type": "number", "description": "Tổng giá trị đơn hàng" },
+        "totalAmount": { "type": "number", "description": "Tổng giá trị đơn hàng" },
+        "type": { "type": "string", "description": "Loại đơn: preorder_0209 hoặc standard_order" },
+        "status": { "type": "string", "description": "Trạng thái xử lý: pending, confirmed, crafting, shipping, completed, cancelled" }
+      }
+    },
+    "Category": {
+      "description": "Danh mục sản phẩm và bộ sưu tập thủ công của NOT A KNOT",
+      "fields": {
+        "id": { "type": "string", "description": "Mã danh mục (bracelets, edc, keychain...)" },
+        "label": { "type": "string", "description": "Tên hiển thị của danh mục" },
+        "description": { "type": "string", "description": "Mô tả danh mục", "optional": true },
+        "highlightColor": { "type": "string", "description": "Màu viền nhấn", "optional": true },
+        "badge": { "type": "string", "description": "Huy hiệu danh mục", "optional": true },
+        "isEvent": { "type": "boolean", "description": "Danh mục sự kiện đặc biệt", "optional": true }
+      }
+    },
+    "Collection": {
+      "description": "Bộ sưu tập và banner trình diễn Showcase trên trang chủ NOT A KNOT",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh bộ sưu tập" },
+        "title": { "type": "string", "description": "Tiêu đề bộ sưu tập" },
+        "subtitle": { "type": "string", "description": "Phụ đề hoặc câu khẩu hiệu" },
+        "categoryKey": { "type": "string", "description": "Mã danh mục liên kết" },
+        "bannerImage": { "type": "string", "description": "Hình ảnh banner hoặc thumbnail" },
+        "bgImage": { "type": "string", "description": "Hình nền hoặc ảnh giới thiệu", "optional": true },
+        "badge": { "type": "string", "description": "Huy hiệu hiển thị", "optional": true },
+        "tag": { "type": "string", "description": "Tag danh mục phụ", "optional": true },
+        "buttonText": { "type": "string", "description": "Chữ trên nút hành động", "optional": true },
+        "themeStyle": { "type": "string", "description": "Kiểu giao diện (light, dark, event0209)", "optional": true },
+        "isPreorder": { "type": "boolean", "description": "Có luồng đặt trước", "optional": true },
+        "order": { "type": "number", "description": "Thứ tự sắp xếp hiển thị", "optional": true }
+      }
+    },
+    "ContactMessage": {
+      "description": "Tin nhắn và yêu cầu tư vấn từ khách hàng gửi qua biểu mẫu liên hệ",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh tin nhắn" },
+        "name": { "type": "string", "description": "Tên khách hàng" },
+        "contactInfo": { "type": "string", "description": "Email hoặc số điện thoại / mạng xã hội" },
+        "email": { "type": "string", "description": "Email khách hàng", "optional": true },
+        "phone": { "type": "string", "description": "Số điện thoại khách hàng", "optional": true },
+        "message": { "type": "string", "description": "Nội dung tin nhắn" },
+        "createdAt": { "type": "string", "description": "Thời gian tạo tin nhắn" },
+        "timestamp": { "type": "number", "description": "Thời gian Unix timestamp" },
+        "isRead": { "type": "boolean", "description": "Trạng thái đã đọc hay chưa", "optional": true },
+        "status": { "type": "string", "description": "Trạng thái tin nhắn (unread, read, replied)", "optional": true }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/collections/{collectionId}": {
+      "schema": "Collection",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/site_content/{contentId}": {
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/contact_messages/{messageId}": {
+      "schema": "ContactMessage",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    }
+  }
+}

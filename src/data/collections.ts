@@ -1,0 +1,89 @@
+import { CollectionInfo } from '../types';
+
+export const COLLECTIONS_DATA: CollectionInfo[] = [
+  {
+    id: 'event_0209',
+    categoryKey: 'event_0209',
+    tag: 'KỶ VẬT QUỐC KHÁNH 02/09',
+    title: 'Hào Khí Non Sông',
+    highlight: 'Kỷ Vật Tự Hào Dân Tộc — Tết Độc Lập',
+    subtitle: 'Kỷ vật phụ kiện Paracord thủ công phiên bản giới hạn kỷ niệm ngày Quốc khánh 02/09/1945.',
+    story: 'Lấy cảm hứng từ sắc cờ đỏ sao vàng và tinh thần kiên cường bất khuất của dân tộc Việt Nam. Mỗi nút thắt Cobra Weave và Snake Knot được những nghệ nhân NOT A KNOT đan gài tỉ mỉ cùng phù hiệu Quốc kỳ dập nổi, biểu tượng chú bộ đội thân thương và chiếc mũ cối kháng chiến huyền thoại. Đây là bộ sưu tập ĐẶC BIỆT áp dụng hình thức Đăng Ký Đặt Trước (Pre-order) giới hạn.',
+    craftDetails: [
+      'Dây Paracord 550 Type III lõi 7 sợi tiêu chuẩn quân đội, chịu tải 250kg',
+      'Phù hiệu Quốc kỳ và biểu tượng Chú bộ đội phủ epoxy chống trầy xước',
+      'Đan thủ công 100% từng nút thắt chắc chắn, độ bền vĩnh cửu theo năm tháng',
+      'Tặng kèm hộp quà NOT A KNOT phiên bản kỷ niệm 02/09 sang trọng'
+    ],
+    bgImage: '/assets/hero-bg.png',
+    bannerImage: '/assets/hero-bg.png',
+    horizontalImage: '/assets/hero-bg.png',
+    productPageBanner: '/assets/hero-bg.png',
+    badge: 'ĐÃ SOLD OUT',
+    isPreorder: false,
+    status: 'sold_out',
+    soldOutTitle: '[PRE-ORDER 02.09] CHÍNH THỨC FULL SLOT! ❤️',
+    soldOutBadge: 'THÔNG BÁO CHÍNH THỨC',
+    soldOutRibbon: '★ TOÀN BỘ DANH MỤC ★',
+    soldOutMessage: 'Bộ sưu tập Hào Khí 02.09 đã chính thức SOLD OUT chỉ sau một thời gian ngắn mở bán. Not A Knot xin gửi lời cảm ơn chân thành nhất đến bạn vì đã lựa chọn mang theo tinh thần Việt Nam trên mỗi hành trình. Sự yêu thương của mọi người chính là niềm tự hào lớn nhất của chúng mình! ✨',
+    soldOutNote: 'Hẹn gặp lại bạn trong những BST tiếp theo nhé!',
+    themeColor: '#B41C1A',
+    accentColor: 'from-red-950/90 via-red-900/60 to-black/80',
+    order: 0,
+    buttonText: 'Khám Phá Kỷ Vật 02/09 (Đã Hết Hàng)',
+    themeStyle: 'event0209',
+    customDesignMode: true
+  },
+  {
+    id: 'event_2010',
+    categoryKey: 'event_2010',
+    tag: 'BỘ SƯU TẬP 20/10',
+    title: 'Nàng Thơ Dịu Dàng',
+    highlight: 'Tôn Vinh Phụ Nữ Việt Nam 20.10',
+    subtitle: 'Sự hòa quyện giữa nét mềm mại của Charm hoa hồng, tone Pastel và độ bền tinh tế của Paracord.',
+    story: 'Chào mừng ngày Phụ nữ Việt Nam 20/10, NOT A KNOT mang đến BST dịu dàng với tone màu Pastel nữ tính, hạt Charm hoa hồng và trái tim mạ Rose Gold chống xỉn màu. Tặng kèm hộp quà sang trọng nắp kính thắt nơ lụa cùng thiệp hoa trang nhã gửi gắm tình cảm trọn vẹn.',
+    craftDetails: [
+      'Bản đan Fishtail & Cobra Slim siêu mỏng nhẹ, êm ái trên cổ tay nữ',
+      'Hạt Charm hoa hồng & trái tim mạ Rose Gold sáng bóng, không hoen gỉ',
+      'Khóa cài chắc chắn, thiết kế chuẩn phom dáng',
+      'Hộp quà nơ lụa cao cấp sẵn sàng làm quà tặng'
+    ],
+    bgImage: '/assets/img_4_NOT_A_KNOT.jpg',
+    bannerImage: '/assets/img_4_NOT_A_KNOT.jpg',
+    horizontalImage: '/assets/img_4_NOT_A_KNOT.jpg',
+    productPageBanner: '/assets/img_4_NOT_A_KNOT.jpg',
+    badge: 'Bộ Sưu Tập Mới',
+    isPreorder: false,
+    themeColor: '#E11D48',
+    accentColor: 'from-rose-950/90 via-pink-950/60 to-black/80',
+    order: 1,
+    buttonText: 'Khám Phá BST Nàng Thơ',
+    themeStyle: 'light'
+  },
+  {
+    id: 'bracelets',
+    categoryKey: 'bracelets',
+    tag: 'DÂY DÙ SINH TỒN 550',
+    title: 'Bản Đan Paracord EDC',
+    highlight: 'Dây Dù Sinh Tồn Chuẩn Quân Đội — Chịu Lực 250kg',
+    subtitle: 'Chịu tải 250kg, bền bỉ qua mưa nắng, phong cách mạnh mẽ cho hoạt động dã ngoại & hằng ngày.',
+    story: 'Kế thừa tinh thần dấn thân của các nhà thám hiểm và cộng đồng yêu thích phụ kiện EDC sinh tồn. Mỗi chiếc vòng tay Paracord 550 sở hữu mắt đan Cobra Knot, Trilobite và Dragon Tongue dày dặn, thể hiện bản lĩnh rắn rỏi, tự tin và phong trần.',
+    craftDetails: [
+      'Sợi Paracord 550 Type III lõi 7 sợi chịu tải trọng kéo 250kg',
+      'Khóa bấm hợp kim cao cấp mạ sơn tĩnh điện chống rỉ sét',
+      'Có thể tháo rời thành sợi dây cứu sinh dài 3-4 mét trong tình huống khẩn cấp',
+      'Bảo hành đường đan và làm mới dây trọn đời'
+    ],
+    bgImage: '/assets/bracelet.jpg',
+    bannerImage: '/assets/bracelet.jpg',
+    horizontalImage: '/assets/bracelet.jpg',
+    productPageBanner: '/assets/bracelet.jpg',
+    badge: 'Phong Cách EDC',
+    isPreorder: false,
+    themeColor: '#D97706',
+    accentColor: 'from-amber-950/90 via-stone-900/60 to-black/80',
+    order: 2,
+    buttonText: 'Khám Phá BST Paracord',
+    themeStyle: 'light'
+  }
+];
