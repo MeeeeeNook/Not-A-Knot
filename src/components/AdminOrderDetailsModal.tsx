@@ -1,5 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
+import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
+import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText } from 'lucide-react';
+import {
+  openOrderPrintTab,
+  downloadOrderSlipHtml,
+  downloadOrderSlipTxt,
+  copyOrderSlipToClipboard
+} from '../utils/printOrderSlip';
 
 interface AdminOrderDetailsModalProps {
   order: StoredOrder;
@@ -17,31 +25,64 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   onEdit
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
 
-  const handlePrintSlip = () => {
-    window.print();
+  const showToast = (msg: string) => {
+    setPrintSuccessToast(msg);
+    setTimeout(() => setPrintSuccessToast(null), 3500);
   };
 
-  const getSourceBadge = () => {
-    switch (order.source) {
-      case 'mạng xã hội':
-      case 'facebook':
-        return { label: 'Mạng xã hội', color: 'text-indigo-800 bg-indigo-50 border-indigo-200' };
-      case 'zalo':
-        return { label: 'Zalo Chat', color: 'text-teal-800 bg-teal-50 border-teal-200' };
-      case 'hotline':
-      case 'trực tiếp':
-        return { label: 'Trực tiếp / Hotline', color: 'text-amber-800 bg-amber-50 border-amber-200' };
-      case 'website':
-      default:
-        return { label: 'Website', color: 'text-blue-800 bg-blue-50 border-blue-200' };
+  const handlePrintSlip = () => {
+    setIsPrintModalOpen(true);
+  };
+
+  const handleDirectWindowPrint = () => {
+    try {
+      window.print();
+      showToast('Đang gọi lệnh in của trình duyệt...');
+    } catch {
+      // If direct print fails, open dedicated print tab
+      openOrderPrintTab(order);
+      showToast('Đã mở tab in riêng do trình duyệt hạn chế in trực tiếp!');
     }
   };
 
-  const src = getSourceBadge();
+  const handleOpenPrintTab = () => {
+    const success = openOrderPrintTab(order);
+    if (success) {
+      showToast('Đã mở trang in trong tab mới!');
+    } else {
+      showToast('Đã tải file phiếu in (.html) về máy của bạn!');
+      downloadOrderSlipHtml(order);
+    }
+  };
+
+  const handleDownloadHtml = () => {
+    downloadOrderSlipHtml(order);
+    showToast('Đã tải phiếu in định dạng HTML!');
+  };
+
+  const handleDownloadTxt = () => {
+    downloadOrderSlipTxt(order);
+    showToast('Đã tải phiếu giao hàng định dạng TXT!');
+  };
+
+  const handleCopyText = async () => {
+    const ok = await copyOrderSlipToClipboard(order);
+    if (ok) {
+      showToast('Đã sao chép toàn bộ thông tin phiếu vào bộ nhớ tạm!');
+    } else {
+      showToast('Không thể sao chép tự động, vui lòng chọn tải file.');
+    }
+  };
+
+  const srcConfig = getSourceBadgeConfig(order.source);
   const totalAmount = order.totalPrice || order.totalAmount || 0;
   const paidAmount = order.paidAmount ?? (order.paymentStatus === 'paid' ? totalAmount : 0);
   const remainingAmount = Math.max(0, totalAmount - paidAmount);
+  const formattedDate = formatOrderDateWithoutSeconds(order.date || order.createdAt);
+  const currentStatus = normalizeOrderStatus(order.status);
 
   return (
     <div
@@ -59,12 +100,12 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               <h3 className="font-bold text-base text-slate-900">
                 Chi Tiết Đơn Hàng #{order.id}
               </h3>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${src.color}`}>
-                {src.label}
+              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${srcConfig.badgeClass}`}>
+                {srcConfig.label}
               </span>
             </div>
-            <span className="text-xs text-slate-500 block mt-0.5">
-              Ngày đặt: {order.date || order.createdAt || 'N/A'}
+            <span className="text-xs text-slate-500 block mt-0.5 font-medium">
+              Ngày đặt: {formattedDate}
             </span>
           </div>
 
@@ -85,9 +126,11 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             <button
               type="button"
               onClick={handlePrintSlip}
-              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 shadow-xs"
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Mở bảng in và xuất phiếu giao hàng"
             >
-              In Phiếu
+              <Printer className="w-3.5 h-3.5 text-amber-400" />
+              <span>In Phiếu</span>
             </button>
 
             <button
@@ -115,6 +158,26 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               <div className="text-slate-800 font-semibold">
                 SĐT: {order.phone || 'Chưa cung cấp SĐT'}
               </div>
+              {(() => {
+                const isLockedSource = order.source === 'website' || order.source === 'mạng xã hội' || order.source === 'facebook' || order.source === 'tiktok' || order.source === 'instagram' || order.source === 'zalo' || order.source === 'shopee';
+                if (isLockedSource) {
+                  return (
+                    <div className="pt-1 text-[11px] text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded flex items-center gap-1.5 font-medium">
+                      <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Nguồn: <strong>{order.source === 'website' ? 'Website' : 'Mạng xã hội'}</strong> (Đơn tự động — Đã khóa người bán)</span>
+                    </div>
+                  );
+                }
+                if (order.sellerName) {
+                  return (
+                    <div className="pt-1 text-[11px] text-amber-900 bg-amber-50/80 border border-amber-200/80 px-2 py-1 rounded flex items-center gap-1.5 font-medium">
+                      <span>Người bán phụ trách:</span>
+                      <strong className="text-amber-950 font-bold">{order.sellerName}</strong>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5">
@@ -124,9 +187,9 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               <p className="text-slate-800 leading-relaxed">
                 {order.address || 'Nhận trực tiếp tại xưởng / Thống nhất qua tin nhắn'}
               </p>
-              {order.note && (
+              {getCleanOrderNote(order.note) && (
                 <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-900 text-xs">
-                  <strong>Ghi chú:</strong> {order.note}
+                  <strong>Ghi chú:</strong> {getCleanOrderNote(order.note)}
                 </div>
               )}
             </div>
@@ -211,27 +274,71 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               Danh Sách Món Đã Đặt
             </span>
 
-            <div className="space-y-2 divide-y divide-slate-200">
+            <div className="space-y-3 divide-y divide-slate-200">
               {(order.itemDetails && order.itemDetails.length > 0) ? (
                 order.itemDetails.map((it, idx) => (
-                  <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between gap-3">
-                    <div>
-                      <span className="font-bold text-slate-900 text-xs block">
-                        {it.productName} (x{it.quantity})
-                      </span>
+                  <div key={idx} className="pt-3 first:pt-0 flex items-start justify-between gap-3">
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 text-xs sm:text-sm">
+                          {it.productName || it.name || 'Sản phẩm'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px]">
+                          x{it.quantity || 1}
+                        </span>
+                      </div>
+
+                      {/* Full Customer-Selected Variations */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {it.selectedColor && (
+                          <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-800 shadow-2xs">
+                            {it.selectedColorImage && (
+                              <img
+                                src={it.selectedColorImage}
+                                alt={it.selectedColor}
+                                className="w-5 h-5 rounded object-cover border border-slate-200 shrink-0"
+                              />
+                            )}
+                            <span>Màu: <strong className="text-slate-900">{it.selectedColor}</strong></span>
+                          </div>
+                        )}
+
+                        {it.selectedCharm && (
+                          <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-300 px-2 py-1 rounded-lg text-[11px] font-bold text-amber-950 shadow-2xs">
+                            {it.selectedCharmImage && (
+                              <img
+                                src={it.selectedCharmImage}
+                                alt={it.selectedCharm}
+                                className="w-6 h-6 rounded-md object-cover border border-amber-300 shrink-0"
+                              />
+                            )}
+                            <span>Charm: <strong>{it.selectedCharm}</strong></span>
+                            {it.selectedCharmPrice ? (
+                              <span className="text-[10px] text-amber-700 font-mono">(+{it.selectedCharmPrice.toLocaleString('vi-VN')}đ)</span>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {it.selectedSize && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
+                            Size: <strong className="ml-1 text-slate-950">{it.selectedSize}</strong>
+                          </span>
+                        )}
+                      </div>
+
                       {it.customNote && (
-                        <div className="text-[10px] text-amber-800 mt-0.5">
-                          Ghi chú: {it.customNote}
+                        <div className="text-[11px] text-amber-900 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">
+                          <strong>Yêu cầu riêng của khách:</strong> {it.customNote}
                         </div>
                       )}
                     </div>
-                    <span className="font-bold text-slate-900 text-xs whitespace-nowrap">
-                      {((it.unitPrice || it.price || 0) * it.quantity).toLocaleString('vi-VN')}đ
+                    <span className="font-extrabold text-slate-900 text-xs sm:text-sm whitespace-nowrap pt-0.5">
+                      {((it.unitPrice || it.price || 0) * (it.quantity || 1)).toLocaleString('vi-VN')}đ
                     </span>
                   </div>
                 ))
               ) : (
-                (order.items || []).map((itText, idx) => (
+                (Array.isArray(order.items) ? order.items : order.items ? [String(order.items)] : []).map((itText, idx) => (
                   <div key={idx} className="pt-2 first:pt-0 text-xs text-slate-800">
                     {itText}
                   </div>
@@ -253,13 +360,15 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
               <select
-                value={order.status || 'Đã đặt'}
+                value={currentStatus}
                 onChange={(e) => onUpdateStatus(order.id!, e.target.value)}
                 className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none"
               >
-                <option value="Đã đặt">Đã đặt</option>
-                <option value="Đã thanh toán">Đã thanh toán</option>
-                <option value="Đã giao">Đã giao</option>
+                <option value="Chờ xác nhận">Chờ xác nhận</option>
+                <option value="Đã xác nhận">Đã xác nhận</option>
+                <option value="Knot đang được sản xuất">Knot đang được sản xuất</option>
+                <option value="Đang giao hàng">Đang giao hàng</option>
+                <option value="Đơn hàng giao thành công">Đơn hàng giao thành công</option>
               </select>
             </div>
 
@@ -274,6 +383,248 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
         </div>
       </div>
-    </div>
-  );
-};
+
+      {/* Official Print Slip Dialog */}
+      {isPrintModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+          onClick={() => setIsPrintModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Top Bar */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white no-print">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-amber-400" />
+                <h4 className="font-bold text-sm sm:text-base">
+                  Phiếu Giao Nhận & Hóa Đơn - #{order.id}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Notification alert banner */}
+            <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200/70 text-amber-900 text-xs flex items-center justify-between gap-2 no-print">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold">💡 Mẹo in:</span>
+                <span>
+                  {printSuccessToast || 'Bấm "Mở Tab In" để mở trang in chuẩn A4/A5 tự động, hoặc "Tải File In" nếu trình duyệt chặn popup.'}
+                </span>
+              </div>
+              {printSuccessToast && (
+                <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1 shrink-0">
+                  <Check className="w-3.5 h-3.5" /> Đã thực hiện
+                </span>
+              )}
+            </div>
+
+            {/* Printable Area with exact styling */}
+            <div className="p-6 overflow-y-auto space-y-5 bg-white text-slate-900 printable-order-slip text-xs">
+              <div className="border-b-2 border-slate-900 pb-3 flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-black text-slate-950 tracking-wider">
+                    NOT A KNOT
+                  </h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Xưởng Đan Vòng & Phụ Kiện Thủ Công Paracord
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Hotline: 0987 654 321
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">MÃ ĐƠN HÀNG</div>
+                  <div className="text-lg font-black font-mono text-slate-900">#{order.id}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{formattedDate}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-1">Khách Hàng Nhận</div>
+                  <div className="font-bold text-slate-900 text-sm">{order.name || order.customerName || 'Khách hàng'}</div>
+                  <div className="font-mono font-bold text-slate-800 text-xs mt-0.5">{order.phone || 'Chưa có SĐT'}</div>
+                  {order.sellerName && (
+                    <div className="text-[11px] text-amber-900 font-medium mt-1">Phụ trách: {order.sellerName}</div>
+                  )}
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-1">Địa Chỉ Nhận Hàng</div>
+                  <div className="text-slate-800 leading-snug">{order.address || 'Nhận tại xưởng / Thỏa thuận qua tin nhắn'}</div>
+                  {getCleanOrderNote(order.note) && (
+                    <div className="text-[11px] text-amber-900 italic font-semibold mt-1">
+                      * Ghi chú: {getCleanOrderNote(order.note)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="p-2.5">Sản Phẩm</th>
+                      <th className="p-2.5 text-center w-12">SL</th>
+                      <th className="p-2.5 text-right w-24">Đơn Giá</th>
+                      <th className="p-2.5 text-right w-28">Thành Tiền</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {order.itemDetails && order.itemDetails.length > 0 ? (
+                      order.itemDetails.map((it, idx) => (
+                        <tr key={idx}>
+                          <td className="p-2.5">
+                            <div className="font-bold text-slate-900">{it.productName}</div>
+                            <div className="text-[11px] text-slate-500">
+                              {[
+                                it.selectedSize ? `Size: ${it.selectedSize}` : '',
+                                it.selectedColor ? `Màu: ${it.selectedColor}` : '',
+                                it.selectedCharm ? `Charm: ${it.selectedCharm}` : ''
+                              ].filter(Boolean).join(' | ')}
+                            </div>
+                            {it.customNote && (
+                              <div className="text-[10px] text-amber-800 italic mt-0.5">
+                                * {it.customNote}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-center font-bold text-slate-900">{it.quantity || 1}</td>
+                          <td className="p-2.5 text-right font-mono text-slate-700">
+                            {(it.price || (it as any).unitPrice || 0).toLocaleString('vi-VN')}đ
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-bold text-slate-900">
+                            {((it.price || (it as any).unitPrice || 0) * (it.quantity || 1)).toLocaleString('vi-VN')}đ
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="p-2.5 text-slate-800">
+                          {Array.isArray(order.items) ? order.items.join(', ') : order.items ? String(order.items) : 'Sản phẩm thủ công Paracord'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Tiến trình:</span>
+                  <strong className="text-slate-900">{currentStatus}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Thanh toán:</span>
+                  <span className="font-bold text-slate-900">
+                    {order.paymentMethod === 'bank_transfer'
+                      ? 'Chuyển khoản VietQR'
+                      : order.paymentMethod === 'cash'
+                      ? 'Tiền mặt tại xưởng'
+                      : 'Thu COD khi nhận hàng'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Tình trạng thanh toán:</span>
+                  <strong className={order.paymentStatus === 'paid' ? 'text-emerald-700' : 'text-amber-800'}>
+                    {order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu tiền / COD'}
+                  </strong>
+                </div>
+                {order.shippingFee ? (
+                  <div className="flex justify-between">
+                    <span className="text-slate-600">Phí giao hàng:</span>
+                    <span className="font-bold text-slate-900">
+                      {Number(order.shippingFee).toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 font-bold text-sm">
+                  <span className="text-slate-900">TỔNG TIỀN:</span>
+                  <span className="font-mono text-amber-700 text-base">
+                    {totalAmount.toLocaleString('vi-VN')}đ
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-center text-[11px] text-slate-500 italic pt-2 border-t border-dashed border-slate-200">
+                Cảm ơn bạn đã lựa chọn NOT A KNOT! Sản phẩm bảo hành chốt khóa trọn đời.
+              </div>
+            </div>
+
+            {/* Bottom action buttons */}
+            <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 no-print">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenPrintTab}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                  title="Mở trang in chuẩn A4/A5 trong tab riêng và gọi hộp thoại in"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Mở Tab In (Chuẩn A4/A5)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDirectWindowPrint}
+                  className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Gửi lệnh in của trình duyệt ngay tại trang này"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-600" />
+                  <span>In Trực Tiếp</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleDownloadHtml}
+                  className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Tải file HTML hóa đơn về máy để in bất kỳ lúc nào"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Tải HTML</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadTxt}
+                  className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Tải phiếu dạng văn bản text đơn giản"
+                >
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Tải .TXT</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyText}
+                  className="px-2.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Sao chép toàn bộ thông tin phiếu để gửi tin nhắn"
+                >
+                  <Copy className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Sao Chép</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPrintModalOpen(false)}
+                  className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}

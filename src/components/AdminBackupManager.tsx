@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage } from '../types';
 import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
 import { StoredOrder, saveSiteContentToFirestore, saveCategoriesToFirestore, saveCollectionsToFirestore, saveProductsToFirestore, saveOrdersToFirestore } from '../firebase';
@@ -55,6 +54,8 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   const [restorePreview, setRestorePreview] = useState<any | null>(null);
   const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('replace');
   const [showExcelPrompt, setShowExcelPrompt] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const restoreFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const toggleAll = (checked: boolean) => {
     setSelectedTypes({
@@ -162,11 +163,14 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   };
 
   // ----------------------------------------------------
-  // 3. Handle File Upload for Restore
+  // 3. Handle File Upload & Drag-and-Drop for Restore
   // ----------------------------------------------------
-  const handleRestoreFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const processBackupFile = (file: File) => {
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+      alert('Vui lòng chọn file sao lưu định dạng .JSON');
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -182,6 +186,8 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
 
         const payload = parsed.payload || parsed;
         setRestorePreview({
+          fileName: file.name,
+          fileSize: (file.size / 1024).toFixed(1) + ' KB',
           version: parsed.schemaVersion || '1.0',
           exportedAt: parsed.exportedAt || 'Không rõ',
           ordersCount: payload.orders ? payload.orders.length : 0,
@@ -192,11 +198,44 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
           hasMessages: payload.messages ? payload.messages.length : 0,
           rawPayload: payload
         });
-      } catch {
+        onNotify(`Đã tải file "${file.name}" thành công.`);
+      } catch (err) {
+        console.error(err);
         alert('Không thể đọc file JSON. Vui lòng kiểm tra lại tính toàn vẹn của file.');
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleRestoreFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processBackupFile(file);
+    }
+    // Reset value so the user can select the same file again if needed
+    e.target.value = '';
+  };
+
+  const handleRestoreDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(true);
+  };
+
+  const handleRestoreDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+  };
+
+  const handleRestoreDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processBackupFile(files[0]);
+    }
   };
 
   const handleExecuteRestore = async () => {
@@ -461,26 +500,58 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
             </div>
 
             {/* Drag & Drop / File Select Box */}
-            <label className="border-2 border-dashed border-slate-200 hover:border-amber-400 rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-amber-50/30">
-              <Upload className="w-8 h-8 text-amber-500 mb-2" />
-              <span className="text-xs font-bold text-slate-800 block">Chọn file sao lưu .JSON</span>
-              <span className="text-[10px] text-slate-400 mt-0.5">Kéo thả file vào đây hoặc bấm để duyệt file</span>
+            <div
+              onDragOver={handleRestoreDragOver}
+              onDragLeave={handleRestoreDragLeave}
+              onDrop={handleRestoreDrop}
+              onClick={() => restoreFileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 ${
+                isDraggingFile
+                  ? 'border-amber-500 bg-amber-100/70 scale-[1.02] shadow-md ring-2 ring-amber-400/50'
+                  : 'border-slate-200 hover:border-amber-400 bg-slate-50/50 hover:bg-amber-50/30'
+              }`}
+            >
+              <Upload className={`w-8 h-8 mb-2 transition-transform duration-200 ${isDraggingFile ? 'text-amber-600 scale-110 animate-bounce' : 'text-amber-500'}`} />
+              <span className="text-xs font-bold text-slate-800 block">
+                {isDraggingFile ? 'Thả file .JSON vào đây để mở' : 'Chọn hoặc thả file sao lưu .JSON'}
+              </span>
+              <span className="text-[10px] text-slate-400 mt-0.5">
+                Kéo thả file vào đây hoặc <span className="text-amber-700 font-semibold underline">bấm để duyệt file</span>
+              </span>
               <input
+                ref={restoreFileInputRef}
                 type="file"
-                accept=".json"
+                accept=".json,application/json"
                 onChange={handleRestoreFileSelected}
                 className="hidden"
               />
-            </label>
+            </div>
 
             {/* Preview Box if file selected */}
             {restorePreview && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3 animate-fadeIn">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-amber-900">Chi Tiết Bản Sao Lưu</span>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-950">
-                    Bản {restorePreview.version}
-                  </span>
+                  <div>
+                    <span className="text-xs font-black text-amber-900 block">Chi Tiết Bản Sao Lưu</span>
+                    {restorePreview.fileName && (
+                      <span className="text-[11px] text-amber-800 font-medium truncate max-w-[200px] block">
+                        📄 {restorePreview.fileName} ({restorePreview.fileSize})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-950">
+                      Bản {restorePreview.version}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setRestorePreview(null)}
+                      className="text-[10px] font-bold text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-amber-100 transition-colors cursor-pointer"
+                      title="Hủy file này và chọn file khác"
+                    >
+                      ✕ Đổi file
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700">

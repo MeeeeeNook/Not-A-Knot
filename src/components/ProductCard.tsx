@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag } from 'lucide-react';
 import { Product } from '../types';
 
@@ -31,6 +31,23 @@ export const getCategoryLabel = (category?: string): string => {
   }
 };
 
+const cardSlideVariants = {
+  enter: (dir: number) => ({
+    x: dir > 0 ? '100%' : '-100%',
+    opacity: 1
+  }),
+  center: {
+    zIndex: 1,
+    x: 0,
+    opacity: 1
+  },
+  exit: (dir: number) => ({
+    zIndex: 0,
+    x: dir > 0 ? '-100%' : '100%',
+    opacity: 1
+  })
+};
+
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onOpenDetail,
@@ -45,34 +62,66 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   }, [product]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [direction, setDirection] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isInView, setIsInView] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-switch between photos until hovered on. When hovered, reset to 0 (default photo).
+  // Lazy loading observer: only loads image resources when card approaches viewport (300px margin)
   useEffect(() => {
-    if (isHovered || images.length <= 1) {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      setIsInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '300px 0px', threshold: 0.01 }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Photos are STATIC by default. When mouse hovers, start auto-slide through photos.
+  useEffect(() => {
+    if (!isHovered || images.length <= 1) {
       return;
     }
 
     const interval = setInterval(() => {
+      setDirection(1);
       setCurrentIdx((prev) => (prev + 1) % images.length);
-    }, 2600);
+    }, 1300);
 
     return () => clearInterval(interval);
   }, [isHovered, images.length]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    setCurrentIdx(0); // Immediately reset to the default first photo
   };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
+    setDirection(-1);
+    setCurrentIdx(0); // Return immediately to initial static photo
   };
 
-  const isSoldOut = !product.inStock || (product.stock !== undefined && product.stock <= 0);
+  const stockCount = typeof product.stock === 'number' ? product.stock : 15;
+  const isSoldOut = !product.inStock || stockCount <= 0;
 
   return (
     <motion.div
+      ref={cardRef}
       layout
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
@@ -86,16 +135,57 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         isSoldOut ? 'opacity-85' : ''
       } ${className}`}
     >
-      {/* Product Image Container */}
+      {/* Product Image Container with Zoom, Skeleton and Horizontal Slide on Hover */}
       <div className="relative aspect-square overflow-hidden bg-neutral-100">
-        <img
-          src={images[currentIdx] || product.image}
-          alt={product.name}
-          className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-500 ease-out ${
-            isSoldOut ? 'grayscale-[35%]' : ''
-          }`}
-          loading="lazy"
-        />
+        {/* Placeholder skeleton while image is offscreen or downloading */}
+        {!isLoaded && (
+          <div
+            className="absolute inset-0 bg-neutral-200/60 animate-pulse flex items-center justify-center pointer-events-none z-0"
+            aria-hidden="true"
+          />
+        )}
+
+        <div className="w-full h-full group-hover:scale-105 transition-transform duration-500 ease-out">
+          {isInView && (
+            isHovered && images.length > 1 ? (
+              <AnimatePresence initial={false} custom={direction} mode="popLayout">
+                <motion.img
+                  key={currentIdx}
+                  src={images[currentIdx] || product.image}
+                  alt={product.name}
+                  custom={direction}
+                  variants={cardSlideVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{
+                    x: { type: 'spring', stiffness: 260, damping: 26 },
+                    opacity: { duration: 0.1 }
+                  }}
+                  onLoad={() => setIsLoaded(true)}
+                  className={`w-full h-full object-cover transition-opacity duration-200 ${
+                    isLoaded ? 'opacity-100' : 'opacity-0'
+                  } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
+                  style={{ imageRendering: '-webkit-optimize-contrast' }}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </AnimatePresence>
+            ) : (
+              <img
+                src={images[0] || product.image}
+                alt={product.name}
+                onLoad={() => setIsLoaded(true)}
+                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                  isLoaded ? 'opacity-100' : 'opacity-0'
+                } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
+                style={{ imageRendering: '-webkit-optimize-contrast' }}
+                loading="lazy"
+                decoding="async"
+              />
+            )
+          )}
+        </div>
 
         {/* Multi-photo dot indicator */}
         {images.length > 1 && (
@@ -113,31 +203,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         )}
 
-        {/* Stock status badge / overlay */}
+        {/* Sold out overlay */}
         {isSoldOut ? (
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none z-10">
             <span className="px-3.5 py-1.5 bg-rose-600 text-white text-xs font-black rounded-xl uppercase tracking-wider shadow-lg border border-white/20 transform -rotate-3">
               Đã Hết Hàng
             </span>
           </div>
         ) : product.discountBadge ? (
-          <span className="absolute top-3 right-3 px-2.5 py-1 bg-brand-red text-white text-[11px] font-bold rounded-lg shadow-sm">
+          <span className="absolute top-3 right-3 px-2.5 py-1 bg-brand-red text-white text-[11px] font-bold rounded-lg shadow-sm z-10">
             {product.discountBadge}
           </span>
         ) : product.isNew ? (
-          <span className="absolute top-3 right-3 px-2.5 py-1 bg-neutral-900 text-white text-[11px] font-bold rounded-lg shadow-sm">
+          <span className="absolute top-3 right-3 px-2.5 py-1 bg-neutral-900 text-white text-[11px] font-bold rounded-lg shadow-sm z-10">
             Mới
           </span>
         ) : null}
-
-        {/* Remaining stock tag */}
-        {!isSoldOut && product.stock !== undefined && product.stock > 0 && (
-          <div className="absolute top-3 left-3">
-            <span className="px-2 py-0.5 bg-white/95 text-emerald-800 text-[10px] font-bold rounded-md shadow-2xs">
-              Còn {product.stock}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Product Info */}
@@ -147,11 +228,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
               {getCategoryLabel(product.category)}
             </span>
-            {isSoldOut && (
-              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">
-                Hết hàng
-              </span>
-            )}
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {product.soldCount !== undefined && product.soldCount > 0 && (
+                <span className="text-[10px] font-semibold text-neutral-500 bg-neutral-100 px-1.5 py-0.5 rounded">
+                  Đã bán {product.soldCount}
+                </span>
+              )}
+              {isSoldOut && (
+                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">
+                  Hết hàng
+                </span>
+              )}
+            </div>
           </div>
 
           <h3 className="font-bold text-sm text-neutral-900 group-hover:text-amber-700 transition-colors line-clamp-1">

@@ -1,6 +1,39 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Product } from '../types';
+import { Product, SellerUser, OrderItemDetail } from '../types';
 import { StoredOrder, saveOrderToFirestore } from '../firebase';
+import { 
+  formatOrderDateWithoutSeconds, 
+  getCleanOrderNote, 
+  getOrderTrackingNumber, 
+  generateTrackingNumber, 
+  getCarrierTrackingUrl,
+  normalizeOrderStatus
+} from '../utils/orderFormatters';
+import { deduplicateSellers } from '../utils/auth';
+import { 
+  UserCheck, 
+  Lock, 
+  Truck, 
+  Package, 
+  ExternalLink, 
+  CheckCircle2, 
+  Hammer, 
+  ShieldCheck, 
+  Clock, 
+  Plus, 
+  Trash2, 
+  Calendar, 
+  MapPin, 
+  Phone, 
+  CreditCard, 
+  Tag, 
+  FileText, 
+  Image as ImageIcon,
+  Sparkles,
+  ShoppingBag,
+  Check,
+  X
+} from 'lucide-react';
 
 interface EditableOrderItem {
   productId: string;
@@ -8,6 +41,9 @@ interface EditableOrderItem {
   category?: string;
   price: number;
   quantity: number;
+  selectedSize?: string;
+  selectedColor?: string;
+  selectedCharm?: string;
   customNote?: string;
 }
 
@@ -15,45 +51,70 @@ interface AdminEditOrderModalProps {
   order: StoredOrder;
   products?: Product[];
   allProducts?: Product[];
+  sellers?: SellerUser[];
   onClose: () => void;
   onSaved?: (updatedOrder: StoredOrder) => void;
   onSave?: (updatedOrder: StoredOrder) => void;
 }
 
+const PROGRESS_STEPS = [
+  { step: 1, id: 'received', label: 'Tiếp nhận đơn', desc: 'Đã nhận yêu cầu đan dây', status: 'Chờ xác nhận', icon: Package },
+  { step: 2, id: 'confirmed', label: 'Xác nhận số đo', desc: 'Đã chốt size cổ tay & charm', status: 'Đã xác nhận', icon: CheckCircle2 },
+  { step: 3, id: 'crafting', label: 'Đang đan Paracord', desc: 'Nghệ nhân thắt dây thủ công', status: 'Knot đang được sản xuất', icon: Hammer },
+  { step: 4, id: 'shipping', label: 'Đang giao hàng', desc: 'Đã bàn giao cho bưu tá', status: 'Đang giao hàng', icon: Truck },
+  { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Kích hoạt bảo hành trọn đời', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
+];
+
 export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   order,
   products: propProducts,
   allProducts,
+  sellers = [],
   onClose,
   onSaved,
   onSave
 }) => {
   const products = propProducts || allProducts || [];
-  // Normalize source to 3 allowed
+
+  // Normalize source
   const normalizeSource = (s?: string): 'website' | 'mạng xã hội' | 'trực tiếp' => {
     if (!s || s === 'website') return 'website';
     if (s === 'facebook' || s === 'zalo' || s === 'instagram' || s === 'tiktok' || s === 'mạng xã hội' || s === 'social') return 'mạng xã hội';
     return 'trực tiếp';
   };
 
+  // 1. Core Header & Tracking
+  const [trackingNumber, setTrackingNumber] = useState<string>(
+    order.trackingNumber || getOrderTrackingNumber(order)
+  );
+  const [orderDate, setOrderDate] = useState<string>(() => {
+    const raw = order.date || order.createdAt;
+    if (!raw) return '';
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        // format as YYYY-MM-DDTHH:mm for datetime-local input
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+    } catch {
+      // fallback
+    }
+    return raw;
+  });
+  const [source, setSource] = useState<'website' | 'mạng xã hội' | 'trực tiếp'>(normalizeSource(order.source));
+
+  // 2. Customer & Delivery Info
   const [customerName, setCustomerName] = useState(order.name || order.customerName || '');
   const [phone, setPhone] = useState(order.phone || '');
   const [address, setAddress] = useState(order.address || '');
-  const [note, setNote] = useState(order.note || '');
-  const [source, setSource] = useState<'website' | 'mạng xã hội' | 'trực tiếp'>(normalizeSource(order.source));
-  const [status, setStatus] = useState<string>(order.status || 'Đã đặt');
-  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>(
-    order.paymentStatus === 'paid' ? 'paid' : 'unpaid'
-  );
-  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'cod'>(
-    (order.paymentMethod as any) || (order.bankReceiptImage ? 'bank_transfer' : 'cash')
-  );
-  const [bankReceiptImage, setBankReceiptImage] = useState<string>(order.bankReceiptImage || '');
-  const [bankTransferRef, setBankTransferRef] = useState<string>(order.bankTransferRef || '');
-  const [isSaving, setIsSaving] = useState(false);
-  const [previewZoomReceipt, setPreviewZoomReceipt] = useState(false);
+  const [note, setNote] = useState(getCleanOrderNote(order.note));
 
-  // Initialize editable item list
+  // 3. Status & 5-Step Crafting Progress
+  const [status, setStatus] = useState<string>(normalizeOrderStatus(order.status) || 'Chờ xác nhận');
+  const [craftingStageNote, setCraftingStageNote] = useState<string>(order.craftingStageNote || '');
+
+  // 4. Products List
   const [items, setItems] = useState<EditableOrderItem[]>(() => {
     if (order.itemDetails && order.itemDetails.length > 0) {
       return order.itemDetails.map((it) => ({
@@ -62,96 +123,168 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         category: it.category || 'Khác',
         price: it.unitPrice || it.price || 0,
         quantity: it.quantity || 1,
+        selectedSize: it.selectedSize || '',
+        selectedColor: it.selectedColor || '',
+        selectedCharm: it.selectedCharm || '',
         customNote: it.customNote || ''
       }));
     }
-    if (order.items && order.items.length > 0) {
-      return order.items.map((itStr, idx) => ({
-        productId: `item-${idx}`,
-        productName: itStr,
-        price: 0,
-        quantity: 1
-      }));
+    if (order.items) {
+      const itemsArr = Array.isArray(order.items)
+        ? order.items
+        : typeof order.items === 'string'
+        ? [order.items]
+        : [];
+      if (itemsArr.length > 0) {
+        return itemsArr.map((itStr, idx) => ({
+          productId: `item-${idx}`,
+          productName: String(itStr),
+          price: order.totalPrice ? Math.round(order.totalPrice / itemsArr.length) : 39000,
+          quantity: 1,
+          selectedSize: '',
+          selectedColor: '',
+          selectedCharm: '',
+          customNote: ''
+        }));
+      }
     }
-    return [];
+    return [
+      {
+        productId: 'custom-1',
+        productName: 'Vòng Paracord Thủ Công',
+        price: 39000,
+        quantity: 1,
+        selectedSize: '16cm',
+        selectedColor: 'Đỏ son & Vàng kim',
+        selectedCharm: 'Charm Hào Khí',
+        customNote: ''
+      }
+    ];
   });
 
-  // Adding new product state
+  // 5. Payment & Financials
+  const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>(
+    order.paymentStatus === 'paid' ? 'paid' : 'unpaid'
+  );
+  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'cod'>(
+    (order.paymentMethod as any) || (order.bankReceiptImage ? 'bank_transfer' : 'cod')
+  );
+  const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 0);
+  const [discountAmount, setDiscountAmount] = useState<number>(order.discountAmount || 0);
+  const [customTotalOverride, setCustomTotalOverride] = useState<string>(
+    order.totalPrice !== undefined && order.totalPrice !== null ? String(order.totalPrice) : ''
+  );
+  const [isManualTotal, setIsManualTotal] = useState<boolean>(false);
+  const [bankReceiptImage, setBankReceiptImage] = useState<string>(order.bankReceiptImage || '');
+  const [bankTransferRef, setBankTransferRef] = useState<string>(order.bankTransferRef || '');
+
+  // 6. Shipping Partner Details
+  const [shippingCarrier, setShippingCarrier] = useState<string>(order.shippingCarrier || '');
+  const [shippingCode, setShippingCode] = useState<string>(order.shippingCode || '');
+  const [estimatedDelivery, setEstimatedDelivery] = useState<string>(order.estimatedDelivery || '');
+
+  // 7. Seller / Handcrafter Assignment
+  const [sellerName, setSellerName] = useState<string>(order.sellerName || 'Mạnh Cường');
+
+  // UI state
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [productSearch, setProductSearch] = useState('');
-  const [selectedAddProductId, setSelectedAddProductId] = useState<string>(products[0]?.id || '');
-  const [addQty, setAddQty] = useState<number | string>(1);
+  const [selectedAddProductId, setSelectedAddProductId] = useState<string>(products[0]?.id || 'custom');
+  const [customAddName, setCustomAddName] = useState('');
+  const [addPrice, setAddPrice] = useState<number>(39000);
+  const [addQty, setAddQty] = useState<number>(1);
+  const [addSize, setAddSize] = useState('');
+  const [addColor, setAddColor] = useState('');
+  const [addCharm, setAddCharm] = useState('');
   const [addCustomNote, setAddCustomNote] = useState('');
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [previewZoomReceipt, setPreviewZoomReceipt] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Calculate total price
-  const calculatedTotal = useMemo(() => {
+  // Subtotal calculation of products
+  const itemsSubtotal = useMemo(() => {
     return items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
   }, [items]);
 
-  const handleUpdateItemQty = (index: number, newQty: number) => {
-    const qtyVal = Math.max(1, newQty);
-    setItems((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], quantity: qtyVal };
-      return next;
-    });
-  };
+  // Final Total Price
+  const finalCalculatedTotal = useMemo(() => {
+    if (isManualTotal && customTotalOverride.trim() !== '') {
+      return Math.max(0, parseInt(customTotalOverride, 10) || 0);
+    }
+    return Math.max(0, itemsSubtotal + (Number(shippingFee) || 0) - (Number(discountAmount) || 0));
+  }, [itemsSubtotal, shippingFee, discountAmount, isManualTotal, customTotalOverride]);
 
-  const handleUpdateItemPrice = (index: number, newPrice: number) => {
+  // When items change and not in manual mode, update customTotalOverride placeholder
+  useEffect(() => {
+    if (!isManualTotal) {
+      setCustomTotalOverride(String(itemsSubtotal + (Number(shippingFee) || 0) - (Number(discountAmount) || 0)));
+    }
+  }, [itemsSubtotal, shippingFee, discountAmount, isManualTotal]);
+
+  // Handle product item changes
+  const handleUpdateItemField = (index: number, field: keyof EditableOrderItem, value: any) => {
     setItems((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], price: Math.max(0, newPrice) };
+      next[index] = { ...next[index], [field]: value };
       return next;
     });
   };
 
   const handleRemoveItem = (index: number) => {
+    if (items.length <= 1) {
+      alert('Đơn hàng phải có ít nhất 1 sản phẩm.');
+      return;
+    }
     setItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleAddProductToItems = () => {
-    const prod = products.find((p) => p.id === selectedAddProductId);
-    if (!prod) return;
+    let name = customAddName.trim();
+    let cat = 'Thủ công';
+    let price = addPrice;
 
-    const parsedQty = typeof addQty === 'string' ? (parseInt(addQty, 10) || 1) : addQty;
-    const finalQty = Math.max(1, parsedQty);
-
-    // Check if already in list
-    const existingIndex = items.findIndex((it) => it.productId === prod.id);
-    if (existingIndex >= 0) {
-      setItems((prev) => {
-        const next = [...prev];
-        next[existingIndex] = {
-          ...next[existingIndex],
-          quantity: next[existingIndex].quantity + finalQty,
-          customNote: addCustomNote ? `${next[existingIndex].customNote || ''} ${addCustomNote}`.trim() : next[existingIndex].customNote
-        };
-        return next;
-      });
-    } else {
-      setItems((prev) => [
-        ...prev,
-        {
-          productId: prod.id,
-          productName: prod.name,
-          category: prod.category,
-          price: prod.price,
-          quantity: finalQty,
-          customNote: addCustomNote
-        }
-      ]);
+    if (selectedAddProductId !== 'custom') {
+      const prod = products.find((p) => p.id === selectedAddProductId);
+      if (prod) {
+        name = prod.name;
+        cat = prod.category;
+        price = prod.price;
+      }
     }
 
-    // Reset add state
+    if (!name) {
+      alert('Vui lòng nhập tên sản phẩm.');
+      return;
+    }
+
+    setItems((prev) => [
+      ...prev,
+      {
+        productId: selectedAddProductId,
+        productName: name,
+        category: cat,
+        price: Math.max(0, price),
+        quantity: Math.max(1, addQty),
+        selectedSize: addSize.trim() || undefined,
+        selectedColor: addColor.trim() || undefined,
+        selectedCharm: addCharm.trim() || undefined,
+        customNote: addCustomNote.trim() || undefined
+      }
+    ]);
+
+    // Reset add dialog
     setIsAddingProduct(false);
+    setCustomAddName('');
+    setAddPrice(39000);
     setAddQty(1);
+    setAddSize('');
+    setAddColor('');
+    setAddCharm('');
     setAddCustomNote('');
-    setProductSearch('');
   };
 
-  // Image upload handling
+  // Image upload handling for bill receipt
   const processImageFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Vui lòng chọn tệp hình ảnh.');
@@ -162,7 +295,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 1200;
+        const maxDim = 2048;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -177,8 +310,18 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/webp', 0.92);
+            if (!compressed || !compressed.startsWith('data:image/webp')) {
+              compressed = canvas.toDataURL('image/jpeg', 0.92);
+            }
+          } catch {
+            compressed = canvas.toDataURL('image/jpeg', 0.92);
+          }
           setBankReceiptImage(compressed);
         } else {
           setBankReceiptImage(event.target?.result as string);
@@ -189,7 +332,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Paste support
+  // Clipboard paste support for receipt
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -208,10 +351,11 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
+  // Save Order
   const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
-      alert('Vui lòng nhập tên khách hàng.');
+      alert('Vui lòng nhập tên khách nhận hàng.');
       return;
     }
     if (!phone.trim()) {
@@ -225,22 +369,42 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
 
     setIsSaving(true);
     try {
+      const isLockedSeller = source === 'website' || source === 'mạng xã hội';
+      const matchedSellerObj = !isLockedSeller
+        ? sellers.find((s) => s.name === sellerName || s.username === sellerName)
+        : undefined;
+      const finalSellerId = isLockedSeller ? undefined : (matchedSellerObj?.id || order.sellerId);
+      const finalSellerName = isLockedSeller ? undefined : (sellerName.trim() || undefined);
+
+      const finalTotal = finalCalculatedTotal;
+
       const updatedOrder: StoredOrder = {
         ...order,
+        date: orderDate ? new Date(orderDate).toISOString() : (order.date || new Date().toISOString()),
+        createdAt: orderDate ? new Date(orderDate).toISOString() : (order.createdAt || order.date || new Date().toISOString()),
         name: customerName.trim(),
         customerName: customerName.trim(),
         phone: phone.trim(),
         address: address.trim(),
         note: note.trim(),
         source,
-        status,
+        status: status as any,
+        craftingStageNote: craftingStageNote.trim() || undefined,
+        trackingNumber: trackingNumber.trim() || undefined,
+        shippingCarrier: shippingCarrier.trim() || undefined,
+        shippingCode: shippingCode.trim() || undefined,
+        estimatedDelivery: estimatedDelivery.trim() || undefined,
         paymentStatus,
         paymentMethod,
         bankReceiptImage: bankReceiptImage || undefined,
         bankTransferRef: bankTransferRef.trim() || undefined,
-        totalPrice: calculatedTotal,
-        totalAmount: calculatedTotal,
-        paidAmount: paymentStatus === 'paid' ? calculatedTotal : 0,
+        shippingFee: Number(shippingFee) || 0,
+        discountAmount: Number(discountAmount) || 0,
+        totalPrice: finalTotal,
+        totalAmount: finalTotal,
+        paidAmount: paymentStatus === 'paid' ? finalTotal : 0,
+        sellerId: finalSellerId,
+        sellerName: finalSellerName,
         itemDetails: items.map((it) => ({
           productId: it.productId,
           productName: it.productName,
@@ -248,9 +412,15 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           unitPrice: it.price,
           price: it.price,
           quantity: it.quantity,
+          selectedSize: it.selectedSize,
+          selectedColor: it.selectedColor,
+          selectedCharm: it.selectedCharm,
           customNote: it.customNote
         })),
-        items: items.map((it) => `${it.productName} (x${it.quantity})`)
+        items: items.map((it) => {
+          const specs = [it.selectedSize, it.selectedColor, it.selectedCharm].filter(Boolean).join(', ');
+          return `${it.productName}${specs ? ` (${specs})` : ''} x${it.quantity}`;
+        })
       };
 
       await saveOrderToFirestore(updatedOrder);
@@ -268,509 +438,923 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     }
   };
 
-  const filteredProductsForAdd = useMemo(() => {
-    const q = productSearch.toLowerCase().trim();
-    if (!q) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
-  }, [products, productSearch]);
-
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl max-w-3xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto"
+        className="bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div>
-            <h3 className="font-bold text-base text-slate-900">
-              Chỉnh Sửa Đơn Hàng #{order.id}
-            </h3>
-            <p className="text-xs text-slate-500">
-              Ngày đặt: {order.date || order.createdAt || 'N/A'}
-            </p>
+        {/* Modal Header */}
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="font-black text-lg text-slate-900">
+                  Chỉnh Sửa Chi Tiết Đơn Hàng
+                </h3>
+                <span className="font-mono font-bold text-xs bg-slate-200 text-slate-800 px-2.5 py-0.5 rounded-lg">
+                  {trackingNumber || order.id}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Mọi thông tin chỉnh sửa tại đây sẽ cập nhật trực tiếp lên trang tra cứu đơn của khách và hệ thống xưởng.
+              </p>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="px-2 py-1 text-slate-400 hover:text-slate-900 rounded text-xs font-bold hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-200/60 transition-colors cursor-pointer"
+            title="Đóng"
           >
-            Đóng [X]
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Form Body */}
         <form onSubmit={handleSaveOrder} className="flex flex-col flex-1 overflow-hidden">
-          <div className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
+          <div className="p-5 sm:p-7 overflow-y-auto space-y-6 text-xs text-slate-700">
             
-            {/* Section 1: Customer & Source Info */}
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                1. Thông Tin Khách Hàng & Nguồn Đơn
-              </span>
+            {/* ============================================================ */}
+            {/* SECTION 1: HEADER, TRACKING CODE & SOURCE                    */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-amber-600" />
+                  <span>1. Mã Đơn Hàng, Ngày Tạo & Nguồn Đơn</span>
+                </span>
+                <span className="text-[11px] font-bold text-slate-500">
+                  (Hiển thị trên đầu trang tra cứu)
+                </span>
+              </div>
 
-              {/* Source selection (3 sources only) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Tracking Number */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      Mã đơn / Tra cứu *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTrackingNumber(generateTrackingNumber())}
+                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
+                    >
+                      Tạo mã NAK mới
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={trackingNumber}
+                    onChange={(e) => setTrackingNumber(e.target.value.toUpperCase())}
+                    placeholder="NAK-260909-2065"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Order Date & Time */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Thời gian tạo đơn
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={orderDate}
+                    onChange={(e) => setOrderDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Order Source */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Kênh đặt hàng (Nguồn đơn)
+                  </label>
+                  <select
+                    value={source}
+                    onChange={(e: any) => setSource(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="website">Website (Online)</option>
+                    <option value="mạng xã hội">Mạng xã hội (Facebook/Zalo/TikTok)</option>
+                    <option value="trực tiếp">Trực tiếp tại xưởng / Hotline</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 2: 5-STEP CRAFTING PROGRESS (TIẾN TRÌNH CHẾ TÁC)     */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span>2. Tiến Trình Chế Tác & Vận Chuyển Thủ Công (5 Bước)</span>
+                </span>
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                  Đang ở: {status}
+                </span>
+              </div>
+
+              {/* Interactive Stepper Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Nguồn đơn hàng *
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Bấm để chọn bước hiện tại của đơn:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: 'website', label: 'Website' },
-                    { id: 'mạng xã hội', label: 'Mạng xã hội' },
-                    { id: 'trực tiếp', label: 'Trực tiếp' }
-                  ].map((s) => {
-                    const isSelected = source === s.id;
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                  {PROGRESS_STEPS.map((step) => {
+                    const IconComp = step.icon;
+                    const isSelected = status === step.status;
                     return (
                       <button
-                        key={s.id}
+                        key={step.id}
                         type="button"
-                        onClick={() => setSource(s.id as any)}
-                        className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
+                        onClick={() => setStatus(step.status)}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                           isSelected
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                            ? 'bg-amber-50 border-amber-400 shadow-xs ring-2 ring-amber-300/40'
+                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
                         }`}
                       >
-                        {s.label}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-black text-slate-400">
+                            BƯỚC 0{step.step}
+                          </span>
+                          <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${
+                            isSelected ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-200 text-slate-500'
+                          }`}>
+                            <IconComp className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                        <div>
+                          <span className={`block font-black text-xs leading-tight ${isSelected ? 'text-amber-950' : 'text-slate-800'}`}>
+                            {step.label}
+                          </span>
+                          <span className="text-[10px] text-slate-500 mt-0.5 block leading-tight">
+                            {step.desc}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Dropdown status backup & Cancel option */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tên khách hàng *
+                    Trạng thái đơn hàng tổng quát
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="Chờ xác nhận">Bước 1: Chờ xác nhận (Tiếp nhận đơn)</option>
+                    <option value="Đã xác nhận">Bước 2: Đã xác nhận (Xác nhận số đo)</option>
+                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất (Đang đan Paracord)</option>
+                    <option value="Đang giao hàng">Bước 4: Đang giao hàng (Bàn giao bưu tá)</option>
+                    <option value="Đơn hàng giao thành công">Bước 5: Đơn hàng giao thành công (Kích hoạt bảo hành)</option>
+                    <option value="Đã hủy">Đã hủy đơn hàng</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ghi chú chi tiết tiến trình chế tác (Hiển thị cho khách)
+                  </label>
+                  <input
+                    type="text"
+                    value={craftingStageNote}
+                    onChange={(e) => setCraftingStageNote(e.target.value)}
+                    placeholder="VD: Đang đan mắt Snake Knot bản 16mm, charm mỏ neo titan..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 3: PRODUCTS IN ORDER (SẢN PHẨM CHẾ TÁC)              */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-amber-600" />
+                  <span>3. Danh Sách Sản Phẩm Chế Tác Trong Đơn</span>
+                </span>
+                
+                <button
+                  type="button"
+                  onClick={() => setIsAddingProduct(!isAddingProduct)}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Thêm sản phẩm</span>
+                </button>
+              </div>
+
+              {/* Add Product Modal Form */}
+              {isAddingProduct && (
+                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3 animate-fadeIn">
+                  <div className="flex items-center justify-between pb-2 border-b border-amber-200/70">
+                    <span className="font-black text-xs text-amber-950">
+                      Thêm Món Mới Vào Đơn Hàng
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingProduct(false)}
+                      className="text-amber-900 hover:text-black text-xs font-bold cursor-pointer"
+                    >
+                      Đóng
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Chọn từ kho sản phẩm có sẵn:
+                      </label>
+                      <select
+                        value={selectedAddProductId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedAddProductId(val);
+                          if (val !== 'custom') {
+                            const p = products.find((x) => x.id === val);
+                            if (p) {
+                              setCustomAddName(p.name);
+                              setAddPrice(p.price);
+                            }
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                      >
+                        <option value="custom">+ Tự nhập tên & món tùy biến</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — {p.price.toLocaleString('vi-VN')}đ
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Tên sản phẩm chế tác *:
+                      </label>
+                      <input
+                        type="text"
+                        value={customAddName}
+                        onChange={(e) => setCustomAddName(e.target.value)}
+                        placeholder="VD: Vòng Paracord 02/09 Edition"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Size cổ tay:</label>
+                      <input
+                        type="text"
+                        value={addSize}
+                        onChange={(e) => setAddSize(e.target.value)}
+                        placeholder="VD: 16cm"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Màu sắc:</label>
+                      <input
+                        type="text"
+                        value={addColor}
+                        onChange={(e) => setAddColor(e.target.value)}
+                        placeholder="VD: Đỏ son & Vàng kim"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Charm đính kèm:</label>
+                      <input
+                        type="text"
+                        value={addCharm}
+                        onChange={(e) => setAddCharm(e.target.value)}
+                        placeholder="VD: Charm Bạc 925"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Đơn giá (đ):</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={addPrice}
+                        onChange={(e) => setAddPrice(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddProductToItems}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                    >
+                      Xác nhận thêm món
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Items List Table */}
+              <div className="space-y-3">
+                {items.map((it, idx) => {
+                  const lineTotal = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+
+                  return (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                        <div className="flex-1">
+                          <span className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">
+                            Món #{idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={it.productName}
+                            onChange={(e) => handleUpdateItemField(idx, 'productName', e.target.value)}
+                            placeholder="Tên sản phẩm..."
+                            className="w-full font-black text-sm text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          {/* Quantity */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-500">SL:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={it.quantity}
+                              onChange={(e) => handleUpdateItemField(idx, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                              className="w-14 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
+                            />
+                          </div>
+
+                          {/* Unit Price */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-500">Đơn giá:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={it.price}
+                              onChange={(e) => handleUpdateItemField(idx, 'price', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                              className="w-28 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-right"
+                            />
+                            <span className="text-xs text-slate-500 font-bold">đ</span>
+                          </div>
+
+                          {/* Subtotal */}
+                          <span className="font-mono font-black text-slate-950 text-sm min-w-[90px] text-right">
+                            {lineTotal.toLocaleString('vi-VN')}đ
+                          </span>
+
+                          {/* Remove */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Xóa món này"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Custom Attributes: Size, Color, Charm, Custom Note */}
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Size cổ tay:</label>
+                          <input
+                            type="text"
+                            value={it.selectedSize || ''}
+                            onChange={(e) => handleUpdateItemField(idx, 'selectedSize', e.target.value)}
+                            placeholder="VD: 16cm"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Màu sắc:</label>
+                          <input
+                            type="text"
+                            value={it.selectedColor || ''}
+                            onChange={(e) => handleUpdateItemField(idx, 'selectedColor', e.target.value)}
+                            placeholder="VD: Đen rằn ri"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Charm đính kèm:</label>
+                          <input
+                            type="text"
+                            value={it.selectedCharm || ''}
+                            onChange={(e) => handleUpdateItemField(idx, 'selectedCharm', e.target.value)}
+                            placeholder="VD: Bạc 925"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Ghi chú xưởng cho món này:</label>
+                          <input
+                            type="text"
+                            value={it.customNote || ''}
+                            onChange={(e) => handleUpdateItemField(idx, 'customNote', e.target.value)}
+                            placeholder="VD: Thắt lỏng 0.5cm..."
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 4: CUSTOMER & DELIVERY ADDRESS                       */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-amber-600" />
+                  <span>4. Địa Chỉ & Người Nhận Kiện Hàng</span>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Người nhận (Họ tên khách) *
                   </label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                    placeholder="VD: Nguyễn Văn A"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Số điện thoại *
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Số điện thoại nhận hàng *
                   </label>
                   <input
                     type="tel"
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                    placeholder="VD: 0987654321"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Địa chỉ giao hàng
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Địa chỉ nhận kiện hàng chi tiết
                 </label>
                 <input
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                  placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ghi chú đơn hàng (Note)
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Ghi chú của khách hàng (Note)
                 </label>
                 <textarea
                   rows={2}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ghi chú yêu cầu của khách hoặc nhân viên..."
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                  placeholder="Ghi chú thời gian giao hoặc yêu cầu riêng của khách..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
                 />
               </div>
             </div>
 
-            {/* Section 2: Order Status & Payment Status */}
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                2. Trạng Thái & Thanh Toán
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Trạng thái đơn *
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(e: any) => setStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none"
-                  >
-                    <option value="Đã đặt">Đã đặt</option>
-                    <option value="Đã thanh toán">Đã thanh toán</option>
-                    <option value="Đã giao">Đã giao</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Tình trạng thanh toán *
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStatus('paid')}
-                      className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
-                        paymentStatus === 'paid'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      Đã thanh toán
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStatus('unpaid')}
-                      className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
-                        paymentStatus === 'unpaid'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                      }`}
-                    >
-                      Chưa thanh toán
-                    </button>
-                  </div>
-                </div>
+            {/* ============================================================ */}
+            {/* SECTION 5: PAYMENT, SHIPPING FEE & FINANCIALS                */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-amber-600" />
+                  <span>5. Thanh Toán & Hóa Đơn Chi Tiết</span>
+                </span>
               </div>
 
-              {/* Payment Method & Bank Ref */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Payment Method */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
                     Hình thức thanh toán
                   </label>
                   <select
                     value={paymentMethod}
                     onChange={(e: any) => setPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
                   >
-                    <option value="bank_transfer">Chuyển khoản (VietQR / Banking)</option>
+                    <option value="cod">Thanh toán COD khi nhận hàng</option>
+                    <option value="bank_transfer">Chuyển khoản VietQR</option>
                     <option value="cash">Tiền mặt tại xưởng</option>
-                    <option value="cod">Thu tiền khi giao</option>
                   </select>
                 </div>
 
+                {/* Payment Status */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Trạng thái thanh toán
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentStatus('unpaid')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
+                        paymentStatus === 'unpaid'
+                          ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-xs'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Chờ thanh toán
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentStatus('paid')}
+                      className={`py-2 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
+                        paymentStatus === 'paid'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Đã thanh toán đủ
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shipping Fee, Discount & Total Amount Breakdown */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Tổng tiền hàng (Sản phẩm):
+                    </label>
+                    <span className="font-mono font-black text-slate-900 text-sm block py-1.5">
+                      {itemsSubtotal.toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Phí giao hàng (0 = Freeship):
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        value={shippingFee}
+                        onChange={(e) => setShippingFee(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono"
+                      />
+                      <span className="text-xs font-bold text-slate-500">đ</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Giảm giá / Chiết khấu:
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        value={discountAmount}
+                        onChange={(e) => setDiscountAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono text-emerald-700"
+                      />
+                      <span className="text-xs font-bold text-slate-500">đ</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Final Total */}
+                <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase text-slate-900">
+                      TỔNG TIỀN ĐƠN HÀNG:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsManualTotal(!isManualTotal)}
+                      className="text-[10px] font-bold text-amber-600 hover:underline cursor-pointer"
+                    >
+                      {isManualTotal ? 'Quay lại tính tự động' : 'Tùy chỉnh số tiền thủ công'}
+                    </button>
+                  </div>
+
+                  {isManualTotal ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        value={customTotalOverride}
+                        onChange={(e) => setCustomTotalOverride(e.target.value)}
+                        className="w-36 px-3 py-1.5 bg-white border-2 border-amber-400 rounded-xl text-base font-black font-mono text-amber-900 text-right"
+                      />
+                      <span className="text-sm font-bold text-slate-700">đ</span>
+                    </div>
+                  ) : (
+                    <span className="text-xl sm:text-2xl font-black font-mono text-amber-900">
+                      {finalCalculatedTotal.toLocaleString('vi-VN')}đ
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Bank Transfer Details / Receipt Image */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Mã GD / Nội dung chuyển khoản
+                    Mã GD / Nội dung chuyển khoản ngân hàng
                   </label>
                   <input
                     type="text"
                     value={bankTransferRef}
                     onChange={(e) => setBankTransferRef(e.target.value)}
-                    placeholder="Ví dụ: MB-883921"
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none"
+                    placeholder="VD: MB-883921 hoặc NGUYEN VAN A"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900"
                   />
                 </div>
-              </div>
 
-              {/* Bill Receipt Upload / Preview */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ảnh Bill chuyển khoản
-                </label>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ảnh Bill chuyển khoản (Hóa đơn)
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        processImageFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      processImageFile(e.target.files[0]);
-                    }
-                  }}
-                  className="hidden"
-                />
-
-                {bankReceiptImage ? (
-                  <div className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={bankReceiptImage}
-                        alt="Bill Receipt"
-                        className="w-14 h-14 rounded object-cover border border-slate-300 cursor-pointer"
-                        onClick={() => setPreviewZoomReceipt(true)}
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 block">
-                          Đã có ảnh Bill
-                        </span>
-                        <div className="flex items-center gap-2 mt-1">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewZoomReceipt(true)}
-                            className="text-[11px] text-slate-600 hover:text-slate-900 underline font-bold"
-                          >
-                            Xem ảnh
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="text-[11px] text-slate-800 hover:text-black underline font-bold"
-                          >
-                            Đổi ảnh
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setBankReceiptImage('')}
-                            className="text-[11px] text-rose-600 hover:text-rose-700 underline font-bold"
-                          >
-                            Xóa
-                          </button>
+                  {bankReceiptImage ? (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={bankReceiptImage}
+                          alt="Bill Receipt"
+                          className="w-12 h-12 rounded-lg object-cover border border-slate-300 cursor-pointer"
+                          onClick={() => setPreviewZoomReceipt(true)}
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">Đã có ảnh bill</span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewZoomReceipt(true)}
+                              className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
+                            >
+                              Xem
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="text-[11px] text-amber-700 hover:text-amber-900 font-bold underline"
+                            >
+                              Đổi
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBankReceiptImage('')}
+                              className="text-[11px] text-rose-600 hover:text-rose-800 font-bold underline"
+                            >
+                              Xóa
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-slate-400 bg-white p-3 rounded-lg text-center cursor-pointer transition-colors"
-                  >
-                    <span className="text-xs font-bold text-slate-700 block">
-                      Bấm để tải ảnh Bill hoặc dán Ctrl+V
-                    </span>
-                  </div>
-                )}
+                  ) : (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-white p-3 rounded-xl text-center cursor-pointer transition-colors"
+                    >
+                      <span className="text-xs font-bold text-slate-600 block">
+                        + Tải ảnh Bill hoặc dán Ctrl+V
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Section 3: Ordered Items Table & Editor */}
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  3. Danh Sách Sản Phẩm Trong Đơn
+            {/* ============================================================ */}
+            {/* SECTION 6: SHIPPING CARRIER & PARTNER CODE                   */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-amber-600" />
+                  <span>6. Thông Tin Vận Chuyển Đối Tác</span>
                 </span>
-
-                <button
-                  type="button"
-                  onClick={() => setIsAddingProduct(!isAddingProduct)}
-                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors"
-                >
-                  + Thêm sản phẩm
-                </button>
               </div>
 
-              {/* Inline Product Picker to Add */}
-              {isAddingProduct && (
-                <div className="bg-white p-3 rounded-lg border border-slate-300 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-                    <span className="font-bold text-xs text-slate-900">Chọn sản phẩm:</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingProduct(false)}
-                      className="text-xs font-bold text-slate-500 hover:text-slate-800"
-                    >
-                      Đóng
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Tìm kiếm sản phẩm..."
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
-                    />
-
-                    <select
-                      value={selectedAddProductId}
-                      onChange={(e) => setSelectedAddProductId(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900"
-                    >
-                      {filteredProductsForAdd.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} - {p.price.toLocaleString('vi-VN')}đ (Kho: {p.stock ?? 15})
-                        </option>
-                      ))}
-                    </select>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-1">Số lượng:</label>
-                        <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50 overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const curr = typeof addQty === 'string' ? (parseInt(addQty, 10) || 1) : addQty;
-                              setAddQty(Math.max(1, curr - 1));
-                            }}
-                            className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            min="1"
-                            value={addQty}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setAddQty(val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
-                            }}
-                            onBlur={() => {
-                              if (addQty === '' || Number(addQty) < 1) {
-                                setAddQty(1);
-                              }
-                            }}
-                            className="w-full text-center bg-transparent text-xs font-bold text-slate-900 focus:outline-none py-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const curr = typeof addQty === 'string' ? (parseInt(addQty, 10) || 1) : addQty;
-                              setAddQty(curr + 1);
-                            }}
-                            className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                      <div className="flex-1 pt-4">
-                        <button
-                          type="button"
-                          onClick={handleAddProductToItems}
-                          className="w-full py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold"
-                        >
-                          Thêm Vào Đơn
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Đơn vị vận chuyển
+                  </label>
+                  <input
+                    type="text"
+                    list="carrier-suggestions"
+                    value={shippingCarrier}
+                    onChange={(e) => setShippingCarrier(e.target.value)}
+                    placeholder="Viettel Post, GHTK, GHN..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                  <datalist id="carrier-suggestions">
+                    <option value="Viettel Post" />
+                    <option value="Giao Hàng Tiết Kiệm (GHTK)" />
+                    <option value="Giao Hàng Nhanh (GHN)" />
+                    <option value="J&T Express" />
+                    <option value="VNPost (Bưu Điện)" />
+                    <option value="Grab / Ahamove hỏa tốc" />
+                  </datalist>
                 </div>
-              )}
 
-              {/* Items List */}
-              <div className="space-y-2 divide-y divide-slate-200">
-                {items.map((it, idx) => (
-                  <div key={idx} className="pt-2 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold text-slate-900 text-xs block">
-                        {it.productName}
-                      </span>
-                      {it.customNote && (
-                        <div className="text-[10px] text-slate-600 mt-0.5">
-                          Ghi chú: {it.customNote}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 shrink-0">
-                      {/* Price input */}
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-slate-400">Giá:</span>
-                        <input
-                          type="number"
-                          value={it.price}
-                          onChange={(e) => handleUpdateItemPrice(idx, Number(e.target.value))}
-                          className="w-24 px-2 py-1 bg-slate-50 border border-slate-300 rounded-md text-xs font-bold text-right"
-                        />
-                        <span className="text-[10px] text-slate-500">đ</span>
-                      </div>
-
-                      {/* Quantity buttons */}
-                      <div className="flex items-center border border-slate-300 rounded-md bg-slate-50">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateItemQty(idx, it.quantity - 1)}
-                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 rounded-l-md font-bold"
-                        >
-                          -
-                        </button>
-                        <span className="px-2 text-xs font-bold text-slate-900 min-w-[20px] text-center">
-                          {it.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateItemQty(idx, it.quantity + 1)}
-                          className="px-2 py-1 text-slate-600 hover:bg-slate-200 rounded-r-md font-bold"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded text-xs font-bold"
-                        title="Xóa món này"
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      Mã vận đơn đối tác
+                    </label>
+                    {shippingCode && getCarrierTrackingUrl(shippingCarrier, shippingCode) && (
+                      <a
+                        href={getCarrierTrackingUrl(shippingCarrier, shippingCode)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
                       >
-                        Xóa
-                      </button>
-                    </div>
+                        <span>Tra cứu</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <input
+                    type="text"
+                    value={shippingCode}
+                    onChange={(e) => setShippingCode(e.target.value)}
+                    placeholder="VD: 198273645"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                </div>
 
-              {/* Total Row */}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-600 uppercase">Tổng tiền đơn hàng:</span>
-                <span className="font-bold text-base text-slate-900">
-                  {calculatedTotal.toLocaleString('vi-VN')}đ
-                </span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Thời gian dự kiến giao
+                  </label>
+                  <input
+                    type="text"
+                    value={estimatedDelivery}
+                    onChange={(e) => setEstimatedDelivery(e.target.value)}
+                    placeholder="VD: 1-2 ngày, hoặc 15/09/2026"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  />
+                </div>
               </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 7: SELLER / HANDCRAFTER IN CHARGE                    */}
+            {/* ============================================================ */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-amber-600" />
+                <span>7. Nhân Viên / Nghệ Nhân Phụ Trách Đơn Hàng</span>
+              </span>
+
+              {(() => {
+                const isLockedSeller = source === 'website' || source === 'mạng xã hội';
+                return (
+                  <div>
+                    <select
+                      disabled={isLockedSeller}
+                      value={isLockedSeller ? '' : sellerName}
+                      onChange={(e) => setSellerName(e.target.value)}
+                      className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        isLockedSeller
+                          ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer'
+                      }`}
+                    >
+                      {isLockedSeller ? (
+                        <option value="">🔒 Đơn từ {source === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động phân bổ xưởng</option>
+                      ) : sellers.length > 0 ? (
+                        deduplicateSellers(sellers).map((s, idx) => (
+                          <option key={`edit-order-seller-${s.id || s.username}-${idx}`} value={s.name}>
+                            {s.name}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Mạnh Cường">Mạnh Cường</option>
+                          <option value="Thu Trang">Thu Trang</option>
+                          <option value="Hoàng Nam">Hoàng Nam</option>
+                          <option value="Minh Anh">Minh Anh</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                );
+              })()}
             </div>
 
           </div>
 
           {/* Modal Footer Actions */}
-          <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-lg text-xs border border-slate-300 transition-colors"
-            >
-              Hủy Bỏ
-            </button>
+          <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              Đảm bảo đã kiểm tra số đo cổ tay và chi tiết chế tác trước khi lưu.
+            </span>
 
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors"
-            >
-              {isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
-            </button>
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+              >
+                Hủy Bỏ
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {isSaving ? 'Đang Lưu...' : 'Lưu Thay Đổi Đơn Hàng'}
+              </button>
+            </div>
           </div>
         </form>
 
         {/* Zoom Lightbox */}
         {previewZoomReceipt && bankReceiptImage && (
           <div
-            className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4"
+            className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 animate-fadeIn"
             onClick={() => setPreviewZoomReceipt(false)}
           >
-            <div className="relative max-w-xl w-full bg-white p-3 rounded-lg" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center pb-2 border-b border-slate-200 mb-2">
-                <span className="text-xs font-bold text-slate-800">Ảnh Bill phóng to</span>
+            <div className="relative max-w-xl w-full bg-white p-4 rounded-3xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-3">
+                <span className="text-xs font-black text-slate-900">Ảnh Bill Hóa Đơn Chuyển Khoản</span>
                 <button
                   onClick={() => setPreviewZoomReceipt(false)}
-                  className="px-2 py-1 text-slate-400 hover:text-slate-800 rounded text-xs font-bold"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-800"
                 >
-                  Đóng [X]
+                  <X className="w-5 h-5" />
                 </button>
               </div>
               <img
                 src={bankReceiptImage}
                 alt="Bill Full"
-                className="max-h-[70vh] w-auto mx-auto rounded object-contain"
+                className="max-h-[70vh] w-auto mx-auto rounded-xl object-contain shadow-md"
               />
             </div>
           </div>

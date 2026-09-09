@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, CategoryItem, CollectionInfo } from '../types';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -28,12 +28,25 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
-  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+
+  // Set of hidden category IDs
+  const hiddenCategoryIds = useMemo(() => {
+    return new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
+  }, [categories]);
 
   const categoryOptions = useMemo(() => {
     const allOpt = { id: 'all', label: 'Tất cả sản phẩm', badge: 'All' };
-    return [allOpt, ...categories];
+    const visibleCats = categories.filter((c) => !c.isHidden);
+    return [allOpt, ...visibleCats];
   }, [categories]);
+
+  // Fallback to 'all' if active selectedCategory is hidden
+  useEffect(() => {
+    if (selectedCategory !== 'all' && hiddenCategoryIds.has(selectedCategory)) {
+      onSelectCategory('all');
+    }
+  }, [selectedCategory, hiddenCategoryIds, onSelectCategory]);
 
   const activeCategoryObj = useMemo(() => {
     return categoryOptions.find((c) => c.id === selectedCategory) || categoryOptions[0];
@@ -50,30 +63,69 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   const collectionBannerImg = activeCollection?.productPageBanner || activeCollection?.bannerImage || activeCollection?.bgImage || (activeCategoryObj as CategoryItem)?.bannerImage;
   const collectionIntro = activeCollection?.subtitle || (activeCategoryObj as CategoryItem)?.introText || activeCategoryObj?.description;
 
+  // Compute category-level stock counts for toggle badges
+  const { totalCount, inStockCount, outOfStockCount } = useMemo(() => {
+    const matched = products.filter((p) => {
+      if (p.isHidden) return false;
+      if (p.category && hiddenCategoryIds.has(p.category)) return false;
+      const matchesCategory = selectedCategory === 'all' ? true : p.category === selectedCategory;
+      const matchesSearch =
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+
+    let inCount = 0;
+    let outCount = 0;
+    matched.forEach((p) => {
+      const isAvailable = p.inStock !== false && (p.stock === undefined || p.stock > 0);
+      if (isAvailable) inCount++;
+      else outCount++;
+    });
+
+    return {
+      totalCount: matched.length,
+      inStockCount: inCount,
+      outOfStockCount: outCount
+    };
+  }, [products, selectedCategory, searchQuery, hiddenCategoryIds]);
+
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
+        if (p.isHidden) return false;
+        if (p.category && hiddenCategoryIds.has(p.category)) return false;
         const matchesCategory =
           selectedCategory === 'all' ? true : p.category === selectedCategory;
         const matchesSearch =
           p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.description.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesStock = onlyInStock ? (p.inStock !== false && (p.stock === undefined || p.stock > 0)) : true;
+        
+        const isAvailable = p.inStock !== false && (p.stock === undefined || p.stock > 0);
+        let matchesStock = true;
+        if (stockFilter === 'in_stock') {
+          matchesStock = isAvailable;
+        } else if (stockFilter === 'out_of_stock') {
+          matchesStock = !isAvailable;
+        }
+
         return matchesCategory && matchesSearch && matchesStock;
       })
       .sort((a, b) => {
-        // ALWAYS put out-of-stock / sold-out items at the very bottom!
-        const aSoldOut = !a.inStock || (a.stock !== undefined && a.stock <= 0);
-        const bSoldOut = !b.inStock || (b.stock !== undefined && b.stock <= 0);
-        if (aSoldOut && !bSoldOut) return 1;
-        if (!aSoldOut && bSoldOut) return -1;
+        // When showing all, put out-of-stock items at bottom
+        if (stockFilter === 'all') {
+          const aSoldOut = !a.inStock || (a.stock !== undefined && a.stock <= 0);
+          const bSoldOut = !b.inStock || (b.stock !== undefined && b.stock <= 0);
+          if (aSoldOut && !bSoldOut) return 1;
+          if (!aSoldOut && bSoldOut) return -1;
+        }
 
         if (sortBy === 'price-asc') return a.price - b.price;
         if (sortBy === 'price-desc') return b.price - a.price;
         if (sortBy === 'newest') return (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0);
         return (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0);
       });
-  }, [products, selectedCategory, searchQuery, sortBy, onlyInStock]);
+  }, [products, selectedCategory, searchQuery, sortBy, stockFilter]);
 
   return (
     <div id="product-catalog-page" className="pt-4 sm:pt-6 pb-20 bg-[#FAF8F5] text-neutral-900 min-h-screen">
@@ -90,6 +142,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               src={collectionBannerImg}
               alt={activeCategoryObj.label}
               className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 opacity-75"
+              loading="lazy"
+              decoding="async"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
             <div className="relative z-10 max-w-2xl space-y-1.5">
@@ -127,7 +181,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               <div className="space-y-1">
                 {categoryOptions.map((cat) => {
                   const isSelected = selectedCategory === cat.id;
-                  const matchingCount = products.filter(p => cat.id === 'all' ? true : p.category === cat.id).length;
+                  const matchingCount = products.filter(p => !p.isHidden && (cat.id === 'all' ? (!p.category || !hiddenCategoryIds.has(p.category)) : p.category === cat.id)).length;
 
                   return (
                     <button
@@ -169,7 +223,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm kiếm sản phẩm theo tên, mã..."
+                  placeholder="Tìm kiếm..."
                   className="w-full pl-9 pr-8 py-2 bg-neutral-50 border border-neutral-200 rounded-full text-xs font-medium text-neutral-900 focus:outline-none focus:border-neutral-900 focus:bg-white transition-colors"
                 />
                 {searchQuery && (
@@ -183,17 +237,62 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               </div>
 
               {/* Filters & Sorting Controls */}
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-                {/* In-Stock Filter */}
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-700 bg-neutral-50 hover:bg-neutral-100 px-3.5 py-2 rounded-full border border-neutral-200 cursor-pointer select-none whitespace-nowrap transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={onlyInStock}
-                    onChange={(e) => setOnlyInStock(e.target.checked)}
-                    className="rounded text-neutral-950 focus:ring-0 w-3.5 h-3.5"
-                  />
-                  <span>Chỉ còn hàng</span>
-                </label>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                {/* Stock Toggle Filter Buttons (Tất cả / Còn hàng / Hết hàng) */}
+                <div className="inline-flex p-1 bg-neutral-100/90 rounded-full border border-neutral-200/90 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setStockFilter('all')}
+                    className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1 cursor-pointer ${
+                      stockFilter === 'all'
+                        ? 'bg-neutral-950 text-white shadow-xs font-bold'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    <span>Tất cả</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      stockFilter === 'all' ? 'bg-neutral-800 text-amber-300' : 'bg-neutral-200 text-neutral-600'
+                    }`}>
+                      {totalCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStockFilter('in_stock')}
+                    className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1 cursor-pointer ${
+                      stockFilter === 'in_stock'
+                        ? 'bg-emerald-600 text-white shadow-xs font-bold'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Chỉ hiển thị sản phẩm còn hàng"
+                  >
+                    <span>Còn hàng</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      stockFilter === 'in_stock' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {inStockCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStockFilter('out_of_stock')}
+                    className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1 cursor-pointer ${
+                      stockFilter === 'out_of_stock'
+                        ? 'bg-rose-600 text-white shadow-xs font-bold'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Chỉ hiển thị sản phẩm đã hết hàng"
+                  >
+                    <span>Hết hàng</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      stockFilter === 'out_of_stock' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {outOfStockCount}
+                    </span>
+                  </button>
+                </div>
 
                 {/* Sort dropdown */}
                 <div className="flex items-center gap-1.5 bg-neutral-50 px-3 py-1.5 rounded-full border border-neutral-200">
@@ -225,16 +324,16 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   Không tìm thấy sản phẩm phù hợp
                 </p>
                 <p className="text-xs text-neutral-500 mb-6">
-                  Vui lòng thử chọn danh mục khác hoặc bỏ bớt điều kiện tìm kiếm.
+                  Vui lòng thử chọn danh mục khác hoặc chuyển lại chế độ xem tồn kho.
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   <button
                     onClick={() => {
                       setSearchQuery('');
-                      setOnlyInStock(false);
+                      setStockFilter('all');
                       onSelectCategory('all');
                     }}
-                    className="px-5 py-2.5 bg-neutral-950 text-white rounded-full text-xs font-semibold hover:bg-neutral-800 transition-colors"
+                    className="px-5 py-2.5 bg-neutral-950 text-white rounded-full text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
                   >
                     Xem tất cả sản phẩm
                   </button>

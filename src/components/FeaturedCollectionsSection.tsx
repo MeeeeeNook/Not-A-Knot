@@ -61,11 +61,13 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   <img
                     src={event2010Item.image}
                     alt={event2010Item.name}
-                    className="w-14 h-14 rounded-xl object-cover"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{event2010Item.name}</p>
-                    <p className="text-xs font-semibold text-rose-600">{event2010Item.price.toLocaleString('vi-VN')}đ</p>
+                    <p className="text-xs font-semibold text-rose-600 font-mono">{event2010Item.price.toLocaleString('vi-VN')}đ</p>
                   </div>
                 </div>
               )}
@@ -106,18 +108,20 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   <img
                     src={charmItem.image}
                     alt={charmItem.name}
-                    className="w-14 h-14 rounded-xl object-cover"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{charmItem.name}</p>
-                    <p className="text-xs font-semibold text-purple-800">{charmItem.price.toLocaleString('vi-VN')}đ</p>
+                    <p className="text-xs font-semibold text-purple-800 font-mono">{charmItem.price.toLocaleString('vi-VN')}đ</p>
                   </div>
                 </div>
               )}
 
               <button
                 onClick={() => onNavigateToCatalog('charm_bracelet')}
-                className="w-full py-3 rounded-full bg-purple-900 hover:bg-purple-950 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+                className="w-full py-3 rounded-full bg-purple-900 hover:bg-purple-950 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
               >
                 <span>Khám phá Vòng Charm</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -151,11 +155,13 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   <img
                     src={everydayItem.image}
                     alt={everydayItem.name}
-                    className="w-14 h-14 rounded-xl object-cover"
+                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    loading="lazy"
+                    decoding="async"
                   />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{everydayItem.name}</p>
-                    <p className="text-xs font-semibold text-neutral-900">{everydayItem.price.toLocaleString('vi-VN')}đ</p>
+                    <p className="text-xs font-semibold text-neutral-900 font-mono">{everydayItem.price.toLocaleString('vi-VN')}đ</p>
                   </div>
                 </div>
               )}

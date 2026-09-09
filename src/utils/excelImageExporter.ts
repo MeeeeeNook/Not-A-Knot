@@ -1,7 +1,8 @@
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import JSZip from 'jszip';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage } from '../types';
 import { StoredOrder } from '../firebase';
+import { getCleanOrderNote } from './orderFormatters';
 
 // Helper to fetch an image and return { data: Blob | ArrayBuffer, extension: string }
 async function fetchImageBlob(url: string): Promise<{ data: Blob; extension: string } | null> {
@@ -46,6 +47,352 @@ function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Helper to build styled Orders worksheet matching the exact template:
+ * - Header Row (Row 1): Background #3B608D, Font: Bold, size 11, White (#FFFFFF), Height: 26, vertical & horizontal center
+ * - Columns: STT, Mã Đơn Hàng, Thời Gian Đặt, Tên Khách Hàng, Số Điện Thoại, Địa Chỉ, Sản Phẩm, Số Lượng, Đơn giá, Tổng Tiền, Đã Thu (VNĐ), Nguồn Đơn, Tình Trạng TT, Hình Thức TT, Bill Chuyển Khoản, Trạng Thái Xử Lý, Ghi Chú, Người bán
+ * - Wherever there is no information for a cell, leave it blank
+ * - Conditional Cell Colors:
+ *   Nguồn Đơn: 'Trực tiếp' → #D2DAE4, 'Website' → #FBD4B4, 'MXH' → #F2DBDB
+ *   Tình Trạng TT: 'Đã thanh toán' → #748C42 (Font #C2D69B Bold), 'Chưa thanh toán' → #D99594 (Font #000000)
+ * - Borders & Alignment: Thin light gray border (#E0E0E0) on all populated cells, right-align numeric columns
+ */
+export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
+  const headers = [
+    'STT',
+    'Mã Đơn Hàng',
+    'Thời Gian Đặt',
+    'Tên Khách Hàng',
+    'Số Điện Thoại',
+    'Địa Chỉ',
+    'Sản Phẩm',
+    'Số Lượng',
+    'Đơn giá',
+    'Tổng Tiền',
+    'Đã Thu (VNĐ)',
+    'Nguồn Đơn',
+    'Tình Trạng TT',
+    'Hình Thức TT',
+    'Bill Chuyển Khoản',
+    'Trạng Thái Xử Lý',
+    'Ghi Chú',
+    'Người bán'
+  ];
+
+  const thinBorder = {
+    top: { style: 'thin', color: { rgb: 'E0E0E0' } },
+    bottom: { style: 'thin', color: { rgb: 'E0E0E0' } },
+    left: { style: 'thin', color: { rgb: 'E0E0E0' } },
+    right: { style: 'thin', color: { rgb: 'E0E0E0' } }
+  };
+
+  const rows: (string | number)[][] = [];
+  const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
+  const rowMetas: { sourceText: string; paymentStatusText: string }[] = [];
+
+  orders.forEach((o, idx) => {
+    // 1. STT
+    const stt = idx + 1;
+
+    // 2. Mã Đơn Hàng
+    const orderId = o.id || '';
+    const safeId = sanitizeFilename(o.id || `ORD_${idx + 1}`);
+
+    // 3. Thời Gian Đặt
+    const orderTime = o.date || o.createdAt || '';
+
+    // 4. Tên Khách Hàng
+    const customerName = o.name || o.customerName || '';
+
+    // 5. Số Điện Thoại
+    const phone = o.phone || '';
+
+    // 6. Địa Chỉ
+    const address = o.address || '';
+
+    // Order Totals
+    const orderTotal = typeof o.totalPrice === 'number' ? o.totalPrice : typeof o.totalAmount === 'number' ? o.totalAmount : '';
+
+    // Paid amount calculation
+    const pStatus = String(o.paymentStatus || '').toLowerCase();
+    const isPaid = pStatus === 'paid' || pStatus.includes('đã thanh toán');
+
+    let orderPaid: number | '' = '';
+    if (typeof o.paidAmount === 'number') {
+      orderPaid = o.paidAmount;
+    } else if (isPaid) {
+      orderPaid = orderTotal !== '' ? orderTotal : 0;
+    } else if (orderTotal !== '') {
+      orderPaid = 0;
+    }
+
+    // 12. Nguồn Đơn: 'Trực tiếp' | 'Website' | 'MXH'
+    const rawSource = (o.source || 'website').toLowerCase().trim();
+    let sourceText = 'Website';
+    if (['trực tiếp', 'truc tiep', 'offline', 'hotline', 'phone', 'direct', 'store', 'other', 'cash'].includes(rawSource)) {
+      sourceText = 'Trực tiếp';
+    } else if (['mxh', 'mạng xã hội', 'mang xa hoi', 'facebook', 'fb', 'tiktok', 'instagram', 'zalo', 'social'].includes(rawSource)) {
+      sourceText = 'MXH';
+    } else {
+      sourceText = 'Website';
+    }
+
+    // 13. Tình Trạng TT: 'Đã thanh toán' | 'Chưa thanh toán'
+    const paymentStatusText = isPaid ? 'Đã thanh toán' : 'Chưa thanh toán';
+
+    // 14. Hình Thức TT
+    const pMethod = String(o.paymentMethod || '').toLowerCase();
+    let paymentMethodText = '';
+    if (pMethod === 'bank_transfer' || pMethod === 'vietqr' || pMethod.includes('chuyển khoản')) {
+      paymentMethodText = 'Chuyển khoản (VietQR)';
+    } else if (pMethod === 'cash' || pMethod.includes('tiền mặt')) {
+      paymentMethodText = 'Tiền mặt';
+    } else if (pMethod === 'cod' || pMethod.includes('cod')) {
+      paymentMethodText = 'Thu COD khi giao';
+    } else if (o.paymentMethod) {
+      paymentMethodText = o.paymentMethod;
+    }
+
+    // 15. Bill Chuyển Khoản: display exact filename such as Bill_Don_ord-man-1788370328910
+    const billText = o.bankReceiptImage ? `Bill_Don_${safeId}` : '';
+
+    // 16. Trạng Thái Xử Lý
+    const statusText = o.status || 'Đã đặt';
+
+    // 17. Ghi Chú
+    const noteText = getCleanOrderNote(o.note);
+
+    // 18. Người bán
+    const sellerText = o.sellerName || o.sellerId || '';
+
+    // Extract individual product lines
+    interface ExtractedItem {
+      name: string;
+      quantity: number | '';
+      unitPrice: number | '';
+    }
+
+    const items: ExtractedItem[] = [];
+
+    if (o.itemDetails && o.itemDetails.length > 0) {
+      o.itemDetails.forEach((it) => {
+        const pName = `${it.productName || 'Sản phẩm'}${it.customNote ? ` [${it.customNote}]` : ''}`;
+        const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
+        let price: number | '' = '';
+        if (typeof it.price === 'number' && it.price >= 0) {
+          price = it.price;
+        } else if (typeof (it as any).unitPrice === 'number' && (it as any).unitPrice >= 0) {
+          price = (it as any).unitPrice;
+        } else if (o.itemDetails!.length === 1 && typeof orderTotal === 'number') {
+          price = Math.round(orderTotal / qty);
+        }
+        items.push({ name: pName, quantity: qty, unitPrice: price });
+      });
+    } else if (o.items && o.items.length > 0) {
+      o.items.forEach((itStr) => {
+        const match = itStr.match(/^(.*?)\s*\(x(\d+)\)(.*)$/);
+        if (match) {
+          const pName = (match[1] + (match[3] || '')).trim();
+          const qty = parseInt(match[2], 10) || 1;
+          items.push({ name: pName, quantity: qty, unitPrice: '' });
+        } else {
+          items.push({ name: itStr, quantity: 1, unitPrice: '' });
+        }
+      });
+      if (items.length === 1 && items[0].unitPrice === '' && typeof orderTotal === 'number' && typeof items[0].quantity === 'number') {
+        items[0].unitPrice = Math.round(orderTotal / items[0].quantity);
+      }
+    } else {
+      items.push({ name: '', quantity: '', unitPrice: '' });
+    }
+
+    const numItems = items.length;
+    const startRowIndex = rows.length + 1; // Row index in Excel (1-based, headers is row 0)
+
+    if (numItems > 1) {
+      const endRowIndex = startRowIndex + numItems - 1;
+      const MERGED_COLUMNS = [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+      MERGED_COLUMNS.forEach((colIdx) => {
+        merges.push({
+          s: { r: startRowIndex, c: colIdx },
+          e: { r: endRowIndex, c: colIdx }
+        });
+      });
+    }
+
+    items.forEach((item, itemIdx) => {
+      const isFirstItem = itemIdx === 0;
+
+      // Customer & Order identifiers on the first item line only (merged across order rows)
+      const cellStt = isFirstItem ? stt : '';
+      const cellOrderId = isFirstItem ? orderId : '';
+      const cellOrderTime = isFirstItem ? orderTime : '';
+      const cellCustomerName = isFirstItem ? customerName : '';
+      const cellPhone = isFirstItem ? phone : '';
+      const cellAddress = isFirstItem ? address : '';
+
+      // Product line data (individual line per item)
+      const cellProdName = item.name;
+      const cellQuantity = item.quantity;
+      const cellUnitPrice = item.unitPrice;
+
+      // Total Price & Paid Amount: placed on the first item row, which is the anchor cell for the merged range
+      const cellTotal = isFirstItem ? orderTotal : '';
+      const cellPaid = isFirstItem ? (orderPaid !== '' ? orderPaid : (orderTotal !== '' ? 0 : '')) : '';
+
+      // Order status / metadata only on the first item line (merged across order rows)
+      const cellSource = isFirstItem ? sourceText : '';
+      const cellPaymentStatus = isFirstItem ? paymentStatusText : '';
+      const cellPaymentMethod = isFirstItem ? paymentMethodText : '';
+      const cellBill = isFirstItem ? billText : '';
+      const cellStatus = isFirstItem ? statusText : '';
+      const cellNote = isFirstItem ? noteText : '';
+      const cellSeller = isFirstItem ? sellerText : '';
+
+      rows.push([
+        cellStt,
+        cellOrderId,
+        cellOrderTime,
+        cellCustomerName,
+        cellPhone,
+        cellAddress,
+        cellProdName,
+        cellQuantity,
+        cellUnitPrice,
+        cellTotal,
+        cellPaid,
+        cellSource,
+        cellPaymentStatus,
+        cellPaymentMethod,
+        cellBill,
+        cellStatus,
+        cellNote,
+        cellSeller
+      ]);
+
+      rowMetas.push({
+        sourceText,
+        paymentStatusText
+      });
+    });
+  });
+
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // Enable AutoFilter (Sort and Filter dropdowns) on the table header row
+  if (worksheet['!ref']) {
+    worksheet['!autofilter'] = { ref: worksheet['!ref'] };
+  }
+
+  if (merges.length > 0) {
+    worksheet['!merges'] = merges;
+  }
+
+  // Set Row Heights: Header row height = 26; Data rows = 22
+  const rowHeights: { hpt: number }[] = [{ hpt: 26 }];
+  for (let i = 0; i < rows.length; i++) {
+    rowHeights.push({ hpt: 22 });
+  }
+  worksheet['!rows'] = rowHeights;
+
+  // Set Column Widths
+  worksheet['!cols'] = [
+    { wch: 6 },  // STT
+    { wch: 18 }, // Mã Đơn Hàng
+    { wch: 20 }, // Thời Gian Đặt
+    { wch: 24 }, // Tên Khách Hàng
+    { wch: 14 }, // Số Điện Thoại
+    { wch: 38 }, // Địa Chỉ
+    { wch: 36 }, // Sản Phẩm
+    { wch: 10 }, // Số Lượng
+    { wch: 14 }, // Đơn giá
+    { wch: 16 }, // Tổng Tiền
+    { wch: 16 }, // Đã Thu (VNĐ)
+    { wch: 14 }, // Nguồn Đơn
+    { wch: 18 }, // Tình Trạng TT
+    { wch: 24 }, // Hình Thức TT
+    { wch: 34 }, // Bill Chuyển Khoản
+    { wch: 18 }, // Trạng Thái Xử Lý
+    { wch: 30 }, // Ghi Chú
+    { wch: 18 }  // Người bán
+  ];
+
+  // Header Row Styling: Background #3B608D, Font: Bold, size 11, White (#FFFFFF), Height: 26, Center/Center, Border #E0E0E0
+  headers.forEach((_, colIdx) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 0, c: colIdx });
+    if (worksheet[cellRef]) {
+      worksheet[cellRef].s = {
+        fill: { fgColor: { rgb: '3B608D' } },
+        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+        alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+        border: thinBorder
+      };
+    }
+  });
+
+  // Data Rows Styling & Conditional Colors
+  rows.forEach((row, rowIdx) => {
+    const r = rowIdx + 1;
+    row.forEach((val, c) => {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      if (!worksheet[cellRef]) {
+        worksheet[cellRef] = { t: 's', v: '' };
+      }
+
+      const cell = worksheet[cellRef];
+      // Numeric columns (Số Lượng, Đơn giá, Tổng Tiền, Đã Thu): cols 7, 8, 9, 10
+      const isNumericCol = c === 7 || c === 8 || c === 9 || c === 10;
+      const isCenteredCol = [0, 1, 2, 4, 11, 12, 13, 14, 15].includes(c);
+
+      let cellFont: any = { name: 'Calibri', sz: 11, bold: false, color: { rgb: '000000' } };
+      let cellFill: any = undefined;
+
+      // Conditional Color: Column Nguồn Đơn (col 11)
+      const currentSource = (val as string) || rowMetas[rowIdx]?.sourceText || '';
+      if (c === 11) {
+        if (currentSource === 'Trực tiếp') {
+          cellFill = { fgColor: { rgb: 'D2DAE4' } };
+        } else if (currentSource === 'Website') {
+          cellFill = { fgColor: { rgb: 'FBD4B4' } };
+        } else if (currentSource === 'MXH') {
+          cellFill = { fgColor: { rgb: 'F2DBDB' } };
+        }
+      }
+
+      // Conditional Color: Column Tình Trạng TT (col 12)
+      const currentPaymentStatus = (val as string) || rowMetas[rowIdx]?.paymentStatusText || '';
+      if (c === 12) {
+        if (currentPaymentStatus === 'Đã thanh toán') {
+          cellFill = { fgColor: { rgb: '748C42' } };
+          cellFont = { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'C2D69B' } };
+        } else if (currentPaymentStatus === 'Chưa thanh toán') {
+          cellFill = { fgColor: { rgb: 'D99594' } };
+          cellFont = { name: 'Calibri', sz: 11, bold: false, color: { rgb: '000000' } };
+        }
+      }
+
+      cell.s = {
+        fill: cellFill,
+        font: cellFont,
+        border: thinBorder,
+        alignment: {
+          vertical: 'center',
+          horizontal: isNumericCol ? 'right' : isCenteredCol ? 'center' : 'left',
+          wrapText: c === 5 || c === 6 || c === 16 // Wrap text on Address, Products, Notes
+        }
+      };
+
+      // Ensure proper numeric type & formatting for Excel
+      if (isNumericCol && typeof val === 'number') {
+        cell.t = 'n';
+        cell.z = '#,##0';
+      }
+    });
+  });
+
+  return worksheet;
+}
+
+/**
  * 1. Export Orders Table to Excel (with optional ZIP image bundle)
  */
 export async function exportOrdersWithImageOption({
@@ -61,70 +408,22 @@ export async function exportOrdersWithImageOption({
 }): Promise<void> {
   const now = new Date();
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const exportTime = `${hh}h${mm}`;
 
   onProgress?.('Đang kết xuất bảng tính Excel...');
 
-  const excelData = orders.map((o, idx) => {
-    const pm =
-      o.paymentMethod === 'bank_transfer'
-        ? 'Chuyển khoản (VietQR)'
-        : o.paymentMethod === 'cash'
-        ? 'Tiền mặt'
-        : 'Thu COD khi giao';
-    const ps = o.paymentStatus === 'paid' ? 'Đã thanh toán' : o.paymentStatus === 'partial' ? 'Đặt cọc' : 'Chưa thanh toán';
-    const hasBill = o.bankReceiptImage ? 'Có ảnh bill CK' : 'Chưa có';
-    const paid = o.paidAmount ?? (o.paymentStatus === 'paid' ? (o.totalPrice || o.totalAmount || 0) : 0);
-    const itemsStr =
-      o.itemDetails && o.itemDetails.length > 0
-        ? o.itemDetails.map((it) => `${it.productName} (x${it.quantity})${it.customNote ? ` [${it.customNote}]` : ''}`).join(', ')
-        : (o.items || []).join(', ');
-
-    return {
-      'STT': idx + 1,
-      'Mã Đơn Hàng': o.id || `ORD-${idx + 1}`,
-      'Thời Gian Đặt': o.date || o.createdAt || '',
-      'Tên Khách Hàng': o.name || o.customerName || '',
-      'Số Điện Thoại': o.phone || '',
-      'Địa Chỉ Giao Hàng': o.address || '',
-      'Sản Phẩm & Số Lượng': itemsStr,
-      'Tổng Tiền (VNĐ)': o.totalPrice || o.totalAmount || 0,
-      'Đã Thu (VNĐ)': paid,
-      'Nguồn Đơn': o.source || 'website',
-      'Hình Thức TT': pm,
-      'Tình Trạng TT': ps,
-      'Mã GD Ngân Hàng': o.bankTransferRef || '',
-      'Bill Chuyển Khoản': hasBill,
-      'Trạng Thái Xử Lý': o.status || 'Đã đặt',
-      'Ghi Chú': o.note || ''
-    };
-  });
-
-  const worksheet = XLSX.utils.json_to_sheet(excelData);
-  worksheet['!cols'] = [
-    { wch: 6 },  // STT
-    { wch: 22 }, // Mã Đơn Hàng
-    { wch: 22 }, // Thời Gian Đặt
-    { wch: 22 }, // Tên Khách Hàng
-    { wch: 15 }, // Số Điện Thoại
-    { wch: 36 }, // Địa Chỉ Giao Hàng
-    { wch: 42 }, // Sản Phẩm & Số Lượng
-    { wch: 16 }, // Tổng Tiền
-    { wch: 16 }, // Đã Thu
-    { wch: 14 }, // Nguồn Đơn
-    { wch: 24 }, // Hình Thức TT
-    { wch: 20 }, // Tình Trạng TT
-    { wch: 18 }, // Mã GD
-    { wch: 18 }, // Bill CK
-    { wch: 18 }, // Trạng Thái Xử Lý
-    { wch: 32 }  // Ghi Chú
-  ];
-
+  const worksheet = buildStyledOrdersWorksheet(orders);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh Sách Đơn Hàng');
+
+  // Sheet Name: Danh Sách Đơn Hàng + (Export time)
+  const sheetName = `Danh Sách Đơn Hàng (${exportTime})`.slice(0, 31);
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
   // If user does NOT want images, download .xlsx directly
   if (!includeImages) {
-    XLSX.writeFile(workbook, `NOT_A_KNOT_Don_Hang_${dateStr}.xlsx`);
+    XLSX.writeFile(workbook, `NOT_A_KNOT_Don_Hang_${dateStr}_${exportTime}.xlsx`);
     return;
   }
 
@@ -134,7 +433,7 @@ export async function exportOrdersWithImageOption({
 
   // 1. Add Excel file to ZIP
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-  zip.file(`NOT_A_KNOT_Don_Hang_${dateStr}.xlsx`, excelBuffer);
+  zip.file(`NOT_A_KNOT_Don_Hang_${dateStr}_${exportTime}.xlsx`, excelBuffer);
 
   // 2. Fetch and add Receipt Bills folder
   const billFolder = zip.folder('Anh_Bill_Chuyen_Khoan');
@@ -173,7 +472,7 @@ export async function exportOrdersWithImageOption({
   const downloadUrl = URL.createObjectURL(zipBlob);
   const link = document.createElement('a');
   link.href = downloadUrl;
-  link.download = `NOT_A_KNOT_Don_Hang_Kem_Anh_${dateStr}.zip`;
+  link.download = `NOT_A_KNOT_Don_Hang_Kem_Anh_${dateStr}_${exportTime}.zip`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -216,30 +515,7 @@ export async function exportMasterBackupWithImageOption({
 
   // Sheet 1: Orders
   if (selectedTypes.orders && orders.length > 0) {
-    const orderRows = orders.map((o, idx) => {
-      const itemsText = o.itemDetails && o.itemDetails.length > 0
-        ? o.itemDetails.map(it => `${it.productName} (SL: ${it.quantity || 1})`).join('; ')
-        : (o.items || []).join('; ');
-
-      return {
-        'STT': idx + 1,
-        'Mã Đơn': o.id || `ORD-${idx + 1}`,
-        'Ngày Đặt': o.date || o.createdAt || '',
-        'Khách Hàng': o.name || o.customerName || '',
-        'SĐT': o.phone || '',
-        'Địa Chỉ': o.address || '',
-        'Sản Phẩm': itemsText,
-        'Tổng Tiền': o.totalPrice || o.totalAmount || 0,
-        'Đã Thu': o.paidAmount || (o.paymentStatus === 'paid' ? (o.totalPrice || o.totalAmount || 0) : 0),
-        'Trạng Thái': o.status || 'Đã đặt',
-        'Thanh Toán': o.paymentStatus || 'unpaid',
-        'Phương Thức': o.paymentMethod || 'vietqr',
-        'Nguồn Đơn': o.source || 'website',
-        'Có Bill CK': o.bankReceiptImage ? 'Có' : 'Không',
-        'Ghi Chú': o.note || ''
-      };
-    });
-    const wsOrders = XLSX.utils.json_to_sheet(orderRows);
+    const wsOrders = buildStyledOrdersWorksheet(orders);
     XLSX.utils.book_append_sheet(workbook, wsOrders, '1. Đơn Hàng');
   }
 

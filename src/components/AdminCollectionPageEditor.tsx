@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CollectionInfo } from '../types';
+import { saveCollectionToFirestore } from '../firebase';
+import { THEME_PRESETS, compressImageFile } from './CollectionDetailPage';
 import { 
   Sparkles, 
   Layers, 
@@ -18,7 +20,10 @@ import {
   Clock,
   ShieldCheck,
   Flag,
-  Lock
+  Lock,
+  UploadCloud,
+  Camera,
+  Loader2
 } from 'lucide-react';
 
 interface AdminCollectionPageEditorProps {
@@ -41,6 +46,26 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
   const [formData, setFormData] = useState<CollectionInfo>(currentCollection);
 
   // Switch active collection
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploading(true);
+      const dataUrl = await compressImageFile(file);
+      handleChange('bannerImage', dataUrl);
+      handleChange('bgImage', dataUrl);
+    } catch (err) {
+      console.error('Lỗi upload ảnh banner:', err);
+      alert('Không thể đọc file ảnh, vui lòng thử lại ảnh khác.');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleSelectCollection = (id: string) => {
     const found = collections.find((c) => c.id === id);
     if (found) {
@@ -74,7 +99,7 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
     handleChange('craftDetails', currentList);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const updatedCollections = collections.map((col) =>
       col.id === formData.id ? { ...formData } : col
     );
@@ -85,7 +110,13 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
     }
 
     onUpdateCollections(updatedCollections);
+    localStorage.setItem('nak_collections', JSON.stringify(updatedCollections));
     localStorage.setItem('nak_collections_data', JSON.stringify(updatedCollections));
+    try {
+      await saveCollectionToFirestore(formData);
+    } catch (err) {
+      console.warn('Lỗi lưu collection lên Firestore:', err);
+    }
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
@@ -327,9 +358,9 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
                     </label>
                     <input
                       type="text"
-                      value={formData.soldOutTitle || '[PRE-ORDER 02.09] CHÍNH THỨC FULL SLOT! ❤️'}
+                      value={formData.soldOutTitle || '[PRE-ORDER 02.09] SOLD OUT! ❤️'}
                       onChange={(e) => handleChange('soldOutTitle', e.target.value)}
-                      placeholder="[PRE-ORDER 02.09] CHÍNH THỨC FULL SLOT! ❤️"
+                      placeholder="[PRE-ORDER 02.09] SOLD OUT! ❤️"
                       className="w-full px-3 py-2 text-xs font-bold bg-white border border-rose-300 rounded-lg outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-200"
                     />
                   </div>
@@ -439,6 +470,22 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
               </div>
 
               <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Mô tả chi tiết bộ sưu tập (Description) — Hiển thị ngay dưới tên BST
+                </label>
+                <textarea
+                  rows={3}
+                  value={formData.description || formData.story || ''}
+                  onChange={(e) => {
+                    handleChange('description', e.target.value);
+                    if (!formData.story) handleChange('story', e.target.value);
+                  }}
+                  placeholder="Nhập mô tả giới thiệu bộ sưu tập (ví dụ: Chào đón mùa tựu trường cùng BST Back To School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt Paracord thủ công năng động...)"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-amber-500 leading-relaxed"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-700 mb-1">Mô tả ngắn gọn (Subtitle)</label>
                 <input
                   type="text"
@@ -449,23 +496,128 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
                 />
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">Đường dẫn ảnh nền Hero Banner (bgImage)</label>
+              {/* Banner Image & Upload from Device */}
+              <div className="sm:col-span-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    Ảnh Banner / Ảnh Bìa Bộ Sưu Tập (bannerImage / bgImage)
+                  </label>
+                  <span className="text-[10px] text-slate-500">Tải ảnh từ máy hoặc nhập URL</span>
+                </div>
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={formData.bgImage}
-                    onChange={(e) => handleChange('bgImage', e.target.value)}
-                    placeholder="/assets/0209/img_1.png hoặc URL ảnh..."
+                    value={formData.bannerImage || formData.bgImage || ''}
+                    onChange={(e) => {
+                      handleChange('bannerImage', e.target.value);
+                      handleChange('bgImage', e.target.value);
+                    }}
+                    placeholder="/assets/hero-bg.png hoặc URL ảnh..."
                     className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-amber-500 font-mono"
                   />
-                  {formData.bgImage && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-500/30 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-3.5 h-3.5" />
+                    )}
+                    <span>Tải tệp từ máy</span>
+                  </button>
+                  {(formData.bannerImage || formData.bgImage) && (
                     <img
-                      src={formData.bgImage}
+                      src={formData.bannerImage || formData.bgImage}
                       alt="Thumbnail"
                       className="w-9 h-9 object-cover rounded-lg border border-slate-200 shrink-0"
                     />
                   )}
+                </div>
+
+                {/* Banner Display Mode */}
+                <div className="flex items-center gap-3 pt-1">
+                  <span className="text-[11px] font-bold text-slate-600">Kiểu hiển thị banner:</span>
+                  <label className="inline-flex items-center gap-1 text-xs cursor-pointer">
+                    <input
+                      type="radio"
+                      name="banner_mode"
+                      checked={formData.bannerDisplayMode !== 'featured_card'}
+                      onChange={() => handleChange('bannerDisplayMode', 'cover_hero')}
+                      className="text-amber-600"
+                    />
+                    <span>Ảnh nền Hero tràn viền</span>
+                  </label>
+                  <label className="inline-flex items-center gap-1 text-xs cursor-pointer">
+                    <input
+                      type="radio"
+                      name="banner_mode"
+                      checked={formData.bannerDisplayMode === 'featured_card'}
+                      onChange={() => handleChange('bannerDisplayMode', 'featured_card')}
+                      className="text-amber-600"
+                    />
+                    <span>Thẻ ảnh bìa tạp chí</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Background Color Customization */}
+              <div className="sm:col-span-2 space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Màu Nền Trang Bộ Sưu Tập (bgColor)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">Màu nền dịu mắt làm nổi bật sản phẩm</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {THEME_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        handleChange('bgColor', p.bg);
+                        handleChange('themeStyle', p.isDark ? 'dark' : 'light');
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        (formData.bgColor || '#FAF7F2').toLowerCase() === p.bg.toLowerCase()
+                          ? 'border-amber-500 ring-2 ring-amber-500 bg-amber-50 text-amber-950 font-bold'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <span className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0" style={{ backgroundColor: p.bg }} />
+                      <span>{p.name}</span>
+                    </button>
+                  ))}
+
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-[11px] text-slate-500">Tự chọn:</span>
+                    <input
+                      type="color"
+                      value={formData.bgColor?.startsWith('#') ? formData.bgColor : '#FAF7F2'}
+                      onChange={(e) => handleChange('bgColor', e.target.value)}
+                      className="w-7 h-7 rounded border border-slate-300 cursor-pointer p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={formData.bgColor || '#FAF7F2'}
+                      onChange={(e) => handleChange('bgColor', e.target.value)}
+                      className="w-20 px-2 py-1 text-xs font-mono bg-slate-50 border border-slate-200 rounded text-center"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

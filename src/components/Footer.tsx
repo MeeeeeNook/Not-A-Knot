@@ -9,6 +9,7 @@ interface FooterProps {
   onOpenAllCatalog?: () => void;
   onOpenAbout?: () => void;
   onOpenContact?: () => void;
+  onOpenOrderTracker?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -16,7 +17,8 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenAdmin,
   onOpenAllCatalog,
   onOpenAbout,
-  onOpenContact
+  onOpenContact,
+  onOpenOrderTracker
 }) => {
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const tagline = siteContent?.brandTagline || 'Phụ kiện Paracord thủ công cao cấp';
@@ -26,7 +28,25 @@ export const Footer: React.FC<FooterProps> = ({
   const copyrightText = siteContent?.footer?.copyrightText || `© ${new Date().getFullYear()} ${brandName} Handmade Studio. Tự hào chế tác thủ công tại Việt Nam.`;
 
   return (
-    <footer id="not-a-knot-footer" className="bg-slate-900 text-slate-400 border-t border-slate-800 py-8 text-xs font-sans">
+    <footer
+      id="not-a-knot-footer"
+      role="contentinfo"
+      itemScope
+      itemType="https://schema.org/Store"
+      className="bg-slate-900 text-slate-400 border-t border-slate-800 py-8 text-xs font-sans"
+    >
+      {/* Hidden Rich Semantic Microdata for Search Engines (GoogleBot / Bing) */}
+      <div className="sr-only">
+        <h2 itemProp="name">NOT A KNOT - Phụ Kiện Vòng Tay Dây Dù Paracord 550 Handmade</h2>
+        <p itemProp="description">
+          NOT A KNOT chuyên chế tác thủ công các dòng vòng tay Paracord nam nữ, móc khóa EDC, phụ kiện dây dù 550 Type III 7 lõi cao cấp, BST Hào Khí 02.09, charm đồng và titan nguyên khối độc bản. Nhận custom phối màu và kích thước theo yêu cầu toàn quốc.
+        </p>
+        <span itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
+          <span itemProp="addressCountry">Việt Nam</span>
+        </span>
+        <span itemProp="priceRange">80.000đ - 500.000đ</span>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Main Clean Row: Brand + Quick Links + Social Icons */}
@@ -37,7 +57,8 @@ export const Footer: React.FC<FooterProps> = ({
             {siteContent?.logoUrl && (
               <img
                 src={siteContent.logoUrl}
-                alt={brandName}
+                alt={`${brandName} - Phụ kiện Paracord handmade`}
+                itemProp="image"
                 className="h-8 w-auto max-w-[120px] object-contain rounded-sm"
               />
             )}
@@ -52,7 +73,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
 
           {/* Center: Quick Links */}
-          <div className="flex flex-wrap items-center justify-center gap-5 text-xs text-slate-300 font-medium">
+          <nav aria-label="Footer Navigation" className="flex flex-wrap items-center justify-center gap-5 text-xs text-slate-300 font-medium">
             {onOpenAllCatalog && (
               <button onClick={onOpenAllCatalog} className="hover:text-white transition-colors cursor-pointer">
                 Tất cả sản phẩm
@@ -68,7 +89,12 @@ export const Footer: React.FC<FooterProps> = ({
                 Liên hệ
               </button>
             )}
-          </div>
+            {onOpenOrderTracker && (
+              <button onClick={onOpenOrderTracker} className="text-amber-400 hover:text-amber-300 font-bold transition-colors cursor-pointer">
+                Tra cứu đơn hàng
+              </button>
+            )}
+          </nav>
 
           {/* Right: 3 Social Icons */}
           <div className="flex items-center gap-2.5">
@@ -78,6 +104,7 @@ export const Footer: React.FC<FooterProps> = ({
               href={facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
+              itemProp="sameAs"
               className="w-8 h-8 rounded-full bg-slate-800 hover:bg-[#1877F2] border border-slate-700 hover:border-[#1877F2] text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200"
               title={`Facebook ${brandName}`}
               aria-label="Facebook"
@@ -93,6 +120,7 @@ export const Footer: React.FC<FooterProps> = ({
               href={instagramUrl}
               target="_blank"
               rel="noopener noreferrer"
+              itemProp="sameAs"
               className="w-8 h-8 rounded-full bg-slate-800 hover:bg-[#E1306C] border border-slate-700 hover:border-[#E1306C] text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200"
               title={`Instagram ${brandName}`}
               aria-label="Instagram"
@@ -108,6 +136,7 @@ export const Footer: React.FC<FooterProps> = ({
               href={threadsUrl}
               target="_blank"
               rel="noopener noreferrer"
+              itemProp="sameAs"
               className="w-8 h-8 rounded-full bg-slate-800 hover:bg-white border border-slate-700 hover:border-white flex items-center justify-center transition-all duration-200 p-1.5 group cursor-pointer"
               title={`Threads ${brandName}`}
               aria-label="Threads"
@@ -123,7 +152,7 @@ export const Footer: React.FC<FooterProps> = ({
 
         </div>
 
-        {/* Bottom Minimal Copyright */}
+        {/* Bottom Minimal Copyright & Admin */}
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
           <span>
             {copyrightText}

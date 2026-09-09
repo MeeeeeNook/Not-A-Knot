@@ -109,20 +109,42 @@ export function trackGA4AddToCart(
 /**
  * Track E-commerce: begin_checkout
  */
-export function trackGA4BeginCheckout(items: { product: Product; quantity: number }[], totalValue: number) {
+export function trackGA4BeginCheckout(
+  itemsOrTotal: any,
+  totalOrItems?: any
+) {
+  // Support either (items, totalValue) or (totalValue, items)
+  let rawItems: any[] = [];
+  let totalValue = 0;
+
+  if (Array.isArray(itemsOrTotal)) {
+    rawItems = itemsOrTotal;
+    totalValue = typeof totalOrItems === 'number' ? totalOrItems : 0;
+  } else if (Array.isArray(totalOrItems)) {
+    rawItems = totalOrItems;
+    totalValue = typeof itemsOrTotal === 'number' ? itemsOrTotal : 0;
+  } else if (typeof itemsOrTotal === 'number') {
+    totalValue = itemsOrTotal;
+  }
+
+  const safeItems = Array.isArray(rawItems) ? rawItems : [];
+
   sendGA4Event('begin_checkout', {
     currency: 'VND',
     value: totalValue,
-    items: items.map((i) => ({
-      item_id: i.product.id,
-      item_name: i.product.name,
-      price: i.product.price,
-      quantity: i.quantity,
-      item_category: i.product.category,
-    })),
+    items: safeItems.map((i) => {
+      const prod = i?.product || i;
+      return {
+        item_id: prod?.id || prod?.productId || 'sp',
+        item_name: prod?.name || prod?.productName || 'Sản phẩm NOT A KNOT',
+        price: prod?.price ?? (typeof i?.price === 'number' ? i.price : 0),
+        quantity: i?.quantity || 1,
+        item_category: prod?.category || 'Knot',
+      };
+    }),
   });
 
-  recordInternalCheckoutStart(totalValue, items.length);
+  recordInternalCheckoutStart(totalValue, safeItems.length);
 }
 
 /**
@@ -131,23 +153,28 @@ export function trackGA4BeginCheckout(items: { product: Product; quantity: numbe
 export function trackGA4Purchase(
   orderId: string,
   totalValue: number,
-  items: { productId?: string; productName?: string; price?: number; quantity?: number }[],
+  items: any,
   paymentMethod?: string
 ) {
+  const safeItems: any[] = Array.isArray(items) ? items : items ? [items] : [];
+
   sendGA4Event('purchase', {
     transaction_id: orderId,
     value: totalValue,
     currency: 'VND',
     payment_type: paymentMethod || 'COD',
-    items: items.map((i) => ({
-      item_id: i.productId || orderId,
-      item_name: i.productName || 'Sản phẩm NOT A KNOT',
-      price: i.price || totalValue,
-      quantity: i.quantity || 1,
-    })),
+    items: safeItems.map((i) => {
+      const prod = i?.product || i;
+      return {
+        item_id: prod?.id || prod?.productId || orderId,
+        item_name: prod?.name || prod?.productName || 'Sản phẩm NOT A KNOT',
+        price: prod?.price ?? (typeof i?.price === 'number' ? i.price : totalValue),
+        quantity: i?.quantity || 1,
+      };
+    }),
   });
 
-  recordInternalPurchase(orderId, totalValue, items.length);
+  recordInternalPurchase(orderId, totalValue, safeItems.length);
 }
 
 /**

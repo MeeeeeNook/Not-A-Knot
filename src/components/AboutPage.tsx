@@ -31,24 +31,32 @@ export const AboutPage: React.FC<AboutPageProps> = ({
   // FAQ Accordion State
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
-  const faqs = [
+  const defaultFaqs = [
     {
+      id: 'faq-1',
       q: 'Dây Paracord 550 có bị phai màu hay ẩm mốc khi dính nước không?',
       a: 'Dây Paracord 550 Type III được dệt từ sợi tổng hợp cao cấp kèm 7 lõi dù xoắn kép, có đặc tính kháng nước, nhanh khô và bền màu. Bạn có thể sử dụng thoải mái trong các hoạt động hằng ngày, đi mưa hay chơi thể thao.'
     },
     {
+      id: 'faq-2',
       q: 'Làm thế nào để chọn đúng kích cỡ vòng tay vừa vặn?',
       a: 'Bạn có thể dùng thước dây hoặc một sợi chỉ quấn quanh cổ tay rồi đo chiều dài trên thước kẻ (đo sát cổ tay không cần trừ hao). Khi đặt hàng, hãy gửi số đo đó để xưởng đan theo đúng chu vi tay của bạn.'
     },
     {
+      id: 'faq-3',
       q: 'Thời gian hoàn thiện và nhận hàng mất bao lâu?',
       a: 'Vì sản phẩm được đan thủ công, thời gian hoàn thiện thường từ 1 - 2 ngày làm việc. Thời gian giao hàng toàn quốc từ 2 - 4 ngày. Khách hàng được kiểm tra hàng trước khi thanh toán.'
     },
     {
+      id: 'faq-4',
       q: 'Xưởng có hỗ trợ đan theo màu sắc và yêu cầu riêng không?',
       a: 'Có. Chúng tớ nhận phối màu theo sở thích và tùy biến kiểu nút thắt. Bạn có thể nhắn tin trực tiếp qua Facebook, Instagram hoặc Threads của xưởng để trao đổi chi tiết.'
     }
   ];
+
+  const faqs = siteContent?.faqs && siteContent.faqs.length > 0 ? siteContent.faqs : defaultFaqs;
+  const faqTitle = siteContent?.faqTitle || 'Câu Hỏi Thường Gặp';
+  const faqSubtitle = siteContent?.faqSubtitle || 'Giải đáp các thắc mắc phổ biến của khách hàng';
 
   const coreCommitments = [
     {
@@ -237,10 +245,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({
         <section id="faq-section" className="space-y-6">
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Câu Hỏi Thường Gặp
+              {faqTitle}
             </h2>
             <p className="text-slate-500 text-xs sm:text-sm mt-1">
-              Giải đáp các thắc mắc phổ biến của khách hàng
+              {faqSubtitle}
             </p>
           </div>
 

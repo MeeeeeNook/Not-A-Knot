@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CartItem } from '../types';
+import { CartItem, SiteContentConfig } from '../types';
 import { 
   X, 
   Trash2, 
@@ -13,20 +13,29 @@ import {
   Send, 
   Copy, 
   ExternalLink,
-  PhoneCall
+  PhoneCall,
+  AlertTriangle,
+  Search,
+  CreditCard,
+  QrCode,
+  Check
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
+import { generateTrackingNumber } from '../utils/orderFormatters';
 
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cartItems: CartItem[];
   facebookUrl?: string;
+  messengerUrl?: string;
+  siteContent?: SiteContentConfig;
   onUpdateQuantity: (index: number, quantity: number) => void;
   onRemoveItem: (index: number) => void;
   onClearCart: () => void;
   onOrderPlaced: (orderData: any) => void;
+  onOpenOrderTracker?: (trackingCode: string) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -34,10 +43,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClose,
   cartItems,
   facebookUrl = 'https://www.facebook.com/profile.php?id=61593591390851',
+  messengerUrl = 'https://m.me/61593591390851',
+  siteContent,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
-  onOrderPlaced
+  onOrderPlaced,
+  onOpenOrderTracker
 }) => {
   // Steps: 'cart' -> 'select-method' -> 'form-checkout' (if method 1) -> 'success'
   const [step, setStep] = useState<'cart' | 'select-method' | 'form-checkout' | 'success'>('cart');
@@ -48,14 +60,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedMessengerOrder, setCopiedMessengerOrder] = useState(false);
   const [successMode, setSuccessMode] = useState<'system' | 'facebook'>('system');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [createdTrackingCode, setCreatedTrackingCode] = useState('');
+  const [copiedTrackingCode, setCopiedTrackingCode] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
+  const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
 
-  const subtotal = cartItems.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
+  const bankConfig = siteContent?.bankAccount || {
+    bankId: 'VCB',
+    bankName: 'Vietcombank',
+    accountNumber: '1028394859',
+    accountHolder: 'VU NGOC MANH CUONG',
+    branch: '',
+    qrTemplate: 'compact2'
+  };
+
+  const subtotal = cartItems.reduce(
+    (acc, item) => acc + (item.product.price + (item.selectedCharmPrice || 0)) * item.quantity,
+    0
+  );
 
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
-      let desc = `${item.product.name} (x${item.quantity}) - ${(item.product.price * item.quantity).toLocaleString('vi-VN')}đ`;
+      const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+      let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
+      if (item.selectedCharm) {
+        extras.push(
+          `Charm: ${item.selectedCharm}${
+            item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) desc += ` [${extras.join(', ')}]`;
@@ -97,9 +134,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Generate text message for Facebook Messenger
   const buildMessengerOrderText = () => {
     const itemsList = cartItems.map((item, idx) => {
-      let line = `${idx + 1}. ${item.product.name} - SL: ${item.quantity} - ${(item.product.price * item.quantity).toLocaleString('vi-VN')}đ`;
+      const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+      let line = `${idx + 1}. ${item.product.name} - SL: ${item.quantity} - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
+      if (item.selectedCharm) {
+        extras.push(
+          `Charm: ${item.selectedCharm}${
+            item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) line += ` (${extras.join(', ')})`;
@@ -118,29 +163,40 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const itemDetails = cartItems.map(item => ({
       productId: item.product.id,
       productName: item.product.name,
-      price: item.product.price,
+      category: item.product.category,
+      price: item.product.price + (item.selectedCharmPrice || 0),
       quantity: item.quantity,
       selectedColor: item.selectedColor,
+      selectedColorImage: item.selectedColorImage,
+      selectedCharm: item.selectedCharm,
+      selectedCharmImage: item.selectedCharmImage,
+      selectedCharmPrice: item.selectedCharmPrice,
       selectedSize: item.selectedSize,
       customNote: item.customNote
     }));
 
+    const trackingCode = generateTrackingNumber();
+    setCreatedTrackingCode(trackingCode);
+
     return {
-      id: `ord-web-${Date.now()}`,
+      id: trackingCode,
+      trackingNumber: trackingCode,
       date: new Date().toLocaleString('vi-VN'),
       createdAt: new Date().toISOString(),
       name: name || 'Khách Facebook Messenger',
       customerName: name || 'Khách Facebook Messenger',
       phone: phone || '',
       address: address || '',
-      note: note ? `${note} (Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Hệ Thống'})` : `(Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Hệ Thống'})`,
+      note: note ? `${note} (Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})` : `(Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})`,
       items: formattedItems,
       itemDetails,
       totalPrice: subtotal,
       totalAmount: subtotal,
       source: contactMethod === 'facebook' ? ('facebook' as const) : ('website' as const),
       type: 'standard_order' as const,
-      status: 'pending' as const
+      status: 'Chờ xác nhận' as const,
+      paymentMethod: contactMethod === 'facebook' ? ('cod' as const) : (paymentMethod === 'vietqr' ? ('bank_transfer' as const) : ('cod' as const)),
+      paymentStatus: 'unpaid' as const
     };
   };
 
@@ -167,14 +223,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     localStorage.setItem('nak_preorders', JSON.stringify(local));
 
     onOrderPlaced(orderData);
-    trackGA4Purchase(orderData.id, subtotal, orderData.itemDetails, 'COD_System');
+    trackGA4Purchase(orderData.id, subtotal, orderData.itemDetails, paymentMethod === 'vietqr' ? 'VietQR_Banking' : 'COD_System');
     setIsSubmitting(false);
     setSuccessMode('system');
     setStep('success');
     onClearCart();
   };
 
-  // Option 2: Directly Copy & Open Facebook Fanpage (No form required!)
+  // Option 2: Directly Copy & Open Messenger (No form required!)
   const handleSelectFacebookMethod = async () => {
     if (cartItems.length === 0) return;
 
@@ -196,8 +252,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     trackGA4Purchase(orderData.id, subtotal, orderData.itemDetails, 'Messenger');
 
-    // 3. Open Facebook Fanpage immediately in new tab
-    const fbWindow = window.open(facebookUrl, '_blank', 'noopener,noreferrer');
+    // 3. Open Messenger link immediately in new tab
+    const targetUrl = messengerUrl || facebookUrl;
+    const fbWindow = window.open(targetUrl, '_blank', 'noopener,noreferrer');
     if (!fbWindow) {
       // If popup blocked, window.location or fallback link available in success screen
       console.info('Popup blocked by browser, link provided on screen.');
@@ -210,6 +267,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleCloseAndReset = () => {
     setStep('cart');
+    setShowClearConfirm(false);
     onClose();
   };
 
@@ -263,87 +321,197 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               {step === 'cart' && (
                 <>
                   {cartItems.length === 0 ? (
-                    <div className="text-center py-20 text-neutral-500 space-y-4">
-                      <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400">
+                    <div className="text-center py-20 text-neutral-600 space-y-4">
+                      <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-500">
                         <ShoppingBag className="w-8 h-8" />
                       </div>
                       <div>
-                        <p className="font-bold text-neutral-900 text-base">Giỏ hàng của bạn đang trống</p>
-                        <p className="text-xs text-neutral-500 mt-1">
+                        <p className="font-bold text-neutral-950 text-base">Giỏ hàng của bạn đang trống</p>
+                        <p className="text-xs text-neutral-600 font-medium mt-1">
                           Hãy khám phá các bộ sưu tập Paracord thủ công độc bản từ NOT A KNOT.
                         </p>
                       </div>
                       <button
                         onClick={onClose}
-                        className="px-6 py-2.5 bg-neutral-950 text-white text-xs font-semibold rounded-full hover:bg-neutral-800 transition-colors cursor-pointer shadow-sm"
+                        className="px-6 py-2.5 bg-neutral-950 text-white text-xs font-semibold rounded-full hover:bg-neutral-800 transition-colors cursor-pointer shadow-xs"
                       >
                         Khám phá bộ sưu tập
                       </button>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between text-xs text-neutral-500 pb-2 border-b border-neutral-200">
-                        <span>{cartItems.length} loại sản phẩm trong giỏ</span>
-                        <button
-                          onClick={onClearCart}
-                          className="text-red-600 hover:underline font-semibold cursor-pointer"
-                        >
-                          Xóa toàn bộ
-                        </button>
+                      {/* Header giỏ hàng + Nút/Menu xác nhận xóa toàn bộ trực tiếp */}
+                      <div className="pb-2.5 border-b border-neutral-200">
+                        <div className="flex items-center justify-between text-xs text-neutral-700 font-semibold">
+                          <span>{cartItems.length} loại sản phẩm trong giỏ</span>
+                          {!showClearConfirm && (
+                            <button
+                              type="button"
+                              onClick={() => setShowClearConfirm(true)}
+                              className="text-red-600 hover:text-red-700 hover:underline font-bold cursor-pointer transition-colors"
+                            >
+                              Xóa toàn bộ
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Inline confirmation menu ngay trong giỏ */}
+                        <AnimatePresence>
+                          {showClearConfirm && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                              animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                                <div className="flex items-center gap-2 text-xs text-red-950 font-bold">
+                                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                                  <span>Xóa tất cả sản phẩm khỏi giỏ?</span>
+                                </div>
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowClearConfirm(false)}
+                                    className="px-3 py-1 text-xs font-bold text-neutral-800 bg-white border border-neutral-300 rounded-full hover:bg-neutral-100 transition-colors cursor-pointer shadow-2xs"
+                                  >
+                                    Hủy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onClearCart();
+                                      setShowClearConfirm(false);
+                                    }}
+                                    className="px-3 py-1 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-full transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    Xóa hết
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
 
                       {cartItems.map((item, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-3 p-3.5 bg-neutral-50 rounded-2xl border border-neutral-200"
+                          className="relative rounded-2xl group/item select-none p-3.5 bg-neutral-50 hover:bg-neutral-100/70 border border-neutral-200 shadow-xs transition-colors"
                         >
-                          <img
-                            src={item.product.image}
-                            alt={item.product.name}
-                            className="w-16 h-16 rounded-xl object-cover border border-neutral-200 flex-shrink-0"
-                          />
-                          <div className="flex-grow min-w-0">
-                            <h4 className="font-bold text-xs text-neutral-900 truncate">
-                              {item.product.name}
-                            </h4>
-                            <div className="text-[11px] text-neutral-500 space-y-0.5 mt-0.5">
-                              {item.selectedColor && <div>Màu: <span className="font-medium text-neutral-700">{item.selectedColor}</span></div>}
-                              {item.selectedSize && <div>Size: <span className="font-medium text-neutral-700">{item.selectedSize}</span></div>}
-                              {item.customNote && <div className="text-neutral-700 truncate">Ghi chú: {item.customNote}</div>}
-                            </div>
-                            <div className="flex items-center justify-between mt-2.5">
-                              <span className="font-black text-neutral-950 text-xs font-mono">
-                                {(item.product.price * item.quantity).toLocaleString('vi-VN')}đ
-                              </span>
+                          <div className="flex items-start gap-3">
+                            <img
+                              src={item.selectedColorImage || item.product.image}
+                              alt={item.product.name}
+                              className="w-16 h-16 rounded-xl object-cover border border-neutral-200 flex-shrink-0 bg-white"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            <div className="flex-grow min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="font-bold text-xs sm:text-sm text-neutral-950 truncate">
+                                  {item.product.name}
+                                </h4>
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveItem(idx)}
+                                  className="text-neutral-400 hover:text-red-600 p-1 -mt-0.5 -mr-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer flex-shrink-0"
+                                  title="Xóa món này"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
 
-                              <div className="flex items-center border border-neutral-300 rounded-full bg-white overflow-hidden text-xs">
-                                <button
-                                  type="button"
-                                  onClick={() => onUpdateQuantity(idx, Math.max(1, item.quantity - 1))}
-                                  className="px-2 py-0.5 hover:bg-neutral-100 font-bold cursor-pointer"
-                                >
-                                  -
-                                </button>
-                                <span className="px-2 font-bold text-neutral-800">{item.quantity}</span>
-                                <button
-                                  type="button"
-                                  disabled={item.quantity >= (item.product.stock ?? 15)}
-                                  onClick={() => onUpdateQuantity(idx, Math.min(item.product.stock ?? 15, item.quantity + 1))}
-                                  className="px-2 py-0.5 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-white font-bold cursor-pointer"
-                                >
-                                  +
-                                </button>
+                              <div className="text-xs text-neutral-700 space-y-1 mt-1 font-medium">
+                                {item.selectedColor && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-neutral-500 text-[11px]">Màu:</span>
+                                    <span className="font-bold text-neutral-900 bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">
+                                      {item.selectedColor}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.selectedCharm && (
+                                  <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-200/80 px-2 py-0.5 rounded-lg w-fit">
+                                    {item.selectedCharmImage && (
+                                      <img
+                                        src={item.selectedCharmImage}
+                                        alt={item.selectedCharm}
+                                        className="w-4 h-4 object-contain rounded-sm"
+                                      />
+                                    )}
+                                    <span className="text-[11px] font-bold text-amber-900">
+                                      Charm: {item.selectedCharm}
+                                    </span>
+                                    {item.selectedCharmPrice && item.selectedCharmPrice > 0 ? (
+                                      <span className="text-[10px] text-amber-700 font-semibold">
+                                        (+{item.selectedCharmPrice.toLocaleString('vi-VN')}đ)
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                )}
+                                {item.selectedSize && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-neutral-500 text-[11px]">Size:</span>
+                                    <span className="font-bold text-neutral-900 text-[11px]">
+                                      {item.selectedSize}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.customNote && (
+                                  <div className="text-neutral-800 truncate font-normal text-[11px]">
+                                    Ghi chú: <span className="font-semibold">{item.customNote}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between mt-2.5">
+                                <span className="font-black text-neutral-950 text-xs sm:text-sm font-mono">
+                                  {((item.product.price + (item.selectedCharmPrice || 0)) * item.quantity).toLocaleString('vi-VN')}đ
+                                </span>
+
+                                 {(() => {
+                                  // Do not limit to 1 in cart - allow customers to order multiple quantities freely
+                                  const prodStock = typeof item.product.stock === 'number' && item.product.stock > 1 
+                                    ? item.product.stock 
+                                    : 99;
+                                  const totalInCart = cartItems
+                                    .filter((ci) => ci.product.id === item.product.id)
+                                    .reduce((sum, ci) => sum + ci.quantity, 0);
+                                  const isStockMax = totalInCart >= prodStock && prodStock > 1 && prodStock < 99;
+
+                                  return (
+                                    <div className="flex items-center gap-1.5">
+                                      {isStockMax && (
+                                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                          Tồn kho ({prodStock})
+                                        </span>
+                                      )}
+                                      <div className="flex items-center border border-neutral-300 rounded-full bg-white overflow-hidden text-xs shadow-2xs">
+                                        <button
+                                          type="button"
+                                          onClick={() => onUpdateQuantity(idx, Math.max(1, item.quantity - 1))}
+                                          className="px-2.5 py-1 hover:bg-neutral-100 font-bold text-neutral-800 cursor-pointer transition-colors"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="px-2 font-black text-neutral-950">{item.quantity}</span>
+                                        <button
+                                          type="button"
+                                          disabled={isStockMax}
+                                          onClick={() => onUpdateQuantity(idx, item.quantity + 1)}
+                                          className="px-2.5 py-1 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-white font-bold text-neutral-800 cursor-pointer transition-colors"
+                                          title={isStockMax ? `Đã đạt giới hạn (${prodStock} cái)` : 'Tăng số lượng'}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => onRemoveItem(idx)}
-                            className="text-neutral-400 hover:text-red-600 p-2 cursor-pointer transition-colors"
-                            title="Xóa món này"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       ))}
                     </div>
@@ -355,14 +523,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               {step === 'select-method' && (
                 <div className="space-y-4">
                   {/* Order Summary */}
-                  <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 flex items-center justify-between text-xs">
-                    <span className="text-neutral-600">Tổng cộng ({cartItems.reduce((a, b) => a + b.quantity, 0)} món):</span>
-                    <span className="font-black text-neutral-950 font-mono text-sm">
+                  <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 flex items-center justify-between text-xs">
+                    <span className="text-neutral-800 font-semibold">Tổng cộng ({cartItems.reduce((a, b) => a + b.quantity, 0)} món):</span>
+                    <span className="font-black text-neutral-950 font-mono text-base">
                       {subtotal.toLocaleString('vi-VN')}đ
                     </span>
                   </div>
 
-                  <p className="text-xs font-semibold text-neutral-700">
+                  <p className="text-xs font-bold text-neutral-900 uppercase tracking-wide">
                     Chọn cách đặt hàng:
                   </p>
 
@@ -372,42 +540,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => setStep('form-checkout')}
-                      className="w-full p-4 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-300 hover:border-neutral-950 text-left transition-all group cursor-pointer"
+                      className="w-full p-4 rounded-xl bg-white hover:bg-neutral-50 border-2 border-neutral-200 hover:border-neutral-950 text-left transition-all group cursor-pointer shadow-xs"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-bold text-neutral-950 text-sm">
-                            Cách 1: Đặt hàng trên Website
-                          </div>
-                          <p className="text-xs text-neutral-500 mt-0.5">
-                            Điền thông tin & Shop sẽ liên hệ với bạn
-                          </p>
-                        </div>
-                        <span className="text-xs font-bold text-neutral-400 group-hover:text-neutral-950 transition-colors flex-shrink-0">
-                          Tiếp tục →
-                        </span>
+                      <div className="font-black text-neutral-950 text-sm">
+                        Đặt hàng trên Website
                       </div>
+                      <p className="text-xs text-neutral-600 font-medium mt-1">
+                        Điền thông tin nhận hàng & Shop sẽ liên hệ xác nhận
+                      </p>
                     </button>
 
                     {/* CÁCH 2 */}
                     <button
                       type="button"
                       onClick={handleSelectFacebookMethod}
-                      className="w-full p-4 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-300 hover:border-neutral-950 text-left transition-all group cursor-pointer"
+                      className="w-full p-4 rounded-xl bg-white hover:bg-neutral-50 border-2 border-neutral-200 hover:border-neutral-950 text-left transition-all group cursor-pointer shadow-xs"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-bold text-neutral-950 text-sm">
-                            Cách 2: Đặt qua Fanpage Facebook
-                          </div>
-                          <p className="text-xs text-neutral-500 mt-0.5">
-                            Tự động copy đơn & mở chat trực tiếp với Shop
-                          </p>
-                        </div>
-                        <span className="text-xs font-bold text-neutral-400 group-hover:text-neutral-950 transition-colors flex-shrink-0">
-                          Mở Facebook →
-                        </span>
+                      <div className="font-black text-neutral-950 text-sm">
+                        Đặt qua Messenger
                       </div>
+                      <p className="text-xs text-neutral-600 font-medium mt-1">
+                        Tự động sao chép đơn & mở chat trực tiếp với Shop
+                      </p>
                     </button>
                   </div>
                 </div>
@@ -416,30 +570,32 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               {/* STEP 3: FORM CHECKOUT (KHI CHỌN CÁCH 1) */}
               {step === 'form-checkout' && (
                 <form onSubmit={handleSubmitSystemOrder} className="space-y-5">
-                  <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 text-xs text-neutral-700">
-                    <span className="font-bold block text-neutral-950 mb-0.5">Đặt hàng trên Website:</span>
-                    Vui lòng điền thông tin người nhận. Shop sẽ tự liên hệ với bạn để xác nhận đơn hàng.
+                  <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200/80 text-xs text-neutral-800 leading-relaxed font-medium">
+                    <span className="font-bold block text-neutral-950 mb-0.5 text-xs">
+                      📋 Đặt hàng trực tiếp trên Website:
+                    </span>
+                    Vui lòng điền thông tin người nhận. Shop sẽ tự liên hệ với bạn qua số điện thoại để xác nhận đơn hàng.
                   </div>
 
                   {/* Contact Information Fields */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold text-neutral-800 mb-1.5">
-                        Họ và tên *
+                      <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                        Họ và tên <span className="text-red-600">*</span>
                       </label>
                       <input
                         type="text"
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Nhập họ và tên..."
-                        className="w-full px-4 py-3 border border-neutral-300 rounded-xl text-sm focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 transition-colors"
+                        placeholder="Nhập họ và tên người nhận..."
+                        className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-neutral-800 mb-1.5">
-                        Số điện thoại *
+                      <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                        Số điện thoại <span className="text-red-600">*</span>
                       </label>
                       <input
                         type="tel"
@@ -448,51 +604,113 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         required
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Nhập số điện thoại..."
-                        className="w-full px-4 py-3 border border-neutral-300 rounded-xl text-sm focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 transition-colors"
+                        placeholder="Nhập số điện thoại nhận hàng (ví dụ: 0912...)"
+                        className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-neutral-800 mb-1.5">
-                        Địa chỉ *
+                      <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                        Địa chỉ nhận hàng <span className="text-red-600">*</span>
                       </label>
                       <textarea
                         required
                         rows={2}
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
-                        placeholder="Nhập địa chỉ nhận hàng..."
-                        className="w-full px-4 py-3 border border-neutral-300 rounded-xl text-sm focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 transition-colors"
+                        placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện, tỉnh/TP..."
+                        className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-neutral-800 mb-1.5">
-                        Ghi chú
+                      <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                        Ghi chú đơn hàng (không bắt buộc)
                       </label>
                       <input
                         type="text"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        placeholder="Ghi chú thêm (nếu có)..."
-                        className="w-full px-4 py-3 border border-neutral-300 rounded-xl text-sm focus:outline-none focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 transition-colors"
+                        placeholder="Ghi chú thêm về kích cỡ cổ tay, yêu cầu charm hoặc thời gian giao..."
+                        className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
                   </div>
 
-                  {/* Order total preview */}
-                  <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 space-y-1.5 text-xs text-neutral-600">
-                    <div className="flex justify-between">
-                      <span>Số lượng:</span>
-                      <span className="font-bold text-neutral-900">{cartItems.reduce((a, b) => a + b.quantity, 0)} món</span>
+                  {/* Payment Method Selector */}
+                  <div className="space-y-2.5">
+                    <label className="block text-xs font-bold text-neutral-950">
+                      Phương thức thanh toán <span className="text-red-600">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('vietqr')}
+                        className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          paymentMethod === 'vietqr'
+                            ? 'border-amber-500 bg-amber-50/50 shadow-xs'
+                            : 'border-neutral-200 hover:border-neutral-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-slate-950">
+                            <QrCode className="w-4 h-4 text-amber-600" />
+                            Chuyển khoản VietQR
+                          </span>
+                          {paymentMethod === 'vietqr' && <Check className="w-4 h-4 text-amber-600 font-bold" />}
+                        </div>
+                        <p className="text-[11px] text-neutral-600 mt-1.5 font-medium leading-tight">
+                          Quét mã QR 24/7 (Tự động điền đúng số tiền & nội dung)
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('cod')}
+                        className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          paymentMethod === 'cod'
+                            ? 'border-neutral-950 bg-neutral-50 shadow-xs'
+                            : 'border-neutral-200 hover:border-neutral-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs flex items-center gap-1.5 text-slate-950">
+                            <Truck className="w-4 h-4 text-neutral-800" />
+                            Thanh toán COD
+                          </span>
+                          {paymentMethod === 'cod' && <Check className="w-4 h-4 text-neutral-950 font-bold" />}
+                        </div>
+                        <p className="text-[11px] text-neutral-600 mt-1.5 font-medium leading-tight">
+                          Nhận hàng kiểm tra và thanh toán tiền mặt cho Shipper
+                        </p>
+                      </button>
                     </div>
-                    <div className="flex justify-between pt-2 border-t border-neutral-200 text-sm">
+
+                    {paymentMethod === 'vietqr' && (
+                      <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Thanh toán VietQR tiện lợi:</span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed">
+                          Mã QR kèm thông tin số tài khoản ({bankConfig.bankName || bankConfig.bankId}) và cú pháp chuyển khoản chính xác sẽ hiển thị ngay khi bạn bấm <strong>Xác nhận đặt hàng</strong>.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Order total preview */}
+                  <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-neutral-800 font-semibold">
+                      <span>Số lượng:</span>
+                      <span className="font-bold text-neutral-950">{cartItems.reduce((a, b) => a + b.quantity, 0)} món</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2.5 border-t border-neutral-200 text-sm">
                       <span className="font-bold text-neutral-950">Tổng thanh toán:</span>
                       <span className="font-black text-neutral-950 text-base font-mono">{subtotal.toLocaleString('vi-VN')}đ</span>
                     </div>
-                    <p className="text-[11px] text-neutral-500 pt-1">
-                      Shop sẽ tự liên hệ với bạn để xác nhận đơn hàng.
+                    <p className="text-xs text-neutral-600 font-medium pt-1">
+                      💡 Shop sẽ tự liên hệ với bạn để xác nhận đơn hàng trước khi gửi.
                     </p>
                   </div>
 
@@ -523,35 +741,89 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                   <div>
                     <h4 className="text-xl font-extrabold text-neutral-950">
-                      {successMode === 'facebook' ? 'Đã sao chép đơn hàng & Mở Fanpage!' : 'Đặt Hàng Thành Công!'}
+                      {successMode === 'facebook' ? 'Đã sao chép đơn hàng & Mở Messenger!' : 'Đặt Hàng Thành Công!'}
                     </h4>
-                    <p className="text-xs text-neutral-600 leading-relaxed max-w-sm mx-auto mt-2">
+                    <p className="text-xs sm:text-sm text-neutral-700 font-medium leading-relaxed max-w-sm mx-auto mt-2">
                       {successMode === 'facebook' 
                         ? 'Thông tin danh sách các món trong giỏ hàng đã được sao chép sẵn vào bộ nhớ tạm của bạn.'
                         : 'Cảm ơn bạn đã tin tưởng NOT A KNOT. Chúng tôi sẽ tiến hành kiểm tra số đo và chuẩn bị đan chiếc vòng theo đúng yêu cầu.'}
                     </p>
                   </div>
 
-                  {/* Facebook Messenger Mode Details */}
+                  {/* Order Tracking Code Display */}
+                  {createdTrackingCode && (
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-left space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900">
+                          Mã tra cứu đơn hàng của bạn:
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded">
+                          Lưu lại mã này
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between bg-white px-3.5 py-2.5 rounded-xl border border-amber-200 shadow-2xs">
+                        <span className="font-mono font-black text-base sm:text-lg text-slate-900 tracking-wider">
+                          {createdTrackingCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(createdTrackingCode);
+                              setCopiedTrackingCode(true);
+                              setTimeout(() => setCopiedTrackingCode(false), 2000);
+                            } catch {}
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Sao chép mã"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{copiedTrackingCode ? 'Đã sao chép' : 'Sao chép'}</span>
+                        </button>
+                      </div>
+
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        Bạn có thể dùng mã này hoặc số điện thoại để theo dõi tiến độ đan dây & giao hàng bất cứ lúc nào tại mục <strong>Tra Cứu Đơn</strong>.
+                      </p>
+
+                      {onOpenOrderTracker && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const code = createdTrackingCode;
+                            handleCloseAndReset();
+                            onOpenOrderTracker(code);
+                          }}
+                          className="w-full py-2.5 px-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                          <span>Theo dõi tiến độ đơn hàng ngay</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Messenger Mode Details */}
                   {successMode === 'facebook' && (
                     <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-left text-xs space-y-3">
-                      <div className="flex items-center gap-2 text-blue-900 font-bold">
+                      <div className="flex items-center gap-2 text-blue-950 font-bold">
                         <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
                         <span>{copiedMessengerOrder ? 'Đã copy sẵn danh sách đơn vào bộ nhớ tạm' : 'Danh sách đơn hàng đã sẵn sàng'}</span>
                       </div>
-                      <p className="text-blue-700 leading-relaxed">
+                      <p className="text-blue-900 font-medium leading-relaxed">
                         👉 Hãy mở khung chat Messenger với <strong>NOT A KNOT</strong> và nhấn <strong>Dán (Paste / Ctrl + V)</strong> để gửi tin nhắn đặt hàng cho shop nhé!
                       </p>
                       
                       <div className="pt-2 flex flex-col sm:flex-row gap-2">
                         <a
-                          href={facebookUrl}
+                          href={messengerUrl || facebookUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-center inline-flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
                         >
                           <MessageCircle className="w-4 h-4" />
-                          <span>Mở Fanpage Facebook</span>
+                          <span>Mở Messenger</span>
                           <ExternalLink className="w-3.5 h-3.5 opacity-80" />
                         </a>
 
@@ -563,7 +835,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             setCopiedMessengerOrder(true);
                             alert('Đã sao chép lại danh sách đơn hàng vào bộ nhớ tạm!');
                           }}
-                          className="py-3 px-4 rounded-xl bg-white hover:bg-slate-100 border border-blue-200 text-blue-800 font-bold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          className="py-3 px-4 rounded-xl bg-white hover:bg-slate-100 border border-blue-200 text-blue-900 font-bold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           <span>Sao chép lại đơn</span>
@@ -572,16 +844,128 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   )}
 
-                  {/* System COD Mode Details */}
+                  {/* System Mode (VietQR or COD) Details */}
                   {successMode === 'system' && (
-                    <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 text-left text-xs space-y-2">
-                      <div className="flex items-center gap-2 text-neutral-900 font-bold">
-                        <PhoneCall className="w-4 h-4 text-amber-600" />
-                        <span>Nhân viên shop sẽ liên hệ xác nhận</span>
+                    <div className="space-y-3">
+                      {paymentMethod === 'vietqr' ? (
+                        <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/70 to-white border-2 border-amber-300 text-left space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                            <div className="flex items-center gap-1.5 text-xs font-black text-amber-950 uppercase tracking-wide">
+                              <QrCode className="w-4 h-4 text-amber-600" />
+                              <span>Mã QR Chuyển Khoản Thanh Toán</span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Quét tự động
+                            </span>
+                          </div>
+
+                          {/* VietQR Dynamic Code Preview */}
+                          <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-xl border border-amber-200">
+                            <div className="w-36 h-36 flex-shrink-0 bg-white rounded-lg p-1.5 border border-neutral-200 shadow-2xs flex items-center justify-center">
+                              <img
+                                src={`https://img.vietqr.io/image/${bankConfig.bankId || 'VCB'}-${bankConfig.accountNumber}-${bankConfig.qrTemplate || 'compact2'}.png?amount=${subtotal}&addInfo=${encodeURIComponent(createdTrackingCode || `NOTAKNOT ${phone}`)}&accountName=${encodeURIComponent(bankConfig.accountHolder || 'NOT A KNOT')}`}
+                                alt="Mã VietQR thanh toán"
+                                className="w-full h-full object-contain"
+                                loading="lazy"
+                              />
+                            </div>
+                            <div className="flex-grow text-xs space-y-2 w-full">
+                              <div className="flex items-center justify-between">
+                                <span className="text-neutral-500 font-medium">Ngân hàng:</span>
+                                <span className="font-bold text-neutral-900">{bankConfig.bankName} ({bankConfig.bankId})</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-neutral-500 font-medium">Chủ tài khoản:</span>
+                                <span className="font-bold text-neutral-900 uppercase">{bankConfig.accountHolder}</span>
+                              </div>
+                              <div className="flex items-center justify-between bg-neutral-50 px-2 py-1 rounded">
+                                <span className="text-neutral-500 font-medium">Số tài khoản:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-neutral-950">{bankConfig.accountNumber}</span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await copyTextToClipboard(bankConfig.accountNumber);
+                                      setCopiedBankField('acc');
+                                      setTimeout(() => setCopiedBankField(null), 2000);
+                                    }}
+                                    className="p-1 hover:bg-neutral-200 rounded text-neutral-700 transition-colors cursor-pointer"
+                                    title="Sao chép STK"
+                                  >
+                                    {copiedBankField === 'acc' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between bg-neutral-50 px-2 py-1 rounded">
+                                <span className="text-neutral-500 font-medium">Số tiền:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-black text-amber-600">{subtotal.toLocaleString('vi-VN')}đ</span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await copyTextToClipboard(String(subtotal));
+                                      setCopiedBankField('amount');
+                                      setTimeout(() => setCopiedBankField(null), 2000);
+                                    }}
+                                    className="p-1 hover:bg-neutral-200 rounded text-neutral-700 transition-colors cursor-pointer"
+                                    title="Sao chép số tiền"
+                                  >
+                                    {copiedBankField === 'amount' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between bg-neutral-50 px-2 py-1 rounded">
+                                <span className="text-neutral-500 font-medium">Nội dung CK:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-bold text-neutral-950 truncate max-w-[120px] sm:max-w-none">
+                                    {createdTrackingCode || `NOTAKNOT ${phone}`}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await copyTextToClipboard(createdTrackingCode || `NOTAKNOT ${phone}`);
+                                      setCopiedBankField('memo');
+                                      setTimeout(() => setCopiedBankField(null), 2000);
+                                    }}
+                                    className="p-1 hover:bg-neutral-200 rounded text-neutral-700 transition-colors cursor-pointer"
+                                    title="Sao chép cú pháp"
+                                  >
+                                    {copiedBankField === 'memo' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Advisory Reminder */}
+                          <div className="p-2.5 rounded-xl bg-amber-100/70 border border-amber-300/80 text-[11px] text-amber-950 leading-relaxed font-medium flex items-start gap-2">
+                            <span className="text-sm">⚠️</span>
+                            <span>
+                              <strong>Lưu ý:</strong> Vui lòng chụp lại màn hình giao dịch chuyển khoản thành công để đối chiếu xác nhận khi xưởng chuẩn bị đan dây và gửi hàng nhé!
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 text-left text-xs space-y-2">
+                          <div className="flex items-center gap-2 text-neutral-950 font-bold">
+                            <Truck className="w-4 h-4 text-neutral-800" />
+                            <span>Hình thức thanh toán: COD (Khi nhận hàng)</span>
+                          </div>
+                          <p className="text-neutral-700 font-medium leading-relaxed">
+                            Quý khách vui lòng chuẩn bị số tiền <strong>{subtotal.toLocaleString('vi-VN')}đ</strong> để gửi cho Shipper khi đơn hàng giao đến.
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 text-left text-xs space-y-2">
+                        <div className="flex items-center gap-2 text-neutral-950 font-bold">
+                          <PhoneCall className="w-4 h-4 text-amber-600" />
+                          <span>Nhân viên shop sẽ liên hệ xác nhận</span>
+                        </div>
+                        <p className="text-neutral-700 font-medium leading-relaxed">
+                          Xưởng NOT A KNOT sẽ gọi điện thoại hoặc gửi tin nhắn SMS để xác nhận thông tin đơn hàng và thông báo mã vận đơn sớm nhất.
+                        </p>
                       </div>
-                      <p className="text-neutral-600 leading-relaxed">
-                        Xưởng NOT A KNOT sẽ gọi điện thoại hoặc gửi tin nhắn SMS để xác nhận thông tin đơn hàng và thông báo mã vận đơn sớm nhất.
-                      </p>
                     </div>
                   )}
 
@@ -601,7 +985,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {step === 'cart' && cartItems.length > 0 && (
               <div className="p-5 border-t border-neutral-200 bg-neutral-50 space-y-3">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Tổng tiền hàng:</span>
+                  <span className="text-xs font-bold text-neutral-700 uppercase tracking-wider">Tổng tiền hàng:</span>
                   <span className="text-2xl font-black text-neutral-950 font-mono">
                     {subtotal.toLocaleString('vi-VN')}đ
                   </span>
@@ -620,13 +1004,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <ArrowRight className="w-4 h-4" />
                 </button>
 
-                <div className="flex items-center justify-center gap-4 text-[11px] text-neutral-500 pt-1">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-700" />
+                <div className="flex items-center justify-center gap-4 text-xs text-neutral-700 font-medium pt-1">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-neutral-800" />
                     Bảo hành trọn đời
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-neutral-700" />
+                  <span className="flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-neutral-800" />
                     Giao hàng COD toàn quốc
                   </span>
                 </div>
@@ -639,7 +1023,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('cart')}
-                  className="text-xs font-bold text-neutral-600 hover:text-neutral-950 cursor-pointer"
+                  className="text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:underline cursor-pointer transition-colors"
                 >
                   ← Quay lại giỏ hàng
                 </button>
@@ -652,7 +1036,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('select-method')}
-                  className="text-xs font-bold text-neutral-600 hover:text-neutral-950 cursor-pointer"
+                  className="text-xs font-bold text-neutral-800 hover:text-neutral-950 hover:underline cursor-pointer transition-colors"
                 >
                   ← Chọn cách đặt hàng khác
                 </button>

@@ -32,13 +32,17 @@ import {
   Crop,
   Maximize2,
   ZoomIn,
-  Crosshair
+  Crosshair,
+  Scissors,
+  CheckCircle2
 } from 'lucide-react';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface CanvaSlideStudioProps {
   slides: SiteHeroSlide[];
   onChangeSlides: (slides: SiteHeroSlide[]) => void;
   brandName?: string;
+  initialDevice?: 'desktop' | 'mobile';
 }
 
 // Curated Design Presets
@@ -136,10 +140,11 @@ const DESIGN_PRESETS = [
 export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
   slides,
   onChangeSlides,
-  brandName = 'NOT A KNOT'
+  brandName = 'NOT A KNOT',
+  initialDevice = 'desktop'
 }) => {
   const [selectedSlideId, setSelectedSlideId] = useState<string>(() => slides[0]?.id || 'slide-1');
-  const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>(() => initialDevice === 'mobile' ? 'mobile' : 'desktop');
   const [inspectorTab, setInspectorTab] = useState<'bg' | 'text' | 'button' | 'presets'>('bg');
   const [dragOverSlideId, setDragOverSlideId] = useState<string | null>(null);
   
@@ -148,12 +153,30 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileFileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+
+  // Sub-tab in Inspector background: 'desktop' vs 'mobile'
+  const [bgDeviceTab, setBgDeviceTab] = useState<'desktop' | 'mobile'>(() => initialDevice === 'mobile' ? 'mobile' : 'desktop');
+  const [cropTarget, setCropTarget] = useState<'desktop' | 'mobile'>(() => initialDevice === 'mobile' ? 'mobile' : 'desktop');
+
+  useEffect(() => {
+    if (initialDevice === 'mobile') {
+      setDeviceMode('mobile');
+      setBgDeviceTab('mobile');
+      setCropTarget('mobile');
+    } else if (initialDevice === 'desktop') {
+      setDeviceMode('desktop');
+      setBgDeviceTab('desktop');
+      setCropTarget('desktop');
+    }
+  }, [initialDevice]);
 
   // Interactive Background Drag & Crop State
   const [isDragCropMode, setIsDragCropMode] = useState(false);
   const [isDraggingBg, setIsDraggingBg] = useState(false);
   const [dragStart, setDragStart] = useState<{ clientX: number; clientY: number; startX: number; startY: number } | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
   // Active slide being edited
   const activeSlide = slides.find((s) => s.id === selectedSlideId) || slides[0];
@@ -187,16 +210,17 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     });
   };
 
-  // Canvas Drag / Crop event handlers
+  // Canvas Drag / Crop event handlers (device-aware for PC vs Smartphone)
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragCropMode || !activeSlide) return;
     e.preventDefault();
     setIsDraggingBg(true);
+    const isMobile = deviceMode === 'mobile';
     setDragStart({
       clientX: e.clientX,
       clientY: e.clientY,
-      startX: activeSlide.bgPositionX ?? 50,
-      startY: activeSlide.bgPositionY ?? 50
+      startX: isMobile ? (activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50) : (activeSlide.bgPositionX ?? 50),
+      startY: isMobile ? (activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50) : (activeSlide.bgPositionY ?? 50)
     });
   };
 
@@ -209,10 +233,17 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     const newX = Math.max(0, Math.min(100, Math.round(dragStart.startX + deltaXPercent)));
     const newY = Math.max(0, Math.min(100, Math.round(dragStart.startY + deltaYPercent)));
 
-    updateActiveSlideFields({
-      bgPositionX: newX,
-      bgPositionY: newY
-    });
+    if (deviceMode === 'mobile') {
+      updateActiveSlideFields({
+        bgPositionXMobile: newX,
+        bgPositionYMobile: newY
+      });
+    } else {
+      updateActiveSlideFields({
+        bgPositionX: newX,
+        bgPositionY: newY
+      });
+    }
   };
 
   const handleCanvasMouseUp = () => {
@@ -301,8 +332,8 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     onChangeSlides(copy.map((s, i) => ({ ...s, order: i + 1 })));
   };
 
-  // Process image upload from computer
-  const handleImageFile = (file: File) => {
+  // Process image upload from computer (handles PC and smartphone billboards)
+  const handleImageFile = (file: File, isMobile: boolean = false) => {
     if (!file.type.startsWith('image/')) {
       alert('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP).');
       return;
@@ -313,7 +344,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 1280;
+        const maxDim = isMobile ? 2160 : 2560;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -328,11 +359,51 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.78);
-          updateActiveSlide('bgImage', compressed);
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/webp', 0.95);
+            if (!compressed || !compressed.startsWith('data:image/webp')) {
+              compressed = canvas.toDataURL('image/jpeg', 0.94);
+            }
+          } catch {
+            compressed = canvas.toDataURL('image/jpeg', 0.94);
+          }
+          if (isMobile) {
+            updateActiveSlideFields({
+              bgImageMobile: compressed,
+              originalBgImageMobile: compressed,
+              bgPositionXMobile: 50,
+              bgPositionYMobile: 50,
+              bgZoomMobile: 100,
+              aspectRatioMobile: activeSlide.aspectRatioMobile || '9:16'
+            });
+            setBgDeviceTab('mobile');
+            setDeviceMode('mobile');
+          } else {
+            updateActiveSlideFields({
+              bgImage: compressed,
+              originalBgImage: compressed
+            });
+          }
         } else {
-          updateActiveSlide('bgImage', e.target?.result as string);
+          const rawUrl = e.target?.result as string;
+          if (isMobile) {
+            updateActiveSlideFields({
+              bgImageMobile: rawUrl,
+              originalBgImageMobile: rawUrl,
+              bgPositionXMobile: 50,
+              bgPositionYMobile: 50,
+              bgZoomMobile: 100,
+              aspectRatioMobile: activeSlide.aspectRatioMobile || '9:16'
+            });
+            setBgDeviceTab('mobile');
+            setDeviceMode('mobile');
+          } else {
+            updateActiveSlide('bgImage', rawUrl);
+          }
         }
       };
       img.src = e.target?.result as string;
@@ -737,68 +808,155 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             <div className="w-full max-w-4xl mb-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-400 text-amber-900 text-[11px] font-semibold flex items-center justify-between animate-fadeIn">
               <div className="flex items-center gap-2">
                 <Move className="w-3.5 h-3.5 text-amber-600 animate-bounce" />
-                <span>Nhấp giữ và kéo chuột trên ảnh bên dưới để di chuyển tâm điểm (Focal Point).</span>
+                <span>Nhấp giữ và kéo chuột trên ảnh để chỉnh tâm điểm ({deviceMode === 'mobile' ? 'cho Smartphone' : 'cho Máy tính'}).</span>
               </div>
               <span className="font-mono font-bold text-amber-700 bg-white/80 px-2 py-0.5 rounded border border-amber-300">
-                X: {activeSlide.bgPositionX ?? 50}% | Y: {activeSlide.bgPositionY ?? 50}% | Zoom: {activeSlide.bgZoom ?? 100}%
+                {deviceMode === 'mobile' ? 'Mobile: ' : 'PC: '}
+                X: {(deviceMode === 'mobile' ? (activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50) : (activeSlide.bgPositionX ?? 50))}% | 
+                Y: {(deviceMode === 'mobile' ? (activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50) : (activeSlide.bgPositionY ?? 50))}% | 
+                Zoom: {(deviceMode === 'mobile' ? (activeSlide.bgZoomMobile ?? activeSlide.bgZoom ?? 100) : (activeSlide.bgZoom ?? 100))}%
               </span>
             </div>
           )}
 
-          {/* THE STAGE VIEWPORT (Strict 16:9 Aspect Ratio on Desktop) */}
+          {/* THE STAGE VIEWPORT (Adaptive to Desktop vs Smartphone) */}
           <div
             ref={canvasRef}
             onMouseDown={handleCanvasMouseDown}
             onMouseMove={handleCanvasMouseMove}
             onMouseUp={handleCanvasMouseUp}
             onMouseLeave={handleCanvasMouseUp}
-            className={`relative w-full rounded-2xl overflow-hidden border border-slate-300 shadow-xl transition-all duration-300 select-none ${
+            className={`relative w-full rounded-2xl overflow-hidden border border-slate-300 shadow-xl transition-all duration-300 select-none bg-slate-950 ${
               isDragCropMode 
                 ? 'cursor-grab active:cursor-grabbing ring-4 ring-amber-400/80 shadow-2xl' 
                 : ''
             } ${
               deviceMode === 'mobile'
-                ? 'max-w-[320px] aspect-[9/16]'
+                ? activeSlide.aspectRatioMobile === '4:5'
+                  ? 'max-w-[320px] aspect-[4/5]'
+                  : activeSlide.aspectRatioMobile === '1:1'
+                  ? 'max-w-[320px] aspect-square'
+                  : activeSlide.aspectRatioMobile === 'fullscreen'
+                  ? 'max-w-[300px] h-[520px]'
+                  : 'max-w-[300px] aspect-[9/16]'
                 : deviceMode === 'tablet'
                 ? 'max-w-xl aspect-[16/10]'
+                : activeSlide.aspectRatio === 'cinematic'
+                ? 'max-w-4xl aspect-[21/9]'
+                : activeSlide.aspectRatio === 'fullscreen'
+                ? 'max-w-4xl aspect-[16/9.5]'
                 : 'max-w-4xl aspect-[16/9]'
             }`}
           >
-            {/* Background Image with Focal Point & Zoom */}
-            {activeSlide.bgImage ? (
-              <img
-                src={activeSlide.bgImage}
-                alt={activeSlide.title}
-                draggable={false}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-100 pointer-events-none"
-                style={{
-                  objectPosition: `${activeSlide.bgPositionX ?? 50}% ${activeSlide.bgPositionY ?? 50}%`,
-                  transform: `scale(${(activeSlide.bgZoom ?? 100) / 100})`,
-                  transformOrigin: `${activeSlide.bgPositionX ?? 50}% ${activeSlide.bgPositionY ?? 50}%`
-                }}
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-black flex items-center justify-center text-slate-400">
-                Chưa có ảnh nền
-              </div>
-            )}
+            {/* Background Image with Focal Point, Zoom & Fit Mode (Supports device-specific mobile billboard) */}
+            {(() => {
+              const isMobile = deviceMode === 'mobile';
+              const imgUrl = (isMobile && activeSlide.bgImageMobile) ? activeSlide.bgImageMobile : activeSlide.bgImage;
+              const posX = isMobile ? (activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50) : (activeSlide.bgPositionX ?? 50);
+              const posY = isMobile ? (activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50) : (activeSlide.bgPositionY ?? 50);
+              const zoom = isMobile ? (activeSlide.bgZoomMobile ?? activeSlide.bgZoom ?? 100) : (activeSlide.bgZoom ?? 100);
+              const fitMode = isMobile ? (activeSlide.bgFitMobile || activeSlide.bgFit || 'cover') : (activeSlide.bgFit || 'cover');
+
+              if (!imgUrl) {
+                return (
+                  <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-black flex items-center justify-center text-slate-400">
+                    Chưa có ảnh nền
+                  </div>
+                );
+              }
+
+              if (fitMode === 'contain') {
+                return (
+                  <div className="absolute inset-0 w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
+                    {/* Ambient Backdrop */}
+                    <img
+                      src={imgUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none"
+                    />
+                    {/* 100% Full Uncropped Image */}
+                    <img
+                      src={imgUrl}
+                      alt={activeSlide.title}
+                      draggable={false}
+                      className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-100 pointer-events-none"
+                      style={{
+                        transform: `scale(${zoom / 100})`,
+                        transformOrigin: `${posX}% ${posY}%`
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (fitMode === 'fill') {
+                return (
+                  <img
+                    src={imgUrl}
+                    alt={activeSlide.title}
+                    draggable={false}
+                    className="absolute inset-0 w-full h-full object-fill transition-transform duration-100 pointer-events-none"
+                    style={{
+                      objectPosition: `${posX}% ${posY}%`,
+                      transform: `scale(${zoom / 100})`,
+                      transformOrigin: `${posX}% ${posY}%`
+                    }}
+                  />
+                );
+              }
+
+              return (
+                <img
+                  src={imgUrl}
+                  alt={activeSlide.title}
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-100 pointer-events-none"
+                  style={{
+                    objectPosition: `${posX}% ${posY}%`,
+                    transform: `scale(${zoom / 100})`,
+                    transformOrigin: `${posX}% ${posY}%`
+                  }}
+                />
+              );
+            })()}
 
             {/* Configurable Overlay Opacity (Dark Film) */}
-            <div
-              className="absolute inset-0 bg-black transition-opacity pointer-events-none"
-              style={{ opacity: (activeSlide.overlayOpacity ?? 50) / 100 }}
-            />
+            {activeSlide.hideOverlay !== true && (activeSlide.overlayOpacity ?? 50) > 0 && (
+              <>
+                <div
+                  className="absolute inset-0 bg-black transition-opacity pointer-events-none"
+                  style={{ opacity: (activeSlide.overlayOpacity ?? 50) / 100 }}
+                />
+                {/* Cinematic Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10 pointer-events-none" />
+              </>
+            )}
 
-            {/* Cinematic Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10 pointer-events-none" />
+            {/* Mobile / PC Image Source Indicator Badge */}
+            {deviceMode === 'mobile' && (
+              <div className="absolute top-2.5 right-2.5 z-30 pointer-events-none">
+                {activeSlide.bgImageMobile ? (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-xs flex items-center gap-1 border border-emerald-400/40">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Ảnh riêng Smartphone</span>
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-600/90 text-white text-[10px] font-bold shadow-sm backdrop-blur-xs flex items-center gap-1 border border-amber-400/40">
+                    <Info className="w-3 h-3" />
+                    <span>Dùng ảnh PC co giãn</span>
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Visual Crosshair when in Drag & Crop Mode */}
             {isDragCropMode && (
               <div 
                 className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center"
                 style={{
-                  left: `${activeSlide.bgPositionX ?? 50}%`,
-                  top: `${activeSlide.bgPositionY ?? 50}%`
+                  left: `${(deviceMode === 'mobile' ? (activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50) : (activeSlide.bgPositionX ?? 50))}%`,
+                  top: `${(deviceMode === 'mobile' ? (activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50) : (activeSlide.bgPositionY ?? 50))}%`
                 }}
               >
                 <div className="w-8 h-8 rounded-full border-2 border-amber-400 border-dashed bg-amber-400/20 flex items-center justify-center shadow-lg animate-pulse">
@@ -807,107 +965,139 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
               </div>
             )}
 
-            {/* Live Rendered Slide Content Box */}
-            <div className={`relative z-20 w-full h-full p-4 sm:p-7 flex flex-col ${getPositionClasses(activeSlide.textPosition)}`}>
-              <div 
-                className={`space-y-2.5 flex flex-col pointer-events-none ${activeSlide.disableAnimation ? '' : 'animate-fadeIn'} ${
-                  activeSlide.titleTextAlign === 'center' || (isCenter && !activeSlide.titleTextAlign)
-                    ? 'items-center text-center mx-auto'
-                    : activeSlide.titleTextAlign === 'right' || (isRight && !activeSlide.titleTextAlign)
-                    ? 'items-end text-right ml-auto'
-                    : 'items-start text-left mr-auto'
-                }`}
-                style={{ width: '100%', maxWidth: activeSlide.contentMaxWidth ? `${activeSlide.contentMaxWidth}%` : '512px' }}
-              >
-                
-                {/* Eyebrow Tag */}
-                {activeSlide.tag && (
-                  <span 
-                    className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest inline-block px-2.5 py-0.5 rounded-full bg-black/40 backdrop-blur-xs border border-white/20 ${
-                      isCenter ? 'mx-auto' : isRight ? 'ml-auto' : 'mr-auto'
-                    }`}
-                    style={{
-                      color: activeSlide.highlightColor || '#F59E0B'
-                    }}
-                  >
-                    {activeSlide.tag}
-                  </span>
-                )}
-
-                {/* Headline & Highlight */}
-                <h2
-                  className={`leading-tight w-full ${getFontFamilyClass(activeSlide.titleFontFamily || activeSlide.fontFamily)} ${getLetterSpacingClass(activeSlide.letterSpacing)} ${
+            {/* Live Rendered Slide Content Box (Rendered if text or button is visible) */}
+            {(activeSlide.showText !== false || (activeSlide.showButton !== false && !!activeSlide.buttonText?.trim())) && (
+              <div className={`relative z-20 w-full h-full p-4 sm:p-7 flex flex-col ${getPositionClasses(activeSlide.textPosition)}`}>
+                <div 
+                  className={`space-y-2.5 flex flex-col pointer-events-none ${activeSlide.disableAnimation ? '' : 'animate-fadeIn'} ${
                     activeSlide.titleTextAlign === 'center' || (isCenter && !activeSlide.titleTextAlign)
-                      ? 'text-center'
+                      ? 'items-center text-center mx-auto'
                       : activeSlide.titleTextAlign === 'right' || (isRight && !activeSlide.titleTextAlign)
-                      ? 'text-right'
-                      : 'text-left'
+                      ? 'items-end text-right ml-auto'
+                      : 'items-start text-left mr-auto'
                   }`}
-                  style={{
-                    color: activeSlide.titleColor || '#FFFFFF',
-                    textShadow: activeSlide.textShadow !== false ? '0 2px 8px rgba(0,0,0,0.8)' : 'none'
-                  }}
+                  style={{ width: '100%', maxWidth: activeSlide.contentMaxWidth ? `${activeSlide.contentMaxWidth}%` : '48rem' }}
                 >
-                  <span
-                    className="block font-black tracking-tight"
-                    style={{
-                      fontSize: `${deviceMode === 'mobile' ? Math.min(titleSize, 22) : deviceMode === 'tablet' ? Math.min(titleSize, 28) : Math.min(titleSize, 34)}px`
-                    }}
-                  >
-                    {activeSlide.title || 'Tiêu đề chính'}
-                  </span>
-                  {activeSlide.highlight && (
+                  
+                  {/* Eyebrow Tag */}
+                  {activeSlide.showText !== false && activeSlide.tag && (
                     <span 
-                      className="block font-light mt-0.5 tracking-normal"
+                      className={`text-[10px] sm:text-xs font-bold uppercase tracking-widest inline-block px-3 py-1 rounded-full bg-black/40 backdrop-blur-xs border border-white/20 ${
+                        isCenter ? 'mx-auto' : isRight ? 'ml-auto' : 'mr-auto'
+                      }`}
                       style={{
-                        color: activeSlide.highlightColor || '#F59E0B',
-                        fontSize: `${deviceMode === 'mobile' ? Math.min(Math.round(titleSize * 0.72), 16) : deviceMode === 'tablet' ? Math.min(Math.round(titleSize * 0.72), 22) : Math.min(Math.round(titleSize * 0.72), 25)}px`
+                        color: activeSlide.highlightColor || '#F59E0B'
                       }}
                     >
-                      {activeSlide.highlight}
+                      {activeSlide.tag}
                     </span>
                   )}
-                </h2>
 
-                {/* Subtitle */}
-                {activeSlide.subtitle && (
-                  <p 
-                    className={`leading-relaxed line-clamp-3 font-normal w-full ${getFontFamilyClass(activeSlide.subtitleFontFamily || activeSlide.fontFamily)} ${
-                      activeSlide.subtitleTextAlign === 'center' || (isCenter && !activeSlide.subtitleTextAlign)
-                        ? 'text-center'
-                        : activeSlide.subtitleTextAlign === 'right' || (isRight && !activeSlide.subtitleTextAlign)
-                        ? 'text-right'
-                        : 'text-left'
-                    }`}
-                    style={{
-                      color: activeSlide.subtitleColor || '#E2E8F0',
-                      fontSize: `${deviceMode === 'mobile' ? Math.min(subtitleSize, 12) : deviceMode === 'tablet' ? Math.min(subtitleSize, 13) : Math.min(subtitleSize, 14)}px`,
-                      textShadow: activeSlide.textShadow !== false ? '0 1px 4px rgba(0,0,0,0.7)' : 'none'
-                    }}
-                  >
-                    {activeSlide.subtitle}
-                  </p>
-                )}
+                  {/* Headline & Highlight */}
+                  {activeSlide.showText !== false && (activeSlide.title || activeSlide.highlight) && (
+                    <h2
+                      className={`leading-tight w-full ${getFontFamilyClass(activeSlide.titleFontFamily || activeSlide.fontFamily)} ${getLetterSpacingClass(activeSlide.letterSpacing)} ${
+                        activeSlide.titleTextAlign === 'center' || (isCenter && !activeSlide.titleTextAlign)
+                          ? 'text-center'
+                          : activeSlide.titleTextAlign === 'right' || (isRight && !activeSlide.titleTextAlign)
+                          ? 'text-right'
+                          : 'text-left'
+                      }`}
+                      style={{
+                        color: activeSlide.titleColor || '#FFFFFF',
+                        textShadow: activeSlide.textShadow !== false ? '0 2px 8px rgba(0,0,0,0.8)' : 'none'
+                      }}
+                    >
+                      {activeSlide.title && (
+                        <span
+                          className="block font-black tracking-tight"
+                          style={{
+                            fontSize: `${
+                              deviceMode === 'mobile'
+                                ? Math.max(18, Math.min(Math.round(titleSize * 0.72), 26))
+                                : deviceMode === 'tablet'
+                                ? Math.max(22, Math.min(Math.round(titleSize * 0.88), 34))
+                                : titleSize
+                            }}px`
+                          }}
+                        >
+                          {activeSlide.title}
+                        </span>
+                      )}
+                      {activeSlide.highlight && (
+                        <span 
+                          className="block font-light mt-0.5 tracking-normal"
+                          style={{ 
+                            color: activeSlide.highlightColor || '#F59E0B',
+                            fontSize: `${
+                              deviceMode === 'mobile'
+                                ? Math.max(14, Math.min(Math.round(titleSize * 0.52), 20))
+                                : deviceMode === 'tablet'
+                                ? Math.max(16, Math.min(Math.round(titleSize * 0.65), 26))
+                                : Math.round(titleSize * 0.72)
+                            }}px`
+                          }}
+                        >
+                          {activeSlide.highlight}
+                        </span>
+                      )}
+                    </h2>
+                  )}
 
-                {/* CTA Button */}
-                <div className={`pt-1.5 flex items-center w-full ${isCenter ? 'justify-center mx-auto' : isRight ? 'justify-end ml-auto' : 'justify-start mr-auto'}`}>
-                  <button
-                    type="button"
-                    className={`px-5 py-2 font-bold flex items-center justify-center gap-1.5 shadow-lg transition-all ${
-                      buttonShape === 'rounded' ? 'rounded-xl' : buttonShape === 'square' ? 'rounded-xs' : 'rounded-full'
-                    }`}
-                    style={{
-                      backgroundColor: activeSlide.buttonBgColor || '#FFFFFF',
-                      color: activeSlide.buttonTextColor || '#0F172A',
-                      fontSize: `${buttonSize}px`
-                    }}
-                  >
-                    <span>{activeSlide.buttonText || 'Khám phá ngay'}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Subtitle */}
+                  {activeSlide.showText !== false && activeSlide.subtitle && (
+                    <p 
+                      className={`leading-relaxed line-clamp-3 font-normal w-full ${getFontFamilyClass(activeSlide.subtitleFontFamily || activeSlide.fontFamily)} ${
+                        activeSlide.subtitleTextAlign === 'center' || (isCenter && !activeSlide.subtitleTextAlign)
+                          ? 'text-center'
+                          : activeSlide.subtitleTextAlign === 'right' || (isRight && !activeSlide.subtitleTextAlign)
+                          ? 'text-right'
+                          : 'text-left'
+                      }`}
+                      style={{
+                        color: activeSlide.subtitleColor || '#E2E8F0',
+                        fontSize: `${
+                          deviceMode === 'mobile'
+                            ? Math.max(11, Math.min(Math.round(subtitleSize * 0.88), 13))
+                            : subtitleSize
+                        }}px`,
+                        textShadow: activeSlide.textShadow !== false ? '0 1px 4px rgba(0,0,0,0.7)' : 'none'
+                      }}
+                    >
+                      {activeSlide.subtitle}
+                    </p>
+                  )}
+
+                  {/* CTA Button (Only if showButton !== false and buttonText is present) */}
+                  {activeSlide.showButton !== false && !!activeSlide.buttonText?.trim() && (
+                    <div className={`pt-2 flex items-center w-full ${isCenter ? 'justify-center mx-auto' : isRight ? 'justify-end ml-auto' : 'justify-start mr-auto'}`}>
+                      <button
+                        type="button"
+                        className={`px-6 py-2.5 font-bold flex items-center justify-center gap-2 shadow-lg transition-all ${
+                          buttonShape === 'rounded' ? 'rounded-xl' : buttonShape === 'square' ? 'rounded-xs' : 'rounded-full'
+                        }`}
+                        style={{
+                          backgroundColor: activeSlide.buttonBgColor || '#FFFFFF',
+                          color: activeSlide.buttonTextColor || '#0F172A',
+                          fontSize: `${buttonSize}px`
+                        }}
+                      >
+                        <span>{activeSlide.buttonText}</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Pure Graphic Banner Mode Badge Indicator */}
+            {activeSlide.showText === false && activeSlide.showButton === false && (
+              <div className="absolute top-3 left-3 z-30 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-amber-400 text-[10px] font-bold border border-amber-400/30 flex items-center gap-1.5 shadow-md">
+                <Sparkles className="w-3 h-3" />
+                <span>Chế độ Banner Đồ Họa (Chỉ hiển thị ảnh)</span>
+              </div>
+            )}
 
             {/* Interactive Positioning Grid Overlay (Visible when hovering over canvas & NOT in crop mode) */}
             {!isDragCropMode && (
@@ -949,7 +1139,19 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleImageFile(file);
+              if (file) handleImageFile(file, false);
+              e.target.value = '';
+            }}
+          />
+          <input
+            type="file"
+            ref={mobileFileInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImageFile(file, true);
+              e.target.value = '';
             }}
           />
         </div>
@@ -1009,226 +1211,807 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
           {/* ---------------- TAB 1: BACKGROUND & OVERLAY ---------------- */}
           {inspectorTab === 'bg' && (
             <div className="space-y-4">
-              {/* Image Upload Box */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 block">
-                  1. Ảnh Nền Banner
-                </label>
-
-                <div
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverSlideId(activeSlide.id);
+              {/* Device Selector Sub-Tabs for Billboard */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBgDeviceTab('desktop');
+                    setDeviceMode('desktop');
                   }}
-                  onDragLeave={() => setDragOverSlideId(null)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragOverSlideId(null);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) handleImageFile(file);
-                  }}
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
-                    dragOverSlideId === activeSlide.id
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-slate-200 hover:border-slate-300 bg-slate-50'
+                  className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    bgDeviceTab === 'desktop'
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <Upload className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-                  <span className="text-xs font-bold text-slate-800 block">Tải ảnh từ máy tính</span>
-                  <span className="text-[10px] text-slate-500">Kéo thả hoặc nhấn vào đây</span>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-slate-600">Hoặc dán liên kết ảnh</label>
-                  <input
-                    type="text"
-                    value={activeSlide.bgImage}
-                    onChange={(e) => updateActiveSlide('bgImage', e.target.value)}
-                    placeholder="https://..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none font-mono focus:bg-white focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              {/* IMAGE UPLOAD GUIDELINES & SIZING SPECS */}
-              <div className="rounded-xl bg-slate-900 text-slate-100 p-3.5 space-y-2.5 text-xs shadow-inner border border-slate-800">
-                <div className="flex items-center gap-1.5 text-amber-400 font-bold">
-                  <Info className="w-4 h-4 shrink-0" />
-                  <span>Quy chuẩn kích thước ảnh đề xuất</span>
-                </div>
-                
-                <div className="space-y-2 text-[11px] text-slate-300">
-                  <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
-                    <span className="font-semibold text-white">🖥️ Fullscreen (Toàn màn hình):</span>
-                    <span className="font-mono text-amber-300 font-bold">1920 × 1080 px (16:9)</span>
-                  </div>
-                  <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
-                    <span className="font-semibold text-white">🎬 Cinematic Banner (Ngang):</span>
-                    <span className="font-mono text-amber-300 font-bold">1920 × 800 px (~21:9)</span>
-                  </div>
-                  <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
-                    <span className="font-semibold text-white">📱 Safe Zone (Vùng an toàn):</span>
-                    <span className="text-slate-300">Chủ thể ở 70% trung tâm</span>
-                  </div>
-                  <div className="flex items-start justify-between">
-                    <span className="font-semibold text-white">⚡ Định dạng & Dung lượng:</span>
-                    <span className="text-emerald-400 font-medium">JPG/WebP/PNG &lt; 2MB</span>
-                  </div>
-                </div>
-                
-                <p className="text-[10px] text-slate-400 leading-normal italic bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                  💡 <strong>Mẹo:</strong> Để ảnh không bị che mất sản phẩm khi xem trên điện thoại hay laptop, hãy bố trí sản phẩm vòng tay ở vùng chính giữa ảnh.
-                </p>
-              </div>
-
-              {/* CROP, FOCAL POINT & ZOOM ADJUSTMENT */}
-              <div className="space-y-3 pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Crop className="w-3.5 h-3.5 text-amber-600" />
-                    <span className="text-xs font-bold text-slate-800">Cắt Ảnh & Căn Tâm (Crop & Pan)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => updateActiveSlideFields({ bgPositionX: 50, bgPositionY: 50, bgZoom: 100 })}
-                    className="text-[10px] font-bold text-slate-600 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 py-0.5 rounded border border-slate-200 hover:border-amber-200 transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Đặt lại ảnh về tâm giữa và tỷ lệ 100%"
-                  >
-                    <RotateCcw className="w-2.5 h-2.5" />
-                    <span>Mặc định (50/50)</span>
-                  </button>
-                </div>
-
-                {/* 9-Point Focal Presets */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold text-slate-600">Điểm lấy nét nhanh (Focal Point)</label>
-                  <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 w-fit mx-auto">
-                    {[
-                      { id: 'tl', x: 20, y: 20, label: '↖' },
-                      { id: 'tc', x: 50, y: 20, label: '↑' },
-                      { id: 'tr', x: 80, y: 20, label: '↗' },
-                      { id: 'cl', x: 20, y: 50, label: '←' },
-                      { id: 'cc', x: 50, y: 50, label: '•' },
-                      { id: 'cr', x: 80, y: 50, label: '→' },
-                      { id: 'bl', x: 20, y: 80, label: '↙' },
-                      { id: 'bc', x: 50, y: 80, label: '↓' },
-                      { id: 'br', x: 80, y: 80, label: '↘' }
-                    ].map((focal) => {
-                      const isSelected = (activeSlide.bgPositionX ?? 50) === focal.x && (activeSlide.bgPositionY ?? 50) === focal.y;
-                      return (
-                        <button
-                          key={focal.id}
-                          type="button"
-                          onClick={() => updateActiveSlideFields({ bgPositionX: focal.x, bgPositionY: focal.y })}
-                          className={`w-6 h-6 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-amber-500 text-white shadow-xs'
-                              : 'bg-white hover:bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {focal.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Position X Slider */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-600">Vị trí Ngang (Trục X)</span>
-                    <span className="font-mono font-bold text-amber-600">{activeSlide.bgPositionX ?? 50}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={activeSlide.bgPositionX ?? 50}
-                    onInput={(e: any) => updateActiveSlide('bgPositionX', Number(e.target.value))}
-                    onChange={(e) => updateActiveSlide('bgPositionX', Number(e.target.value))}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="w-full accent-amber-500 cursor-pointer touch-none"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
-                    <span>Trái (0%)</span>
-                    <span>Giữa (50%)</span>
-                    <span>Phải (100%)</span>
-                  </div>
-                </div>
-
-                {/* Position Y Slider */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-600">Vị trí Dọc (Trục Y)</span>
-                    <span className="font-mono font-bold text-amber-600">{activeSlide.bgPositionY ?? 50}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={activeSlide.bgPositionY ?? 50}
-                    onInput={(e: any) => updateActiveSlide('bgPositionY', Number(e.target.value))}
-                    onChange={(e) => updateActiveSlide('bgPositionY', Number(e.target.value))}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="w-full accent-amber-500 cursor-pointer touch-none"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
-                    <span>Trên (0%)</span>
-                    <span>Giữa (50%)</span>
-                    <span>Dưới (100%)</span>
-                  </div>
-                </div>
-
-                {/* Zoom / Scale Slider */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-600">Thu Phóng Ảnh (Zoom)</span>
-                    <span className="font-mono font-bold text-amber-600">{activeSlide.bgZoom ?? 100}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={100}
-                    max={200}
-                    step={2}
-                    value={activeSlide.bgZoom ?? 100}
-                    onInput={(e: any) => updateActiveSlide('bgZoom', Number(e.target.value))}
-                    onChange={(e) => updateActiveSlide('bgZoom', Number(e.target.value))}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="w-full accent-amber-500 cursor-pointer touch-none"
-                  />
-                  <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
-                    <span>Vừa khít (100%)</span>
-                    <span>Phóng to (200%)</span>
-                  </div>
-                </div>
+                  <Monitor className="w-3.5 h-3.5 text-blue-600" />
+                  <span>🖥️ Máy Tính (PC)</span>
+                </button>
 
                 <button
                   type="button"
-                  onClick={() => setIsDragCropMode(!isDragCropMode)}
-                  className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer ${
-                    isDragCropMode
-                      ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                  onClick={() => {
+                    setBgDeviceTab('mobile');
+                    setDeviceMode('mobile');
+                  }}
+                  className={`py-2 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer relative ${
+                    bgDeviceTab === 'mobile'
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <Move className="w-3.5 h-3.5" />
-                  <span>{isDragCropMode ? 'Đang bật kéo chuột trực tiếp trên ảnh' : 'Bật kéo chuột trực tiếp trên khung ảnh'}</span>
+                  <Smartphone className="w-3.5 h-3.5 text-amber-600" />
+                  <span>📱 Điện Thoại</span>
+                  {activeSlide.bgImageMobile ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Đã có ảnh riêng cho điện thoại" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Chưa có ảnh riêng (Dùng chung ảnh PC)" />
+                  )}
                 </button>
               </div>
 
-              {/* Overlay Opacity Slider */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
+              {/* ======================================================== */}
+              {/* SUB-SECTION A: DESKTOP (PC) BILLBOARD */}
+              {/* ======================================================== */}
+              {bgDeviceTab === 'desktop' && (
+                <div className="space-y-4">
+                  {/* Image Upload & Crop Studio Action */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 block">
+                        Ảnh Nền Billboard Máy Tính
+                      </label>
+                      {activeSlide.bgImage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCropTarget('desktop');
+                            setIsCropModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Scissors className="w-3.5 h-3.5" />
+                          <span>Cắt Ảnh 16:9 / 21:9</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOverSlideId(activeSlide.id);
+                      }}
+                      onDragLeave={() => setDragOverSlideId(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverSlideId(null);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleImageFile(file, false);
+                      }}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                        dragOverSlideId === activeSlide.id
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-slate-200 hover:border-slate-300 bg-slate-50'
+                      }`}
+                    >
+                      <Upload className="w-5 h-5 mx-auto mb-1 text-amber-500" />
+                      <span className="text-xs font-bold text-slate-800 block">Tải ảnh PC từ máy tính</span>
+                      <span className="text-[10px] text-slate-500">Kéo thả hoặc nhấn vào đây (Khuyên dùng 1920×1080)</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-600">Hoặc dán liên kết ảnh PC</label>
+                      <input
+                        type="text"
+                        value={activeSlide.bgImage}
+                        onChange={(e) => updateActiveSlide('bgImage', e.target.value)}
+                        placeholder="https://..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none font-mono focus:bg-white focus:border-amber-500"
+                      />
+                    </div>
+
+                    {/* Primary Dedicated Crop Tool Button */}
+                    {activeSlide.bgImage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCropTarget('desktop');
+                          setIsCropModalOpen(true);
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 shadow-md transition-all cursor-pointer group"
+                      >
+                        <Crop className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                        <span>Mở Studio Cắt Ảnh Máy Tính (16:9 / 21:9)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* BILLBOARD HEIGHT & VIEWPORT SETTINGS */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Tỷ lệ khung hình trên PC</span>
+                      <span className="text-[10px] text-amber-600 font-medium">Lấp đầy màn hình</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatio', 'fullscreen')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatio === 'fullscreen' || !activeSlide.aspectRatio
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🖥️ Toàn màn hình</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Lấp đầy chiều cao PC</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatio', '16:9')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatio === '16:9'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🎬 Chuẩn 16:9</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">1920×1080 chuẩn Canva</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatio', 'cinematic')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatio === 'cinematic'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🎞️ Cinematic 21:9</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Góc rộng điện ảnh</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* IMAGE FIT MODE (Contain vs Cover vs Fill) */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Chế độ hiển thị ảnh PC (Fit Mode)</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Tránh bị mất viền</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFit', 'cover')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFit === 'cover' || (!activeSlide.bgFit && activeSlide.aspectRatio !== 'contain')
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🔍 Phủ kín (Cover)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Lấp đầy màn hình</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFit', 'contain')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFit === 'contain'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🖼️ Trọn vẹn (Contain)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Không cắt xén</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFit', 'fill')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFit === 'fill'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">↔️ Co giãn (Fill)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Vừa khít khung</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* IMAGE UPLOAD GUIDELINES & SIZING SPECS */}
+                  <div className="rounded-xl bg-slate-900 text-slate-100 p-3.5 space-y-2.5 text-xs shadow-inner border border-slate-800">
+                    <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                      <Info className="w-4 h-4 shrink-0" />
+                      <span>Quy chuẩn kích thước ảnh máy tính</span>
+                    </div>
+                    
+                    <div className="space-y-2 text-[11px] text-slate-300">
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-semibold text-white">🖥️ Toàn màn hình PC:</span>
+                        <span className="font-mono text-amber-300 font-bold">1920 × 1080 px (16:9)</span>
+                      </div>
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-semibold text-white">🎬 Góc rộng Cinematic:</span>
+                        <span className="font-mono text-amber-300 font-bold">1920 × 800 px (~21:9)</span>
+                      </div>
+                      <div className="flex items-start justify-between">
+                        <span className="font-semibold text-white">⚡ Định dạng & Dung lượng:</span>
+                        <span className="text-emerald-400 font-medium">JPG/WebP &lt; 2MB</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CROP, FOCAL POINT & ZOOM ADJUSTMENT */}
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Move className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="text-xs font-bold text-slate-800">Căn Tâm & Thu Phóng PC</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlideFields({ bgPositionX: 50, bgPositionY: 50, bgZoom: 100 })}
+                        className="text-[10px] font-bold text-slate-600 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 py-0.5 rounded border border-slate-200 hover:border-amber-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Đặt lại ảnh về tâm giữa và tỷ lệ 100%"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        <span>Mặc định (50/50)</span>
+                      </button>
+                    </div>
+
+                    {/* 9-Point Focal Presets */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-slate-600">Điểm lấy nét nhanh PC (Focal Point)</label>
+                      <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 w-fit mx-auto">
+                        {[
+                          { id: 'tl', x: 20, y: 20, label: '↖' },
+                          { id: 'tc', x: 50, y: 20, label: '↑' },
+                          { id: 'tr', x: 80, y: 20, label: '↗' },
+                          { id: 'cl', x: 20, y: 50, label: '←' },
+                          { id: 'cc', x: 50, y: 50, label: '•' },
+                          { id: 'cr', x: 80, y: 50, label: '→' },
+                          { id: 'bl', x: 20, y: 80, label: '↙' },
+                          { id: 'bc', x: 50, y: 80, label: '↓' },
+                          { id: 'br', x: 80, y: 80, label: '↘' }
+                        ].map((focal) => {
+                          const isSelected = (activeSlide.bgPositionX ?? 50) === focal.x && (activeSlide.bgPositionY ?? 50) === focal.y;
+                          return (
+                            <button
+                              key={focal.id}
+                              type="button"
+                              onClick={() => updateActiveSlideFields({ bgPositionX: focal.x, bgPositionY: focal.y })}
+                              className={`w-6 h-6 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'bg-white hover:bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              {focal.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Position X Slider */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Vị trí Ngang PC (Trục X)</span>
+                        <span className="font-mono font-bold text-amber-600">{activeSlide.bgPositionX ?? 50}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.bgPositionX ?? 50}
+                        onInput={(e: any) => updateActiveSlide('bgPositionX', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgPositionX', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Trái (0%)</span>
+                        <span>Giữa (50%)</span>
+                        <span>Phải (100%)</span>
+                      </div>
+                    </div>
+
+                    {/* Position Y Slider */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Vị trí Dọc PC (Trục Y)</span>
+                        <span className="font-mono font-bold text-amber-600">{activeSlide.bgPositionY ?? 50}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.bgPositionY ?? 50}
+                        onInput={(e: any) => updateActiveSlide('bgPositionY', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgPositionY', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Trên (0%)</span>
+                        <span>Giữa (50%)</span>
+                        <span>Dưới (100%)</span>
+                      </div>
+                    </div>
+
+                    {/* Zoom / Scale Slider */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Thu Phóng Ảnh PC (Zoom)</span>
+                        <span className="font-mono font-bold text-amber-600">{activeSlide.bgZoom ?? 100}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={100}
+                        max={200}
+                        step={2}
+                        value={activeSlide.bgZoom ?? 100}
+                        onInput={(e: any) => updateActiveSlide('bgZoom', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgZoom', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Vừa khít (100%)</span>
+                        <span>Phóng to (200%)</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDragCropMode(!isDragCropMode)}
+                      className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer ${
+                        isDragCropMode
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                      }`}
+                    >
+                      <Move className="w-3.5 h-3.5" />
+                      <span>{isDragCropMode ? 'Đang bật kéo chuột trực tiếp trên ảnh' : 'Bật kéo chuột trực tiếp trên khung ảnh'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ======================================================== */}
+              {/* SUB-SECTION B: SMARTPHONE (MOBILE) BILLBOARD (NEW) */}
+              {/* ======================================================== */}
+              {bgDeviceTab === 'mobile' && (
+                <div className="space-y-4 animate-fadeIn">
+                  {/* Smartphone Billboard Status Card */}
+                  {activeSlide.bgImageMobile ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>Đang dùng ảnh riêng cho Smartphone</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateActiveSlideFields({ bgImageMobile: undefined, originalBgImageMobile: undefined })}
+                          className="text-[10px] text-red-600 hover:text-red-800 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                          title="Xóa ảnh riêng và quay lại dùng ảnh máy tính tự động co giãn"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Dùng lại ảnh PC</span>
+                        </button>
+                      </div>
+
+                      {/* Mini Thumbnail */}
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-14 h-24 rounded-lg overflow-hidden border border-emerald-300 shadow-xs bg-slate-950 shrink-0">
+                          <img
+                            src={activeSlide.bgImageMobile}
+                            alt="Mobile billboard preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="text-[11px] text-emerald-900 space-y-1">
+                          <p className="font-semibold">Đã cấu hình ảnh riêng</p>
+                          <p className="text-[10px] text-emerald-700 leading-tight">
+                            Người dùng truy cập bằng điện thoại sẽ nhìn thấy bức ảnh dọc này thay vì ảnh ngang của máy tính.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs text-amber-900">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Chưa có ảnh riêng cho Smartphone</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                        Hiện tại điện thoại đang co giãn tạm từ ảnh ngang của máy tính. Bạn nên tải lên một ảnh riêng tỷ lệ dọc <strong>(9:16 hoặc 4:5)</strong> để không bị cắt mất chữ hoặc nhân vật trên màn hình điện thoại.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Upload Mobile Billboard */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 block">
+                        Tải Ảnh Nền Cho Smartphone
+                      </label>
+                      {(activeSlide.bgImageMobile || activeSlide.bgImage) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCropTarget('mobile');
+                            setIsCropModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-[11px] shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Scissors className="w-3.5 h-3.5" />
+                          <span>Cắt Dọc 9:16 / 4:5</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOverSlideId(activeSlide.id + '-mobile');
+                      }}
+                      onDragLeave={() => setDragOverSlideId(null)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverSlideId(null);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleImageFile(file, true);
+                      }}
+                      onClick={() => mobileFileInputRef.current?.click()}
+                      className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                        dragOverSlideId === activeSlide.id + '-mobile'
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-amber-200 hover:border-amber-400 bg-amber-50/40 hover:bg-amber-50/70'
+                      }`}
+                    >
+                      <Upload className="w-5 h-5 mx-auto mb-1 text-amber-600" />
+                      <span className="text-xs font-bold text-slate-800 block">Tải ảnh dọc riêng cho Smartphone</span>
+                      <span className="text-[10px] text-slate-500">Kéo thả hoặc nhấn vào đây (Khuyên dùng 1080×1920)</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-600">Hoặc dán liên kết ảnh dọc Smartphone</label>
+                      <input
+                        type="text"
+                        value={activeSlide.bgImageMobile || ''}
+                        onChange={(e) => updateActiveSlide('bgImageMobile', e.target.value)}
+                        placeholder="https://... (ảnh tỷ lệ 9:16 hoặc 4:5)"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none font-mono focus:bg-white focus:border-amber-500"
+                      />
+                    </div>
+
+                    {/* Dedicated Mobile Cropper Action */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCropTarget('mobile');
+                        setIsCropModalOpen(true);
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 shadow-md transition-all cursor-pointer group"
+                    >
+                      <Crop className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                      <span>Cắt Ảnh Dọc Smartphone (9:16 / 4:5 / 1:1)</span>
+                    </button>
+                  </div>
+
+                  {/* SMARTPHONE ASPECT RATIO / FRAME SETTINGS */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Tỷ lệ khung hình trên Smartphone</span>
+                      <span className="text-[10px] text-amber-600 font-medium">Chuẩn di động</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatioMobile', '9:16')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatioMobile === '9:16' || !activeSlide.aspectRatioMobile
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">📱 Chuẩn Dọc 9:16</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">1080×1920 (TikTok/Story/Reels)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatioMobile', '4:5')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatioMobile === '4:5'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">📸 Dọc Gọn 4:5</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">1080×1350 (Instagram Feed)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatioMobile', '1:1')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatioMobile === '1:1'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">⏹️ Khung Vuông 1:1</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">1080×1080 tiêu chuẩn</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('aspectRatioMobile', 'fullscreen')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.aspectRatioMobile === 'fullscreen'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">📲 Toàn màn hình</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Lấp đầy chiều cao máy</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SMARTPHONE FIT MODE */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Chế độ hiển thị ảnh Smartphone</span>
+                      <span className="text-[10px] text-slate-500 font-medium">Fit Mode</span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFitMobile', 'cover')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFitMobile === 'cover' || (!activeSlide.bgFitMobile && activeSlide.bgFit !== 'contain')
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🔍 Phủ kín (Cover)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Lấp đầy màn hình</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFitMobile', 'contain')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFitMobile === 'contain'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">🖼️ Trọn vẹn (Contain)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Không cắt xén</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlide('bgFitMobile', 'fill')}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                          activeSlide.bgFitMobile === 'fill'
+                            ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block">↔️ Co giãn (Fill)</span>
+                        <span className="text-[9px] text-slate-500 leading-tight block mt-0.5">Kéo vừa khít</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SMARTPHONE SIZING & DESIGN GUIDELINES */}
+                  <div className="rounded-xl bg-slate-900 text-slate-100 p-3.5 space-y-2.5 text-xs shadow-inner border border-slate-800">
+                    <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                      <Smartphone className="w-4 h-4 shrink-0" />
+                      <span>Quy chuẩn thiết kế ảnh cho Smartphone</span>
+                    </div>
+                    
+                    <div className="space-y-2 text-[11px] text-slate-300">
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-semibold text-white">📱 Kích thước chuẩn dọc:</span>
+                        <span className="font-mono text-amber-300 font-bold">1080 × 1920 px (9:16)</span>
+                      </div>
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-semibold text-white">📸 Kích thước dọc gọn:</span>
+                        <span className="font-mono text-amber-300 font-bold">1080 × 1350 px (4:5)</span>
+                      </div>
+                      <div className="flex items-start justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-semibold text-white">🛡️ Vùng an toàn (Safe Zone):</span>
+                        <span className="text-slate-300">Cách đỉnh và đáy 15%</span>
+                      </div>
+                      <div className="flex items-start justify-between">
+                        <span className="font-semibold text-white">⚡ Định dạng & Dung lượng:</span>
+                        <span className="text-emerald-400 font-medium">JPG/WebP &lt; 1.5MB</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SMARTPHONE FOCAL POINT & ZOOM ADJUSTMENT */}
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Move className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="text-xs font-bold text-slate-800">Căn Tâm & Thu Phóng Smartphone</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveSlideFields({ bgPositionXMobile: 50, bgPositionYMobile: 50, bgZoomMobile: 100 })}
+                        className="text-[10px] font-bold text-slate-600 hover:text-amber-600 bg-slate-100 hover:bg-amber-50 px-2 py-0.5 rounded border border-slate-200 hover:border-amber-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Đặt lại ảnh điện thoại về tâm giữa và tỷ lệ 100%"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" />
+                        <span>Mặc định (50/50)</span>
+                      </button>
+                    </div>
+
+                    {/* 9-Point Focal Presets for Mobile */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold text-slate-600">Điểm lấy nét nhanh Smartphone</label>
+                      <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 w-fit mx-auto">
+                        {[
+                          { id: 'tl', x: 20, y: 20, label: '↖' },
+                          { id: 'tc', x: 50, y: 20, label: '↑' },
+                          { id: 'tr', x: 80, y: 20, label: '↗' },
+                          { id: 'cl', x: 20, y: 50, label: '←' },
+                          { id: 'cc', x: 50, y: 50, label: '•' },
+                          { id: 'cr', x: 80, y: 50, label: '→' },
+                          { id: 'bl', x: 20, y: 80, label: '↙' },
+                          { id: 'bc', x: 50, y: 80, label: '↓' },
+                          { id: 'br', x: 80, y: 80, label: '↘' }
+                        ].map((focal) => {
+                          const currentX = activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50;
+                          const currentY = activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50;
+                          const isSelected = currentX === focal.x && currentY === focal.y;
+                          return (
+                            <button
+                              key={focal.id}
+                              type="button"
+                              onClick={() => updateActiveSlideFields({ bgPositionXMobile: focal.x, bgPositionYMobile: focal.y })}
+                              className={`w-6 h-6 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'bg-white hover:bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              {focal.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Position X Slider for Mobile */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Vị trí Ngang Smartphone (Trục X)</span>
+                        <span className="font-mono font-bold text-amber-600">
+                          {activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.bgPositionXMobile ?? activeSlide.bgPositionX ?? 50}
+                        onInput={(e: any) => updateActiveSlide('bgPositionXMobile', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgPositionXMobile', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Trái (0%)</span>
+                        <span>Giữa (50%)</span>
+                        <span>Phải (100%)</span>
+                      </div>
+                    </div>
+
+                    {/* Position Y Slider for Mobile */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Vị trí Dọc Smartphone (Trục Y)</span>
+                        <span className="font-mono font-bold text-amber-600">
+                          {activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.bgPositionYMobile ?? activeSlide.bgPositionY ?? 50}
+                        onInput={(e: any) => updateActiveSlide('bgPositionYMobile', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgPositionYMobile', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Trên (0%)</span>
+                        <span>Giữa (50%)</span>
+                        <span>Dưới (100%)</span>
+                      </div>
+                    </div>
+
+                    {/* Zoom Slider for Mobile */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-600">Thu Phóng Smartphone (Zoom)</span>
+                        <span className="font-mono font-bold text-amber-600">
+                          {activeSlide.bgZoomMobile ?? activeSlide.bgZoom ?? 100}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={100}
+                        max={200}
+                        step={2}
+                        value={activeSlide.bgZoomMobile ?? activeSlide.bgZoom ?? 100}
+                        onInput={(e: any) => updateActiveSlide('bgZoomMobile', Number(e.target.value))}
+                        onChange={(e) => updateActiveSlide('bgZoomMobile', Number(e.target.value))}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="w-full accent-amber-500 cursor-pointer touch-none"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-600 px-0.5">
+                        <span>Vừa khít (100%)</span>
+                        <span>Phóng to (200%)</span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDragCropMode(!isDragCropMode)}
+                      className={`w-full py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all border cursor-pointer ${
+                        isDragCropMode
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                      }`}
+                    >
+                      <Move className="w-3.5 h-3.5" />
+                      <span>{isDragCropMode ? 'Đang kéo chuột trên màn hình điện thoại' : 'Bật kéo chuột trên màn hình điện thoại'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* SHARED OVERLAY OPACITY SLIDER (Applies to both) */}
+              <div className="space-y-2 pt-3 border-t border-slate-200">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-700">Độ tối lớp phủ nền</span>
+                  <span className="font-bold text-slate-800">Độ tối lớp phủ nền (Chung cho PC & Mobile)</span>
                   <span className="font-mono font-bold text-amber-600">
                     {activeSlide.overlayOpacity ?? 50}%
                   </span>
@@ -1256,6 +2039,25 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
           {/* ---------------- TAB 2: TEXT & TYPOGRAPHY ---------------- */}
           {inspectorTab === 'text' && (
             <div className="space-y-3.5">
+              {/* Text Visibility Toggle */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Hiển thị chữ trên slide</span>
+                  <span className="text-[10px] text-slate-500">
+                    {activeSlide.showText !== false ? 'Đang bật tiêu đề & mô tả' : 'Đang ẩn toàn bộ chữ (Chỉ hiện ảnh)'}
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={activeSlide.showText !== false}
+                    onChange={(e) => updateActiveSlide('showText', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
               {/* Tag */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-700">Huy hiệu nhỏ</label>
@@ -1561,26 +2363,158 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
           {/* ---------------- TAB 3: BUTTON & CTA ---------------- */}
           {inspectorTab === 'button' && (
             <div className="space-y-3.5">
+              {/* Button Visibility Toggle */}
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Hiển thị nút bấm CTA</span>
+                  <span className="text-[10px] text-slate-500">
+                    {activeSlide.showButton !== false ? 'Đang bật nút kêu gọi hành động' : 'Đang ẩn nút (Chỉ dùng ảnh)'}
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={activeSlide.showButton !== false}
+                    onChange={(e) => updateActiveSlide('showButton', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              {/* QUICK PRESET: PURE IMAGE ONLY (NO BUTTON / NO TEXT) */}
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-300 space-y-2">
+                <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Chế Độ Trình Bày Banner Nhanh</span>
+                </div>
+                <p className="text-[10px] text-amber-900/80 leading-relaxed">
+                  Nếu bạn đã có ảnh banner thiết kế sẵn chứa chữ từ Canva/Photoshop, hãy bấm chọn chế độ bên dưới:
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateActiveSlideFields({
+                        showButton: false,
+                        showText: false,
+                        overlayOpacity: 0,
+                        hideOverlay: true
+                      });
+                    }}
+                    className="py-1.5 px-2 rounded-lg bg-white hover:bg-amber-50 text-slate-800 hover:text-amber-800 text-[11px] font-bold border border-amber-300 shadow-2xs transition-all cursor-pointer text-center"
+                  >
+                    🖼️ Chỉ hiện ảnh (Ẩn chữ & nút)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateActiveSlideFields({
+                        showButton: true,
+                        showText: true,
+                        overlayOpacity: 45,
+                        hideOverlay: false
+                      });
+                    }}
+                    className="py-1.5 px-2 rounded-lg bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 text-[11px] font-bold border border-slate-200 shadow-2xs transition-all cursor-pointer text-center"
+                  >
+                    ✨ Đầy đủ (Có chữ & nút)
+                  </button>
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-700">Nội dung nút bấm</label>
                 <input
                   type="text"
-                  value={activeSlide.buttonText}
+                  value={activeSlide.buttonText || ''}
                   onChange={(e) => updateActiveSlide('buttonText', e.target.value)}
-                  placeholder="Khám phá ngay, Xem bộ sưu tập..."
+                  placeholder="Để trống nếu không muốn hiển thị chữ trên nút..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-bold outline-none focus:bg-white focus:border-amber-500"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700">Đường dẫn danh mục khi bấm</label>
-                <input
-                  type="text"
-                  value={activeSlide.categoryLink}
-                  onChange={(e) => updateActiveSlide('categoryLink', e.target.value)}
-                  placeholder="all, keychains, bracelets..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none focus:bg-white focus:border-amber-500 font-mono"
-                />
+              {/* Dropdown Menu Chọn Trang Liên Kết Chuyển Hướng */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span>Trang liên kết khi khách bấm</span>
+                  {activeSlide.categoryLink && (
+                    <button
+                      type="button"
+                      onClick={() => updateActiveSlide('categoryLink', '')}
+                      className="text-[10px] font-normal text-slate-500 hover:text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Bỏ liên kết
+                    </button>
+                  )}
+                </label>
+
+                {/* Dropdown Select Menu */}
+                <select
+                  value={
+                    [
+                      'all', 'bracelets', 'keychains', 'lanyards', 'accessories',
+                      'event_0209', 'custom-order', 'collections', 'contact', 'about', ''
+                    ].includes(activeSlide.categoryLink || '')
+                      ? (activeSlide.categoryLink || '')
+                      : '__custom__'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '__custom__') {
+                      if (!activeSlide.categoryLink || ['all', 'bracelets', 'keychains', 'lanyards', 'accessories', 'event_0209', 'custom-order', 'collections', 'contact', 'about'].includes(activeSlide.categoryLink)) {
+                        updateActiveSlide('categoryLink', 'https://');
+                      }
+                    } else {
+                      updateActiveSlide('categoryLink', val);
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="">-- Không chuyển trang (Chỉ hiển thị) --</option>
+                  
+                  <optgroup label="🛍️ Danh Mục Sản Phẩm">
+                    <option value="all">🌟 Tất cả sản phẩm (Toàn bộ kho)</option>
+                    <option value="bracelets">💎 Vòng tay Paracord thủ công</option>
+                    <option value="keychains">🔑 Móc khóa & Phụ kiện EDC</option>
+                    <option value="lanyards">🏷️ Dây đeo thẻ & Lanyard</option>
+                    <option value="accessories">⚙️ Phụ kiện & Hạt Charm</option>
+                  </optgroup>
+
+                  <optgroup label="🎯 Sự Kiện & Bộ Sưu Tập">
+                    <option value="event_0209">🇻🇳 BST Kỷ Niệm 02/09 - Hào Khí Độc Lập</option>
+                    <option value="collections">🏆 Xem tất cả Bộ sưu tập</option>
+                    <option value="custom-order">✨ Đặt đan vòng theo yêu cầu (Custom Order)</option>
+                  </optgroup>
+
+                  <optgroup label="📄 Trang Thông Tin & Liên Hệ">
+                    <option value="contact">📞 Trang Liên hệ & CSKH</option>
+                    <option value="about">📖 Câu chuyện thương hiệu NOT A KNOT</option>
+                  </optgroup>
+
+                  <optgroup label="⚙️ Tùy Chỉnh Nâng Cao">
+                    <option value="__custom__">🔗 Tùy chỉnh liên kết khác / URL ngoài...</option>
+                  </optgroup>
+                </select>
+
+                {/* Custom URL Input if selected */}
+                {(![
+                  'all', 'bracelets', 'keychains', 'lanyards', 'accessories',
+                  'event_0209', 'custom-order', 'collections', 'contact', 'about', ''
+                ].includes(activeSlide.categoryLink || '')) && (
+                  <div className="pt-1 animate-fadeIn">
+                    <input
+                      type="text"
+                      value={activeSlide.categoryLink || ''}
+                      onChange={(e) => updateActiveSlide('categoryLink', e.target.value)}
+                      placeholder="https://... hoặc #ten-trang"
+                      className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none font-mono focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Nhập đường dẫn trang web hoặc mạng xã hội bạn muốn mở khi bấm.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Button Size */}
@@ -1726,6 +2660,44 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
         </div>
 
       </div>
+
+      {/* Image Cropper Modal (Supports both PC and Smartphone Cropping) */}
+      {isCropModalOpen && activeSlide && (
+        <ImageCropperModal
+          isOpen={isCropModalOpen}
+          onClose={() => setIsCropModalOpen(false)}
+          imageUrl={
+            cropTarget === 'mobile'
+              ? (activeSlide.originalBgImageMobile || activeSlide.bgImageMobile || activeSlide.originalBgImage || activeSlide.bgImage)
+              : (activeSlide.originalBgImage || activeSlide.bgImage)
+          }
+          initialAspectRatio={cropTarget === 'mobile' ? '9:16' : '16:9'}
+          onApplyCrop={(croppedDataUrl, cropRatio) => {
+            if (cropTarget === 'mobile') {
+              updateActiveSlideFields({
+                bgImageMobile: croppedDataUrl,
+                originalBgImageMobile: activeSlide.originalBgImageMobile || activeSlide.bgImageMobile || croppedDataUrl,
+                bgPositionXMobile: 50,
+                bgPositionYMobile: 50,
+                bgZoomMobile: 100,
+                aspectRatioMobile: (cropRatio === '9:16' || cropRatio === '4:5' || cropRatio === '1:1') ? (cropRatio as any) : '9:16'
+              });
+              setDeviceMode('mobile');
+              setBgDeviceTab('mobile');
+            } else {
+              updateActiveSlideFields({
+                bgImage: croppedDataUrl,
+                originalBgImage: activeSlide.originalBgImage || activeSlide.bgImage,
+                bgPositionX: 50,
+                bgPositionY: 50,
+                bgZoom: 100,
+                aspectRatio: cropRatio === '21:9' ? 'cinematic' : cropRatio === '16:9' ? '16:9' : activeSlide.aspectRatio || 'fullscreen'
+              });
+            }
+            setIsCropModalOpen(false);
+          }}
+        />
+      )}
 
     </div>
   );

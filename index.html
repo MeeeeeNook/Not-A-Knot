@@ -2,13 +2,135 @@
 <html lang="vi" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NOT A KNOT | Hào Khí 02.09</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <script>
+      // Gracefully prevent benign Vite HMR websocket connection notices in sandbox dev preview
+      window.addEventListener('unhandledrejection', function(event) {
+        var errStr = String((event && event.reason && event.reason.message) || (event && event.reason) || '');
+        if (errStr.includes('WebSocket') || errStr.includes('websocket') || errStr.includes('[vite]')) {
+          event.preventDefault();
+        }
+      });
+    </script>
+    <title>Not a Knot | Handmade Accessories</title>
+    
+    <!-- Favicon & Brand Icons -->
     <link rel="icon" type="image/jpeg" href="/assets/logo.jpg" />
+    <link rel="apple-touch-icon" href="/assets/logo.jpg" />
+    
+    <!-- Primary Meta SEO Tags -->
+    <meta name="title" content="Not a Knot | Handmade Accessories" />
+    <meta name="description" content="NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam." />
+    <meta name="keywords" content="NOT A KNOT, vòng tay paracord, vòng tay handmade, phụ kiện paracord, dây dù 550, vòng tay 02/09, vòng tay hào khí, vòng tay nam handmade, quà tặng thủ công, móc khóa paracord, paracord vietnam, vòng đôi handmade" />
+    <meta name="author" content="NOT A KNOT Handmade Studio" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <meta name="theme-color" content="#FAF9F6" />
+
+    <!-- Geo & Language Meta Tags -->
+    <meta name="geo.region" content="VN" />
+    <meta name="geo.placename" content="Vietnam" />
+    <meta name="language" content="Vietnamese" />
+    <meta http-equiv="content-language" content="vi" />
+
+    <!-- Open Graph / Facebook / Zalo -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NOT A KNOT Handmade Studio" />
+    <meta property="og:title" content="Not a Knot | Handmade Accessories" />
+    <meta property="og:description" content="NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam." />
+    <meta property="og:image" content="/assets/logo.jpg" />
+    <meta property="og:locale" content="vi_VN" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Not a Knot | Handmade Accessories" />
+    <meta name="twitter:description" content="NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam." />
+    <meta name="twitter:image" content="/assets/logo.jpg" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&subset=vietnamese&display=swap" rel="stylesheet">
-    <meta name="description" content="Tự hào Việt Nam cùng NOT A KNOT." />
+    
+    <!-- JSON-LD Structured Data Schema.org (Organization & Store) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "OnlineStore",
+      "name": "NOT A KNOT",
+      "alternateName": "NOT A KNOT Handmade Studio",
+      "description": "Thương hiệu phụ kiện thủ công chế tác từ dây dù Paracord 550 cao cấp tại Việt Nam.",
+      "url": "https://notaknot.vn",
+      "logo": "/assets/logo.jpg",
+      "image": "/assets/logo.jpg",
+      "priceRange": "80000VND - 500000VND",
+      "currenciesAccepted": "VND",
+      "paymentAccepted": "Cash, Bank Transfer, QR Code, MoMo",
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "VN",
+        "addressRegion": "Vietnam"
+      },
+      "sameAs": [
+        "https://www.facebook.com/profile.php?id=61593591390851",
+        "https://www.instagram.com/notaknot.handmade",
+        "https://www.threads.com/@notaknot.handmade"
+      ],
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Bộ Sưu Tập Phụ Kiện Paracord Handmade",
+        "itemListElement": [
+          {
+            "@type": "OfferCatalog",
+            "name": "BST Hào Khí 02.09"
+          },
+          {
+            "@type": "OfferCatalog",
+            "name": "BST Vòng Tay Charm Đồng Titan"
+          },
+          {
+            "@type": "OfferCatalog",
+            "name": "BST Móc Khóa EDC Paracord"
+          }
+        ]
+      }
+    }
+    </script>
+
+    <!-- JSON-LD FAQ Schema for Google Search Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Dây dù Paracord tại NOT A KNOT có bền và không thấm nước không?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "NOT A KNOT sử dụng dây dù Paracord 550 Type III 7 lõi tiêu chuẩn quân đội, có khả năng chịu lực tới 250kg, nhanh khô khi ướt, không mục rữa và cực kỳ bền bỉ trong mọi điều kiện thời tiết."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Cách đo size cổ tay để đặt vòng tay handmade vừa vặn?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Bạn dùng một sợi dây hoặc thước dây quấn vừa sát quanh cổ tay (không siết quá chặt), sau đó đo chiều dài để biết chu vi cổ tay (phổ biến từ 15cm đến 19cm) và ghi chú khi đặt hàng."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "NOT A KNOT có nhận đan vòng tay theo yêu cầu (custom) không?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Có, NOT A KNOT hỗ trợ phối màu dây paracord, charm đồng titan khắc chữ và điều chỉnh kích thước theo yêu cầu riêng của bạn."
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- Google Analytics 4 (GA4) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-MWTDSVH9ER"></script>
     <script>

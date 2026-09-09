@@ -1,11 +1,57 @@
 import React, { useState, useMemo } from 'react';
-import { Product, CategoryItem } from '../types';
+import { Product, CategoryItem, SellerUser } from '../types';
 import { StoredOrder } from '../firebase';
+import { deduplicateSellers } from '../utils/auth';
+import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart } from 'lucide-react';
+
+const SLICE_COLORS = [
+  '#2563EB', // Blue
+  '#10B981', // Emerald
+  '#F59E0B', // Amber
+  '#8B5CF6', // Purple
+  '#EC4899', // Pink
+  '#06B6D4', // Cyan
+  '#F97316', // Orange
+  '#14B8A6', // Teal
+  '#6366F1', // Indigo
+  '#64748B', // Slate
+];
+
+function getDonutSlicePath(cx: number, cy: number, rOuter: number, rInner: number, startAngle: number, endAngle: number) {
+  const sweep = endAngle - startAngle;
+  if (sweep >= 359.99) {
+    return [
+      'M', cx, cy - rOuter,
+      'A', rOuter, rOuter, 0, 1, 1, cx, cy + rOuter,
+      'A', rOuter, rOuter, 0, 1, 1, cx, cy - rOuter,
+      'M', cx, cy - rInner,
+      'A', rInner, rInner, 0, 1, 0, cx, cy + rInner,
+      'A', rInner, rInner, 0, 1, 0, cx, cy - rInner,
+      'Z'
+    ].join(' ');
+  }
+
+  const rad = (deg: number) => ((deg - 90) * Math.PI) / 180.0;
+  const startOuter = { x: cx + rOuter * Math.cos(rad(startAngle)), y: cy + rOuter * Math.sin(rad(startAngle)) };
+  const endOuter = { x: cx + rOuter * Math.cos(rad(endAngle)), y: cy + rOuter * Math.sin(rad(endAngle)) };
+  const startInner = { x: cx + rInner * Math.cos(rad(endAngle)), y: cy + rInner * Math.sin(rad(endAngle)) };
+  const endInner = { x: cx + rInner * Math.cos(rad(startAngle)), y: cy + rInner * Math.sin(rad(startAngle)) };
+  const largeArcFlag = sweep <= 180 ? 0 : 1;
+
+  return [
+    'M', startOuter.x, startOuter.y,
+    'A', rOuter, rOuter, 0, largeArcFlag, 1, endOuter.x, endOuter.y,
+    'L', startInner.x, startInner.y,
+    'A', rInner, rInner, 0, largeArcFlag, 0, endInner.x, endInner.y,
+    'Z'
+  ].join(' ');
+}
 
 interface AdminDashboardProps {
   orders: StoredOrder[];
   products: Product[];
   categories: CategoryItem[];
+  sellers?: SellerUser[];
   onNavigateToOrders: () => void;
   onNavigateToManualOrder: () => void;
 }
@@ -14,13 +60,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   products,
   categories,
+  sellers = [],
   onNavigateToOrders,
   onNavigateToManualOrder
 }) => {
   const [timeRange, setTimeRange] = useState<'all' | 'today' | '7days' | '30days' | 'this_month'>('all');
+  const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>('all');
+
+  type SellerSortField = 'rank' | 'name' | 'orderCount' | 'totalRevenue' | 'percent';
+  const [sellerSortField, setSellerSortField] = useState<SellerSortField>('totalRevenue');
+  const [sellerSortOrder, setSellerSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [hoveredSellerKey, setHoveredSellerKey] = useState<string | null>(null);
+
+  const handleSellerSort = (field: SellerSortField) => {
+    if (sellerSortField === field) {
+      setSellerSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSellerSortField(field);
+      setSellerSortOrder(field === 'name' ? 'asc' : 'desc');
+    }
+  };
 
   // Filter orders by time range
-  const filteredOrders = useMemo(() => {
+  const timeFilteredOrders = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
@@ -53,7 +115,261 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [orders, timeRange]);
 
-  // Valid orders
+  // Valid orders before seller filtering (for team-wide seller ranking)
+  const teamValidOrders = useMemo(() => {
+    return timeFilteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
+  }, [timeFilteredOrders]);
+
+  // Overall Team Gross Revenue
+  const teamGrossRevenue = useMemo(() => {
+    return teamValidOrders.reduce((sum, o) => {
+      const amt = o.totalPrice ?? o.totalAmount ?? 0;
+      return sum + amt;
+    }, 0);
+  }, [teamValidOrders]);
+
+  // Seller Leaderboard & Ranking Calculation
+  const sellerRanking = useMemo(() => {
+    const cleanSellers = deduplicateSellers(sellers);
+    const map: Record<string, {
+      id: string;
+      name: string;
+      username: string;
+      avatarColor: string;
+      isRootAdmin: boolean;
+      orderCount: number;
+      completedCount: number;
+      totalRevenue: number;
+      paidRevenue: number;
+    }> = {};
+
+    // 1. Initialize from known deduplicated sellers list keyed by s.id
+    cleanSellers.forEach((s) => {
+      const sId = s.id || `seller-${(s.username || '').toLowerCase().replace(/[^a-z0-9_]/g, '')}`;
+      map[sId] = {
+        id: sId,
+        name: s.name,
+        username: s.username,
+        avatarColor: s.avatarColor || '#B41C1A',
+        isRootAdmin: !!s.isRootAdmin,
+        orderCount: 0,
+        completedCount: 0,
+        totalRevenue: 0,
+        paidRevenue: 0
+      };
+    });
+
+    // Helper for normalized string comparison
+    const norm = (str: string) =>
+      str.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // 2. Tally from orders
+    teamValidOrders.forEach((o) => {
+      const amt = o.totalPrice ?? o.totalAmount ?? 0;
+      const paid = o.paymentStatus === 'paid' ? amt : (o.paidAmount || 0);
+      const isCompleted = o.status === 'completed' || o.status === 'Đã giao';
+
+      const isLockedSource = o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee';
+
+      if (isLockedSource) {
+        // Online / Website / Social Media Direct (No individual salesperson tracking)
+        const isSocial = o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo';
+        const key = isSocial ? 'seller-social-media' : 'seller-website';
+        if (!map[key]) {
+          map[key] = {
+            id: key,
+            name: isSocial ? 'Mạng Xã Hội (Tự Động)' : 'Website (Tự Động)',
+            username: isSocial ? 'social_media' : 'website',
+            avatarColor: isSocial ? '#3B82F6' : '#64748B',
+            isRootAdmin: false,
+            orderCount: 0,
+            completedCount: 0,
+            totalRevenue: 0,
+            paidRevenue: 0
+          };
+        }
+        map[key].orderCount += 1;
+        map[key].totalRevenue += amt;
+        map[key].paidRevenue += paid;
+        if (isCompleted) map[key].completedCount += 1;
+        return;
+      }
+
+      const sName = o.sellerName ? o.sellerName.trim() : '';
+      const normSName = norm(sName);
+
+      // Match against cleanSellers
+      const matched = cleanSellers.find(
+        (s) => (o.sellerId && s.id === o.sellerId) ||
+               (normSName && norm(s.name) === normSName) ||
+               (normSName && norm(s.username) === normSName)
+      );
+
+      if (matched) {
+        const sId = matched.id;
+        if (!map[sId]) {
+          map[sId] = {
+            id: sId,
+            name: matched.name,
+            username: matched.username,
+            avatarColor: matched.avatarColor || '#B41C1A',
+            isRootAdmin: !!matched.isRootAdmin,
+            orderCount: 0,
+            completedCount: 0,
+            totalRevenue: 0,
+            paidRevenue: 0
+          };
+        }
+        map[sId].orderCount += 1;
+        map[sId].totalRevenue += amt;
+        map[sId].paidRevenue += paid;
+        if (isCompleted) map[sId].completedCount += 1;
+      } else if (sName || o.sellerId) {
+        // Unknown/manual seller name or sellerId
+        const slug = (sName || o.sellerId || 'seller').toLowerCase().trim().replace(/[^a-z0-9_]/g, '') || 'manual';
+        const targetId = o.sellerId || `seller-${slug}`;
+
+        // If targetId or slug already exists in map, add to existing
+        if (!map[targetId]) {
+          map[targetId] = {
+            id: targetId,
+            name: sName || targetId,
+            username: slug,
+            avatarColor: '#D97706',
+            isRootAdmin: false,
+            orderCount: 0,
+            completedCount: 0,
+            totalRevenue: 0,
+            paidRevenue: 0
+          };
+        }
+        map[targetId].orderCount += 1;
+        map[targetId].totalRevenue += amt;
+        map[targetId].paidRevenue += paid;
+        if (isCompleted) map[targetId].completedCount += 1;
+      } else {
+        // Online / Website Direct
+        const key = 'seller-website';
+        if (!map[key]) {
+          map[key] = {
+            id: 'seller-website',
+            name: 'Website / Tự Động',
+            username: 'website',
+            avatarColor: '#2563EB',
+            isRootAdmin: false,
+            orderCount: 0,
+            completedCount: 0,
+            totalRevenue: 0,
+            paidRevenue: 0
+          };
+        }
+        map[key].orderCount += 1;
+        map[key].totalRevenue += amt;
+        map[key].paidRevenue += paid;
+        if (isCompleted) map[key].completedCount += 1;
+      }
+    });
+
+    // Deduplicate and merge any identically keyed items
+    const mergedMap: Record<string, typeof map[string]> = {};
+    Object.values(map).forEach((item) => {
+      if (!item) return;
+      const cleanId = item.id || `seller-${(item.username || '').toLowerCase()}`;
+      if (!mergedMap[cleanId]) {
+        mergedMap[cleanId] = { ...item, id: cleanId };
+      } else {
+        mergedMap[cleanId].orderCount += item.orderCount;
+        mergedMap[cleanId].completedCount += item.completedCount;
+        mergedMap[cleanId].totalRevenue += item.totalRevenue;
+        mergedMap[cleanId].paidRevenue += item.paidRevenue;
+      }
+    });
+
+    const totalRev = teamGrossRevenue || 1;
+    return Object.values(mergedMap)
+      .map((item) => ({
+        ...item,
+        percent: totalRev > 0 ? Number(((item.totalRevenue / totalRev) * 100).toFixed(1)) : 0,
+        completionRate: item.orderCount > 0 ? Math.round((item.completedCount / item.orderCount) * 100) : 0
+      }))
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .map((item, idx) => ({
+        ...item,
+        rank: idx + 1,
+        sliceColor: SLICE_COLORS[idx % SLICE_COLORS.length]
+      }));
+  }, [sellers, teamValidOrders, teamGrossRevenue]);
+
+  const sortedSellerRanking = useMemo(() => {
+    const list = [...sellerRanking];
+    list.sort((a, b) => {
+      let comparison = 0;
+      if (sellerSortField === 'rank') {
+        comparison = a.rank - b.rank;
+      } else if (sellerSortField === 'name') {
+        comparison = a.name.localeCompare(b.name, 'vi');
+      } else if (sellerSortField === 'orderCount') {
+        comparison = a.orderCount - b.orderCount;
+      } else if (sellerSortField === 'totalRevenue') {
+        comparison = a.totalRevenue - b.totalRevenue;
+      } else if (sellerSortField === 'percent') {
+        comparison = a.percent - b.percent;
+      }
+      return sellerSortOrder === 'asc' ? comparison : -comparison;
+    });
+    return list;
+  }, [sellerRanking, sellerSortField, sellerSortOrder]);
+
+  const pieSlices = useMemo(() => {
+    const sellersWithRevenue = sellerRanking.filter((s) => s.totalRevenue > 0);
+    const totalRev = sellersWithRevenue.reduce((acc, s) => acc + s.totalRevenue, 0);
+    if (totalRev === 0) return [];
+
+    let currentAngle = 0;
+    return sellersWithRevenue.map((seller) => {
+      const sliceAngle = (seller.totalRevenue / totalRev) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + sliceAngle;
+      currentAngle = endAngle;
+
+      return {
+        seller,
+        startAngle,
+        endAngle,
+        percent: Number(((seller.totalRevenue / totalRev) * 100).toFixed(1))
+      };
+    });
+  }, [sellerRanking]);
+
+  // Filter orders by selected seller (if a seller is chosen)
+  const filteredOrders = useMemo(() => {
+    if (selectedSellerFilter === 'all') return timeFilteredOrders;
+
+    return timeFilteredOrders.filter((ord) => {
+      const isLockedSource = ord.source === 'website' || ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo' || ord.source === 'shopee';
+      const sName = ord.sellerName ? ord.sellerName.toLowerCase().trim() : '';
+
+      if (selectedSellerFilter === 'website') {
+        return ord.source === 'website' || (!ord.sellerId && (!sName || sName === 'website' || sName.includes('tự động')));
+      }
+      if (selectedSellerFilter === 'social_media') {
+        return ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo';
+      }
+
+      if (isLockedSource) return false;
+
+      return (
+        sName === selectedSellerFilter.toLowerCase() ||
+        ord.sellerId === selectedSellerFilter ||
+        sellers.some(
+          (s) => (s.id === selectedSellerFilter || s.username.toLowerCase() === selectedSellerFilter.toLowerCase()) &&
+                 (s.name.toLowerCase() === sName || s.username.toLowerCase() === sName)
+        )
+      );
+    });
+  }, [timeFilteredOrders, selectedSellerFilter, sellers]);
+
+  // Valid orders for active view
   const validOrders = useMemo(() => {
     return filteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
   }, [filteredOrders]);
@@ -171,23 +487,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const statusFunnel = useMemo(() => {
     const counts = {
       'Đã đặt': 0,
+      'Đã tiếp nhận': 0,
       'Đã thanh toán': 0,
       'Đã giao': 0
     };
 
     filteredOrders.forEach((o) => {
-      const st = o.status || 'Đã đặt';
-      if (st in counts) {
-        counts[st as keyof typeof counts]++;
+      const rawSt = (o.status || 'Đã đặt').toLowerCase().trim();
+      if (['đã giao', 'shipping', 'completed', 'delivered', 'đang giao', 'hoàn thành'].includes(rawSt)) {
+        counts['Đã giao']++;
+      } else if (['đã thanh toán', 'paid', 'confirmed'].includes(rawSt)) {
+        counts['Đã thanh toán']++;
+      } else if (['đã tiếp nhận', 'tiếp nhận', 'received', 'acknowledged', 'processing', 'crafting'].includes(rawSt)) {
+        counts['Đã tiếp nhận']++;
       } else {
         counts['Đã đặt']++;
       }
     });
 
     return [
-      { id: 'Đã đặt', label: 'Đã đặt', count: counts['Đã đặt'] },
-      { id: 'Đã thanh toán', label: 'Đã thanh toán', count: counts['Đã thanh toán'] },
-      { id: 'Đã giao', label: 'Đã giao', count: counts['Đã giao'] }
+      { id: 'Đã đặt', label: 'Đã đặt (Mới)', count: counts['Đã đặt'], color: 'border-amber-200 bg-amber-50/70 text-amber-950' },
+      { id: 'Đã tiếp nhận', label: 'Đã tiếp nhận', count: counts['Đã tiếp nhận'], color: 'border-sky-200 bg-sky-50/70 text-sky-950' },
+      { id: 'Đã thanh toán', label: 'Đã thanh toán', count: counts['Đã thanh toán'], color: 'border-emerald-200 bg-emerald-50/70 text-emerald-950' },
+      { id: 'Đã giao', label: 'Đã giao', count: counts['Đã giao'], color: 'border-indigo-200 bg-indigo-50/70 text-indigo-950' }
     ];
   }, [filteredOrders]);
 
@@ -261,39 +583,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div id="admin-dashboard-section" className="space-y-5">
       
-      {/* Top Controls & Time Range Filter */}
+      {/* Top Controls & Time Range & Seller Filter */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-xs">
         <div>
-          <h3 className="text-base font-bold text-slate-900">
-            Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900">
+              Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh
+            </h3>
+            {selectedSellerFilter !== 'all' && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                Đang xem: {sellers.find(s => s.username === selectedSellerFilter || s.id === selectedSellerFilter)?.name || selectedSellerFilter}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-500">
-            Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và tại xưởng
+            Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và theo từng nhân sự bán hàng
           </p>
         </div>
 
-        {/* Time Filter Pills */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 overflow-x-auto">
-          {[
-            { id: 'today', label: 'Hôm nay' },
-            { id: '7days', label: '7 ngày' },
-            { id: '30days', label: '30 ngày' },
-            { id: 'this_month', label: 'Tháng này' },
-            { id: 'all', label: 'Tất cả' }
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTimeRange(t.id as any)}
-              className={`px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap transition-all ${
-                timeRange === t.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-              }`}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Seller Filter Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs">
+            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+            <select
+              value={selectedSellerFilter}
+              onChange={(e) => setSelectedSellerFilter(e.target.value)}
+              className="bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer"
             >
-              {t.label}
-            </button>
-          ))}
+              <option value="all">Toàn bộ nhóm (Tất cả người bán)</option>
+              {deduplicateSellers(sellers).map((s, sIdx) => (
+                <option key={`dashboard-seller-opt-${s.id || s.username}-${sIdx}`} value={s.username}>
+                  Người bán: {s.name}
+                </option>
+              ))}
+              <option value="website">Kênh trực tuyến (Website)</option>
+            </select>
+          </div>
+
+          {/* Time Filter Pills */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 overflow-x-auto">
+            {[
+              { id: 'today', label: 'Hôm nay' },
+              { id: '7days', label: '7 ngày' },
+              { id: '30days', label: '30 ngày' },
+              { id: 'this_month', label: 'Tháng này' },
+              { id: 'all', label: 'Tất cả' }
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTimeRange(t.id as any)}
+                className={`px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap transition-all ${
+                  timeRange === t.id
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -353,10 +702,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* Average Order Value (AOV) */}
+        {/* Average Order Value */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Giá Trị Đơn Trung Bình (AOV)
+            Giá Trị Đơn Trung Bình
           </span>
           <span className="text-2xl font-bold text-slate-900 block mt-2">
             {averageOrderValue.toLocaleString('vi-VN')}đ
@@ -397,16 +746,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {statusFunnel.map((item) => (
             <div
               key={item.id}
-              className="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between"
+              className={`p-3.5 rounded-xl border flex items-center justify-between shadow-2xs ${item.color || 'border-slate-200 bg-slate-50'}`}
             >
-              <span className="text-xs font-bold text-slate-800">{item.label}</span>
+              <span className="text-xs font-bold">{item.label}</span>
               <div className="text-right">
-                <span className="text-lg font-bold text-slate-900">{item.count}</span>
-                <span className="text-[10px] text-slate-500 block">đơn</span>
+                <span className="text-lg font-black">{item.count}</span>
+                <span className="text-[10px] opacity-70 block font-medium">đơn</span>
               </div>
             </div>
           ))}
@@ -616,6 +965,286 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Row 6: Seller Ranking & Contribution Donut Chart */}
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <PieChart className="w-5 h-5 text-slate-800" />
+            <div>
+              <h4 className="font-bold text-sm text-slate-900">
+                Bảng Xếp Hạng & Doanh Số Người Bán
+              </h4>
+              <span className="text-xs text-slate-500">
+                Hiệu suất bán hàng, biểu đồ đóng góp doanh thu và thứ hạng người bán
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Grid: Left: Circular Pie / Donut Chart with Legend; Right: Sortable Table */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Biểu đồ tròn đóng góp doanh số */}
+          <div className="lg:col-span-5 bg-slate-50/60 p-4 rounded-xl border border-slate-200/80 flex flex-col items-center">
+            <h5 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 self-start">
+              Biểu Đồ Tròn Đóng Góp Doanh Số
+            </h5>
+
+            {/* Donut Chart Canvas */}
+            <div className="relative w-52 h-52 my-1">
+              <svg viewBox="0 0 240 240" className="w-full h-full transform -rotate-90">
+                {pieSlices.length === 0 ? (
+                  <circle
+                    cx="120"
+                    cy="120"
+                    r="80"
+                    fill="none"
+                    stroke="#E2E8F0"
+                    strokeWidth="35"
+                  />
+                ) : (
+                  pieSlices.map((slice, sliceIdx) => {
+                    const isHovered = hoveredSellerKey === slice.seller.username;
+                    const rOut = isHovered ? 98 : 92;
+                    const rIn = 60;
+                    const pathD = getDonutSlicePath(120, 120, rOut, rIn, slice.startAngle, slice.endAngle);
+
+                    return (
+                      <path
+                        key={`pie-slice-${slice.seller.id || slice.seller.username}-${sliceIdx}`}
+                        d={pathD}
+                        fill={slice.seller.sliceColor}
+                        className="transition-all duration-200 cursor-pointer"
+                        opacity={hoveredSellerKey && !isHovered ? 0.45 : 1}
+                        onMouseEnter={() => setHoveredSellerKey(slice.seller.username)}
+                        onMouseLeave={() => setHoveredSellerKey(null)}
+                      />
+                    );
+                  })
+                )}
+              </svg>
+
+              {/* Center Content in Donut */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 pointer-events-none">
+                {(() => {
+                  if (hoveredSellerKey) {
+                    const matched = sellerRanking.find((s) => s.username === hoveredSellerKey);
+                    if (matched) {
+                      return (
+                        <>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider max-w-[110px] truncate">
+                            {matched.name}
+                          </span>
+                          <span className="text-sm font-black text-slate-900 mt-0.5">
+                            {matched.totalRevenue.toLocaleString('vi-VN')}đ
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-600 mt-0.5">
+                            {matched.percent}% ({matched.orderCount} đơn)
+                          </span>
+                        </>
+                      );
+                    }
+                  }
+
+                  return (
+                    <>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Tổng Doanh Số
+                      </span>
+                      <span className="text-sm font-black text-slate-900 mt-0.5">
+                        {teamGrossRevenue.toLocaleString('vi-VN')}đ
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-500 mt-0.5">
+                        {teamValidOrders.length} đơn hợp lệ
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Legend for Pie Chart */}
+            <div className="w-full mt-3 pt-3 border-t border-slate-200/80 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {sellerRanking
+                .filter((s) => s.totalRevenue > 0 || s.orderCount > 0)
+                .map((seller, sIdx) => {
+                  const isHovered = hoveredSellerKey === seller.username;
+                  return (
+                    <div
+                      key={`dashboard-legend-${seller.id || seller.username}-${sIdx}`}
+                      onMouseEnter={() => setHoveredSellerKey(seller.username)}
+                      onMouseLeave={() => setHoveredSellerKey(null)}
+                      className={`flex items-center justify-between gap-2 px-2 py-1 rounded text-xs transition-colors cursor-pointer ${
+                        isHovered ? 'bg-amber-100/70 font-semibold' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: seller.sliceColor }}
+                        />
+                        <span className="text-slate-800 truncate text-[11px] font-medium">
+                          {seller.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          {seller.totalRevenue.toLocaleString('vi-VN')}đ
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 min-w-[36px] text-right">
+                          {seller.percent}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Right (Col 6-12): Sortable Leaderboard Table */}
+          <div className="lg:col-span-7 overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-700 border border-slate-200 rounded-lg overflow-hidden">
+              <thead className="bg-slate-50 text-[10px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  {/* Col 1: Hạng */}
+                  <th
+                    onClick={() => handleSellerSort('rank')}
+                    className="p-2.5 text-center w-14 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    title="Bấm để sắp xếp theo thứ hạng"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Hạng</span>
+                      {sellerSortField === 'rank' ? (
+                        sellerSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Col 2: Người Bán */}
+                  <th
+                    onClick={() => handleSellerSort('name')}
+                    className="p-2.5 cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    title="Bấm để sắp xếp theo tên người bán"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Người Bán</span>
+                      {sellerSortField === 'name' ? (
+                        sellerSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Col 3: Số Đơn */}
+                  <th
+                    onClick={() => handleSellerSort('orderCount')}
+                    className="p-2.5 text-center cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    title="Bấm để sắp xếp theo số đơn"
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Số Đơn</span>
+                      {sellerSortField === 'orderCount' ? (
+                        sellerSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Col 4: Doanh Thu */}
+                  <th
+                    onClick={() => handleSellerSort('totalRevenue')}
+                    className="p-2.5 text-right cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    title="Bấm để sắp xếp theo doanh thu"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Doanh Thu</span>
+                      {sellerSortField === 'totalRevenue' ? (
+                        sellerSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Col 5: Đóng Góp (%) */}
+                  <th
+                    onClick={() => handleSellerSort('percent')}
+                    className="p-2.5 text-right cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    title="Bấm để sắp xếp theo phần trăm đóng góp"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Đóng Góp (%)</span>
+                      {sellerSortField === 'percent' ? (
+                        sellerSortOrder === 'asc' ? <ArrowUp className="w-3 h-3 text-slate-800" /> : <ArrowDown className="w-3 h-3 text-slate-800" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-60" />
+                      )}
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedSellerRanking.map((seller, sIdx) => {
+                  const isHovered = hoveredSellerKey === seller.username;
+                  return (
+                    <tr
+                      key={`dashboard-rank-row-${seller.id || seller.username}-${sIdx}`}
+                      onMouseEnter={() => setHoveredSellerKey(seller.username)}
+                      onMouseLeave={() => setHoveredSellerKey(null)}
+                      className={`transition-colors ${
+                        isHovered ? 'bg-amber-50/70 font-semibold' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      {/* Col 1: Hạng (Clean numbers, no 1, 2, 3 logo/medals) */}
+                      <td className="p-2.5 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
+                          {seller.rank}
+                        </span>
+                      </td>
+
+                      {/* Col 2: Người Bán (No avatar) */}
+                      <td className="p-2.5 whitespace-nowrap">
+                        <span className="font-semibold text-slate-900 text-xs">{seller.name}</span>
+                      </td>
+
+                      {/* Col 3: Số Đơn */}
+                      <td className="p-2.5 text-center whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-xs">
+                          {seller.orderCount} đơn
+                        </span>
+                      </td>
+
+                      {/* Col 4: Doanh Thu */}
+                      <td className="p-2.5 text-right whitespace-nowrap font-bold text-slate-900">
+                        {seller.totalRevenue.toLocaleString('vi-VN')}đ
+                      </td>
+
+                      {/* Col 5: Đóng Góp (%) */}
+                      <td className="p-2.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <span
+                            className="w-2 h-2 rounded-full inline-block"
+                            style={{ backgroundColor: seller.sliceColor }}
+                          />
+                          <span className="font-bold text-slate-900 text-xs">
+                            {seller.percent}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
         </div>
       </div>
 

@@ -187,8 +187,8 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
     const totalSecondsAllPages: number = Object.values(durations).reduce<number>((acc, val: any) => acc + (typeof val?.totalSeconds === 'number' ? val.totalSeconds : 0), 0) || 1;
 
     const labelMap: Record<string, string> = {
-      '#home': 'Trang chủ (Showcase & Banner)',
-      '#landing': 'Trang chủ (Landing Page)',
+      '#home': 'Trang chủ',
+      '#landing': 'Trang chủ',
       '#products': 'Danh mục Tất cả sản phẩm',
       '#catalog': 'Danh mục phân loại',
       '#product-detail': 'Chi tiết sản phẩm',
@@ -486,7 +486,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
             <h3 className="font-extrabold text-sm text-slate-900">
-              Nhật Ký Tương Tác Trực Tiếp (Live Stream)
+              Nhật Ký Tương Tác Trực Tiếp
             </h3>
           </div>
           <span className="text-[11px] font-bold text-slate-500">
@@ -632,7 +632,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-amber-500 shrink-0" />
               <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                Thời Gian Khách Ở Lại Từng Trang (Time on Page & Engagement)
+                Thời Gian Khách Ở Lại Từng Trang
               </h3>
             </div>
             <p className="text-xs text-slate-500">
@@ -650,7 +650,7 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
             <thead className="bg-slate-50 text-[10px] font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-200">
               <tr>
                 <th className="p-3">Trang / Phân Mục</th>
-                <th className="p-3 text-center">Lượt Xem (Views)</th>
+                <th className="p-3 text-center">Lượt Xem</th>
                 <th className="p-3 text-center">Thời Gian TB / Lượt</th>
                 <th className="p-3 text-center">Tổng Thời Gian Lưu Lại</th>
                 <th className="p-3 text-right">Tỷ Trọng Lưu Lượng</th>

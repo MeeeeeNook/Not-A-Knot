@@ -49,7 +49,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
               Câu Chuyện & Tinh Thần Thương Hiệu
             </h3>
             <p>
-              NOT A KNOT là xưởng chế tác thủ công chuyên sâu về các dòng phụ kiện dây dù Paracord 550 và phụ kiện EDC (Everyday Carry) tại Việt Nam.
+              NOT A KNOT là xưởng chế tác thủ công chuyên sâu về các dòng phụ kiện dây dù Paracord 550 và phụ kiện EDC tại Việt Nam.
             </p>
             <p>
               Tên gọi <strong className="text-amber-300 font-semibold">NOT A KNOT</strong> mang ý nghĩa: một chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần bền bỉ và bản lĩnh của người mang nó.

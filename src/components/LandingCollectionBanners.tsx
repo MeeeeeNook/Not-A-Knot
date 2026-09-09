@@ -14,8 +14,10 @@ export const LandingCollectionBanners: React.FC<LandingCollectionBannersProps> =
   onSelectCollection,
   onOpenAllCatalog
 }) => {
-  // Sort collections by order
-  const activeBanners = [...collections].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Sort collections by order and filter out hidden collections
+  const activeBanners = [...collections]
+    .filter((c) => !c.isHidden)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   if (!activeBanners || activeBanners.length === 0) return null;
 
@@ -26,7 +28,7 @@ export const LandingCollectionBanners: React.FC<LandingCollectionBannersProps> =
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto space-y-2">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-950 tracking-tight">
-            Bộ Sưu Tập Thủ Công NOT A KNOT
+            Bộ Sưu Tập NOT A KNOT
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Mỗi bộ sưu tập là một câu chuyện riêng biệt, kết tinh từ niềm đam mê dây dù Paracord 550 chuẩn quân đội và nghệ thuật đan tay thủ công tỉ mỉ.
@@ -53,6 +55,7 @@ export const LandingCollectionBanners: React.FC<LandingCollectionBannersProps> =
                     alt={banner.title}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 ease-out brightness-95"
                     loading="lazy"
+                    decoding="async"
                   />
                   {/* Gradient Overlays */}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent" />

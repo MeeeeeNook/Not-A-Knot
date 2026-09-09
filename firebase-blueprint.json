@@ -38,7 +38,11 @@
         "totalPrice": { "type": "number", "description": "Tổng giá trị đơn hàng" },
         "totalAmount": { "type": "number", "description": "Tổng giá trị đơn hàng" },
         "type": { "type": "string", "description": "Loại đơn: preorder_0209 hoặc standard_order" },
-        "status": { "type": "string", "description": "Trạng thái xử lý: pending, confirmed, crafting, shipping, completed, cancelled" }
+        "status": { "type": "string", "description": "Trạng thái xử lý: pending, confirmed, crafting, shipping, completed, cancelled" },
+        "trackingNumber": { "type": "string", "description": "Mã tra cứu đơn hàng chuyên biệt (vd: NAK-260904-8942)", "optional": true },
+        "shippingCarrier": { "type": "string", "description": "Đơn vị vận chuyển (Viettel Post, GHTK, GHN...)", "optional": true },
+        "shippingCode": { "type": "string", "description": "Mã vận đơn của đối tác giao hàng", "optional": true },
+        "estimatedDelivery": { "type": "string", "description": "Thời gian dự kiến giao hàng", "optional": true }
       }
     },
     "Category": {
@@ -83,6 +87,23 @@
         "isRead": { "type": "boolean", "description": "Trạng thái đã đọc hay chưa", "optional": true },
         "status": { "type": "string", "description": "Trạng thái tin nhắn (unread, read, replied)", "optional": true }
       }
+    },
+    "Seller": {
+      "description": "Danh sách tài khoản người bán và quản trị viên",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh tài khoản" },
+        "username": { "type": "string", "description": "Tên đăng nhập" },
+        "name": { "type": "string", "description": "Họ và tên người bán" },
+        "passwordHash": { "type": "string", "description": "Mật khẩu băm SHA-256" },
+        "passwordSalt": { "type": "string", "description": "Muối mã hóa" },
+        "isRootAdmin": { "type": "boolean", "description": "Quyền Admin Gốc" },
+        "role": { "type": "string", "description": "Vai trò tài khoản (root_admin, manager, member)" },
+        "isActive": { "type": "boolean", "description": "Trạng thái hoạt động" },
+        "createdAt": { "type": "string", "description": "Thời gian tạo" },
+        "lastLoginAt": { "type": "string", "description": "Thời gian đăng nhập gần nhất", "optional": true },
+        "avatarColor": { "type": "string", "description": "Màu đại diện avatar", "optional": true },
+        "phone": { "type": "string", "description": "Số điện thoại", "optional": true }
+      }
     }
   },
   "firestore": {
@@ -122,6 +143,13 @@
     },
     "/contact_messages/{messageId}": {
       "schema": "ContactMessage",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/sellers/{sellerId}": {
+      "schema": "Seller",
       "allow": {
         "read": "true",
         "write": "true"

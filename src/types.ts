@@ -7,6 +7,21 @@ export interface CategoryItem {
   highlightColor?: string;
   badge?: string;
   isEvent?: boolean;
+  isHidden?: boolean;
+}
+
+export interface ProductColorOption {
+  name: string;
+  image?: string; // photo linked to this color (when clicked, swaps main product image)
+  colorCode?: string; // optional hex for swatch dot, e.g. #FF0000
+}
+
+export interface ProductCharmOption {
+  id?: string;
+  name: string; // e.g. "Sao chuông · Xanh", "Sao trong · Hồng", "Hoa anh đào · Hồng"
+  image: string; // thumbnail / photo of the charm
+  priceDelta?: number; // optional extra price, default 0
+  stock?: number; // Inventory quantity for this specific charm (undefined = unlimited, 0 = out of stock)
 }
 
 export interface Product {
@@ -28,8 +43,18 @@ export interface Product {
   reviewsCount: number;
   availableColors?: string[];
   availableSizes?: string[];
+  // Dynamic Variation Settings
+  enableColorSelection?: boolean;
+  colorOptions?: ProductColorOption[];
+  enableCharmSelection?: boolean;
+  charmOptions?: ProductCharmOption[];
+  charmSelectionRequired?: boolean;
+  enableSizeSelection?: boolean;
   inStock: boolean;
   stock?: number;
+  soldCount?: number;
+  isHidden?: boolean;
+  updatedAt?: string;
 }
 
 export interface BannerItem {
@@ -50,6 +75,10 @@ export interface CartItem {
   product: Product;
   quantity: number;
   selectedColor?: string;
+  selectedColorImage?: string;
+  selectedCharm?: string;
+  selectedCharmImage?: string;
+  selectedCharmPrice?: number;
   selectedSize?: string;
   customNote?: string;
 }
@@ -66,8 +95,27 @@ export interface OrderItemDetail {
   price: number;
   quantity: number;
   selectedColor?: string;
+  selectedColorImage?: string;
+  selectedCharm?: string;
+  selectedCharmImage?: string;
+  selectedCharmPrice?: number;
   selectedSize?: string;
   customNote?: string;
+}
+
+export interface SellerUser {
+  id: string;
+  username: string;
+  name: string;
+  passwordHash: string;
+  passwordSalt: string;
+  isRootAdmin?: boolean;
+  role: 'root_admin' | 'member';
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+  avatarColor?: string;
+  phone?: string;
 }
 
 export interface OrderRecord {
@@ -83,15 +131,33 @@ export interface OrderRecord {
   itemDetails?: OrderItemDetail[];
   totalPrice?: number;
   totalAmount?: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  craftingStageNote?: string;
   source?: OrderSource;
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
-  status?: 'pending' | 'confirmed' | 'crafting' | 'shipping' | 'completed' | 'cancelled';
+  isManual?: boolean;
+  status?: 'Chờ xác nhận' | 'Đã xác nhận' | 'Knot đang được sản xuất' | 'Đang giao hàng' | 'Đơn hàng giao thành công' | 'pending' | 'received' | 'confirmed' | 'crafting' | 'shipping' | 'completed' | 'cancelled' | 'Đã đặt' | 'Đã tiếp nhận' | 'Đã thanh toán' | 'Đã giao' | 'Đã hủy';
   paymentMethod?: PaymentMethod;
   paymentStatus?: PaymentStatus;
   bankReceiptImage?: string;
   paidAmount?: number;
   bankTransferRef?: string;
+  sellerId?: string;
+  sellerName?: string;
+  trackingNumber?: string;
+  shippingCarrier?: string;
+  shippingCode?: string;
+  estimatedDelivery?: string;
+  statusHistory?: {
+    status: string;
+    label: string;
+    timestamp: string;
+    note?: string;
+  }[];
 }
+
+export type StoredOrder = OrderRecord;
 
 export interface ContactMessage {
   id: string;
@@ -114,6 +180,7 @@ export interface CollectionInfo {
   subtitle: string;
   highlight?: string;
   story?: string;
+  description?: string;
   craftDetails?: string[];
   bgImage: string;
   bannerImage: string;
@@ -129,10 +196,14 @@ export interface CollectionInfo {
   soldOutNote?: string;
   themeColor?: string;
   accentColor?: string;
+  bgColor?: string;
+  bannerOverlay?: 'dark' | 'light' | 'gradient' | 'none';
+  bannerDisplayMode?: 'cover_hero' | 'featured_card' | 'minimal';
   order?: number;
   buttonText?: string;
   themeStyle?: 'light' | 'dark' | 'event0209';
   customDesignMode?: boolean;
+  isHidden?: boolean;
 }
 
 export interface CustomElementBlock {
@@ -185,6 +256,35 @@ export interface SiteHeroSlide {
   bgPositionX?: number; // 0 to 100% (default 50)
   bgPositionY?: number; // 0 to 100% (default 50)
   bgZoom?: number; // 100 to 250% (default 100)
+  showButton?: boolean;
+  showText?: boolean;
+  hideOverlay?: boolean;
+  bgFit?: 'cover' | 'contain' | 'fill';
+  aspectRatio?: 'fullscreen' | '16:9' | 'cinematic' | 'contain' | 'auto';
+  originalBgImage?: string;
+  // Dedicated Mobile / Smartphone Billboard Settings
+  bgImageMobile?: string;
+  originalBgImageMobile?: string;
+  bgPositionXMobile?: number; // 0 to 100% (default 50)
+  bgPositionYMobile?: number; // 0 to 100% (default 50)
+  bgZoomMobile?: number; // 100 to 250% (default 100)
+  bgFitMobile?: 'cover' | 'contain' | 'fill';
+  aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto';
+}
+
+export interface FaqItem {
+  id?: string;
+  q: string;
+  a: string;
+}
+
+export interface BankAccountConfig {
+  bankId: string; // e.g. 'VCB', 'TPB', 'MB', 'BIDV', 'TCB', 'ACB', 'VPB', 'VIB', 'STB'
+  bankName: string; // e.g. 'Vietcombank', 'TPBank', 'MBBank', 'BIDV'
+  accountNumber: string; // e.g. '1028394859'
+  accountHolder: string; // e.g. 'VU NGOC MANH CUONG'
+  branch?: string;
+  qrTemplate?: 'compact' | 'compact2' | 'qr_only' | 'print';
 }
 
 export interface SiteContentConfig {
@@ -198,7 +298,11 @@ export interface SiteContentConfig {
   zalo: string;
   address: string;
   email: string;
+  bankAccount?: BankAccountConfig;
   heroSlides: SiteHeroSlide[];
+  faqTitle?: string;
+  faqSubtitle?: string;
+  faqs?: FaqItem[];
   aboutSection: {
     badge: string;
     title: string;
@@ -228,6 +332,7 @@ export interface SiteContentConfig {
   shippingPolicy: string;
   socialLinks: {
     facebook: string;
+    messenger?: string;
     instagram: string;
     threads: string;
     tiktok?: string;

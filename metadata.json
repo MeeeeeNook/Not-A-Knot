@@ -1,6 +1,6 @@
 {
-  "name": "Remix Remix NOT A KNOT | Hào Khí 02.09",
-  "description": "Trang giới thiệu và đăng ký đặt trước bộ sưu tập phụ kiện thủ công đặc biệt kỷ niệm 02/09 từ NOT A KNOT.",
+  "name": "Not a Knot | Handmade Accessories",
+  "description": "NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Product } from '../types';
-import { X, Check, ShieldCheck, Truck, ShoppingBag } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Product, ProductColorOption, ProductCharmOption } from '../types';
+import { ProductCharmSelector } from './ProductCharmSelector';
+import { ProductColorSelector } from './ProductColorSelector';
+import { X, Check, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
 
 interface ProductDetailModalProps {
@@ -10,7 +13,12 @@ interface ProductDetailModalProps {
     product: Product,
     quantity: number,
     selectedColor?: string,
-    selectedSize?: string
+    selectedSize?: string,
+    customNote?: string,
+    selectedCharm?: string,
+    selectedColorImage?: string,
+    selectedCharmImage?: string,
+    selectedCharmPrice?: number
   ) => void;
 }
 
@@ -22,23 +30,139 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   if (!product) return null;
 
   const [quantity, setQuantity] = useState(1);
-  const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [activeImageIdx, setActiveImageIdx] = useState<number>(0);
   const [isAdded, setIsAdded] = useState(false);
 
+  const initialColor = useMemo(() => {
+    if (product?.colorOptions && product.colorOptions.length > 0) {
+      return product.colorOptions[0].name;
+    }
+    return product?.availableColors?.[0];
+  }, [product]);
+
+  const initialColorImage = useMemo(() => {
+    if (product?.colorOptions && product.colorOptions.length > 0) {
+      return product.colorOptions[0].image;
+    }
+    return undefined;
+  }, [product]);
+
+  const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
+  const [selectedColorImage, setSelectedColorImage] = useState<string | undefined>(initialColorImage);
+  const [selectedCharm, setSelectedCharm] = useState<string | undefined>(undefined);
+  const [selectedCharmImage, setSelectedCharmImage] = useState<string | undefined>(undefined);
+  const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
+  const [charmError, setCharmError] = useState<string | null>(null);
+
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(
+    product?.availableSizes?.[0]
+  );
+
   useEffect(() => {
+    setActiveImageIdx(0);
+    setQuantity(1);
+    setSelectedColor(product?.colorOptions?.[0]?.name || product?.availableColors?.[0]);
+    setSelectedColorImage(product?.colorOptions?.[0]?.image);
+    setSelectedCharm(undefined);
+    setSelectedCharmImage(undefined);
+    setSelectedCharmPrice(undefined);
+    setCharmError(null);
+    setSelectedSize(product?.availableSizes?.[0]);
+
     if (product) {
       trackGA4ViewItem(product);
     }
   }, [product?.id]);
 
-  const images = product.images && product.images.length > 0 ? product.images : [product.image];
+  const images = useMemo(() => {
+    const base = product.images && product.images.length > 0 ? [...product.images] : [product.image];
+    if (selectedColorImage && !base.includes(selectedColorImage)) {
+      return [selectedColorImage, ...base];
+    }
+    return base;
+  }, [product, selectedColorImage]);
 
-  const availableStock = typeof product.stock === 'number' ? product.stock : 15;
-  const isOutOfStock = product.inStock === false || availableStock <= 0;
+  const availableStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
+  const isOutOfStock = product.inStock === false;
+
+  const paginate = useCallback((newDirection: number) => {
+    setActiveImageIdx((curr) => {
+      let next = curr + newDirection;
+      if (next < 0) next = images.length - 1;
+      if (next >= images.length) next = 0;
+      return next;
+    });
+  }, [images.length]);
+
+  const selectImage = useCallback((idx: number) => {
+    setActiveImageIdx(idx);
+  }, []);
+
+  const handleSelectColor = (colorOpt: ProductColorOption) => {
+    setSelectedColor(colorOpt.name);
+    if (colorOpt.image) {
+      setSelectedColorImage(colorOpt.image);
+      const imgIdx = images.indexOf(colorOpt.image);
+      if (imgIdx > -1) {
+        setActiveImageIdx(imgIdx);
+      } else {
+        setActiveImageIdx(0);
+      }
+    }
+  };
+
+  const handleSelectCharm = (charmOpt: ProductCharmOption | null) => {
+    setCharmError(null);
+    if (!charmOpt) {
+      setSelectedCharm(undefined);
+      setSelectedCharmImage(undefined);
+      setSelectedCharmPrice(undefined);
+    } else {
+      if (typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
+        setCharmError(`Mẫu charm "${charmOpt.name}" đã hết hàng trong kho. Vui lòng chọn mẫu khác.`);
+        return;
+      }
+      setSelectedCharm(charmOpt.name);
+      setSelectedCharmImage(charmOpt.image);
+      setSelectedCharmPrice(charmOpt.priceDelta || 0);
+    }
+  };
 
   const handleAdd = () => {
     if (isOutOfStock) return;
-    onAddToCart(product, quantity);
+
+    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
+      setCharmError('Vui lòng chọn 1 mẫu charm trước khi thêm.');
+      return;
+    }
+
+    if (selectedCharm && product.charmOptions) {
+      const chosenCharm = product.charmOptions.find(
+        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
+      );
+      if (chosenCharm && typeof chosenCharm.stock === 'number') {
+        if (chosenCharm.stock <= 0) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu charm khác.`);
+          return;
+        }
+        if (chosenCharm.stock < quantity) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+          return;
+        }
+      }
+    }
+
+    onAddToCart(
+      product,
+      quantity,
+      selectedColor,
+      selectedSize,
+      undefined,
+      selectedCharm,
+      selectedColorImage,
+      selectedCharmImage,
+      selectedCharmPrice
+    );
     setIsAdded(true);
     setTimeout(() => {
       setIsAdded(false);
@@ -70,14 +194,67 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Images Section */}
           <div className="bg-neutral-50 p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-white shadow-sm mb-4">
-              <img
-                src={images[activeImageIdx]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
+            <div className="relative aspect-square rounded-2xl overflow-hidden bg-white shadow-sm mb-4 group">
+              {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
+              <div
+                className="flex w-full h-full transition-transform duration-500 ease-out"
+                style={{ transform: `translateX(-${activeImageIdx * 100}%)` }}
+              >
+                {images.map((imgSrc, idx) => (
+                  <div key={idx} className="w-full h-full flex-shrink-0 relative">
+                    <img
+                      src={imgSrc}
+                      alt={`${product.name} - Ảnh ${idx + 1}`}
+                      className="w-full h-full object-cover select-none pointer-events-none"
+                      style={{ imageRendering: '-webkit-optimize-contrast' }}
+                      draggable={false}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {images.length > 1 && (
+                <>
+                  {/* Left edge hover zone */}
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 z-20 flex items-center justify-start pl-2.5 group/edge-left cursor-pointer select-none"
+                    onClick={() => paginate(-1)}
+                    title="Ảnh trước"
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        paginate(-1);
+                      }}
+                      className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/15 hover:bg-black/40 backdrop-blur-md border border-white/20 text-white/90 hover:text-white flex items-center justify-center opacity-0 group-hover/edge-left:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      aria-label="Ảnh trước"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" strokeWidth={2} />
+                    </button>
+                  </div>
+
+                  {/* Right edge hover zone */}
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 z-20 flex items-center justify-end pr-2.5 group/edge-right cursor-pointer select-none"
+                    onClick={() => paginate(1)}
+                    title="Ảnh sau"
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        paginate(1);
+                      }}
+                      className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-black/15 hover:bg-black/40 backdrop-blur-md border border-white/20 text-white/90 hover:text-white flex items-center justify-center opacity-0 group-hover/edge-right:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      aria-label="Ảnh sau"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" strokeWidth={2} />
+                    </button>
+                  </div>
+                </>
+              )}
+
               {product.isEvent0209 && (
-                <div className="absolute top-3 left-3 bg-brand-red text-white text-xs font-semibold px-3 py-1 rounded-full shadow-sm">
+                <div className="absolute top-3 left-3 bg-brand-red text-white text-xs font-semibold px-3 py-1 rounded-full shadow-sm z-10">
                   Bản giới hạn 02.09
                 </div>
               )}
@@ -89,14 +266,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {images.map((img, i) => (
                   <button
                     key={i}
-                    onClick={() => setActiveImageIdx(i)}
-                    className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${
+                    onClick={() => selectImage(i)}
+                    className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 cursor-pointer ${
                       i === activeImageIdx
-                        ? 'border-neutral-900'
+                        ? 'border-neutral-900 ring-1 ring-neutral-900/20'
                         : 'border-neutral-200 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img src={img} alt="thumb" className="w-full h-full object-cover" />
+                    <img
+                      src={img}
+                      alt="thumb"
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                    />
                   </button>
                 ))}
               </div>
@@ -126,11 +309,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </span>
 
               {/* Title & Stock badge */}
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-bold text-neutral-950 tracking-tight">
                     {product.name}
                   </h2>
+                  {product.soldCount !== undefined && product.soldCount > 0 && (
+                    <span className="bg-neutral-100 text-neutral-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border border-neutral-200">
+                      Đã bán {product.soldCount}
+                    </span>
+                  )}
                   {isOutOfStock ? (
                     <span className="bg-red-100 text-brand-red text-[11px] font-bold px-2.5 py-0.5 rounded-full">
                       Hết hàng
@@ -173,6 +361,67 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {product.description}
               </p>
 
+              {/* Color Selection (if enabled) */}
+              {product.enableColorSelection !== false &&
+                ((product.colorOptions && product.colorOptions.length > 0) ||
+                  (product.availableColors && product.availableColors.length > 0)) && (
+                  <ProductColorSelector
+                    colors={
+                      product.colorOptions && product.colorOptions.length > 0
+                        ? product.colorOptions
+                        : product.availableColors || []
+                    }
+                    selectedColor={selectedColor}
+                    onSelectColor={handleSelectColor}
+                  />
+                )}
+
+              {/* Charm Selection (if enabled) */}
+              {product.enableCharmSelection &&
+                product.charmOptions &&
+                product.charmOptions.length > 0 && (
+                  <div className="space-y-1">
+                    <ProductCharmSelector
+                      charms={product.charmOptions}
+                      selectedCharm={selectedCharm}
+                      onSelectCharm={handleSelectCharm}
+                      isRequired={product.charmSelectionRequired}
+                    />
+                    {charmError && (
+                      <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                        ⚠️ {charmError}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              {/* Size Variants (if enabled) */}
+              {product.enableSizeSelection !== false &&
+                product.availableSizes &&
+                product.availableSizes.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
+                      Kích thước cổ tay: <span className="text-amber-700 font-semibold">{selectedSize}</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {product.availableSizes.map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setSelectedSize(size)}
+                          className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            selectedSize === size
+                              ? 'border-neutral-950 bg-neutral-950 text-white shadow-sm'
+                              : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               {/* Product Specifications list */}
               {product.details && product.details.length > 0 && (
                 <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-1.5">
@@ -210,9 +459,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       +
                     </button>
                   </div>
-                  {quantity >= availableStock && (
-                    <span className="text-[11px] text-amber-700 font-medium">Tối đa theo tồn kho</span>
+                  {quantity >= availableStock && availableStock < 90 && (
+                    <span className="text-[11px] text-amber-700 font-medium">Tối đa ({availableStock})</span>
                   )}
+                  {selectedCharmPrice && selectedCharmPrice > 0 ? (
+                    <span className="text-xs text-amber-800 font-medium">
+                      +{(selectedCharmPrice * quantity).toLocaleString('vi-VN')}đ (charm)
+                    </span>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -242,7 +496,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 ) : (
                   <>
                     <ShoppingBag className="w-4 h-4" />
-                    <span>Thêm vào giỏ ({quantity}) — {(product.price * quantity).toLocaleString('vi-VN')}đ</span>
+                    <span>
+                      Thêm vào giỏ ({quantity}) — {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
+                    </span>
                   </>
                 )}
               </button>
@@ -250,7 +506,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {/* Messenger consultation link */}
               <a
                 id="modal-messenger-contact-btn"
-                href="https://www.facebook.com/profile.php?id=61593591390851"
+                href="https://m.me/61593591390851"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full py-2.5 rounded-full border border-neutral-300 hover:border-neutral-900 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
@@ -260,17 +516,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </svg>
                 <span>Nhắn tin tư vấn sản phẩm qua Messenger</span>
               </a>
-
-              <div className="flex items-center justify-center gap-4 text-[11px] text-neutral-500 pt-1">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-neutral-700" />
-                  Bảo hành trọn đời
-                </span>
-                <span className="flex items-center gap-1">
-                  <Truck className="w-3.5 h-3.5 text-neutral-700" />
-                  Giao hàng toàn quốc
-                </span>
-              </div>
             </div>
           </div>
         </div>

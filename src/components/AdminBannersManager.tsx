@@ -25,6 +25,9 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
 
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<CollectionInfo | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
+
   // Form fields
   const [formTitle, setFormTitle] = useState('');
   const [formSubtitle, setFormSubtitle] = useState('');
@@ -34,6 +37,8 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
   const [formCategoryKey, setFormCategoryKey] = useState(categories[0]?.id || 'event_0209');
   const [formThemeStyle, setFormThemeStyle] = useState<'light' | 'dark' | 'event0209'>('light');
   const [formIsPreorder, setFormIsPreorder] = useState(false);
+  const [formIsHidden, setFormIsHidden] = useState(false);
+  const [collectionVisibilityFilter, setCollectionVisibilityFilter] = useState<'all' | 'visible' | 'hidden'>('all');
   const [formImage, setFormImage] = useState('');
   const [formHorizontalImage, setFormHorizontalImage] = useState('');
   const [formProductPageBanner, setFormProductPageBanner] = useState('');
@@ -51,7 +56,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
 
   const processFileToState = (file: File, setter: (val: string) => void) => {
     if (!file.type.startsWith('image/')) {
-      alert('Vui lòng chọn file hình ảnh (JPG, PNG, WebP, SVG).');
+      setErrorMsg('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP, SVG).');
       return;
     }
 
@@ -60,7 +65,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 1600;
+        const maxDim = 2560;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -75,8 +80,18 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/webp', 0.95);
+            if (!compressed || !compressed.startsWith('data:image/webp')) {
+              compressed = canvas.toDataURL('image/jpeg', 0.94);
+            }
+          } catch {
+            compressed = canvas.toDataURL('image/jpeg', 0.94);
+          }
           setter(compressed);
         } else {
           setter(event.target?.result as string);
@@ -98,6 +113,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     setFormCategoryKey(categories[0]?.id || 'event_0209');
     setFormThemeStyle('light');
     setFormIsPreorder(false);
+    setFormIsHidden(false);
     setFormImage('');
     setFormHorizontalImage('');
     setFormProductPageBanner('');
@@ -116,6 +132,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     setFormCategoryKey(col.categoryKey || categories[0]?.id || 'event_0209');
     setFormThemeStyle(col.themeStyle || 'light');
     setFormIsPreorder(!!col.isPreorder);
+    setFormIsHidden(!!col.isHidden);
     setFormImage(col.bannerImage || col.bgImage || '');
     setFormHorizontalImage(col.horizontalImage || col.bannerImage || col.bgImage || '');
     setFormProductPageBanner(col.productPageBanner || col.bannerImage || col.bgImage || '');
@@ -123,12 +140,33 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     setIsEditing(true);
   };
 
+  // Quick 1-touch toggle visibility for collection
+  const handleToggleHideCollection = async (col: CollectionInfo) => {
+    const nextHidden = !col.isHidden;
+    const updated = collections.map((c) => (c.id === col.id ? { ...c, isHidden: nextHidden } : c));
+    onUpdateCollections(updated);
+    try {
+      const updatedItem = updated.find((c) => c.id === col.id);
+      if (updatedItem) {
+        await saveCollectionToFirestore(updatedItem);
+      }
+      const msg = nextHidden
+        ? `Đã ẩn bộ sưu tập "${col.title}". Khách hàng sẽ không thấy trên trang chủ & menu.`
+        : `Đã hiện bộ sưu tập "${col.title}" trở lại cửa hàng.`;
+      setSuccessMsg(msg);
+      if (onCloudNotify) onCloudNotify(msg);
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } catch (e) {
+      console.warn('Firestore toggle collection hide error:', e);
+    }
+  };
+
   // Handle local file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        alert('Vui lòng chọn file hình ảnh (JPG, PNG, WebP).');
+        setErrorMsg('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP).');
         return;
       }
 
@@ -137,7 +175,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const maxDim = 1400;
+          const maxDim = 2560;
           let { width, height } = img;
           if (width > maxDim || height > maxDim) {
             if (width > height) {
@@ -152,8 +190,18 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.85);
+            let compressed = '';
+            try {
+              compressed = canvas.toDataURL('image/webp', 0.95);
+              if (!compressed || !compressed.startsWith('data:image/webp')) {
+                compressed = canvas.toDataURL('image/jpeg', 0.94);
+              }
+            } catch {
+              compressed = canvas.toDataURL('image/jpeg', 0.94);
+            }
             setFormImage(compressed);
           } else {
             setFormImage(event.target?.result as string);
@@ -196,6 +244,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
               categoryKey: formCategoryKey,
               themeStyle: formThemeStyle,
               isPreorder: formIsPreorder,
+              isHidden: formIsHidden,
               bannerImage: finalMainImage,
               bgImage: finalMainImage,
               horizontalImage: finalHorizImage,
@@ -225,6 +274,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
           categoryKey: formCategoryKey,
           themeStyle: formThemeStyle,
           isPreorder: formIsPreorder,
+          isHidden: formIsHidden,
           bannerImage: finalMainImage,
           bgImage: finalMainImage,
           horizontalImage: finalHorizImage,
@@ -286,41 +336,52 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     }
   };
 
-  // Delete Banner
-  const handleDelete = async (col: CollectionInfo) => {
+  // Delete Banner Click (Opens in-app confirmation modal)
+  const handleDelete = (col: CollectionInfo) => {
     if (collections.length <= 1) {
-      alert('Hệ thống cần giữ ít nhất 1 banner bộ sưu tập.');
+      setErrorMsg('Hệ thống cần giữ ít nhất 1 banner bộ sưu tập trên trang chủ.');
       return;
     }
-    if (!window.confirm(`Bạn có chắc chắn muốn xóa banner "${col.title}" khỏi trang chủ?`)) {
-      return;
-    }
+    setDeleteConfirmModal(col);
+  };
 
+  // Confirm delete handler (No window.confirm, 100% reliable in iframe)
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmModal) return;
+    const colToDelete = deleteConfirmModal;
+    
     try {
-      const remaining = collections.filter((c) => c.id !== col.id);
+      const remaining = collections.filter((c) => c.id !== colToDelete.id);
       const reordered = remaining.map((item, idx) => ({ ...item, order: idx }));
       onUpdateCollections(reordered);
 
-      await deleteCollectionFromFirestore(col.id);
-      setSuccessMsg(`Đã xóa banner "${col.title}".`);
+      await deleteCollectionFromFirestore(colToDelete.id);
+      setSuccessMsg(`Đã xóa banner "${colToDelete.title}" thành công.`);
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       setErrorMsg('Lỗi xóa banner: ' + err.message);
+    } finally {
+      setDeleteConfirmModal(null);
     }
   };
 
   // Reset to default 3 showcases
-  const handleResetDefaults = async () => {
-    if (!window.confirm('Khôi phục 3 Banner Showcase mặc định (02/09, 20/10, Paracord EDC)?')) {
-      return;
-    }
+  const handleResetDefaults = () => {
+    setShowResetModal(true);
+  };
+
+  // Confirm Reset Defaults handler
+  const handleConfirmReset = async () => {
     onUpdateCollections(COLLECTIONS_DATA);
     try {
       await Promise.all(COLLECTIONS_DATA.map((c) => saveCollectionToFirestore(c)));
-      setSuccessMsg('Đã khôi phục 3 banner mặc định!');
+      setSuccessMsg('Đã khôi phục 3 banner mặc định thành công!');
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       console.warn('Lỗi reset Firestore:', err);
+      setErrorMsg('Lỗi khôi phục mặc định: ' + err.message);
+    } finally {
+      setShowResetModal(false);
     }
   };
 
@@ -498,17 +559,35 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                 </select>
               </div>
 
-              {/* 7. Pre-order Switch */}
-              <div className="flex items-center gap-2 pt-4">
-                <input
-                  type="checkbox"
-                  id="form-is-preorder-cb"
-                  checked={formIsPreorder}
-                  onChange={(e) => setFormIsPreorder(e.target.checked)}
-                  className="w-4 h-4 rounded cursor-pointer"
-                />
-                <label htmlFor="form-is-preorder-cb" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                  Kích hoạt luồng Đặt Trước (Pre-order nhận cọc)
+              {/* 7. Pre-order Switch & Visibility Switch */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-2 md:col-span-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="form-is-preorder-cb"
+                    checked={formIsPreorder}
+                    onChange={(e) => setFormIsPreorder(e.target.checked)}
+                    className="w-4 h-4 rounded cursor-pointer text-amber-500 focus:ring-amber-400"
+                  />
+                  <span className="text-xs font-semibold text-slate-700">
+                    Kích hoạt luồng Đặt Trước (Pre-order nhận cọc)
+                  </span>
+                </label>
+
+                <div className="h-4 w-px bg-slate-300 hidden sm:block" />
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="form-is-hidden-cb"
+                    checked={formIsHidden}
+                    onChange={(e) => setFormIsHidden(e.target.checked)}
+                    className="w-4 h-4 rounded cursor-pointer text-rose-500 focus:ring-rose-400"
+                  />
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>🙈 Ẩn bộ sưu tập này</span>
+                    <span className="text-[10px] font-normal text-slate-500">(Khách hàng không thấy trên website)</span>
+                  </span>
                 </label>
               </div>
 
@@ -772,9 +851,61 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
         </div>
       )}
 
+      {/* Banners List Header & Visibility Filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-800">Hiển thị:</span>
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setCollectionVisibilityFilter('all')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                collectionVisibilityFilter === 'all'
+                  ? 'bg-amber-400 text-slate-950 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Tất cả ({collections.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollectionVisibilityFilter('visible')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                collectionVisibilityFilter === 'visible'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Đang hiện ({collections.filter((c) => !c.isHidden).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollectionVisibilityFilter('hidden')}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                collectionVisibilityFilter === 'hidden'
+                  ? 'bg-slate-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Đang ẩn ({collections.filter((c) => !!c.isHidden).length})
+            </button>
+          </div>
+        </div>
+
+        <span className="text-[11px] text-slate-500 font-medium">
+          Mẹo: Dùng nút <strong>Ẩn/Hiện</strong> để ẩn tạm thời BST chưa sẵn sàng mà không cần xóa.
+        </span>
+      </div>
+
       {/* Banners List */}
       <div className="space-y-3">
-        {sortedCollections.map((col, index) => {
+        {sortedCollections
+          .filter((c) => {
+            if (collectionVisibilityFilter === 'visible') return !c.isHidden;
+            if (collectionVisibilityFilter === 'hidden') return !!c.isHidden;
+            return true;
+          })
+          .map((col, index) => {
           const isTop = index === 0;
           const isBottom = index === sortedCollections.length - 1;
 
@@ -782,7 +913,9 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
             <div
               key={col.id}
               id={`admin-banner-row-${col.id}`}
-              className="bg-white rounded-xl border border-slate-200 p-4 transition-all shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+              className={`bg-white rounded-xl border p-4 transition-all shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+                col.isHidden ? 'border-dashed border-rose-300 bg-rose-50/20' : 'border-slate-200'
+              }`}
             >
               {/* Order & Position Controls */}
               <div className="flex items-center gap-3 w-full md:w-auto">
@@ -812,12 +945,17 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                 </div>
 
                 {/* Thumbnail Image */}
-                <div className="w-20 h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 ml-1">
+                <div className="w-20 h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 ml-1 relative">
                   <img
                     src={col.bannerImage || col.bgImage || '/assets/bracelet.jpg'}
                     alt={col.title}
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${col.isHidden ? 'opacity-60 grayscale' : ''}`}
                   />
+                  {col.isHidden && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-[10px] text-white font-bold">
+                      Đã ẩn
+                    </div>
+                  )}
                 </div>
 
                 {/* Banner Metadata Info */}
@@ -826,6 +964,15 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                     <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                       {col.title}
                     </span>
+                    {col.isHidden ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                        Đang ẩn
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Đang hiển thị
+                      </span>
+                    )}
                     {col.badge && (
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
                         {col.badge}
@@ -849,6 +996,19 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleToggleHideCollection(col)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                    col.isHidden
+                      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  }`}
+                  title={col.isHidden ? 'Hiển thị lại bộ sưu tập này trên website' : 'Ẩn bộ sưu tập khỏi website'}
+                >
+                  {col.isHidden ? 'Hiện BST' : 'Ẩn BST'}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleOpenEdit(col)}
@@ -1003,6 +1163,95 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM DELETE BANNER */}
+      {deleteConfirmModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setDeleteConfirmModal(null)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white p-6 rounded-2xl border border-rose-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Xóa Banner Bộ Sưu Tập</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Hành động cần xác nhận</p>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1">
+              <p className="text-sm font-semibold text-slate-800">
+                Bạn có chắc chắn muốn xóa banner <span className="text-rose-600 font-bold">"{deleteConfirmModal.title}"</span> khỏi trang chủ?
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Banner sẽ bị gỡ bỏ khỏi giao diện hiển thị trang chủ và danh sách quản trị.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                id="btn-confirm-delete-banner"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM RESET DEFAULTS */}
+      {showResetModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowResetModal(false)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white p-6 rounded-2xl border border-slate-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Khôi Phục Banner Mặc Định</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Đặt lại 3 banner gốc của hệ thống</p>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1">
+              <p className="text-sm font-semibold text-slate-800">
+                Khôi phục lại 3 Banner Showcase mặc định (02/09, 20/10, Paracord EDC)?
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Tất cả các banner tùy chỉnh hiện tại sẽ được thay thế bằng 3 bộ sưu tập chuẩn ban đầu.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Xác nhận khôi phục
+              </button>
+            </div>
           </div>
         </div>
       )}

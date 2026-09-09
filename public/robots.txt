@@ -1,0 +1,7 @@
+# robots.txt for NOT A KNOT
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://notaknot.vn/sitemap.xml

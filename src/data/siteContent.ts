@@ -6,10 +6,18 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   announcementText: '🇻🇳 Sự Kiện 02/09: Nhận đặt trước BST Hào Khí Độc Lập - Giảm 15% khi thanh toán chuyển khoản',
   announcementLink: '#collection?id=event_0209',
   announcementActive: true,
-  phone: '0987.654.321',
-  zalo: '0987.654.321',
-  address: 'NEU - Hà Nội',
-  email: 'contact@notaknot.vn',
+  phone: '079 655 5636',
+  zalo: '',
+  address: 'Hanoi, Vietnam',
+  email: 'notaknothandmade@gmail.com',
+  bankAccount: {
+    bankId: 'VCB',
+    bankName: 'Vietcombank',
+    accountNumber: '1028394859',
+    accountHolder: 'VU NGOC MANH CUONG',
+    branch: 'Sở Giao Dịch',
+    qrTemplate: 'compact2'
+  },
   
   heroSlides: [
     {
@@ -50,6 +58,31 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     }
   ],
 
+  faqTitle: 'Câu Hỏi Thường Gặp',
+  faqSubtitle: 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công',
+  faqs: [
+    {
+      id: 'faq-1',
+      q: 'Dây Paracord có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
+      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt/mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
+    },
+    {
+      id: 'faq-2',
+      q: 'Kích cỡ và kiểu dáng sản phẩm như thế nào?',
+      a: 'Tất cả sản phẩm đều được thiết kế và chế tác hoàn chỉnh theo chuẩn form dáng cố định tối ưu nhất, ôm tay thoải mái và dễ đeo cho hầu hết người dùng. Bạn chỉ cần chọn mẫu ưng ý và đặt hàng trực tiếp.'
+    },
+    {
+      id: 'faq-3',
+      q: 'Thời gian hoàn thiện và giao hàng là bao lâu?',
+      a: 'Mỗi sản phẩm đều sẵn sàng xuất xưởng nhanh chóng từ 1 - 2 ngày làm việc. Thời gian giao hàng toàn quốc từ 2 - 4 ngày. Bạn được quyền kiểm tra hàng trước khi thanh toán.'
+    },
+    {
+      id: 'faq-4',
+      q: 'Chính sách bảo hành nút đan và đổi trả sản phẩm như thế nào?',
+      a: 'NOT A KNOT áp dụng chính sách Bảo hành nút thắt trọn đời: hỗ trợ vệ sinh và làm mới miễn phí. Nếu nhận hàng có lỗi kỹ thuật từ nhà sản xuất, bạn được hỗ trợ đổi mới miễn phí trong 7 ngày đầu tiên.'
+    }
+  ],
+
   aboutSection: {
     badge: 'Về Chúng Tôi · NOT A KNOT',
     title: 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh',
@@ -61,7 +94,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
       { label: 'Chuẩn Paracord 550', value: '100%', desc: '7 lõi dù Type III bền bỉ' },
       { label: 'Bảo Hành Nút Thắt', value: 'Trọn Đời', desc: 'Vệ sinh & đan lại miễn phí' },
-      { label: 'Đánh Giá Hài Lòng', value: '4.9/5★', desc: 'Khách hàng toàn quốc' }
+      { label: 'Độ Hài Lòng', value: '100%', desc: 'Khách hàng toàn quốc' }
     ],
     coreValues: [
       {
@@ -100,9 +133,10 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   shippingPolicy: 'Giao hàng toàn quốc từ 2-4 ngày. Hỗ trợ kiểm tra hàng trước khi thanh toán (COD). Miễn phí vận chuyển cho đơn hàng từ 400.000đ.',
   socialLinks: {
     facebook: 'https://www.facebook.com/profile.php?id=61593591390851',
+    messenger: 'https://m.me/61593591390851',
     instagram: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
     threads: 'https://www.threads.com/@notaknot.handmade?igshid=NTc4MTIwNjQ2YQ==',
     tiktok: 'https://www.tiktok.com/@notaknot.handmade',
-    zalo: '0987.654.321'
+    zalo: ''
   }
 };

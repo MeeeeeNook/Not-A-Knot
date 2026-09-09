@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
-import { Flag, CheckCircle2, ArrowRight, ShieldCheck, Truck, Gift } from 'lucide-react';
+import { Flag, CheckCircle2, ArrowRight, ShieldCheck, Truck, Gift, Copy, Search } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
+import { generateTrackingNumber } from '../utils/orderFormatters';
 
 interface Event0209SectionProps {
   products: Product[];
@@ -28,6 +29,8 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
   const [qtyKeychainMucoi, setQtyKeychainMucoi] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [createdTrackingCode, setCreatedTrackingCode] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const eventProducts = products.filter((p) => p.category === 'event_0209');
 
@@ -52,8 +55,12 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
       return;
     }
 
+    const trackingNumber = generateTrackingNumber();
+    setCreatedTrackingCode(trackingNumber);
+
     const orderData = {
       id: `ord-0209-${Date.now()}`,
+      trackingNumber,
       date: new Date().toLocaleString('vi-VN'),
       createdAt: new Date().toLocaleString('vi-VN'),
       name,
@@ -132,6 +139,8 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
                   src={prod.image}
                   alt={prod.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  loading="lazy"
+                  decoding="async"
                 />
                 {prod.discountBadge && (
                   <div className="absolute top-4 left-4 bg-brand-red text-white px-3 py-1 text-xs font-semibold rounded-full shadow-md">
@@ -190,12 +199,37 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
           </div>
 
           {submitSuccess && (
-            <div className="mb-6 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
-              <div className="text-xs">
-                <p className="font-semibold text-sm">Đăng ký đặt trước thành công</p>
-                <p className="text-emerald-300/80">NOT A KNOT sẽ liên hệ qua điện thoại để xác nhận thông tin đơn hàng.</p>
+            <div className="mb-6 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
+                <div className="text-xs">
+                  <p className="font-semibold text-sm">Đăng ký đặt trước thành công!</p>
+                  <p className="text-emerald-300/80">NOT A KNOT sẽ liên hệ qua điện thoại để xác nhận thông tin đơn hàng.</p>
+                </div>
               </div>
+
+              {createdTrackingCode && (
+                <div className="pt-2 border-t border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-black/40 px-3 py-2 rounded-xl">
+                  <div className="text-xs">
+                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">Mã tra cứu đơn hàng:</span>
+                    <span className="font-mono font-black text-white text-sm">{createdTrackingCode}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(createdTrackingCode);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      } catch {}
+                    }}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedCode ? 'Đã sao chép' : 'Sao chép mã'}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

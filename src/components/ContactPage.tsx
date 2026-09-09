@@ -5,7 +5,9 @@ import {
   CheckCircle2, 
   ArrowLeft,
   MessageSquare,
-  ArrowUpRight
+  ArrowUpRight,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { SiteContentConfig, ContactMessage } from '../types';
 import { saveContactMessageToFirestore } from '../firebase';
@@ -30,6 +32,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
 
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const facebookUrl = siteContent?.socialLinks?.facebook || 'https://www.facebook.com/profile.php?id=61593591390851';
+  const messengerUrl = siteContent?.socialLinks?.messenger || 'https://m.me/61593591390851';
   const instagramUrl = siteContent?.socialLinks?.instagram || 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==';
   const threadsUrl = siteContent?.socialLinks?.threads || 'https://www.threads.com/@notaknot.handmade?igshid=NTc4MTIwNjQ2YQ==';
 
@@ -116,12 +119,44 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                   Nhắn Tin Trực Tiếp Với NOT A KNOT
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Chúng tớ hoạt động chính trên 3 nền tảng mạng xã hội này. Bạn có thể bấm vào kênh thuận tiện nhất:
+                  Chúng tớ hoạt động chính trên các nền tảng dưới đây. Bạn có thể bấm vào kênh thuận tiện nhất:
                 </p>
               </div>
               
               <div className="space-y-3 pt-1">
-                {/* 1. Facebook */}
+                {/* 1. Messenger Trực Tiếp */}
+                <a
+                  href={messengerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-4 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-blue-400 transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00C6FF] to-[#0078FF] text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12 2C6.477 2 2 6.145 2 11.258c0 2.908 1.455 5.503 3.735 7.152V22l3.447-1.892c.905.251 1.865.388 2.818.388 5.523 0 10-4.145 10-9.238C22 6.145 17.523 2 12 2zm1.05 12.355l-2.673-2.85-5.215 2.85 5.735-6.09 2.741 2.85 5.147-2.85-5.735 6.09z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 group-hover:text-[#0078FF] transition-colors block">
+                          Messenger
+                        </span>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800">
+                          Chat nhanh
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 font-mono">
+                        m.me/61593591390851
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:border-blue-300 group-hover:bg-blue-50/80 flex items-center justify-center text-slate-400 group-hover:text-[#0078FF] transition-all">
+                    <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                  </div>
+                </a>
+
+                {/* 2. Facebook Fanpage */}
                 <a
                   href={facebookUrl}
                   target="_blank"
@@ -205,28 +240,78 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                     <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                   </div>
                 </a>
+
+                {/* 4. Zalo (Rendered ONLY if admin configured a Zalo number/link) */}
+                {siteContent?.zalo && siteContent.zalo.trim() !== '' && (
+                  <a
+                    href={`https://zalo.me/${siteContent.zalo.trim().replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-4 rounded-xl bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-blue-400 transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-[#0068FF] text-white flex items-center justify-center flex-shrink-0 shadow-2xs font-black text-xs">
+                        Zalo
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-900 group-hover:text-[#0068FF] transition-colors block">
+                            Zalo CSKH
+                          </span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800">
+                            Hỗ trợ
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-500 font-mono">
+                          {siteContent.zalo}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:border-blue-300 group-hover:bg-blue-50/80 flex items-center justify-center text-slate-400 group-hover:text-[#0068FF] transition-all">
+                      <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </div>
+                  </a>
+                )}
               </div>
             </div>
 
-            {/* Workshop Address */}
-            <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-              <div className="flex items-start gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <MapPin className="w-5 h-5 text-slate-700" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
-                    Xưởng Chế Tác
-                  </span>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                    Khuôn viên Đại học Kinh tế Quốc dân (NEU), Hà Nội
-                  </h3>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Phố Trần Đại Nghĩa, Quận Hai Bà Trưng, TP. Hà Nội.
-                  </p>
-                </div>
+            {/* Workshop Address & Hotline (Rendered ONLY if at least one contact item exists) */}
+            {(siteContent?.address?.trim() || siteContent?.phone?.trim() || siteContent?.email?.trim()) && (
+              <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4">
+                {siteContent?.address?.trim() && (
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <MapPin className="w-5 h-5 text-slate-700" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                        Xưởng Chế Tác
+                      </span>
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                        {siteContent.address}
+                      </h3>
+                    </div>
+                  </div>
+                )}
+
+                {(siteContent?.phone?.trim() || siteContent?.email?.trim()) && (
+                  <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {siteContent?.phone?.trim() && (
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Phone className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="font-semibold">{siteContent.phone}</span>
+                      </div>
+                    )}
+                    {siteContent?.email?.trim() && (
+                      <div className="flex items-center gap-2 text-slate-700">
+                        <Mail className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span className="font-semibold truncate">{siteContent.email}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
           </div>
 

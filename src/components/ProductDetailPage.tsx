@@ -1,25 +1,35 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CategoryItem } from '../types';
+import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption } from '../types';
+import { ProductCharmSelector } from './ProductCharmSelector';
+import { ProductColorSelector } from './ProductColorSelector';
 import {
   ChevronLeft,
   ChevronRight,
   ShoppingBag,
   Check,
-  ShieldCheck,
-  Truck,
-  RotateCcw,
   Star,
   Share2,
   ArrowLeft,
-  Sparkles
+  Plus,
+  AlertCircle,
+  ShieldCheck,
+  Droplets,
+  Ruler,
+  PackageCheck,
+  Truck,
+  RotateCcw,
+  Sparkles,
+  Award
 } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
+import { useProductSEO } from '../utils/seo';
 
 interface ProductDetailPageProps {
   product: Product;
   allProducts: Product[];
   categories?: CategoryItem[];
+  cartItems?: CartItem[];
   backLabel?: string;
   onBack: () => void;
   onSelectProduct: (product: Product) => void;
@@ -27,13 +37,23 @@ interface ProductDetailPageProps {
     product: Product,
     quantity: number,
     selectedColor?: string,
-    selectedSize?: string
+    selectedSize?: string,
+    customNote?: string,
+    selectedCharm?: string,
+    selectedColorImage?: string,
+    selectedCharmImage?: string,
+    selectedCharmPrice?: number
   ) => void;
   onBuyNow: (
     product: Product,
     quantity: number,
     selectedColor?: string,
-    selectedSize?: string
+    selectedSize?: string,
+    customNote?: string,
+    selectedCharm?: string,
+    selectedColorImage?: string,
+    selectedCharmImage?: string,
+    selectedCharmPrice?: number
   ) => void;
 }
 
@@ -41,6 +61,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
   allProducts,
   categories = [],
+  cartItems = [],
   backLabel,
   onBack,
   onSelectProduct,
@@ -48,23 +69,63 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onBuyNow,
 }) => {
   const [quantity, setQuantity] = useState(1);
-  const [activeImageIdx, setActiveImageIdx] = useState(0);
-  const [selectedColor, setSelectedColor] = useState<string | undefined>(
-    product.availableColors?.[0]
-  );
+  const [activeImageIdx, setActiveImageIdx] = useState<number>(0);
+
+  // Initial color setup
+  const initialColor = useMemo(() => {
+    if (product.colorOptions && product.colorOptions.length > 0) {
+      return product.colorOptions[0].name;
+    }
+    return product.availableColors?.[0];
+  }, [product]);
+
+  const initialColorImage = useMemo(() => {
+    if (product.colorOptions && product.colorOptions.length > 0) {
+      return product.colorOptions[0].image;
+    }
+    return undefined;
+  }, [product]);
+
+  const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
+  const [selectedColorImage, setSelectedColorImage] = useState<string | undefined>(initialColorImage);
+  const [selectedCharm, setSelectedCharm] = useState<string | undefined>(undefined);
+  const [selectedCharmImage, setSelectedCharmImage] = useState<string | undefined>(undefined);
+  const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
+  const [charmError, setCharmError] = useState<string | null>(null);
+
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     product.availableSizes?.[0]
   );
   const [isAdded, setIsAdded] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'details' | 'sizing' | 'warranty'>('details');
+
+  // Dynamic gallery images (including linked color image if present)
+  const images = useMemo(() => {
+    const base = product.images && product.images.length > 0 ? [...product.images] : [product.image];
+    if (selectedColorImage && !base.includes(selectedColorImage)) {
+      return [selectedColorImage, ...base];
+    }
+    return base;
+  }, [product, selectedColorImage]);
 
   // Reset state when product changes
   useEffect(() => {
+    const initCol = product.colorOptions?.[0]?.name || product.availableColors?.[0];
+    const initImg = product.colorOptions?.[0]?.image;
+
     setActiveImageIdx(0);
     setQuantity(1);
-    setSelectedColor(product.availableColors?.[0]);
+    setSelectedColor(initCol);
+    setSelectedColorImage(initImg);
+    setSelectedCharm(undefined);
+    setSelectedCharmImage(undefined);
+    setSelectedCharmPrice(undefined);
+    setCharmError(null);
     setSelectedSize(product.availableSizes?.[0]);
     setIsAdded(false);
+    setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (product) {
@@ -72,23 +133,47 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   }, [product?.id]);
 
-  const images = useMemo(() => {
-    if (product.images && product.images.length > 0) {
-      return product.images;
-    }
-    return [product.image];
-  }, [product]);
+  const availableStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
+  const inCartQty = useMemo(() => {
+    if (!cartItems || cartItems.length === 0) return 0;
+    return cartItems
+      .filter((item) => item.product.id === product.id)
+      .reduce((sum, item) => sum + item.quantity, 0);
+  }, [cartItems, product.id]);
 
-  const availableStock = typeof product.stock === 'number' ? product.stock : 15;
-  const isOutOfStock = product.inStock === false || availableStock <= 0;
+  const remainingAddableStock = Math.max(0, availableStock - inCartQty);
+  const isOutOfStock = product.inStock === false;
+  const isCartFullForProduct = !isOutOfStock && remainingAddableStock <= 0 && availableStock < 90;
+
+  // Ensure selected quantity never exceeds remaining addable stock
+  useEffect(() => {
+    if (remainingAddableStock > 0 && quantity > remainingAddableStock) {
+      setQuantity(remainingAddableStock);
+    } else if (remainingAddableStock === 0) {
+      setQuantity(1);
+    }
+  }, [remainingAddableStock, quantity]);
+
+  const paginate = useCallback((newDirection: number) => {
+    setActiveImageIdx((curr) => {
+      let next = curr + newDirection;
+      if (next < 0) next = images.length - 1;
+      if (next >= images.length) next = 0;
+      return next;
+    });
+  }, [images.length]);
+
+  const selectImage = useCallback((idx: number) => {
+    setActiveImageIdx(idx);
+  }, []);
 
   const prevImage = useCallback(() => {
-    setActiveImageIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-  }, [images.length]);
+    paginate(-1);
+  }, [paginate]);
 
   const nextImage = useCallback(() => {
-    setActiveImageIdx((prev) => (prev === images.length - 1 ? 0 : prev + 1));
-  }, [images.length]);
+    paginate(1);
+  }, [paginate]);
 
   // Keyboard navigation for image gallery
   useEffect(() => {
@@ -103,9 +188,76 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [prevImage, nextImage]);
 
+  // Color selection with automatic image link preview
+  const handleSelectColor = (colorOpt: ProductColorOption) => {
+    setSelectedColor(colorOpt.name);
+    if (colorOpt.image) {
+      setSelectedColorImage(colorOpt.image);
+      const imgIdx = images.indexOf(colorOpt.image);
+      if (imgIdx > -1) {
+        setActiveImageIdx(imgIdx);
+      } else {
+        // Will be prepended by useMemo
+        setActiveImageIdx(0);
+      }
+    }
+  };
+
+  // Charm selection
+  const handleSelectCharm = (charmOpt: ProductCharmOption | null) => {
+    setCharmError(null);
+    if (!charmOpt) {
+      setSelectedCharm(undefined);
+      setSelectedCharmImage(undefined);
+      setSelectedCharmPrice(undefined);
+    } else {
+      if (typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
+        setCharmError(`Mẫu charm "${charmOpt.name}" đã hết hàng trong kho. Vui lòng chọn mẫu khác.`);
+        return;
+      }
+      setSelectedCharm(charmOpt.name);
+      setSelectedCharmImage(charmOpt.image);
+      setSelectedCharmPrice(charmOpt.priceDelta || 0);
+    }
+  };
+
   const handleAddToCartClick = () => {
-    if (isOutOfStock) return;
-    onAddToCart(product, quantity, selectedColor, selectedSize);
+    if (isOutOfStock || remainingAddableStock <= 0) return;
+
+    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
+      setCharmError('Vui lòng chọn 1 mẫu charm trước khi thêm vào giỏ hàng.');
+      return;
+    }
+
+    const addQty = Math.min(quantity, remainingAddableStock);
+
+    if (selectedCharm && product.charmOptions) {
+      const chosenCharm = product.charmOptions.find(
+        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
+      );
+      if (chosenCharm && typeof chosenCharm.stock === 'number') {
+        if (chosenCharm.stock <= 0) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          return;
+        }
+        if (chosenCharm.stock < addQty) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+          return;
+        }
+      }
+    }
+
+    onAddToCart(
+      product,
+      addQty,
+      selectedColor,
+      selectedSize,
+      undefined,
+      selectedCharm,
+      selectedColorImage,
+      selectedCharmImage,
+      selectedCharmPrice
+    );
     setIsAdded(true);
     setTimeout(() => {
       setIsAdded(false);
@@ -113,8 +265,42 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   };
 
   const handleBuyNowClick = () => {
-    if (isOutOfStock) return;
-    onBuyNow(product, quantity, selectedColor, selectedSize);
+    if (isOutOfStock || remainingAddableStock <= 0) return;
+
+    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
+      setCharmError('Vui lòng chọn 1 mẫu charm trước khi mua hàng.');
+      return;
+    }
+
+    const addQty = Math.min(quantity, remainingAddableStock);
+
+    if (selectedCharm && product.charmOptions) {
+      const chosenCharm = product.charmOptions.find(
+        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
+      );
+      if (chosenCharm && typeof chosenCharm.stock === 'number') {
+        if (chosenCharm.stock <= 0) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          return;
+        }
+        if (chosenCharm.stock < addQty) {
+          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+          return;
+        }
+      }
+    }
+
+    onBuyNow(
+      product,
+      addQty,
+      selectedColor,
+      selectedSize,
+      undefined,
+      selectedCharm,
+      selectedColorImage,
+      selectedCharmImage,
+      selectedCharmPrice
+    );
   };
 
   const handleShare = () => {
@@ -126,11 +312,41 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
-  // Find related products in the same category
+  const handleQuickAddRecommended = (e: React.MouseEvent, prod: Product) => {
+    e.stopPropagation();
+    const defaultColor = prod.colorOptions?.[0]?.name || prod.availableColors?.[0];
+    const defaultSize = prod.availableSizes?.[0];
+    onAddToCart(prod, 1, defaultColor, defaultSize);
+    
+    setQuickAddedId(prod.id);
+    setTimeout(() => {
+      setQuickAddedId((curr) => (curr === prod.id ? null : curr));
+    }, 1800);
+  };
+
+  // Find related products in the same category (excluding hidden)
   const relatedProducts = useMemo(() => {
     return allProducts
-      .filter((p) => p.id !== product.id && p.category === product.category)
+      .filter((p) => !p.isHidden && p.id !== product.id && p.category === product.category)
       .slice(0, 4);
+  }, [allProducts, product]);
+
+  // Curated 'Có thể bạn sẽ thích' (cross-collection recommendations & hot picks, excluding hidden)
+  const recommendedProducts = useMemo(() => {
+    // Exclude current product and hidden products
+    const otherProducts = allProducts.filter((p) => !p.isHidden && p.id !== product.id && p.inStock !== false);
+    if (otherProducts.length === 0) return [];
+
+    // Prioritize products with high rating, bestsellers, and complementary categories
+    const sorted = [...otherProducts].sort((a, b) => {
+      const isDiffCatA = a.category !== product.category ? 1.5 : 0.5;
+      const isDiffCatB = b.category !== product.category ? 1.5 : 0.5;
+      const scoreA = (a.isBestSeller ? 2 : 0) + (a.discountBadge ? 1 : 0) + (a.rating || 4.8) + isDiffCatA;
+      const scoreB = (b.isBestSeller ? 2 : 0) + (b.discountBadge ? 1 : 0) + (b.rating || 4.8) + isDiffCatB;
+      return scoreB - scoreA;
+    });
+
+    return sorted.slice(0, 4);
   }, [allProducts, product]);
 
   const categoryName = useMemo(() => {
@@ -145,6 +361,34 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     if (product.category === 'lanyards') return 'Dây Đeo Phụ Kiện';
     return 'Phụ Kiện Thủ Công';
   }, [categories, product.category]);
+
+  // Automatically update page title, meta description, keywords, Open Graph, Twitter cards, and JSON-LD schema for this product
+  useProductSEO(product, categoryName);
+
+  if (product.isHidden) {
+    return (
+      <div id="product-hidden-page" className="min-h-[70vh] bg-[#FAF8F5] flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-4">
+          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-900 border border-amber-200 flex items-center justify-center mx-auto text-3xl shadow-xs">
+            🙈
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Sản Phẩm Đang Tạm Ẩn</h2>
+          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+            Mẫu "{product.name}" hiện đang được tạm ẩn khỏi gian hàng trực tuyến. Quý khách vui lòng tham khảo các mẫu sản phẩm khác đang sẵn hàng!
+          </p>
+          <div className="pt-2">
+            <button
+              onClick={onBack}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Quay Lại Cửa Hàng</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -183,53 +427,75 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 space-y-12">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8 space-y-12">
         {/* Product Hero: Left Gallery, Right Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
           
-          {/* LEFT: Interactive High-Res Gallery */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="relative aspect-square rounded-3xl overflow-hidden bg-white border border-neutral-200 shadow-md group">
-              {/* Main Image with Animated Transition */}
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={activeImageIdx}
-                  src={images[activeImageIdx] || product.image}
-                  alt={product.name}
-                  initial={{ opacity: 0.7, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0.7 }}
-                  transition={{ duration: 0.25 }}
-                  className="w-full h-full object-cover object-center"
-                />
-              </AnimatePresence>
+          {/* LEFT: Compact Interactive High-Res Gallery */}
+          <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3.5">
+            <div className="relative aspect-square max-h-[440px] rounded-3xl overflow-hidden bg-white border border-neutral-200 shadow-sm group">
+              {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
+              <div
+                className="flex w-full h-full transition-transform duration-500 ease-out"
+                style={{ transform: `translateX(-${activeImageIdx * 100}%)` }}
+              >
+                {images.map((imgSrc, idx) => (
+                  <div key={idx} className="w-full h-full flex-shrink-0 relative">
+                    <img
+                      src={imgSrc || product.image}
+                      alt={`${product.name} - Ảnh ${idx + 1}`}
+                      className="w-full h-full object-cover object-center select-none pointer-events-none"
+                      style={{ imageRendering: '-webkit-optimize-contrast' }}
+                      draggable={false}
+                    />
+                  </div>
+                ))}
+              </div>
 
-              {/* Navigation Arrows for switching photos */}
+              {/* Navigation Arrows for switching photos - Minimalist transparent glass, visible only on left/right edge hover */}
               {images.length > 1 && (
                 <>
-                  <button
+                  {/* Left edge hover zone */}
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-16 sm:w-20 z-20 flex items-center justify-start pl-2.5 group/edge-left cursor-pointer select-none"
                     onClick={prevImage}
-                    className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-neutral-900 flex items-center justify-center shadow-lg border border-neutral-200 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                    aria-label="Ảnh trước (hoặc phím mũi tên trái)"
                     title="Ảnh trước (Phím ←)"
                   >
-                    <ChevronLeft className="w-6 h-6" />
-                  </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevImage();
+                      }}
+                      className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 backdrop-blur-md border border-white/20 text-white flex items-center justify-center opacity-0 group-hover/edge-left:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      aria-label="Ảnh trước (hoặc phím mũi tên trái)"
+                    >
+                      <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                  </div>
 
-                  <button
+                  {/* Right edge hover zone */}
+                  <div
+                    className="absolute right-0 top-0 bottom-0 w-16 sm:w-20 z-20 flex items-center justify-end pr-2.5 group/edge-right cursor-pointer select-none"
                     onClick={nextImage}
-                    className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-neutral-900 flex items-center justify-center shadow-lg border border-neutral-200 transition-all hover:scale-105 active:scale-95 cursor-pointer z-10"
-                    aria-label="Ảnh tiếp theo (hoặc phím mũi tên phải)"
                     title="Ảnh tiếp theo (Phím →)"
                   >
-                    <ChevronRight className="w-6 h-6" />
-                  </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextImage();
+                      }}
+                      className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 backdrop-blur-md border border-white/20 text-white flex items-center justify-center opacity-0 group-hover/edge-right:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      aria-label="Ảnh tiếp theo (hoặc phím mũi tên phải)"
+                    >
+                      <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                    </button>
+                  </div>
                 </>
               )}
 
               {/* Photo Index Counter */}
               {images.length > 1 && (
-                <div className="absolute bottom-4 right-4 px-3 py-1 bg-black/65 backdrop-blur-md text-white text-xs font-bold rounded-full pointer-events-none">
+                <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/65 backdrop-blur-md text-white text-[11px] font-bold rounded-full pointer-events-none z-10">
                   {activeImageIdx + 1} / {images.length}
                 </div>
               )}
@@ -237,16 +503,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
             {/* Thumbnail Strip (Click to choose photo) */}
             {images.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-thin">
+              <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
                 {images.map((img, idx) => {
                   const isActive = idx === activeImageIdx;
                   return (
                     <button
                       key={idx}
-                      onClick={() => setActiveImageIdx(idx)}
-                      className={`relative w-20 h-20 rounded-2xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white cursor-pointer ${
+                      onClick={() => selectImage(idx)}
+                      className={`relative w-16 h-16 sm:w-[68px] sm:h-[68px] rounded-2xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white cursor-pointer ${
                         isActive
-                          ? 'border-neutral-950 ring-2 ring-neutral-950/20 scale-102 shadow-sm'
+                          ? 'border-neutral-950 ring-2 ring-neutral-950/20 scale-102 shadow-xs'
                           : 'border-neutral-200 opacity-60 hover:opacity-100 hover:border-neutral-400'
                       }`}
                     >
@@ -254,9 +520,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         src={img}
                         alt={`${product.name} thumbnail ${idx + 1}`}
                         className="w-full h-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                       {idx === 0 && (
-                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[9px] text-white text-center font-bold py-0.5">
+                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[8px] text-white text-center font-bold py-0.5">
                           Ảnh chính
                         </span>
                       )}
@@ -268,7 +536,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
 
           {/* RIGHT: Product Information & Purchase Panel */}
-          <div className="lg:col-span-5 space-y-6">
+          <div className="lg:col-span-7 xl:col-span-7 space-y-6">
             <div className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm space-y-6">
               
               {/* Category & Title */}
@@ -281,27 +549,32 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   {product.name}
                 </h1>
 
-                {/* Rating & Stock status */}
-                <div className="flex items-center gap-3 pt-1">
-                  <div className="flex items-center gap-1 text-amber-500">
-                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    <span className="text-xs font-bold text-neutral-900">
-                      {product.rating || 5.0}
-                    </span>
-                    <span className="text-xs text-neutral-400">
-                      ({product.reviewsCount || 12} đánh giá)
-                    </span>
-                  </div>
-
-                  <span className="text-neutral-300">•</span>
+                {/* Stock & sales status */}
+                <div className="flex items-center gap-3 pt-1 flex-wrap">
+                  {product.soldCount !== undefined && product.soldCount > 0 && (
+                    <>
+                      <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-md">
+                        Đã bán {product.soldCount}
+                      </span>
+                      <span className="text-neutral-300">•</span>
+                    </>
+                  )}
 
                   {isOutOfStock ? (
-                    <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-md">
+                    <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-md">
                       Hết hàng
                     </span>
+                  ) : availableStock === 1 ? (
+                    <span className="text-xs font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-md animate-pulse">
+                      ⚡ Chỉ còn duy nhất 1 sản phẩm!
+                    </span>
+                  ) : availableStock <= 3 ? (
+                    <span className="text-xs font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                      ⚡ Chỉ còn {availableStock} sản phẩm trong kho
+                    </span>
                   ) : (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
-                      Còn {availableStock} sản phẩm
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
+                      Còn {availableStock} sản phẩm trong kho
                     </span>
                   )}
                 </div>
@@ -329,52 +602,102 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 {product.description}
               </p>
 
-              {/* Color Variants (if available) */}
-              {product.availableColors && product.availableColors.length > 0 && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
-                    Màu sắc: <span className="text-amber-700 font-semibold">{selectedColor}</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {product.availableColors.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setSelectedColor(color)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                          selectedColor === color
-                            ? 'border-neutral-950 bg-neutral-950 text-white'
-                            : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
-                        }`}
-                      >
-                        {color}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Color Selection (if enabled) */}
+              {product.enableColorSelection !== false &&
+                ((product.colorOptions && product.colorOptions.length > 0) ||
+                  (product.availableColors && product.availableColors.length > 0)) && (
+                  <ProductColorSelector
+                    colors={
+                      product.colorOptions && product.colorOptions.length > 0
+                        ? product.colorOptions
+                        : product.availableColors || []
+                    }
+                    selectedColor={selectedColor}
+                    onSelectColor={handleSelectColor}
+                  />
+                )}
 
-              {/* Size Variants (if available) */}
-              {product.availableSizes && product.availableSizes.length > 0 && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
-                    Kích thước cổ tay: <span className="text-amber-700 font-semibold">{selectedSize}</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {product.availableSizes.map((size) => (
+              {/* Charm Selection (if enabled) */}
+              {product.enableCharmSelection &&
+                product.charmOptions &&
+                product.charmOptions.length > 0 && (
+                  <div className="space-y-1">
+                    <ProductCharmSelector
+                      charms={product.charmOptions}
+                      selectedCharm={selectedCharm}
+                      onSelectCharm={handleSelectCharm}
+                      isRequired={product.charmSelectionRequired}
+                    />
+                    {charmError && (
+                      <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                        ⚠️ {charmError}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              {/* Size Variants (if enabled) */}
+              {product.enableSizeSelection !== false &&
+                product.availableSizes &&
+                product.availableSizes.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
+                        Kích thước cổ tay: <span className="text-amber-700 font-semibold">{selectedSize}</span>
+                      </label>
                       <button
-                        key={size}
                         type="button"
-                        onClick={() => setSelectedSize(size)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                          selectedSize === size
-                            ? 'border-neutral-950 bg-neutral-950 text-white'
-                            : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
-                        }`}
+                        onClick={() => {
+                          setActiveTab('sizing');
+                          const el = document.getElementById('product-tabs-section');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="text-[11px] font-bold text-amber-700 hover:text-amber-800 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
                       >
-                        {size}
+                        <Ruler className="w-3.5 h-3.5" />
+                        <span>Cách đo size cổ tay</span>
                       </button>
-                    ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {product.availableSizes.map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setSelectedSize(size)}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            selectedSize === size
+                              ? 'border-neutral-950 bg-neutral-950 text-white shadow-sm ring-1 ring-neutral-950'
+                              : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* In-cart stock status alert */}
+              {inCartQty > 0 && availableStock < 90 && (
+                <div
+                  className={`p-3 rounded-2xl border text-xs flex items-start gap-2.5 ${
+                    isCartFullForProduct
+                      ? 'bg-rose-50 border-rose-200 text-rose-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold">
+                      {isCartFullForProduct
+                        ? `Bạn đã có đủ toàn bộ số lượng tồn kho (${inCartQty}/${availableStock} chiếc) trong giỏ hàng.`
+                        : `Bạn đã thêm ${inCartQty} chiếc vào giỏ hàng.`}
+                    </p>
+                    <p className="text-[11px] opacity-90">
+                      {isCartFullForProduct
+                        ? 'Không thể thêm số lượng nhiều hơn số lượng hiện có.'
+                        : `Còn có thể thêm tối đa ${remainingAddableStock} chiếc nữa.`}
+                    </p>
                   </div>
                 </div>
               )}
@@ -385,7 +708,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <div className="flex items-center border border-neutral-200 rounded-2xl bg-neutral-50 p-1">
                     <button
                       type="button"
-                      disabled={quantity <= 1 || isOutOfStock}
+                      disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
                       onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                       className="w-8 h-8 rounded-xl bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer"
                     >
@@ -396,8 +719,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     </span>
                     <button
                       type="button"
-                      disabled={quantity >= availableStock || isOutOfStock}
-                      onClick={() => setQuantity((q) => Math.min(availableStock, q + 1))}
+                      disabled={quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct}
+                      onClick={() => setQuantity((q) => Math.min(remainingAddableStock, q + 1))}
                       className="w-8 h-8 rounded-xl bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer"
                     >
                       +
@@ -407,8 +730,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <div className="text-xs text-neutral-500">
                     Tạm tính:{' '}
                     <strong className="text-neutral-950 font-mono text-sm">
-                      {(product.price * quantity).toLocaleString('vi-VN')}đ
+                      {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
                     </strong>
+                    {selectedCharmPrice && selectedCharmPrice > 0 ? (
+                      <span className="text-[10px] text-amber-700 ml-1">
+                        (kèm charm +{(selectedCharmPrice * quantity).toLocaleString('vi-VN')}đ)
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
@@ -416,10 +744,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
                     type="button"
-                    disabled={isOutOfStock}
+                    disabled={isOutOfStock || isCartFullForProduct}
                     onClick={handleAddToCartClick}
                     className={`py-3.5 px-4 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      isOutOfStock
+                      isOutOfStock || isCartFullForProduct
                         ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
                         : isAdded
                         ? 'bg-emerald-600 text-white'
@@ -431,6 +759,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         <Check className="w-4 h-4" />
                         <span>Đã thêm vào giỏ</span>
                       </>
+                    ) : isCartFullForProduct ? (
+                      <span>Đã đạt giới hạn</span>
                     ) : (
                       <>
                         <ShoppingBag className="w-4 h-4" />
@@ -441,32 +771,36 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
                   <button
                     type="button"
-                    disabled={isOutOfStock}
+                    disabled={isOutOfStock || isCartFullForProduct}
                     onClick={handleBuyNowClick}
                     className={`py-3.5 px-4 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      isOutOfStock
+                      isOutOfStock || isCartFullForProduct
                         ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
                         : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-md active:scale-98'
                     }`}
                   >
-                    <span>Mua Ngay</span>
+                    <span>{isCartFullForProduct ? 'Kho đã hết' : 'Mua Ngay'}</span>
                   </button>
                 </div>
-              </div>
 
-              {/* Service & Quality Guarantees */}
-              <div className="pt-4 border-t border-neutral-100 grid grid-cols-1 gap-2.5 text-xs text-neutral-600">
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span>Dây Paracord 550 chuẩn 7 lõi siêu bền, chống nước tuyệt đối.</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <Truck className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span>Giao hàng toàn quốc — Kiểm tra hàng trước khi thanh toán.</span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <RotateCcw className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span>Bảo hành nút thắt trọn đời — Đổi trả miễn phí 7 ngày nếu lỗi.</span>
+                {/* 4 Trust & Craft Commitments */}
+                <div className="pt-4 border-t border-neutral-100 grid grid-cols-2 gap-2 text-[11px] text-neutral-600">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
+                    <ShieldCheck className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                    <span className="font-semibold text-neutral-800">Dây Paracord 550 chính hãng</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
+                    <Droplets className="w-4 h-4 text-sky-600 flex-shrink-0" />
+                    <span className="font-semibold text-neutral-800">Chống nước, không phai màu</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
+                    <PackageCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span className="font-semibold text-neutral-800">Đồng kiểm tra trước khi trả tiền</span>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
+                    <RotateCcw className="w-4 h-4 text-amber-700 flex-shrink-0" />
+                    <span className="font-semibold text-neutral-800">Đổi size miễn phí trong 7 ngày</span>
+                  </div>
                 </div>
               </div>
 
@@ -474,30 +808,279 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
         </div>
 
-        {/* Product Details & Specifications */}
-        {product.details && product.details.length > 0 && (
-          <section className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm space-y-4">
-            <h2 className="text-lg sm:text-xl font-black text-neutral-950 tracking-tight">
-              Đặc Điểm & Thông Số Chế Tác
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-              {product.details.map((detail, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-100 flex items-start gap-3 text-xs sm:text-sm text-neutral-700"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600 mt-2 flex-shrink-0" />
-                  <span>{detail}</span>
+        {/* INTERACTIVE SPECIFICATION & SERVICE TABS */}
+        <section id="product-tabs-section" className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm space-y-6">
+          {/* Tabs Navigation */}
+          <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 overflow-x-auto scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'details'
+                  ? 'bg-neutral-950 text-white shadow-xs'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              <Award className="w-4 h-4 text-amber-400" />
+              <span>Chi tiết chế tác & Chất liệu</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('sizing')}
+              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'sizing'
+                  ? 'bg-neutral-950 text-white shadow-xs'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              <Ruler className="w-4 h-4 text-amber-400" />
+              <span>Hướng dẫn chọn size cổ tay</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('warranty')}
+              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'warranty'
+                  ? 'bg-neutral-950 text-white shadow-xs'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span>Chính sách đổi trả & Bảo hành</span>
+            </button>
+          </div>
+
+          {/* Tab 1: Chi tiết chế tác */}
+          {activeTab === 'details' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {product.details && product.details.length > 0 ? (
+                  product.details.map((detail, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 flex items-start gap-3 text-xs sm:text-sm text-neutral-700"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-600 mt-1.5 flex-shrink-0" />
+                      <span className="leading-relaxed">{detail}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 text-xs sm:text-sm text-neutral-600">
+                    Sản phẩm được đan tay 100% thủ công từ dây Paracord 550 nhập khẩu cao cấp, chốt khóa hợp kim chống gỉ sáng bóng.
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-amber-200/60 text-xs text-amber-950 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">Quy chuẩn chất lượng xưởng NOT A KNOT</p>
+                  <p className="text-neutral-700 leading-relaxed">
+                    Mỗi chiếc vòng được nghệ nhân bện tay từng gút thắt tỉ mỉ, xử lý giấu mối nhiệt thẩm mỹ cao, đảm bảo không cộm rát khi đeo thường nhật hay hoạt động thể thao ngoài trời.
+                  </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Hướng dẫn đo size */}
+          {activeTab === 'sizing' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">1</span>
+                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Quấn thước quanh cổ tay</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Dùng thước dây mềm hoặc sợi chỉ quấn sát quanh vị trí xương cổ tay đeo vòng (không quấn quá chặt hay quá lỏng).
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">2</span>
+                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Đánh dấu và đo chiều dài</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Đánh dấu điểm giáp vòng, sau đó căng sợi chỉ lên thước thẳng để lấy số đo chính xác theo đơn vị cm.
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">3</span>
+                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Chọn size chuẩn xưởng</h4>
+                  <p className="text-xs text-neutral-600 leading-relaxed">
+                    Xưởng đã tự động cộng độ cử động ôm vừa vặn 1-1.5cm nên bạn chỉ cần chọn đúng số đo sát tay thực tế.
+                  </p>
+                </div>
+              </div>
+
+              {/* Bảng quy đổi size */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border border-neutral-200 rounded-2xl overflow-hidden">
+                  <thead className="bg-neutral-100 text-neutral-900 font-bold">
+                    <tr>
+                      <th className="p-3">Size vòng</th>
+                      <th className="p-3">Chu vi cổ tay sát da</th>
+                      <th className="p-3">Phù hợp đối tượng</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-200 text-neutral-700">
+                    <tr className="hover:bg-neutral-50">
+                      <td className="p-3 font-bold font-mono text-neutral-900">Size S</td>
+                      <td className="p-3 font-mono">14.0cm - 15.5cm</td>
+                      <td className="p-3">Cổ tay nữ vừa & nhỏ, nam tay thanh mảnh</td>
+                    </tr>
+                    <tr className="hover:bg-neutral-50">
+                      <td className="p-3 font-bold font-mono text-neutral-900">Size M</td>
+                      <td className="p-3 font-mono">16.0cm - 17.5cm</td>
+                      <td className="p-3">Kích thước phổ thông nhất cho cả nam và nữ</td>
+                    </tr>
+                    <tr className="hover:bg-neutral-50">
+                      <td className="p-3 font-bold font-mono text-neutral-900">Size L</td>
+                      <td className="p-3 font-mono">18.0cm - 19.5cm</td>
+                      <td className="p-3">Cổ tay nam to, người tập gym thể thao</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 3: Chính sách đổi trả & bảo hành */}
+          {activeTab === 'warranty' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <RotateCcw className="w-4 h-4 text-amber-700" />
+                    <span>Đổi size trong 7 ngày</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Nếu nhận hàng đeo không vừa, xưởng sẵn sàng hỗ trợ đan lại size mới hoặc tinh chỉnh theo đúng số đo của bạn hoàn toàn miễn phí.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <PackageCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Đồng kiểm khi nhận hàng</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Quý khách được quyền mở hộp kiểm tra màu sắc, mẫu charm, thử vòng trước khi thanh toán cho nhân viên giao hàng.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <ShieldCheck className="w-4 h-4 text-sky-600" />
+                    <span>Bảo hành độ bền sợi</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Bảo hành trọn đời lỗi bung gút đan tự nhiên. Dây Paracord 550 chính hãng có khả năng chịu lực 250kg và không bị mục sợi khi ngâm nước.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <Truck className="w-4 h-4 text-amber-700" />
+                    <span>Đóng gói quà tặng Vintage</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Mỗi đơn hàng được đóng gói trong hộp kraft vintage phong cách xưởng, có túi chống ẩm và thiệp thông điệp thích hợp làm quà tặng.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* PHẦN 'CÓ THỂ BẠN SẼ THÍCH' */}
+        {recommendedProducts.length > 0 && (
+          <section className="space-y-6 pt-6">
+            <h2 className="text-xl sm:text-2xl font-black text-neutral-950 tracking-tight">
+              Có thể bạn sẽ thích
+            </h2>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              {recommendedProducts.map((rec) => (
+                <motion.div
+                  key={rec.id}
+                  whileHover={{ y: -4 }}
+                  onClick={() => onSelectProduct(rec)}
+                  className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
+                >
+                  {/* Product Image & Badges */}
+                  <div className="relative aspect-square overflow-hidden bg-neutral-100">
+                    <img
+                      src={rec.image}
+                      alt={rec.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
+                      {rec.discountBadge ? (
+                        <span className="px-2 py-0.5 bg-amber-400 text-neutral-950 text-[10px] font-black rounded-lg shadow-2xs">
+                          {rec.discountBadge}
+                        </span>
+                      ) : rec.isBestSeller ? (
+                        <span className="px-2 py-0.5 bg-neutral-950 text-white text-[10px] font-black rounded-lg shadow-2xs">
+                          HOT
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Product Info */}
+                  <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-xs sm:text-sm text-neutral-950 group-hover:text-amber-700 transition-colors line-clamp-1">
+                        {rec.name}
+                      </h3>
+                      <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                        {rec.description}
+                      </p>
+
+                      <div className="flex items-baseline gap-1.5 mt-2">
+                        <span className="font-mono text-sm sm:text-base font-black text-neutral-950">
+                          {rec.price.toLocaleString('vi-VN')}đ
+                        </span>
+                        {rec.originalPrice && (
+                          <span className="text-xs text-neutral-400 line-through font-mono">
+                            {rec.originalPrice.toLocaleString('vi-VN')}đ
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quick Add Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleQuickAddRecommended(e, rec)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                        quickAddedId === rec.id
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-neutral-100 hover:bg-neutral-950 text-neutral-900 hover:text-white active:scale-95'
+                      }`}
+                      title="Thêm vào giỏ hàng"
+                    >
+                      {quickAddedId === rec.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Đã thêm vào giỏ ✓</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Thêm vào giỏ</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </motion.div>
               ))}
             </div>
           </section>
         )}
 
-        {/* Related Products Section */}
+        {/* Related Products in the same collection */}
         {relatedProducts.length > 0 && (
           <section className="space-y-6 pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
               <h2 className="text-xl sm:text-2xl font-black text-neutral-950 tracking-tight">
                 Sản Phẩm Cùng Bộ Sưu Tập
               </h2>
@@ -509,19 +1092,21 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               {relatedProducts.map((rel) => (
                 <motion.div
                   key={rel.id}
                   whileHover={{ y: -4 }}
                   onClick={() => onSelectProduct(rel)}
-                  className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-400 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
+                  className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
                 >
                   <div className="relative aspect-square overflow-hidden bg-neutral-100">
                     <img
                       src={rel.image}
                       alt={rel.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                      decoding="async"
                     />
                     {rel.discountBadge && (
                       <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 bg-brand-red text-white text-[10px] font-bold rounded-full">
@@ -549,6 +1134,52 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         )}
 
       </main>
+
+      {/* MOBILE STICKY BUY BAR (visible on mobile only) */}
+      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-neutral-200/90 p-3 z-30 shadow-lg">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block truncate">
+              {product.name}
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-mono font-black text-sm text-neutral-950">
+                {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
+              </span>
+              {selectedCharm && (
+                <span className="text-[10px] text-amber-700 font-medium truncate">
+                  +{selectedCharm}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              disabled={isOutOfStock || isCartFullForProduct}
+              onClick={handleAddToCartClick}
+              className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                isAdded
+                  ? 'bg-emerald-600 border-emerald-600 text-white'
+                  : 'border-neutral-900 bg-white text-neutral-950 hover:bg-neutral-100'
+              }`}
+              title="Thêm vào giỏ"
+            >
+              {isAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
+            </button>
+
+            <button
+              type="button"
+              disabled={isOutOfStock || isCartFullForProduct}
+              onClick={handleBuyNowClick}
+              className="py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 font-black text-xs text-neutral-950 shadow-sm active:scale-95 transition-all cursor-pointer"
+            >
+              Mua Ngay
+            </button>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 };

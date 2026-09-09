@@ -13,28 +13,37 @@ interface LandingFaqCommitmentsProps {
 }
 
 export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
+  siteContent,
   onOpenContact
 }) => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-  const faqs = [
+  const defaultFaqs = [
     {
+      id: 'faq-1',
       q: 'Dây Paracord có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
       a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt/mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
     },
     {
+      id: 'faq-2',
       q: 'Kích cỡ và kiểu dáng sản phẩm như thế nào?',
       a: 'Tất cả sản phẩm đều được thiết kế và chế tác hoàn chỉnh theo chuẩn form dáng cố định tối ưu nhất, ôm tay thoải mái và dễ đeo cho hầu hết người dùng. Bạn chỉ cần chọn mẫu ưng ý và đặt hàng trực tiếp.'
     },
     {
+      id: 'faq-3',
       q: 'Thời gian hoàn thiện và giao hàng là bao lâu?',
       a: 'Mỗi sản phẩm đều sẵn sàng xuất xưởng nhanh chóng từ 1 - 2 ngày làm việc. Thời gian giao hàng toàn quốc từ 2 - 4 ngày. Bạn được quyền kiểm tra hàng trước khi thanh toán.'
     },
     {
+      id: 'faq-4',
       q: 'Chính sách bảo hành nút đan và đổi trả sản phẩm như thế nào?',
       a: 'NOT A KNOT áp dụng chính sách Bảo hành nút thắt trọn đời: hỗ trợ vệ sinh và làm mới miễn phí. Nếu nhận hàng có lỗi kỹ thuật từ nhà sản xuất, bạn được hỗ trợ đổi mới miễn phí trong 7 ngày đầu tiên.'
     }
   ];
+
+  const faqs = siteContent?.faqs && siteContent.faqs.length > 0 ? siteContent.faqs : defaultFaqs;
+  const title = siteContent?.faqTitle || 'Câu Hỏi Thường Gặp';
+  const subtitle = siteContent?.faqSubtitle || 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công';
 
   return (
     <section id="landing-faq-section" className="py-10 sm:py-14 bg-slate-50 text-slate-900 border-t border-slate-200/80 font-sans">
@@ -43,10 +52,10 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto space-y-1.5">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
-            Câu Hỏi Thường Gặp
+            {title}
           </h2>
           <p className="text-slate-600 text-xs sm:text-sm">
-            Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công
+            {subtitle}
           </p>
         </div>
 

@@ -19,10 +19,10 @@ export const COLLECTIONS_DATA: CollectionInfo[] = [
     bannerImage: '/assets/hero-bg.png',
     horizontalImage: '/assets/hero-bg.png',
     productPageBanner: '/assets/hero-bg.png',
-    badge: 'ĐÃ SOLD OUT',
+    badge: 'SOLD OUT',
     isPreorder: false,
     status: 'sold_out',
-    soldOutTitle: '[PRE-ORDER 02.09] CHÍNH THỨC FULL SLOT! ❤️',
+    soldOutTitle: '[PRE-ORDER 02.09] SOLD OUT! ❤️',
     soldOutBadge: 'THÔNG BÁO CHÍNH THỨC',
     soldOutRibbon: '★ TOÀN BỘ DANH MỤC ★',
     soldOutMessage: 'Bộ sưu tập Hào Khí 02.09 đã chính thức SOLD OUT chỉ sau một thời gian ngắn mở bán. Not A Knot xin gửi lời cảm ơn chân thành nhất đến bạn vì đã lựa chọn mang theo tinh thần Việt Nam trên mỗi hành trình. Sự yêu thương của mọi người chính là niềm tự hào lớn nhất của chúng mình! ✨',
@@ -30,7 +30,7 @@ export const COLLECTIONS_DATA: CollectionInfo[] = [
     themeColor: '#B41C1A',
     accentColor: 'from-red-950/90 via-red-900/60 to-black/80',
     order: 0,
-    buttonText: 'Khám Phá Kỷ Vật 02/09 (Đã Hết Hàng)',
+    buttonText: 'Khám Phá Kỷ Vật 02/09',
     themeStyle: 'event0209',
     customDesignMode: true
   },
@@ -84,6 +84,37 @@ export const COLLECTIONS_DATA: CollectionInfo[] = [
     accentColor: 'from-amber-950/90 via-stone-900/60 to-black/80',
     order: 2,
     buttonText: 'Khám Phá BST Paracord',
-    themeStyle: 'light'
+    themeStyle: 'light',
+    bgColor: '#FAF7F2'
+  },
+  {
+    id: 'back_to_school',
+    categoryKey: 'back_to_school',
+    tag: 'BỘ SƯU TẬP TỰU TRƯỜNG',
+    title: 'Back 2 School',
+    highlight: 'Hành Trang Phong Cách Khởi Đầu Năm Học Mới',
+    subtitle: 'Năng động · Bền bỉ · Tự tin bước vào năm học mới',
+    description: 'Chào đón năm học mới đầy năng lượng cùng BST Back 2 School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt Paracord thủ công sắc sảo, tone màu hiện đại giúp bạn nổi bật, tự tin và mang theo may mắn trên mỗi chặng đường học tập.',
+    story: 'Chào đón năm học mới đầy năng lượng cùng BST Back 2 School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt Paracord thủ công sắc sảo, tone màu hiện đại giúp bạn nổi bật, tự tin và mang theo may mắn trên mỗi chặng đường học tập.',
+    craftDetails: [
+      'Dây Paracord 550 Type III chịu lực bền bỉ, chống thấm nước khi đi học',
+      'Tone màu thể thao & trẻ trung phù hợp cả nam và nữ sinh',
+      'Đan thủ công 100% tỉ mỉ, khóa bấm kim loại chắc chắn',
+      'Bảo hành đường đan và làm sạch miễn phí trọn đời'
+    ],
+    bgImage: '/assets/bracelet.jpg',
+    bannerImage: '/assets/bracelet.jpg',
+    horizontalImage: '/assets/bracelet.jpg',
+    productPageBanner: '/assets/bracelet.jpg',
+    badge: 'MÙA TỰU TRƯỜNG',
+    isPreorder: false,
+    status: 'available',
+    themeColor: '#2563EB',
+    accentColor: 'from-blue-950/90 via-sky-900/60 to-black/80',
+    order: 3,
+    buttonText: 'Khám Phá BST Back 2 School',
+    themeStyle: 'light',
+    bgColor: '#FAF7F2',
+    bannerDisplayMode: 'cover_hero'
   }
 ];

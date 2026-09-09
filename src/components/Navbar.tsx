@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { ShoppingBag, ChevronDown, Menu, X, ArrowRight, Shield, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { ShoppingBag, ChevronDown, Menu, X, ArrowRight, ShieldCheck, Package } from 'lucide-react';
 import { COLLECTIONS_DATA } from '../data/collections';
-import { CategoryItem, CollectionInfo, SiteContentConfig } from '../types';
+import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../types';
 
 interface NavbarProps {
   cartCount: number;
@@ -14,9 +14,12 @@ interface NavbarProps {
   onOpenAllCatalog: (categoryId?: string) => void;
   onOpenAbout: () => void;
   onOpenContact: () => void;
-  onOpenAdmin: () => void;
-  currentView: 'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin';
+  onOpenOrderTracker?: () => void;
+  onOpenAdmin?: () => void;
+  currentView: 'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'track-order' | string;
   activeCollectionId: string;
+  currentSeller?: SellerUser | null;
+  isAdminLoggedIn?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,9 +33,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAllCatalog,
   onOpenAbout,
   onOpenContact,
+  onOpenOrderTracker,
   onOpenAdmin,
   currentView,
-  activeCollectionId
+  activeCollectionId,
+  currentSeller,
+  isAdminLoggedIn = false
 }) => {
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -57,6 +63,16 @@ export const Navbar: React.FC<NavbarProps> = ({
     setMobileMenuOpen(false);
     setDropdownOpen(false);
   };
+
+  const hiddenCatKeys = useMemo(() => {
+    return new Set((categories || []).filter((c) => c.isHidden).map((c) => c.id));
+  }, [categories]);
+
+  const visibleCollections = useMemo(() => {
+    return collections.filter(
+      (c) => !c.isHidden && (!c.categoryKey || !hiddenCatKeys.has(c.categoryKey))
+    );
+  }, [collections, hiddenCatKeys]);
 
   return (
     <header className="sticky top-0 z-40 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 text-white transition-all shadow-md">
@@ -110,8 +126,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-800 text-xs font-bold">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span className="uppercase tracking-wider text-white">Bộ Sưu Tập Thủ Công {brandName}</span>
+                      <span className="uppercase tracking-wider text-white">Bộ Sưu Tập {brandName}</span>
                     </div>
                     <button
                       onClick={() => handleNavClick(onNavigateLanding)}
@@ -124,7 +139,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Horizontal Grid of Collection Cards */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[440px] overflow-y-auto sm:overflow-visible">
-                    {collections.map((col) => {
+                    {visibleCollections.map((col) => {
                       const colImg = col.horizontalImage || col.bannerImage || col.bgImage || '/assets/hero-bg.png';
                       const isSelected = currentView === 'collection' && activeCollectionId === col.id;
 
@@ -145,6 +160,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                               src={colImg}
                               alt={col.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              loading="lazy"
+                              decoding="async"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent" />
                             
@@ -227,37 +244,56 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Liên Hệ
             </button>
+
+            {/* 5. Tra Cứu Đơn */}
+            {onOpenOrderTracker && (
+              <button
+                id="nav-track-order-btn"
+                onClick={() => handleNavClick(onOpenOrderTracker)}
+                className={`px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                  currentView === 'order-tracker' || (currentView as any) === 'track-order'
+                    ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
+                    : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
+                }`}
+              >
+                Tra Cứu Đơn
+              </button>
+            )}
           </nav>
 
-          {/* Action Icons: Cart Button & Admin portal entry */}
+          {/* Action Icons: Admin (if logged in) + Cart Button */}
           <div className="flex items-center gap-2">
-            {/* Admin entry */}
-            <button
-              id="nav-admin-btn"
-              onClick={onOpenAdmin}
-              className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border cursor-pointer ${
-                currentView === 'admin'
-                  ? 'bg-amber-400 text-neutral-950 border-amber-400 shadow-xs'
-                  : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:bg-neutral-800 hover:text-white'
-              }`}
-              title="Trang Quản Trị Hệ Thống"
-              aria-label="Admin Portal"
-            >
-              <Shield className="w-4 h-4 text-amber-400" />
-              <span className="hidden lg:inline text-xs">Quản Trị</span>
-            </button>
+            {/* Admin Header Button - ONLY shown when admin is logged in */}
+            {isAdminLoggedIn && onOpenAdmin && (
+              <button
+                id="nav-admin-header-btn"
+                onClick={onOpenAdmin}
+                className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group"
+                title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Quản Trị</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Đang đăng nhập" />
+              </button>
+            )}
 
             {/* Cart Button */}
             <button
               id="nav-cart-btn"
               onClick={onOpenCart}
-              className="relative px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white transition-all flex items-center gap-2 border border-neutral-800 shadow-xs group cursor-pointer"
+              className={`relative px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 border shadow-xs group cursor-pointer ${
+                currentView === 'cart'
+                  ? 'bg-amber-400 text-slate-950 font-black border-amber-300'
+                  : 'bg-neutral-900 hover:bg-neutral-800 text-white border-neutral-800'
+              }`}
               aria-label="Mở giỏ hàng"
             >
-              <ShoppingBag className="w-4 h-4 text-amber-400 group-hover:scale-105 transition-transform" />
+              <ShoppingBag className={`w-4 h-4 group-hover:scale-105 transition-transform ${currentView === 'cart' ? 'text-slate-950' : 'text-amber-400'}`} />
               <span className="text-xs font-bold hidden sm:inline">Giỏ Hàng</span>
               {cartCount > 0 && (
-                <span className="bg-amber-400 text-neutral-950 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-4 text-center leading-none shadow-xs">
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-4 text-center leading-none shadow-xs ${
+                  currentView === 'cart' ? 'bg-slate-950 text-amber-400' : 'bg-amber-400 text-neutral-950'
+                }`}>
                   {cartCount}
                 </span>
               )}
@@ -298,18 +334,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-neutral-300 bg-neutral-900 hover:bg-neutral-800'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Sản Phẩm Thủ Công</span>
-            </div>
+            <span>Sản Phẩm</span>
             <span>›</span>
           </button>
 
           <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 px-3 pt-2">
-            Bộ Sưu Tập Thủ Công
+            Bộ Sưu Tập
           </div>
 
-          {collections.map((col) => (
+          {visibleCollections.map((col) => (
             <button
               key={col.id}
               onClick={() => handleNavClick(() => onSelectCollection(col.id))}
@@ -351,14 +384,40 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Liên Hệ</span>
               <span>›</span>
             </button>
-            <button
-              onClick={() => handleNavClick(onOpenAdmin)}
-              className="w-full text-left py-2 px-3 rounded-lg font-bold text-amber-300 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 flex items-center justify-between mt-1 cursor-pointer"
-            >
-              <span>Trang Quản Trị Hệ Thống</span>
-              <span>›</span>
-            </button>
+
+            {onOpenOrderTracker && (
+              <button
+                id="mobile-nav-track-order-btn"
+                onClick={() => handleNavClick(onOpenOrderTracker)}
+                className={`w-full text-left py-2 px-3 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                  currentView === 'order-tracker' || (currentView as any) === 'track-order'
+                    ? 'bg-neutral-800 text-amber-400 font-bold'
+                    : 'text-neutral-300 hover:bg-neutral-900'
+                }`}
+              >
+                <span>Tra Cứu Đơn</span>
+                <span>›</span>
+              </button>
+            )}
           </div>
+
+          {/* Admin Mobile Link (Only for logged in Admin) */}
+          {isAdminLoggedIn && onOpenAdmin && (
+            <div className="pt-2 border-t border-neutral-800">
+              <button
+                onClick={() => handleNavClick(onOpenAdmin)}
+                className="w-full text-left py-2.5 px-3 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span>Trang Quản Trị ({currentSeller?.name || 'Admin'})</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold uppercase tracking-wider">
+                  Admin
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>
