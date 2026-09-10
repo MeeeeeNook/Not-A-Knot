@@ -59,7 +59,7 @@ interface AdminEditOrderModalProps {
 
 const PROGRESS_STEPS = [
   { step: 1, id: 'received', label: 'Tiếp nhận đơn', desc: 'Đã nhận yêu cầu đan dây', status: 'Chờ xác nhận', icon: Package },
-  { step: 2, id: 'confirmed', label: 'Xác nhận số đo', desc: 'Đã chốt size cổ tay & charm', status: 'Đã xác nhận', icon: CheckCircle2 },
+  { step: 2, id: 'confirmed', label: 'Xác nhận đơn', desc: 'Đã chốt mẫu charm & chi tiết', status: 'Đã xác nhận', icon: CheckCircle2 },
   { step: 3, id: 'crafting', label: 'Đang đan Paracord', desc: 'Nghệ nhân thắt dây thủ công', status: 'Knot đang được sản xuất', icon: Hammer },
   { step: 4, id: 'shipping', label: 'Đang giao hàng', desc: 'Đã bàn giao cho bưu tá', status: 'Đang giao hàng', icon: Truck },
   { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Kích hoạt bảo hành trọn đời', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
@@ -369,12 +369,11 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
 
     setIsSaving(true);
     try {
-      const isLockedSeller = source === 'website' || source === 'mạng xã hội';
-      const matchedSellerObj = !isLockedSeller
+      const matchedSellerObj = sellerName
         ? sellers.find((s) => s.name === sellerName || s.username === sellerName)
         : undefined;
-      const finalSellerId = isLockedSeller ? undefined : (matchedSellerObj?.id || order.sellerId);
-      const finalSellerName = isLockedSeller ? undefined : (sellerName.trim() || undefined);
+      const finalSellerId = matchedSellerObj?.id || order.sellerId || undefined;
+      const finalSellerName = sellerName.trim() || order.sellerName || undefined;
 
       const finalTotal = finalCalculatedTotal;
 
@@ -409,13 +408,13 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           productId: it.productId,
           productName: it.productName,
           category: it.category,
-          unitPrice: it.price,
-          price: it.price,
-          quantity: it.quantity,
-          selectedSize: it.selectedSize,
-          selectedColor: it.selectedColor,
-          selectedCharm: it.selectedCharm,
-          customNote: it.customNote
+          unitPrice: Number(it.price) || 0,
+          price: Number(it.price) || 0,
+          quantity: Number(it.quantity) || 1,
+          selectedSize: it.selectedSize || undefined,
+          selectedColor: it.selectedColor || undefined,
+          selectedCharm: it.selectedCharm || undefined,
+          customNote: it.customNote || undefined
         })),
         items: items.map((it) => {
           const specs = [it.selectedSize, it.selectedColor, it.selectedCharm].filter(Boolean).join(', ');
@@ -423,13 +422,18 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         })
       };
 
-      await saveOrderToFirestore(updatedOrder);
+      // Notify parent immediately so local state & storage update without blocking
       if (typeof onSaved === 'function') {
         onSaved(updatedOrder);
       } else if (typeof onSave === 'function') {
         onSave(updatedOrder);
       }
       onClose();
+
+      // Sync to Firestore
+      saveOrderToFirestore(updatedOrder).catch((err) => {
+        console.warn('Lỗi đồng bộ Firebase từ modal sửa đơn:', err);
+      });
     } catch (err) {
       console.error('Lỗi khi lưu chỉnh sửa đơn hàng:', err);
       alert('Có lỗi xảy ra khi lưu đơn hàng. Vui lòng thử lại.');
@@ -724,17 +728,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Size cổ tay:</label>
-                      <input
-                        type="text"
-                        value={addSize}
-                        onChange={(e) => setAddSize(e.target.value)}
-                        placeholder="VD: 16cm"
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
-                      />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">Màu sắc:</label>
                       <input
@@ -846,19 +840,8 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Custom Attributes: Size, Color, Charm, Custom Note */}
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Size cổ tay:</label>
-                          <input
-                            type="text"
-                            value={it.selectedSize || ''}
-                            onChange={(e) => handleUpdateItemField(idx, 'selectedSize', e.target.value)}
-                            placeholder="VD: 16cm"
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                          />
-                        </div>
-
+                      {/* Custom Attributes: Color, Charm, Custom Note */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Màu sắc:</label>
                           <input
@@ -1312,7 +1295,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           {/* Modal Footer Actions */}
           <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
             <span className="text-xs text-slate-500 hidden sm:inline">
-              Đảm bảo đã kiểm tra số đo cổ tay và chi tiết chế tác trước khi lưu.
+              Đảm bảo đã kiểm tra chi tiết đơn hàng trước khi lưu.
             </span>
 
             <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">

@@ -378,14 +378,14 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
             {/* Note */}
             <div>
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-                Ghi chú thêm (Kích thước cổ tay, yêu cầu riêng)
+                Ghi chú thêm (Yêu cầu riêng)
               </label>
               <input
                 id="preorder-note-input"
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Ví dụ: Cổ tay 16cm..."
+                placeholder="Ví dụ: Giao giờ hành chính, gọi trước..."
                 className="w-full px-4 py-3 bg-neutral-800/80 border border-neutral-700 rounded-xl text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-white transition-colors"
               />
             </div>

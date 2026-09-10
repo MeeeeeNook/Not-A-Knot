@@ -54,10 +54,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
   const [charmError, setCharmError] = useState<string | null>(null);
 
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    product?.availableSizes?.[0]
-  );
-
   useEffect(() => {
     setActiveImageIdx(0);
     setQuantity(1);
@@ -67,7 +63,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     setSelectedCharmImage(undefined);
     setSelectedCharmPrice(undefined);
     setCharmError(null);
-    setSelectedSize(product?.availableSizes?.[0]);
 
     if (product) {
       trackGA4ViewItem(product);
@@ -156,7 +151,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       product,
       quantity,
       selectedColor,
-      selectedSize,
+      undefined,
       undefined,
       selectedCharm,
       selectedColorImage,
@@ -392,33 +387,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                         ⚠️ {charmError}
                       </p>
                     )}
-                  </div>
-                )}
-
-              {/* Size Variants (if enabled) */}
-              {product.enableSizeSelection !== false &&
-                product.availableSizes &&
-                product.availableSizes.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
-                      Kích thước cổ tay: <span className="text-amber-700 font-semibold">{selectedSize}</span>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {product.availableSizes.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => setSelectedSize(size)}
-                          className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                            selectedSize === size
-                              ? 'border-neutral-950 bg-neutral-950 text-white shadow-sm'
-                              : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 )}
 

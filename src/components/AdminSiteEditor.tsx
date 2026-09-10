@@ -937,6 +937,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
           onChangeSlides={(newSlides) => setConfig((prev) => ({ ...prev, heroSlides: newSlides }))}
           brandName={config.brandName}
           initialDevice="desktop"
+          categories={categories}
+          collections={collections}
         />
       )}
 
@@ -1022,6 +1024,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                 onChangeSlides={(newSlides) => setConfig((prev) => ({ ...prev, heroSlides: newSlides }))}
                 brandName={config.brandName}
                 initialDevice="mobile"
+                categories={categories}
+                collections={collections}
               />
             </div>
           )}
@@ -1534,61 +1538,78 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                         )}
                       </div>
                       
-                      <select
-                        value={
-                          [
-                            '#products', '#bracelets', '#keychains', '#lanyards', '#accessories',
-                            '#collection?id=event_0209', '#collections', '#contact', '#about', '#custom-order', ''
-                          ].includes(elem.buttonLink || '')
-                            ? (elem.buttonLink || '')
-                            : '__custom__'
-                        }
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '__custom__') {
-                            if (!elem.buttonLink || ['#products', '#bracelets', '#keychains', '#lanyards', '#accessories', '#collection?id=event_0209', '#collections', '#contact', '#about', '#custom-order'].includes(elem.buttonLink)) {
-                              handleUpdateCustomElement(elem.id, 'buttonLink', 'https://');
-                            }
-                          } else {
-                            handleUpdateCustomElement(elem.id, 'buttonLink', val);
-                          }
-                        }}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none cursor-pointer"
-                      >
-                        <option value="">-- Không chuyển trang --</option>
-                        <optgroup label="🛍️ Danh Mục Sản Phẩm">
-                          <option value="#products">🌟 Tất cả sản phẩm</option>
-                          <option value="#bracelets">💎 Vòng tay Paracord</option>
-                          <option value="#keychains">🔑 Móc khóa EDC</option>
-                          <option value="#lanyards">🏷️ Dây đeo thẻ / Lanyard</option>
-                          <option value="#accessories">⚙️ Phụ kiện & Hạt Charm</option>
-                        </optgroup>
-                        <optgroup label="🎯 Bộ Sưu Tập & Đặt Riêng">
-                          <option value="#collection?id=event_0209">🇻🇳 BST Hào Khí 02/09</option>
-                          <option value="#collections">🏆 Tất cả Bộ sưu tập</option>
-                          <option value="#custom-order">✨ Đặt làm theo yêu cầu</option>
-                        </optgroup>
-                        <optgroup label="📄 Trang Khác">
-                          <option value="#contact">📞 Trang Liên hệ & CSKH</option>
-                          <option value="#about">📖 Về thương hiệu NOT A KNOT</option>
-                        </optgroup>
-                        <optgroup label="⚙️ Tùy Chỉnh">
-                          <option value="__custom__">🔗 Nhập liên kết tùy chỉnh khác...</option>
-                        </optgroup>
-                      </select>
+                      {(() => {
+                        const currentBtnLink = elem.buttonLink || '';
+                        const knownBtnValues = new Set([
+                          '',
+                          '#products',
+                          '#collections',
+                          '#about',
+                          '#contact',
+                          '#custom-order',
+                          ...(categories || []).map((c) => `#products?category=${c.id}`),
+                          ...(collections || []).map((col) => `#collection?id=${col.id}`)
+                        ]);
+                        const isCustomBtn = currentBtnLink !== '' && !knownBtnValues.has(currentBtnLink);
+                        const selectedVal = isCustomBtn ? '__custom__' : currentBtnLink;
 
-                      {(![
-                        '#products', '#bracelets', '#keychains', '#lanyards', '#accessories',
-                        '#collection?id=event_0209', '#collections', '#contact', '#about', '#custom-order', ''
-                      ].includes(elem.buttonLink || '')) && (
-                        <input
-                          type="text"
-                          value={elem.buttonLink || ''}
-                          onChange={(e) => handleUpdateCustomElement(elem.id, 'buttonLink', e.target.value)}
-                          placeholder="https://... hoặc #link"
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 outline-none font-mono mt-1"
-                        />
-                      )}
+                        return (
+                          <div className="space-y-1">
+                            <select
+                              value={selectedVal}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '__custom__') {
+                                  if (!currentBtnLink || knownBtnValues.has(currentBtnLink)) {
+                                    handleUpdateCustomElement(elem.id, 'buttonLink', 'https://');
+                                  }
+                                } else {
+                                  handleUpdateCustomElement(elem.id, 'buttonLink', val);
+                                }
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none cursor-pointer"
+                            >
+                              <option value="">-- Không chuyển trang --</option>
+                              <optgroup label="🛍️ Danh Mục Sản Phẩm">
+                                <option value="#products">🌟 Tất cả sản phẩm</option>
+                                {(categories || [])
+                                  .filter((c) => c.id !== 'all')
+                                  .map((cat) => (
+                                    <option key={cat.id} value={`#products?category=${cat.id}`}>
+                                      🏷️ {cat.label}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                              <optgroup label="🎯 Bộ Sưu Tập & Đặt Riêng">
+                                <option value="#collections">🏆 Tất cả Bộ sưu tập</option>
+                                {(collections || []).map((col) => (
+                                  <option key={col.id} value={`#collection?id=${col.id}`}>
+                                    ✨ {col.title}
+                                  </option>
+                                ))}
+                                <option value="#custom-order">🎨 Đặt làm theo yêu cầu</option>
+                              </optgroup>
+                              <optgroup label="📄 Trang Khác">
+                                <option value="#about">📖 Về thương hiệu NOT A KNOT</option>
+                                <option value="#contact">📞 Trang Liên hệ & CSKH</option>
+                              </optgroup>
+                              <optgroup label="⚙️ Tùy Chỉnh">
+                                <option value="__custom__">🔗 Nhập liên kết tùy chỉnh khác...</option>
+                              </optgroup>
+                            </select>
+
+                            {isCustomBtn && (
+                              <input
+                                type="text"
+                                value={elem.buttonLink || ''}
+                                onChange={(e) => handleUpdateCustomElement(elem.id, 'buttonLink', e.target.value)}
+                                placeholder="https://... hoặc #link"
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 outline-none font-mono mt-1"
+                              />
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

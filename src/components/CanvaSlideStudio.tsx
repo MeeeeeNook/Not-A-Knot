@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SiteHeroSlide } from '../types';
+import { SiteHeroSlide, CategoryItem, CollectionInfo } from '../types';
+import { DEFAULT_CATEGORIES } from '../data/categories';
+import { COLLECTIONS_DATA } from '../data/collections';
 import { 
   Sparkles, 
   ArrowRight, 
@@ -43,6 +45,8 @@ interface CanvaSlideStudioProps {
   onChangeSlides: (slides: SiteHeroSlide[]) => void;
   brandName?: string;
   initialDevice?: 'desktop' | 'mobile';
+  categories?: CategoryItem[];
+  collections?: CollectionInfo[];
 }
 
 // Curated Design Presets
@@ -141,7 +145,9 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
   slides,
   onChangeSlides,
   brandName = 'NOT A KNOT',
-  initialDevice = 'desktop'
+  initialDevice = 'desktop',
+  categories = DEFAULT_CATEGORIES,
+  collections = COLLECTIONS_DATA
 }) => {
   const [selectedSlideId, setSelectedSlideId] = useState<string>(() => slides[0]?.id || 'slide-1');
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>(() => initialDevice === 'mobile' ? 'mobile' : 'desktop');
@@ -2449,72 +2455,95 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                   )}
                 </label>
 
-                {/* Dropdown Select Menu */}
-                <select
-                  value={
-                    [
-                      'all', 'bracelets', 'keychains', 'lanyards', 'accessories',
-                      'event_0209', 'custom-order', 'collections', 'contact', 'about', ''
-                    ].includes(activeSlide.categoryLink || '')
-                      ? (activeSlide.categoryLink || '')
-                      : '__custom__'
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '__custom__') {
-                      if (!activeSlide.categoryLink || ['all', 'bracelets', 'keychains', 'lanyards', 'accessories', 'event_0209', 'custom-order', 'collections', 'contact', 'about'].includes(activeSlide.categoryLink)) {
-                        updateActiveSlide('categoryLink', 'https://');
-                      }
-                    } else {
-                      updateActiveSlide('categoryLink', val);
-                    }
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="">-- Không chuyển trang (Chỉ hiển thị) --</option>
-                  
-                  <optgroup label="🛍️ Danh Mục Sản Phẩm">
-                    <option value="all">🌟 Tất cả sản phẩm (Toàn bộ kho)</option>
-                    <option value="bracelets">💎 Vòng tay Paracord thủ công</option>
-                    <option value="keychains">🔑 Móc khóa & Phụ kiện EDC</option>
-                    <option value="lanyards">🏷️ Dây đeo thẻ & Lanyard</option>
-                    <option value="accessories">⚙️ Phụ kiện & Hạt Charm</option>
-                  </optgroup>
+                {/* Dropdown Select Menu with Dynamic Categories & Collections */}
+                {(() => {
+                  const currentLink = activeSlide.categoryLink || '';
+                  const knownValues = new Set([
+                    '',
+                    'all',
+                    ...categories.map((c) => c.id),
+                    'collections',
+                    ...collections.map((col) => col.id),
+                    'about',
+                    'contact',
+                    'tracking',
+                    'custom-order'
+                  ]);
+                  const isCustom = currentLink !== '' && !knownValues.has(currentLink);
+                  const selectVal = isCustom ? '__custom__' : currentLink;
 
-                  <optgroup label="🎯 Sự Kiện & Bộ Sưu Tập">
-                    <option value="event_0209">🇻🇳 BST Kỷ Niệm 02/09 - Hào Khí Độc Lập</option>
-                    <option value="collections">🏆 Xem tất cả Bộ sưu tập</option>
-                    <option value="custom-order">✨ Đặt đan vòng theo yêu cầu (Custom Order)</option>
-                  </optgroup>
+                  return (
+                    <div className="space-y-2">
+                      <select
+                        value={selectVal}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__custom__') {
+                            if (!currentLink || knownValues.has(currentLink)) {
+                              updateActiveSlide('categoryLink', 'https://');
+                            }
+                          } else {
+                            updateActiveSlide('categoryLink', val);
+                          }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-medium outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                      >
+                        <option value="">-- Không chuyển trang (Chỉ hiển thị ảnh) --</option>
+                        
+                        <optgroup label="🛍️ Danh Mục Sản Phẩm">
+                          <option value="all">🌟 Tất cả sản phẩm (Toàn bộ kho hàng)</option>
+                          {categories
+                            .filter((c) => c.id !== 'all')
+                            .map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                🏷️ {cat.label} ({cat.id})
+                              </option>
+                            ))}
+                        </optgroup>
 
-                  <optgroup label="📄 Trang Thông Tin & Liên Hệ">
-                    <option value="contact">📞 Trang Liên hệ & CSKH</option>
-                    <option value="about">📖 Câu chuyện thương hiệu NOT A KNOT</option>
-                  </optgroup>
+                        <optgroup label="🏆 Bộ Sưu Tập & Sự Kiện">
+                          <option value="collections">🏆 Xem tất cả Bộ sưu tập</option>
+                          {collections.map((col) => (
+                            <option key={col.id} value={col.id}>
+                              ✨ {col.title} ({col.id})
+                            </option>
+                          ))}
+                        </optgroup>
 
-                  <optgroup label="⚙️ Tùy Chỉnh Nâng Cao">
-                    <option value="__custom__">🔗 Tùy chỉnh liên kết khác / URL ngoài...</option>
-                  </optgroup>
-                </select>
+                        <optgroup label="📄 Trang Thông Tin & CSKH">
+                          <option value="about">📖 Giới thiệu câu chuyện thương hiệu NOT A KNOT</option>
+                          <option value="contact">📞 Trang Liên hệ & CSKH</option>
+                          <option value="tracking">📦 Tra cứu vận đơn đơn hàng</option>
+                          <option value="custom-order">🎨 Đặt làm vòng theo yêu cầu (Custom Order)</option>
+                        </optgroup>
 
-                {/* Custom URL Input if selected */}
-                {(![
-                  'all', 'bracelets', 'keychains', 'lanyards', 'accessories',
-                  'event_0209', 'custom-order', 'collections', 'contact', 'about', ''
-                ].includes(activeSlide.categoryLink || '')) && (
-                  <div className="pt-1 animate-fadeIn">
-                    <input
-                      type="text"
-                      value={activeSlide.categoryLink || ''}
-                      onChange={(e) => updateActiveSlide('categoryLink', e.target.value)}
-                      placeholder="https://... hoặc #ten-trang"
-                      className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none font-mono focus:ring-1 focus:ring-amber-500 shadow-2xs"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-0.5 block">
-                      Nhập đường dẫn trang web hoặc mạng xã hội bạn muốn mở khi bấm.
-                    </span>
-                  </div>
-                )}
+                        <optgroup label="⚙️ Tùy Chỉnh Nâng Cao">
+                          <option value="__custom__">🔗 Tùy chỉnh liên kết khác / URL ngoài...</option>
+                        </optgroup>
+                      </select>
+
+                      {/* Custom URL Input when custom link or non-standard link is active */}
+                      {isCustom && (
+                        <div className="pt-1 space-y-1 animate-fadeIn">
+                          <div className="flex items-center justify-between text-[10px] text-amber-700 font-semibold">
+                            <span>Đường dẫn liên kết ngoài (URL):</span>
+                            <span>Ví dụ: https://facebook.com/...</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={activeSlide.categoryLink || ''}
+                            onChange={(e) => updateActiveSlide('categoryLink', e.target.value)}
+                            placeholder="https://... hoặc #ten-trang"
+                            className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none font-mono focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                          />
+                          <span className="text-[10px] text-slate-500 block">
+                            Khi khách bấm vào slide này trên website, hệ thống sẽ mở đường dẫn bạn đã nhập ở trên.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Button Size */}

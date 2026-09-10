@@ -35,6 +35,7 @@ import {
   removeVietnameseTones
 } from '../utils/orderFormatters';
 import { getOrdersFromFirestore } from '../firebase';
+import { printOrderSlipDirectly } from '../utils/printOrderSlip';
 
 interface OrderTrackerProps {
   initialTrackingCode?: string;
@@ -697,11 +698,16 @@ Cam kết bảo hành chốt khóa trọn đời!
 
   // Direct print attempt inside current window with fallback
   const handleDirectPrint = () => {
-    try {
-      window.print();
-    } catch (err) {
-      console.warn('Direct print inside window blocked, falling back to dedicated print tab:', err);
-      if (activeOrder) {
+    if (!activeOrder) return;
+    const ok = printOrderSlipDirectly(activeOrder, hotline, brandName);
+    if (ok) {
+      setPrintSuccessToast('Đang gọi hộp thoại in phiếu...');
+      setTimeout(() => setPrintSuccessToast(null), 3000);
+    } else {
+      try {
+        window.print();
+      } catch (err) {
+        console.warn('Direct print inside window blocked, falling back to dedicated print tab:', err);
         handleOpenPrintTab(activeOrder);
       }
     }
@@ -722,8 +728,8 @@ Cam kết bảo hành chốt khóa trọn đời!
       },
       {
         id: 'confirmed',
-        label: 'Xác nhận số đo',
-        desc: 'Đã chốt size cổ tay & charm',
+        label: 'Xác nhận đơn',
+        desc: 'Đã chốt mẫu charm & chi tiết',
         icon: CheckCircle2,
         isDone: ['Đã xác nhận', 'Knot đang được sản xuất', 'Đang giao hàng', 'Đơn hàng giao thành công'].includes(norm),
         isCurrent: norm === 'Đã xác nhận'

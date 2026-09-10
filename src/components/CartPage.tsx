@@ -299,7 +299,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                   Giỏ hàng của bạn đang trống
                 </h2>
                 <p className="text-sm text-slate-500 leading-relaxed mb-8">
-                  Hãy khám phá những tác phẩm vòng tay và phụ kiện Paracord 550 thủ công độc bản được chế tác riêng theo số đo cổ tay của bạn.
+                  Hãy khám phá những tác phẩm vòng tay và phụ kiện Paracord 550 thủ công độc bản được chế tác tỉ mỉ dành riêng cho bạn.
                 </p>
                 <button
                   onClick={onContinueShopping}
@@ -531,7 +531,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                           type="text"
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
-                          placeholder="Ví dụ: Giao giờ hành chính, cổ tay 16.5cm thích vừa khít..."
+                          placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi giao..."
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-400 focus:outline-hidden transition-colors"
                         />
                       </div>
@@ -711,7 +711,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       <Truck className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
                       <div>
                         <strong className="text-slate-900 block">Đồng kiểm khi nhận</strong>
-                        <span>Mở hộp kiểm tra độ vừa cổ tay và mẫu charm trước khi nhận.</span>
+                        <span>Mở hộp kiểm tra sản phẩm và mẫu charm trước khi nhận.</span>
                       </div>
                     </div>
 
@@ -998,32 +998,32 @@ export const CartPage: React.FC<CartPageProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => onOpenOrderTracker(placedOrder.trackingNumber || placedOrder.id)}
-                className="w-full sm:w-auto px-8 py-4 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-sm rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <Search className="w-4 h-4" />
-                <span>Tra cứu tiến độ đơn hàng này ngay</span>
+                <span>Tra cứu tiến độ</span>
               </button>
 
               <button
                 type="button"
                 onClick={onContinueShopping}
-                className="w-full sm:w-auto px-6 py-4 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-sm rounded-2xl transition-colors cursor-pointer flex items-center justify-center gap-2"
+                className="px-5 py-2.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
-                <span>Về trang chủ tiếp tục xem sản phẩm</span>
+                <span>Tiếp tục mua sắm</span>
               </button>
 
               <a
                 href={messengerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full sm:w-auto px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl transition-colors cursor-pointer flex items-center justify-center gap-2"
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-4 h-4 text-amber-400" />
-                <span>Nhắn xưởng qua Messenger</span>
+                <span>Nhắn Messenger</span>
               </a>
             </div>
 

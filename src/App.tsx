@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { HeroBanners } from './components/HeroBanners';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
@@ -109,6 +109,12 @@ export default function App() {
   useEffect(() => {
     productsRef.current = products;
   }, [products]);
+
+  // Publicly visible products (filtered to exclude hidden items or items in hidden categories on storefront)
+  const visibleProducts = useMemo(() => {
+    const hiddenCategoryIds = new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
+    return products.filter((p) => !p.isHidden && !hiddenCategoryIds.has(p.category));
+  }, [products, categories]);
 
   // Site Content Configuration (CMS) state
   const [siteContent, setSiteContent] = useState<SiteContentConfig>(() => {
@@ -434,9 +440,7 @@ export default function App() {
         setCategories(realtimeCats);
         try {
           localStorage.setItem('nak_categories', JSON.stringify(realtimeCats));
-        } catch (e) {
-          console.warn("Lỗi lưu local categories từ real-time sync:", e);
-        }
+        } catch {}
       }
     });
 
@@ -842,6 +846,51 @@ export default function App() {
     scrollToPageBeginning();
   };
 
+  const handleHeroSlideNavigation = (target: string) => {
+    if (!target) return;
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (target.startsWith('#')) {
+      window.location.hash = target;
+      return;
+    }
+    if (target === 'about') {
+      handleOpenAbout();
+      return;
+    }
+    if (target === 'contact') {
+      handleOpenContact();
+      return;
+    }
+    if (target === 'tracking' || target === 'order-tracker') {
+      handleOpenOrderTracker();
+      return;
+    }
+    if (target === 'custom-order') {
+      setCurrentView('custom-order');
+      window.location.hash = '#custom-order';
+      scrollToPageBeginning();
+      return;
+    }
+    if (target === 'collections') {
+      setCurrentView('landing');
+      window.location.hash = '#collections';
+      const el = document.getElementById('collections-showcase-section');
+      el?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    // Check if target matches any collection
+    const matchedCol = collections.find((c) => c.id === target || c.categoryKey === target);
+    if (matchedCol) {
+      handleSelectCollection(matchedCol.id);
+      return;
+    }
+    // Otherwise route to catalog with the category ID
+    handleOpenAllCatalog(target);
+  };
+
   const handleNavigateLanding = () => {
     setCurrentView('landing');
     window.location.hash = '#home';
@@ -1037,9 +1086,9 @@ export default function App() {
             {/* Hero Carousel */}
             <HeroBanners
               slides={siteContent?.heroSlides}
-              onSelectCategory={(cat) => handleOpenAllCatalog(cat)}
+              onSelectCategory={handleHeroSlideNavigation}
               onNavigateToEvent={() => handleSelectCollection('event_0209')}
-              onSelectBannerCategory={(cat) => handleOpenAllCatalog(cat)}
+              onSelectBannerCategory={handleHeroSlideNavigation}
               onOpen0209Event={() => handleSelectCollection('event_0209')}
               onOpenAbout={handleOpenAbout}
             />
@@ -1098,7 +1147,7 @@ export default function App() {
         {currentView === 'collection' && (
           <CollectionDetailPage
             collectionId={activeCollectionId}
-            products={products}
+            products={visibleProducts}
             collections={collections}
             isAdminLoggedIn={Boolean(currentSeller)}
             onUpdateCollections={handleUpdateCollections}
@@ -1113,7 +1162,7 @@ export default function App() {
         {/* VIEW 3: Full Catalog Page (All products store with search & category filters) */}
         {currentView === 'catalog' && (
           <ProductCatalog
-            products={products}
+            products={visibleProducts}
             categories={categories}
             collections={collections}
             selectedCategory={selectedCategory}
@@ -1192,7 +1241,7 @@ export default function App() {
         {currentView === 'product-detail' && selectedProduct && (
           <ProductDetailPage
             product={selectedProduct}
-            allProducts={products}
+            allProducts={visibleProducts}
             categories={categories}
             cartItems={cartItems}
             backLabel={

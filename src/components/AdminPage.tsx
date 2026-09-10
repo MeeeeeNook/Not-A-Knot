@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -38,14 +38,17 @@ import {
   FirestoreQuotaStats,
   fetchProductsFromFirestore,
   saveProductToFirestore,
+  saveProductsToFirestore,
   pushAndSyncProductsToFirestore,
   deleteProductFromFirestore,
   fetchCategoriesFromFirestore,
   saveCategoryToFirestore,
+  saveCategoriesToFirestore,
   pushAndSyncCategoriesToFirestore,
   deleteCategoryFromFirestore,
   fetchOrdersFromFirestore,
   saveOrderToFirestore,
+  saveOrdersToFirestore,
   subscribeToOrdersFromFirestore,
   deleteOrderFromFirestore,
   updateOrderStatusInFirestore,
@@ -58,6 +61,14 @@ import {
   testFirebaseConnection,
   StoredOrder
 } from '../firebase';
+
+interface HistoryAction {
+  id: string;
+  description: string;
+  type: 'products' | 'categories' | 'orders';
+  undoState: any;
+  redoState: any;
+}
 
 interface AdminPageProps {
   products: Product[];
@@ -225,6 +236,35 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
+  // Order toolbar compact search & extra filters slide dropdown
+  const [isOrderSearchExpanded, setIsOrderSearchExpanded] = useState<boolean>(false);
+  const [showOrderExtraFilters, setShowOrderExtraFilters] = useState<boolean>(false);
+  const orderExtraFiltersRef = useRef<HTMLDivElement>(null);
+  const orderSearchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (orderExtraFiltersRef.current && !orderExtraFiltersRef.current.contains(e.target as Node)) {
+        setShowOrderExtraFilters(false);
+      }
+    };
+    if (showOrderExtraFilters) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showOrderExtraFilters]);
+
+  const activeOrderExtraFiltersCount = useMemo(() => {
+    let count = 0;
+    if (orderSortBy !== 'date_desc') count++;
+    if (orderSellerFilter !== 'all') count++;
+    if (orderPaymentStatusFilter !== 'all') count++;
+    if (orderHasReceiptFilter !== 'all') count++;
+    return count;
+  }, [orderSortBy, orderSellerFilter, orderPaymentStatusFilter, orderHasReceiptFilter]);
+
   // Calculate pixel-perfect clamped context menu position right at cursor
   const getClampedContextMenuPos = (clientX: number, clientY: number) => {
     const MENU_WIDTH = 224;
@@ -310,6 +350,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formIsEvent0209, setFormIsEvent0209] = useState(false);
   const [formIsBestSeller, setFormIsBestSeller] = useState(false);
   const [formIsNew, setFormIsNew] = useState(false);
+  const [formIsHidden, setFormIsHidden] = useState(false);
+  const [isExpandedHiddenBox, setIsExpandedHiddenBox] = useState(true);
+
+  // Undo / Redo History Stacks
+  const [undoStack, setUndoStack] = useState<HistoryAction[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryAction[]>([]);
 
   // Dynamic Product Variations (Colors with photos, Charms with photos, Sizes)
   const [formEnableColorSelection, setFormEnableColorSelection] = useState(false);
@@ -381,6 +427,119 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const formatted = bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(2)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
     showAdminToast(`Đã tính lại dung lượng dữ liệu Firestore: ~${formatted}`);
   };
+
+  // Undo / Redo History Handlers
+  const pushHistoryAction = (
+    description: string,
+    type: 'products' | 'categories' | 'orders',
+    undoState: any,
+    redoState: any
+  ) => {
+    const action: HistoryAction = {
+      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      description,
+      type,
+      undoState: JSON.parse(JSON.stringify(undoState)),
+      redoState: JSON.parse(JSON.stringify(redoState))
+    };
+    setUndoStack((prev) => [action, ...prev].slice(0, 30));
+    setRedoStack([]); // Clear redo stack on new action
+  };
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    const [actionToUndo, ...remainingUndo] = undoStack;
+    setUndoStack(remainingUndo);
+    setRedoStack((prev) => [actionToUndo, ...prev].slice(0, 30));
+
+    try {
+      if (actionToUndo.type === 'products') {
+        onUpdateProducts(actionToUndo.undoState);
+        localStorage.setItem('nak_custom_products', JSON.stringify(actionToUndo.undoState));
+        saveProductsToFirestore(actionToUndo.undoState).catch((err) =>
+          console.warn('Undo products sync err:', err)
+        );
+      } else if (actionToUndo.type === 'categories') {
+        setLocalCategories(actionToUndo.undoState);
+        onUpdateCategories?.(actionToUndo.undoState);
+        localStorage.setItem('nak_categories', JSON.stringify(actionToUndo.undoState));
+        saveCategoriesToFirestore(actionToUndo.undoState).catch((err) =>
+          console.warn('Undo categories sync err:', err)
+        );
+      } else if (actionToUndo.type === 'orders') {
+        setOrders(actionToUndo.undoState);
+        localStorage.setItem('nak_preorders', JSON.stringify(actionToUndo.undoState));
+        saveOrdersToFirestore(actionToUndo.undoState).catch((err) =>
+          console.warn('Undo orders sync err:', err)
+        );
+      }
+      showAdminToast(`Đã hoàn tác: ${actionToUndo.description}`);
+    } catch (e: any) {
+      console.warn('Lỗi khi hoàn tác:', e);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (redoStack.length === 0) return;
+    const [actionToRedo, ...remainingRedo] = redoStack;
+    setRedoStack(remainingRedo);
+    setUndoStack((prev) => [actionToRedo, ...prev].slice(0, 30));
+
+    try {
+      if (actionToRedo.type === 'products') {
+        onUpdateProducts(actionToRedo.redoState);
+        localStorage.setItem('nak_custom_products', JSON.stringify(actionToRedo.redoState));
+        saveProductsToFirestore(actionToRedo.redoState).catch((err) =>
+          console.warn('Redo products sync err:', err)
+        );
+      } else if (actionToRedo.type === 'categories') {
+        setLocalCategories(actionToRedo.redoState);
+        onUpdateCategories?.(actionToRedo.redoState);
+        localStorage.setItem('nak_categories', JSON.stringify(actionToRedo.redoState));
+        saveCategoriesToFirestore(actionToRedo.redoState).catch((err) =>
+          console.warn('Redo categories sync err:', err)
+        );
+      } else if (actionToRedo.type === 'orders') {
+        setOrders(actionToRedo.redoState);
+        localStorage.setItem('nak_preorders', JSON.stringify(actionToRedo.redoState));
+        saveOrdersToFirestore(actionToRedo.redoState).catch((err) =>
+          console.warn('Redo orders sync err:', err)
+        );
+      }
+      showAdminToast(`Đã làm lại: ${actionToRedo.description}`);
+    } catch (e: any) {
+      console.warn('Lỗi khi làm lại:', e);
+    }
+  };
+
+  // Global Keyboard Shortcuts for Undo (Ctrl+Z / Cmd+Z) & Redo (Ctrl+Y / Cmd+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          handleUndo();
+        } else if ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y') {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undoStack, redoStack]);
 
   // Fetch sellers from Firestore or defaults
   const loadSellers = async () => {
@@ -691,6 +850,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormIsEvent0209(false);
     setFormIsBestSeller(false);
     setFormIsNew(true);
+    setFormIsHidden(false);
     // Variations initialization
     setFormEnableColorSelection(false);
     setFormColorOptions([]);
@@ -722,6 +882,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormIsEvent0209(!!prod.isEvent0209);
     setFormIsBestSeller(!!prod.isBestSeller);
     setFormIsNew(!!prod.isNew);
+    setFormIsHidden(Boolean(prod.isHidden));
     // Variations loading
     setFormEnableColorSelection(Boolean(prod.enableColorSelection));
     const loadedColors: ProductColorOption[] = (prod.colorOptions && prod.colorOptions.length > 0)
@@ -950,10 +1111,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isEvent0209: formIsEvent0209,
         isBestSeller: formIsBestSeller,
         isNew: formIsNew,
+        isHidden: formIsHidden,
         updatedAt: new Date().toISOString()
       };
 
       const updatedList = products.map((p) => (p.id === editingProduct.id ? updatedItem : p));
+      pushHistoryAction(`Cập nhật sản phẩm "${updatedItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
       try {
         localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
@@ -1001,12 +1164,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isEvent0209: formIsEvent0209,
         isBestSeller: formIsBestSeller,
         isNew: formIsNew,
+        isHidden: formIsHidden,
         rating: 5.0,
         reviewsCount: 1,
         updatedAt: new Date().toISOString()
       };
 
       const updatedList = [newItem, ...products];
+      pushHistoryAction(`Thêm sản phẩm mới "${newItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
       try {
         localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
@@ -1056,6 +1221,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       confirmLabel: 'Xóa sản phẩm',
       onConfirm: async () => {
         const updatedList = products.filter((p) => p.id !== id);
+        pushHistoryAction(`Xóa sản phẩm "${name}"`, 'products', products, updatedList);
         onUpdateProducts(updatedList);
         try {
           localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
@@ -1076,6 +1242,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const newInStock = newStock > 0;
     const updatedProd = { ...prod, stock: newStock, inStock: newInStock };
     const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+    pushHistoryAction(`Điều chỉnh tồn kho "${prod.name}": ${newStock}`, 'products', products, updatedList);
     onUpdateProducts(updatedList);
     saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore quick stock adjustment:', e));
   };
@@ -1087,8 +1254,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const nextStock = newStockState ? Math.max(10, currentStock) : 0;
     const updatedProd = { ...prod, stock: nextStock, inStock: newStockState };
     const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+    pushHistoryAction(`Đổi trạng thái kho "${prod.name}": ${newStockState ? 'Còn hàng' : 'Hết hàng'}`, 'products', products, updatedList);
     onUpdateProducts(updatedList);
     saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore stock toggle:', e));
+  };
+
+  // Quick toggle product visibility (Hide / Unhide)
+  const handleToggleProductVisibility = async (prod: Product) => {
+    const nextHiddenState = !prod.isHidden;
+    const updatedProd = { ...prod, isHidden: nextHiddenState, updatedAt: new Date().toISOString() };
+    const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+    pushHistoryAction(
+      nextHiddenState ? `Ẩn sản phẩm "${prod.name}"` : `Hiện lại sản phẩm "${prod.name}"`,
+      'products',
+      products,
+      updatedList
+    );
+    onUpdateProducts(updatedList);
+    try {
+      localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
+    } catch {}
+    saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore product visibility toggle:', e));
+    showAdminToast(
+      nextHiddenState
+        ? `Đã ẩn sản phẩm "${prod.name}" (chuyển sang Hộp sản phẩm đã ẩn).`
+        : `Đã hiện lại sản phẩm "${prod.name}" trên website.`
+    );
   };
 
   // ==========================================
@@ -1127,6 +1318,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const updatedCats = localCategories.map((c) =>
       c.id === category.id ? updatedCategory : c
     );
+    pushHistoryAction(
+      nextHiddenState ? `Ẩn danh mục "${category.label}"` : `Hiện danh mục "${category.label}"`,
+      'categories',
+      localCategories,
+      updatedCats
+    );
     setLocalCategories(updatedCats);
     onUpdateCategories?.(updatedCats);
 
@@ -1137,7 +1334,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     try {
       localStorage.setItem('nak_categories', JSON.stringify(updatedCats));
-      saveCategoryToFirestore(updatedCategory)
+      Promise.all(updatedCats.map((c) => saveCategoryToFirestore(c)))
         .then(() => showAdminToast(`Đã đồng bộ trạng thái danh mục lên Firebase Cloud!`))
         .catch((err) => {
           console.warn('Firestore save category error:', err);
@@ -1180,6 +1377,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       updatedCats = [...localCategories, catPayload];
     }
 
+    pushHistoryAction(
+      editingCategory ? `Cập nhật danh mục "${catPayload.label}"` : `Tạo mới danh mục "${catPayload.label}"`,
+      'categories',
+      localCategories,
+      updatedCats
+    );
     setLocalCategories(updatedCats);
     onUpdateCategories?.(updatedCats);
     setIsAddingCategory(false);
@@ -1235,6 +1438,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           }
         }
 
+        pushHistoryAction(`Xóa danh mục "${catLabel}"`, 'categories', localCategories, updatedCats);
         setLocalCategories(updatedCats);
         onUpdateCategories?.(updatedCats);
         try {
@@ -1314,6 +1518,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           }
         : o
     );
+    pushHistoryAction(`Đổi trạng thái đơn #${orderId} sang "${normalizedSt}"`, 'orders', orders, updated);
     setOrders(updated);
     localStorage.setItem('nak_preorders', JSON.stringify(updated));
     const targetModOrder = updated.find((o) => o.id === orderId);
@@ -1512,6 +1717,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       return matchesSearch && matchesCategory && matchesStock;
     });
   }, [products, adminSearch, adminCategoryFilter, adminStockFilter]);
+
+  // Set of category IDs that are marked as hidden
+  const hiddenCategoryIds = useMemo(() => {
+    return new Set(localCategories.filter((c) => c.isHidden).map((c) => c.id));
+  }, [localCategories]);
+
+  // A product is considered hidden if it is explicitly hidden OR belongs to a hidden category
+  const isProductHidden = (p: Product) => {
+    return Boolean(p.isHidden) || Boolean(hiddenCategoryIds.has(p.category));
+  };
+
+  // Separate active (visible) products from hidden products
+  const filteredActiveProducts = useMemo(() => {
+    return filteredProducts.filter((p) => !isProductHidden(p));
+  }, [filteredProducts, hiddenCategoryIds]);
+
+  const allHiddenProducts = useMemo(() => {
+    return products.filter((p) => isProductHidden(p));
+  }, [products, hiddenCategoryIds]);
+
+  const filteredHiddenProducts = useMemo(() => {
+    return allHiddenProducts.filter((p) => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(adminSearch.toLowerCase()) ||
+        p.id.toLowerCase().includes(adminSearch.toLowerCase());
+      const matchesCategory =
+        adminCategoryFilter === 'all' || p.category === adminCategoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [allHiddenProducts, adminSearch, adminCategoryFilter]);
 
   // Filtered Orders with multi-dimensional criteria (category filter, 3 sources, 2 payment types, 3 statuses, seller filter & dynamic sort)
   const filteredOrders = useMemo(() => {
@@ -2137,6 +2372,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               }}
             />
 
+            {/* Undo & Redo History Controls */}
+            <div className="flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 gap-0.5">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={undoStack.length === 0}
+                className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all text-slate-700 hover:text-slate-950 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed shadow-none hover:shadow-xs"
+                title={
+                  undoStack.length > 0
+                    ? `Hoàn tác: ${undoStack[0].description} (Ctrl+Z)`
+                    : 'Không có thao tác nào để hoàn tác (Ctrl+Z)'
+                }
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Hoàn tác</span>
+                {undoStack.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full font-black">
+                    {undoStack.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={redoStack.length === 0}
+                className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all text-slate-700 hover:text-slate-950 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed shadow-none hover:shadow-xs"
+                title={
+                  redoStack.length > 0
+                    ? `Làm lại: ${redoStack[0].description} (Ctrl+Y)`
+                    : 'Không có thao tác nào để làm lại (Ctrl+Y)'
+                }
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Làm lại</span>
+                {redoStack.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-sky-200 text-sky-900 rounded-full font-black">
+                    {redoStack.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
             <button
               onClick={() => setDesktopSidebarCollapsed((prev) => !prev)}
               className="hidden lg:flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 text-xs font-bold transition-colors cursor-pointer"
@@ -2733,7 +3011,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </div>
 
                       {/* Badges and check flags */}
-                      <div className="flex flex-wrap gap-4 pt-2 border-t border-slate-100">
+                      <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
                         <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
                           <input
                             type="checkbox"
@@ -2762,6 +3040,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             className="rounded text-amber-600 focus:ring-amber-500"
                           />
                           <span>Gắn nhãn Mới</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 text-xs font-bold text-rose-700 cursor-pointer bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={formIsHidden}
+                            onChange={(e) => setFormIsHidden(e.target.checked)}
+                            className="rounded text-rose-600 focus:ring-rose-500"
+                          />
+                          <span>Ẩn sản phẩm khỏi website</span>
                         </label>
                       </div>
                     </div>
@@ -3198,94 +3486,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       )}
                     </div>
 
-                    {/* 3. SIZE OPTIONS */}
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <label className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formEnableSizeSelection}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setFormEnableSizeSelection(checked);
-                              if (checked && (!formAvailableSizes || formAvailableSizes.length === 0)) {
-                                setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
-                              }
-                            }}
-                            className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <div>
-                            <span className="text-xs font-bold text-slate-900">
-                              📏 Bật tùy chọn Size cổ tay (Size Options)
-                            </span>
-                            <span className="block text-[11px] text-slate-500">
-                              Cho phép khách hàng chọn chu vi cổ tay phù hợp
-                            </span>
-                          </div>
-                        </label>
-                      </div>
-
-                      {formEnableSizeSelection && (
-                        <div className="space-y-2 pt-2 border-t border-slate-200">
-                          <div className="flex flex-wrap gap-2">
-                            {formAvailableSizes.map((sz, szIdx) => (
-                              <span
-                                key={szIdx}
-                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-2xs"
-                              >
-                                <span>{sz}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setFormAvailableSizes((prev) => prev.filter((_, i) => i !== szIdx));
-                                  }}
-                                  className="text-slate-400 hover:text-rose-600 font-bold cursor-pointer"
-                                  title="Xóa size này"
-                                >
-                                  ✕
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-2">
-                            <input
-                              type="text"
-                              id="input-new-size"
-                              placeholder="Nhập size mới (vd: 18cm - 19cm)..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  const target = e.currentTarget;
-                                  const val = target.value.trim();
-                                  if (val && !formAvailableSizes.includes(val)) {
-                                    setFormAvailableSizes((prev) => [...prev, val]);
-                                    target.value = '';
-                                  }
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 w-64"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const input = document.getElementById('input-new-size') as HTMLInputElement | null;
-                                if (input && input.value.trim()) {
-                                  const val = input.value.trim();
-                                  if (!formAvailableSizes.includes(val)) {
-                                    setFormAvailableSizes((prev) => [...prev, val]);
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              + Thêm Size
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
                   </div>
 
                   {/* Form Submit Button */}
@@ -3315,12 +3515,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             {/* Products Display: Cards or Table based on productViewMode */}
             {productViewMode === 'cards' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                {filteredProducts.length === 0 ? (
+                {filteredActiveProducts.length === 0 ? (
                   <div className="col-span-full p-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">
-                    Không tìm thấy sản phẩm nào phù hợp bộ lọc.
+                    Không tìm thấy sản phẩm đang hiển thị nào phù hợp bộ lọc.
                   </div>
                 ) : (
-                  filteredProducts.map((p) => {
+                  filteredActiveProducts.map((p) => {
                     const stockCount = p.stock ?? 15;
                     const isAvailable = p.inStock !== false && stockCount > 0;
                     const catObj = localCategories.find((c) => c.id === p.category);
@@ -3434,15 +3634,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                           <button
                             type="button"
+                            onClick={() => handleToggleProductVisibility(p)}
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 rounded-xl text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
+                            title="Ẩn sản phẩm khỏi website (chuyển vào Hộp sản phẩm đã ẩn)"
+                          >
+                            <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Ẩn</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleOpenEditForm(p)}
-                            className="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors border border-amber-200 text-center"
+                            className="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors border border-amber-200 text-center cursor-pointer"
                           >
                             Sửa sản phẩm
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteProduct(p.id, p.name)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-semibold transition-colors border border-slate-200"
+                            className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                             title="Xóa sản phẩm"
                           >
                             Xóa
@@ -3470,14 +3679,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredProducts.length === 0 ? (
+                      {filteredActiveProducts.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="p-12 text-center text-slate-400">
-                            Không tìm thấy sản phẩm nào phù hợp bộ lọc.
+                            Không tìm thấy sản phẩm đang hiển thị nào phù hợp bộ lọc.
                           </td>
                         </tr>
                       ) : (
-                        filteredProducts.map((p) => {
+                        filteredActiveProducts.map((p) => {
                           const stockCount = p.stock ?? 15;
                           const isAvailable = p.inStock !== false && stockCount > 0;
                           const catObj = localCategories.find((c) => c.id === p.category);
@@ -3573,17 +3782,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               </td>
 
                               <td className="p-4 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-2">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleProductVisibility(p)}
+                                    className="px-2 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
+                                    title="Ẩn sản phẩm khỏi website (chuyển vào Hộp sản phẩm đã ẩn)"
+                                  >
+                                    <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Ẩn</span>
+                                  </button>
                                   <button
                                     onClick={() => handleOpenEditForm(p)}
-                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-amber-700 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200"
+                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-amber-700 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                     title="Chỉnh sửa sản phẩm"
                                   >
                                     Sửa
                                   </button>
                                   <button
                                     onClick={() => handleDeleteProduct(p.id, p.name)}
-                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 hover:border-rose-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200"
+                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 hover:border-rose-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                     title="Xóa sản phẩm"
                                   >
                                     Xóa
@@ -3599,6 +3817,138 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 </div>
               </div>
             )}
+
+            {/* ======================================================== */}
+            {/* BOX RIÊNG BIỆT: HỘP SẢN PHẨM ĐÃ ẨN (HOẶC THUỘC DANH MỤC ĐÃ ẨN) */}
+            {/* ======================================================== */}
+            <div className="mt-8 rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-2xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+                    <EyeOff className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-extrabold text-white">Hộp Sản Phẩm Đã Ẩn</h3>
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-amber-400 text-slate-950">
+                        {allHiddenProducts.length} sản phẩm
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Bao gồm các sản phẩm bị ẩn thủ công hoặc thuộc danh mục đang ẩn. Khách hàng trên website hoàn toàn không thấy các sản phẩm này.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsExpandedHiddenBox((prev) => !prev)}
+                  className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 font-bold text-xs border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <span>{isExpandedHiddenBox ? 'Thu gọn' : 'Mở rộng xem danh sách'}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandedHiddenBox ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {isExpandedHiddenBox && (
+                <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-200 animate-fadeIn">
+                  {filteredHiddenProducts.length === 0 ? (
+                    <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-300 text-slate-500 text-xs">
+                      {allHiddenProducts.length === 0
+                        ? 'Chưa có sản phẩm nào bị ẩn. Khi bạn ẩn sản phẩm hoặc ẩn danh mục, chúng sẽ tự động tách vào hộp này.'
+                        : 'Không có sản phẩm đã ẩn nào khớp với bộ lọc tìm kiếm hiện tại.'}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {filteredHiddenProducts.map((p) => {
+                        const catObj = localCategories.find((c) => c.id === p.category);
+                        const isCatHidden = hiddenCategoryIds.has(p.category);
+                        const isDirectlyHidden = Boolean(p.isHidden);
+
+                        return (
+                          <div
+                            key={`hidden-${p.id}`}
+                            className="bg-white rounded-2xl border border-slate-200 hover:border-slate-300 p-3.5 space-y-3 shadow-2xs relative"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="relative flex-shrink-0">
+                                <img
+                                  src={p.image}
+                                  alt={p.name}
+                                  className="w-14 h-14 rounded-xl object-cover border border-slate-200 bg-slate-100 opacity-80"
+                                />
+                                <div className="absolute inset-0 bg-slate-900/10 rounded-xl flex items-center justify-center">
+                                  <EyeOff className="w-4 h-4 text-slate-600" />
+                                </div>
+                              </div>
+
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {isDirectlyHidden && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                                      Ẩn thủ công
+                                    </span>
+                                  )}
+                                  {isCatHidden && (
+                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                      Danh mục ẩn ({catObj?.label || p.category})
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 className="font-bold text-xs text-slate-800 line-clamp-2 leading-snug">
+                                  {p.name}
+                                </h4>
+
+                                <div className="flex items-center justify-between pt-0.5">
+                                  <span className="text-amber-700 font-extrabold text-xs">
+                                    {p.price.toLocaleString('vi-VN')}đ
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    #{p.id}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Hidden Card Actions */}
+                            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleProductVisibility(p)}
+                                className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-colors border border-emerald-200 flex items-center justify-center gap-1 cursor-pointer"
+                                title="Hiện lại sản phẩm này trên website"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{isDirectlyHidden ? 'Hiện lại' : 'Bật hiển thị'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditForm(p)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                title="Chỉnh sửa sản phẩm"
+                              >
+                                Sửa
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(p.id, p.name)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                title="Xóa vĩnh viễn"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -3956,12 +4306,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </div>
 
             {/* Filter & Controls Bar */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold border border-slate-200">
-                  {filteredOrders.length} / {orders.length} đơn hàng
-                </span>
-
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+              {/* Left group: View Modes, Multi-Select, Export Excel, Table Zoom */}
+              <div className="flex flex-wrap items-center gap-2">
                 {/* View Mode Toggle: Cards vs Table */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                   <button
@@ -3992,7 +4339,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </button>
                 </div>
 
-                {/* Prominent Selection Mode Button */}
+                {/* Multi-Select Button: "chọn nhiều đơn hàng chuyển thành chọn nhiều" */}
                 <button
                   type="button"
                   onClick={() => {
@@ -4000,29 +4347,30 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       const next = !prev;
                       showAdminToast(
                         next
-                          ? 'Đã bật chế độ chọn nhiều đơn hàng: Bạn có thể chọn hoặc bỏ chọn từng đơn bằng cách bấm trực tiếp vào hàng.'
-                          : 'Đã tắt chế độ chọn nhiều đơn hàng.'
+                          ? 'Đã bật chế độ chọn nhiều: Bạn có thể chọn hoặc bỏ chọn từng đơn bằng cách bấm trực tiếp vào hàng.'
+                          : 'Đã tắt chế độ chọn nhiều.'
                       );
                       return next;
                     });
                   }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
                     isSelectionMode
                       ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-500 font-extrabold shadow-sm'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                   }`}
-                  title="Bật hoặc tắt chế độ chọn nhiều để tích chọn nhanh các hàng"
+                  title="Bật hoặc tắt chế độ chọn nhiều"
                 >
-                  <span className={`w-2.5 h-2.5 rounded-full ${isSelectionMode ? 'bg-slate-950 animate-pulse' : 'bg-slate-400'}`} />
-                  <span>{isSelectionMode ? '✓ Đang chọn nhiều đơn' : '☑ Chọn nhiều đơn hàng'}</span>
+                  <span className={`w-2 h-2 rounded-full ${isSelectionMode ? 'bg-slate-950 animate-pulse' : 'bg-slate-400'}`} />
+                  <span>{isSelectionMode ? '✓ Đang chọn nhiều' : '☑ Chọn nhiều'}</span>
                 </button>
 
+                {/* Export Excel Button: "xuất file excel chuyển thành Export Excel" */}
                 <button
                   onClick={handleExportOrdersExcel}
-                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-emerald-200 cursor-pointer shadow-2xs"
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-emerald-200 cursor-pointer shadow-2xs"
                   title="Xuất danh sách đơn hàng sang bảng tính Excel .xlsx"
                 >
-                  <span>📊 Xuất File Excel (.xlsx)</span>
+                  <span>📊 Export Excel</span>
                 </button>
 
                 {tableZoom !== 100 && (
@@ -4032,65 +4380,55 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Search Box */}
-                <div className="relative flex-grow sm:flex-grow-0">
-                  <input
-                    type="text"
-                    value={orderSearchQuery}
-                    onChange={(e) => setOrderSearchQuery(e.target.value)}
-                    placeholder="Tìm tên, SĐT, mã đơn, người bán..."
-                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white w-full sm:w-52"
-                  />
-                </div>
-
-                {/* Seller Filter Selector */}
-                <select
-                  id="admin-order-filter-seller"
-                  value={orderSellerFilter}
-                  onChange={(e) => setOrderSellerFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                  title="Lọc đơn hàng theo người bán phụ trách"
-                >
-                  <option value="all">👤 Tất cả người bán ({sellers.length} người)</option>
-                  <option value="website">🌐 Đơn Website (Tự động / Không người bán)</option>
-                  <option value="social">📱 Đơn Mạng xã hội (Không người bán)</option>
-                  <option value="unassigned">🔒 Đơn không tính người bán (Website + MXH)</option>
-                  {deduplicateSellers(sellers).map((s, idx) => (
-                    <option key={`admin-seller-filter-${s.id}-${idx}`} value={s.id}>
-                      👤 {s.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Dynamic Sort Order Selector */}
-                <select
-                  id="admin-order-sort-selector"
-                  value={orderSortBy}
-                  onChange={(e: any) => setOrderSortBy(e.target.value)}
-                  className="px-3 py-2 bg-amber-50 border border-amber-300 rounded-xl text-xs font-bold text-amber-950 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                  title="Sắp xếp danh sách đơn hàng"
-                >
-                  <option value="date_desc">⏳ Mới nhất trước</option>
-                  <option value="date_asc">⌛ Cũ nhất trước</option>
-                  <option value="category_asc">🏷️ Danh mục SP (A → Z)</option>
-                  <option value="category_desc">🏷️ Danh mục SP (Z → A)</option>
-                  <option value="seller_asc">👤 Người bán (A → Z)</option>
-                  <option value="seller_desc">👤 Người bán (Z → A)</option>
-                  <option value="total_desc">💰 Tổng tiền (Cao → Thấp)</option>
-                  <option value="total_asc">💵 Tổng tiền (Thấp → Cao)</option>
-                  <option value="name_asc">🔤 Tên KH (A → Z)</option>
-                </select>
+              {/* Right group: Search icon (expands on click), Categories filter, Source filter, and "Bộ lọc khác" slide dropdown */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search: "Nút tìm kiếm chuyển thành Icon Search, khi ấn vào mới hiện to ra" */}
+                {!isOrderSearchExpanded && !orderSearchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOrderSearchExpanded(true);
+                      setTimeout(() => orderSearchInputRef.current?.focus(), 50);
+                    }}
+                    className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
+                    title="Tìm kiếm đơn hàng"
+                  >
+                    <Search className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="relative flex items-center">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                    <input
+                      ref={orderSearchInputRef}
+                      type="text"
+                      value={orderSearchQuery}
+                      onChange={(e) => setOrderSearchQuery(e.target.value)}
+                      placeholder="Tìm tên, SĐT, mã đơn..."
+                      className="pl-8 pr-7 py-1.5 bg-white border border-amber-400 focus:border-amber-500 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none w-48 sm:w-60 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderSearchQuery('');
+                        setIsOrderSearchExpanded(false);
+                      }}
+                      className="absolute right-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer text-xs font-bold"
+                      title="Đóng tìm kiếm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 {/* Product Category Filter */}
                 <select
                   id="admin-order-filter-category"
                   value={orderCategoryFilter}
                   onChange={(e: any) => setOrderCategoryFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer max-w-[140px] sm:max-w-none truncate"
                   title="Lọc đơn hàng theo danh mục sản phẩm"
                 >
-                  <option value="all">🏷️ Tất cả danh mục ({localCategories.length})</option>
+                  <option value="all">Tất cả danh mục</option>
                   {localCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       🏷️ {cat.label}
@@ -4102,35 +4440,141 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <select
                   value={orderSourceFilter}
                   onChange={(e: any) => setOrderSourceFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  title="Lọc đơn hàng theo nguồn đơn"
                 >
-                  <option value="all">Tất cả nguồn đơn</option>
+                  <option value="all">Tất cả nguồn</option>
                   <option value="website">Website</option>
                   <option value="mạng xã hội">Mạng xã hội</option>
                   <option value="trực tiếp">Trực tiếp</option>
                 </select>
 
-                {/* Payment Status Filter */}
-                <select
-                  value={orderPaymentStatusFilter}
-                  onChange={(e: any) => setOrderPaymentStatusFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                >
-                  <option value="all">Tất cả thanh toán</option>
-                  <option value="paid">Đã thanh toán</option>
-                  <option value="unpaid">Chưa thanh toán</option>
-                </select>
+                {/* "Bộ lọc khác" Slide Dropdown Menu */}
+                <div className="relative" ref={orderExtraFiltersRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOrderExtraFilters((prev) => !prev)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                      showOrderExtraFilters || activeOrderExtraFiltersCount > 0
+                        ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                    }`}
+                    title="Bộ lọc khác: Sắp xếp, Người bán, Thanh toán, Bill chuyển khoản"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>Bộ lọc khác</span>
+                    {activeOrderExtraFiltersCount > 0 && (
+                      <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">
+                        {activeOrderExtraFiltersCount}
+                      </span>
+                    )}
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showOrderExtraFilters ? 'rotate-180' : ''}`} />
+                  </button>
 
-                {/* Has Receipt Filter */}
-                <select
-                  value={orderHasReceiptFilter}
-                  onChange={(e: any) => setOrderHasReceiptFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                >
-                  <option value="all">Bill CK: Tất cả</option>
-                  <option value="has_receipt">Có ảnh Bill CK</option>
-                  <option value="no_receipt">Chưa có ảnh Bill</option>
-                </select>
+                  {/* Dropdown panel */}
+                  {showOrderExtraFilters && (
+                    <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-slate-200 shadow-xl p-4 z-40 space-y-3.5 animate-fadeIn">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
+                          <span className="text-xs font-black text-slate-900">Bộ lọc khác</span>
+                        </div>
+                        {activeOrderExtraFiltersCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOrderSortBy('date_desc');
+                              setOrderSellerFilter('all');
+                              setOrderPaymentStatusFilter('all');
+                              setOrderHasReceiptFilter('all');
+                            }}
+                            className="text-[11px] font-bold text-amber-700 hover:underline cursor-pointer"
+                          >
+                            Đặt lại ({activeOrderExtraFiltersCount})
+                          </button>
+                        )}
+                      </div>
+
+                      {/* 1. Mới nhất / Sắp xếp */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Sắp xếp đơn hàng:
+                        </label>
+                        <select
+                          id="admin-order-sort-selector"
+                          value={orderSortBy}
+                          onChange={(e: any) => setOrderSortBy(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                        >
+                          <option value="date_desc">⏳ Mới nhất trước</option>
+                          <option value="date_asc">⌛ Cũ nhất trước</option>
+                          <option value="category_asc">🏷️ Danh mục SP (A → Z)</option>
+                          <option value="category_desc">🏷️ Danh mục SP (Z → A)</option>
+                          <option value="seller_asc">👤 Người bán (A → Z)</option>
+                          <option value="seller_desc">👤 Người bán (Z → A)</option>
+                          <option value="total_desc">💰 Tổng tiền (Cao → Thấp)</option>
+                          <option value="total_asc">💵 Tổng tiền (Thấp → Cao)</option>
+                          <option value="name_asc">🔤 Tên KH (A → Z)</option>
+                        </select>
+                      </div>
+
+                      {/* 2. Người bán */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Người bán phụ trách:
+                        </label>
+                        <select
+                          id="admin-order-filter-seller"
+                          value={orderSellerFilter}
+                          onChange={(e) => setOrderSellerFilter(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                        >
+                          <option value="all">👤 Tất cả người bán ({sellers.length} người)</option>
+                          <option value="website">🌐 Đơn Website (Tự động / Không người bán)</option>
+                          <option value="social">📱 Đơn Mạng xã hội (Không người bán)</option>
+                          <option value="unassigned">🔒 Đơn không tính người bán (Website + MXH)</option>
+                          {deduplicateSellers(sellers).map((s, idx) => (
+                            <option key={`admin-seller-filter-${s.id}-${idx}`} value={s.id}>
+                              👤 {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 3. Thanh toán */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Trạng thái thanh toán:
+                        </label>
+                        <select
+                          value={orderPaymentStatusFilter}
+                          onChange={(e: any) => setOrderPaymentStatusFilter(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                        >
+                          <option value="all">Tất cả thanh toán</option>
+                          <option value="paid">Đã thanh toán</option>
+                          <option value="unpaid">Chưa thanh toán</option>
+                        </select>
+                      </div>
+
+                      {/* 4. Bill chuyển khoản */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Ảnh bill chuyển khoản:
+                        </label>
+                        <select
+                          value={orderHasReceiptFilter}
+                          onChange={(e: any) => setOrderHasReceiptFilter(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                        >
+                          <option value="all">Bill CK: Tất cả</option>
+                          <option value="has_receipt">Có ảnh Bill CK</option>
+                          <option value="no_receipt">Chưa có ảnh Bill</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

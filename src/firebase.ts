@@ -17,6 +17,7 @@ import {
   onSnapshot
 } from 'firebase/firestore';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser } from './types';
+import { DEFAULT_CATEGORIES } from './data/categories';
 
 // Load client configuration from firebase-applet-config.json
 import firebaseAppletConfig from '../firebase-applet-config.json';
@@ -348,6 +349,9 @@ export interface StoredOrder {
   }[];
   totalPrice?: number;
   totalAmount?: number;
+  shippingFee?: number;
+  discountAmount?: number;
+  craftingStageNote?: string;
   source?: 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other';
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
   isManual?: boolean;
@@ -584,6 +588,7 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
     snap.forEach((docSnap) => {
       const data = docSnap.data();
       results.push({
+        ...data,
         id: docSnap.id,
         date: data.date || data.createdAt || '',
         createdAt: data.createdAt || data.date || '',
@@ -594,15 +599,18 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         note: data.note || '',
         items: data.items || [],
         itemDetails: data.itemDetails || [],
-        totalPrice: data.totalPrice || data.totalAmount || 0,
-        totalAmount: data.totalAmount || data.totalPrice || 0,
+        totalPrice: data.totalPrice !== undefined ? Number(data.totalPrice) : (Number(data.totalAmount) || 0),
+        totalAmount: data.totalAmount !== undefined ? Number(data.totalAmount) : (Number(data.totalPrice) || 0),
+        shippingFee: Number(data.shippingFee) || 0,
+        discountAmount: Number(data.discountAmount) || 0,
+        craftingStageNote: data.craftingStageNote || '',
         source: data.source || 'website',
         type: data.type || 'standard_order',
         status: data.status || 'pending',
         paymentMethod: data.paymentMethod || (data.bankReceiptImage ? 'bank_transfer' : 'cod'),
         paymentStatus: data.paymentStatus || (data.bankReceiptImage ? 'paid' : 'unpaid'),
         bankReceiptImage: data.bankReceiptImage || '',
-        paidAmount: data.paidAmount || (data.paymentStatus === 'paid' ? (data.totalPrice || data.totalAmount || 0) : 0),
+        paidAmount: data.paidAmount !== undefined ? Number(data.paidAmount) : (data.paymentStatus === 'paid' ? (Number(data.totalPrice) || 0) : 0),
         bankTransferRef: data.bankTransferRef || '',
         sellerId: data.sellerId || '',
         sellerName: data.sellerName || '',
@@ -800,6 +808,7 @@ export const subscribeToOrdersFromFirestore = (
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           results.push({
+            ...data,
             id: docSnap.id,
             date: data.date || data.createdAt || '',
             createdAt: data.createdAt || data.date || new Date().toISOString(),
@@ -810,15 +819,18 @@ export const subscribeToOrdersFromFirestore = (
             note: data.note || '',
             items: data.items || [],
             itemDetails: data.itemDetails || [],
-            totalPrice: data.totalPrice || data.totalAmount || 0,
-            totalAmount: data.totalAmount || data.totalPrice || 0,
+            totalPrice: data.totalPrice !== undefined ? Number(data.totalPrice) : (Number(data.totalAmount) || 0),
+            totalAmount: data.totalAmount !== undefined ? Number(data.totalAmount) : (Number(data.totalPrice) || 0),
+            shippingFee: Number(data.shippingFee) || 0,
+            discountAmount: Number(data.discountAmount) || 0,
+            craftingStageNote: data.craftingStageNote || '',
             source: data.source || 'website',
             type: data.type || 'standard_order',
             status: data.status || 'pending',
             paymentMethod: data.paymentMethod || (data.bankReceiptImage ? 'bank_transfer' : 'cod'),
             paymentStatus: data.paymentStatus || (data.bankReceiptImage ? 'paid' : 'unpaid'),
             bankReceiptImage: data.bankReceiptImage || '',
-            paidAmount: data.paidAmount || (data.paymentStatus === 'paid' ? (data.totalPrice || data.totalAmount || 0) : 0),
+            paidAmount: data.paidAmount !== undefined ? Number(data.paidAmount) : (data.paymentStatus === 'paid' ? (Number(data.totalPrice) || 0) : 0),
             bankTransferRef: data.bankTransferRef || '',
             sellerId: data.sellerId || '',
             sellerName: data.sellerName || '',
@@ -864,6 +876,11 @@ export const fetchCategoriesFromFirestore = async (): Promise<CategoryItem[]> =>
     recordOperation('read');
     const colRef = collection(db, 'categories');
     const snap = await getDocs(colRef);
+
+    if (snap.empty) {
+      return DEFAULT_CATEGORIES;
+    }
+
     const results: CategoryItem[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();
@@ -880,6 +897,7 @@ export const fetchCategoriesFromFirestore = async (): Promise<CategoryItem[]> =>
       });
       recordOperation('read');
     });
+
     return results;
   } catch (err) {
     console.error('Lỗi tải danh mục từ Firestore:', err);

@@ -3,6 +3,7 @@ import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
 import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText } from 'lucide-react';
 import {
+  printOrderSlipDirectly,
   openOrderPrintTab,
   downloadOrderSlipHtml,
   downloadOrderSlipTxt,
@@ -38,20 +39,24 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   };
 
   const handleDirectWindowPrint = () => {
-    try {
-      window.print();
-      showToast('Đang gọi lệnh in của trình duyệt...');
-    } catch {
-      // If direct print fails, open dedicated print tab
-      openOrderPrintTab(order);
-      showToast('Đã mở tab in riêng do trình duyệt hạn chế in trực tiếp!');
+    const success = printOrderSlipDirectly(order);
+    if (success) {
+      showToast('Đang mở hộp thoại in phiếu...');
+    } else {
+      try {
+        window.print();
+        showToast('Đang gọi lệnh in của trình duyệt...');
+      } catch {
+        openOrderPrintTab(order);
+        showToast('Đã mở tab in riêng do trình duyệt hạn chế in trực tiếp!');
+      }
     }
   };
 
   const handleOpenPrintTab = () => {
     const success = openOrderPrintTab(order);
     if (success) {
-      showToast('Đã mở trang in trong tab mới!');
+      showToast('Đã mở trang in chuẩn A4/A5!');
     } else {
       showToast('Đã tải file phiếu in (.html) về máy của bạn!');
       downloadOrderSlipHtml(order);
@@ -85,14 +90,15 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   const currentStatus = normalizeOrderStatus(order.status);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
-      onClick={onClose}
-    >
+    <>
       <div
-        className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 bg-slate-900/70 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+        onClick={onClose}
       >
+        <div
+          className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Modal Header */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
@@ -383,6 +389,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
         </div>
       </div>
+    </div>
 
       {/* Official Print Slip Dialog */}
       {isPrintModalOpen && (
@@ -566,22 +573,22 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleOpenPrintTab}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 active:scale-98 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                  title="Mở trang in chuẩn A4/A5 trong tab riêng và gọi hộp thoại in"
+                  onClick={handleDirectWindowPrint}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-98 text-amber-400 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                  title="Gửi lệnh in phiếu ngay lập tức không sợ bị chặn popup"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Mở Tab In (Chuẩn A4/A5)</span>
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>In Phiếu Ngay</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleDirectWindowPrint}
-                  className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Gửi lệnh in của trình duyệt ngay tại trang này"
+                  onClick={handleOpenPrintTab}
+                  className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Mở trang in chuẩn A4/A5 trong tab riêng và gọi hộp thoại in"
                 >
-                  <Printer className="w-3.5 h-3.5 text-slate-600" />
-                  <span>In Trực Tiếp</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Mở Tab In (A4/A5)</span>
                 </button>
               </div>
 
@@ -628,3 +635,6 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
           </div>
         </div>
       )}
+    </>
+  );
+};

@@ -631,7 +631,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         type="text"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        placeholder="Ghi chú thêm về kích cỡ cổ tay, yêu cầu charm hoặc thời gian giao..."
+                        placeholder="Ghi chú thêm về yêu cầu charm hoặc thời gian giao hàng..."
                         className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>

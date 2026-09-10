@@ -40,7 +40,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
     {
       id: 'faq-2',
       q: 'Làm thế nào để chọn đúng kích cỡ vòng tay vừa vặn?',
-      a: 'Bạn có thể dùng thước dây hoặc một sợi chỉ quấn quanh cổ tay rồi đo chiều dài trên thước kẻ (đo sát cổ tay không cần trừ hao). Khi đặt hàng, hãy gửi số đo đó để xưởng đan theo đúng chu vi tay của bạn.'
+      a: 'Các mẫu vòng tay của NOT A KNOT đều được thiết kế theo kích cỡ tiêu chuẩn phù hợp với đa số người dùng hoặc có thể dễ dàng thu phóng nới lỏng tùy chỉnh trực tiếp trên nút thắt.'
     },
     {
       id: 'faq-3',
@@ -127,7 +127,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
                 Tên gọi <strong>NOT A KNOT</strong> thể hiện góc nhìn của chúng tớ: một chiếc vòng tay không chỉ là những nút thắt dây đơn thuần, mà là sự gắn kết của phong cách cá nhân, sự chỉn chu và độ bền đồng hành cùng bạn mỗi ngày.
               </p>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Thay vì sản xuất công nghiệp đại trà, từng mẫu vòng đều được đan thủ công theo số đo cổ tay và phối màu bạn mong muốn.
+                Thay vì sản xuất công nghiệp đại trà, từng mẫu vòng đều được đan thủ công tỉ mỉ và phối màu theo phong cách riêng bạn mong muốn.
               </p>
             </div>
 

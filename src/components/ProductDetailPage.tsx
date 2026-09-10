@@ -15,7 +15,6 @@ import {
   AlertCircle,
   ShieldCheck,
   Droplets,
-  Ruler,
   PackageCheck,
   Truck,
   RotateCcw,
@@ -93,13 +92,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
   const [charmError, setCharmError] = useState<string | null>(null);
 
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    product.availableSizes?.[0]
-  );
   const [isAdded, setIsAdded] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'sizing' | 'warranty'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'warranty'>('details');
 
   // Dynamic gallery images (including linked color image if present)
   const images = useMemo(() => {
@@ -123,7 +119,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setSelectedCharmImage(undefined);
     setSelectedCharmPrice(undefined);
     setCharmError(null);
-    setSelectedSize(product.availableSizes?.[0]);
     setIsAdded(false);
     setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -251,7 +246,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       product,
       addQty,
       selectedColor,
-      selectedSize,
+      undefined,
       undefined,
       selectedCharm,
       selectedColorImage,
@@ -294,7 +289,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       product,
       addQty,
       selectedColor,
-      selectedSize,
+      undefined,
       undefined,
       selectedCharm,
       selectedColorImage,
@@ -636,47 +631,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </div>
                 )}
 
-              {/* Size Variants (if enabled) */}
-              {product.enableSizeSelection !== false &&
-                product.availableSizes &&
-                product.availableSizes.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wider">
-                        Kích thước cổ tay: <span className="text-amber-700 font-semibold">{selectedSize}</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveTab('sizing');
-                          const el = document.getElementById('product-tabs-section');
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="text-[11px] font-bold text-amber-700 hover:text-amber-800 underline underline-offset-2 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Ruler className="w-3.5 h-3.5" />
-                        <span>Cách đo size cổ tay</span>
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {product.availableSizes.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => setSelectedSize(size)}
-                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                            selectedSize === size
-                              ? 'border-neutral-950 bg-neutral-950 text-white shadow-sm ring-1 ring-neutral-950'
-                              : 'border-neutral-200 bg-neutral-50 text-neutral-700 hover:border-neutral-400'
-                          }`}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
               {/* In-cart stock status alert */}
               {inCartQty > 0 && availableStock < 90 && (
                 <div
@@ -826,18 +780,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('sizing')}
-              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-                activeTab === 'sizing'
-                  ? 'bg-neutral-950 text-white shadow-xs'
-                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-              }`}
-            >
-              <Ruler className="w-4 h-4 text-amber-400" />
-              <span>Hướng dẫn chọn size cổ tay</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setActiveTab('warranty')}
               className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
                 activeTab === 'warranty'
@@ -883,66 +825,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </div>
           )}
 
-          {/* Tab 2: Hướng dẫn đo size */}
-          {activeTab === 'sizing' && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">1</span>
-                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Quấn thước quanh cổ tay</h4>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Dùng thước dây mềm hoặc sợi chỉ quấn sát quanh vị trí xương cổ tay đeo vòng (không quấn quá chặt hay quá lỏng).
-                  </p>
-                </div>
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">2</span>
-                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Đánh dấu và đo chiều dài</h4>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Đánh dấu điểm giáp vòng, sau đó căng sợi chỉ lên thước thẳng để lấy số đo chính xác theo đơn vị cm.
-                  </p>
-                </div>
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <span className="w-6 h-6 rounded-full bg-neutral-900 text-white text-xs font-black flex items-center justify-center">3</span>
-                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900">Chọn size chuẩn xưởng</h4>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Xưởng đã tự động cộng độ cử động ôm vừa vặn 1-1.5cm nên bạn chỉ cần chọn đúng số đo sát tay thực tế.
-                  </p>
-                </div>
-              </div>
-
-              {/* Bảng quy đổi size */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border border-neutral-200 rounded-2xl overflow-hidden">
-                  <thead className="bg-neutral-100 text-neutral-900 font-bold">
-                    <tr>
-                      <th className="p-3">Size vòng</th>
-                      <th className="p-3">Chu vi cổ tay sát da</th>
-                      <th className="p-3">Phù hợp đối tượng</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-200 text-neutral-700">
-                    <tr className="hover:bg-neutral-50">
-                      <td className="p-3 font-bold font-mono text-neutral-900">Size S</td>
-                      <td className="p-3 font-mono">14.0cm - 15.5cm</td>
-                      <td className="p-3">Cổ tay nữ vừa & nhỏ, nam tay thanh mảnh</td>
-                    </tr>
-                    <tr className="hover:bg-neutral-50">
-                      <td className="p-3 font-bold font-mono text-neutral-900">Size M</td>
-                      <td className="p-3 font-mono">16.0cm - 17.5cm</td>
-                      <td className="p-3">Kích thước phổ thông nhất cho cả nam và nữ</td>
-                    </tr>
-                    <tr className="hover:bg-neutral-50">
-                      <td className="p-3 font-bold font-mono text-neutral-900">Size L</td>
-                      <td className="p-3 font-mono">18.0cm - 19.5cm</td>
-                      <td className="p-3">Cổ tay nam to, người tập gym thể thao</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: Chính sách đổi trả & bảo hành */}
+          {/* Tab 2: Chính sách đổi trả & bảo hành */}
           {activeTab === 'warranty' && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

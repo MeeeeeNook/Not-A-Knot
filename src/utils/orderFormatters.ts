@@ -278,6 +278,10 @@ export const getOrderTrackingNumber = (order?: Partial<StoredOrder> | null): str
   return 'NAK-ORDER';
 };
 
+export const getCanonicalOrderKey = (order?: Partial<StoredOrder> | null): string => {
+  return getOrderTrackingNumber(order);
+};
+
 /**
  * Đường dẫn tra cứu trực tiếp theo mã vận đơn của các đơn vị vận chuyển phổ biến tại Việt Nam
  */
