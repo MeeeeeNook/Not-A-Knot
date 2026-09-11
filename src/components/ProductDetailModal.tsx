@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, ProductColorOption, ProductCharmOption } from '../types';
+import { Product, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
+import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { ProductCharmSelector } from './ProductCharmSelector';
+import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { X, Check, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
@@ -18,7 +20,10 @@ interface ProductDetailModalProps {
     selectedCharm?: string,
     selectedColorImage?: string,
     selectedCharmImage?: string,
-    selectedCharmPrice?: number
+    selectedCharmPrice?: number,
+    selectedCharms?: ProductCharmOption[],
+    selectedOmamoris?: ProductOmamoriOption[],
+    selectedOmamoriPrice?: number
   ) => void;
 }
 
@@ -49,20 +54,34 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
   const [selectedColorImage, setSelectedColorImage] = useState<string | undefined>(initialColorImage);
-  const [selectedCharm, setSelectedCharm] = useState<string | undefined>(undefined);
-  const [selectedCharmImage, setSelectedCharmImage] = useState<string | undefined>(undefined);
-  const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
+  const [selectedCharms, setSelectedCharms] = useState<ProductCharmOption[]>([]);
   const [charmError, setCharmError] = useState<string | null>(null);
+  const [selectedOmamoris, setSelectedOmamoris] = useState<ProductOmamoriOption[]>([]);
+  const [omamoriError, setOmamoriError] = useState<string | null>(null);
+
+  const totalCharmPrice = useMemo(() => {
+    return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
+  }, [selectedCharms]);
+
+  const totalOmamoriPrice = useMemo(() => {
+    return selectedOmamoris.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
+  }, [selectedOmamoris]);
+
+  const effectiveUnitPrice = (product?.price || 0) + totalCharmPrice + totalOmamoriPrice;
+
+  const selectedCharmNames = useMemo(() => {
+    return selectedCharms.map((c) => c.name).join(', ');
+  }, [selectedCharms]);
 
   useEffect(() => {
     setActiveImageIdx(0);
     setQuantity(1);
     setSelectedColor(product?.colorOptions?.[0]?.name || product?.availableColors?.[0]);
     setSelectedColorImage(product?.colorOptions?.[0]?.image);
-    setSelectedCharm(undefined);
-    setSelectedCharmImage(undefined);
-    setSelectedCharmPrice(undefined);
+    setSelectedCharms([]);
+    setSelectedOmamoris([]);
     setCharmError(null);
+    setOmamoriError(null);
 
     if (product) {
       trackGA4ViewItem(product);
@@ -70,8 +89,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   }, [product?.id]);
 
   const images = useMemo(() => {
-    const base = product.images && product.images.length > 0 ? [...product.images] : [product.image];
-    if (selectedColorImage && !base.includes(selectedColorImage)) {
+    const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
+    const validBase = rawList.filter(
+      (img) => typeof img === 'string' && img.trim().length > 0
+    );
+    const base = validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
+    if (
+      selectedColorImage &&
+      typeof selectedColorImage === 'string' &&
+      selectedColorImage.trim().length > 0 &&
+      !base.includes(selectedColorImage)
+    ) {
       return [selectedColorImage, ...base];
     }
     return base;
@@ -106,42 +134,50 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     }
   };
 
-  const handleSelectCharm = (charmOpt: ProductCharmOption | null) => {
+  const handleSelectCharms = (charms: ProductCharmOption[]) => {
     setCharmError(null);
-    if (!charmOpt) {
-      setSelectedCharm(undefined);
-      setSelectedCharmImage(undefined);
-      setSelectedCharmPrice(undefined);
-    } else {
-      if (typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
-        setCharmError(`Mẫu charm "${charmOpt.name}" đã hết hàng trong kho. Vui lòng chọn mẫu khác.`);
-        return;
-      }
-      setSelectedCharm(charmOpt.name);
-      setSelectedCharmImage(charmOpt.image);
-      setSelectedCharmPrice(charmOpt.priceDelta || 0);
-    }
+    setSelectedCharms(charms);
+  };
+
+  const handleSelectOmamoris = (omamoris: ProductOmamoriOption[]) => {
+    setOmamoriError(null);
+    setSelectedOmamoris(omamoris);
   };
 
   const handleAdd = () => {
     if (isOutOfStock) return;
 
-    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
-      setCharmError('Vui lòng chọn 1 mẫu charm trước khi thêm.');
+    if (product.enableCharmSelection && product.charmSelectionRequired && selectedCharms.length === 0) {
+      setCharmError('Vui lòng chọn ít nhất 1 mẫu charm trước khi thêm.');
       return;
     }
 
-    if (selectedCharm && product.charmOptions) {
-      const chosenCharm = product.charmOptions.find(
-        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
-      );
-      if (chosenCharm && typeof chosenCharm.stock === 'number') {
-        if (chosenCharm.stock <= 0) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu charm khác.`);
+    if (product.enableOmamoriSelection && product.omamoriSelectionRequired && selectedOmamoris.length === 0) {
+      setOmamoriError('Vui lòng chọn ít nhất 1 bùa Omamori trước khi thêm.');
+      return;
+    }
+
+    for (const ch of selectedCharms) {
+      if (typeof ch.stock === 'number') {
+        if (ch.stock <= 0) {
+          setCharmError(`Mẫu charm "${ch.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
           return;
         }
-        if (chosenCharm.stock < quantity) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+        if (ch.stock < quantity) {
+          setCharmError(`Mẫu charm "${ch.name}" chỉ còn ${ch.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+          return;
+        }
+      }
+    }
+
+    for (const om of selectedOmamoris) {
+      if (typeof om.stock === 'number') {
+        if (om.stock <= 0) {
+          setOmamoriError(`Bùa "${om.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          return;
+        }
+        if (om.stock < quantity) {
+          setOmamoriError(`Bùa "${om.name}" chỉ còn ${om.stock} cái trong kho, không đủ số lượng ${quantity}.`);
           return;
         }
       }
@@ -153,10 +189,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       selectedColor,
       undefined,
       undefined,
-      selectedCharm,
+      selectedCharmNames || undefined,
       selectedColorImage,
-      selectedCharmImage,
-      selectedCharmPrice
+      selectedCharms[0]?.image || undefined,
+      totalCharmPrice,
+      selectedCharms,
+      selectedOmamoris,
+      totalOmamoriPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -198,7 +237,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {images.map((imgSrc, idx) => (
                   <div key={idx} className="w-full h-full flex-shrink-0 relative">
                     <img
-                      src={imgSrc}
+                      src={imgSrc || product.image || '/assets/bracelet.jpg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
                       className="w-full h-full object-cover select-none pointer-events-none"
                       style={{ imageRendering: '-webkit-optimize-contrast' }}
@@ -269,7 +308,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     }`}
                   >
                     <img
-                      src={img}
+                      src={img || '/assets/bracelet.jpg'}
                       alt="thumb"
                       className="w-full h-full object-cover"
                       loading="lazy"
@@ -327,18 +366,23 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
 
               {/* Price */}
-              <div className="flex items-baseline gap-3">
+              <div className="flex flex-wrap items-baseline gap-3">
                 <span className="text-2xl font-bold text-neutral-950">
-                  {product.price.toLocaleString('vi-VN')}đ
+                  {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                 </span>
                 {product.originalPrice && (
                   <span className="text-sm text-neutral-400 line-through font-normal">
-                    {product.originalPrice.toLocaleString('vi-VN')}đ
+                    {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
                   </span>
                 )}
                 {product.discountBadge && !isOutOfStock && (
                   <span className="bg-red-50 text-brand-red text-xs font-semibold px-2 py-0.5 rounded-full border border-red-200">
                     {product.discountBadge}
+                  </span>
+                )}
+                {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
+                  <span className="bg-amber-100/80 text-amber-900 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">
+                    +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện
                   </span>
                 )}
               </div>
@@ -378,9 +422,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <div className="space-y-1">
                     <ProductCharmSelector
                       charms={product.charmOptions}
-                      selectedCharm={selectedCharm}
-                      onSelectCharm={handleSelectCharm}
+                      selectedCharms={selectedCharms}
+                      onSelectCharms={handleSelectCharms}
                       isRequired={product.charmSelectionRequired}
+                      maxAllowed={product.maxCharmsAllowed || 1}
                     />
                     {charmError && (
                       <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
@@ -389,6 +434,28 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     )}
                   </div>
                 )}
+
+              {/* Omamori Selection (if enabled) */}
+              {product.enableOmamoriSelection && (
+                <div className="space-y-1">
+                  <ProductOmamoriSelector
+                    omamoris={
+                      product.omamoriOptions && product.omamoriOptions.length > 0
+                        ? product.omamoriOptions
+                        : DEFAULT_OMAMORI_PRESETS
+                    }
+                    selectedOmamoris={selectedOmamoris}
+                    onSelectOmamoris={handleSelectOmamoris}
+                    isRequired={product.omamoriSelectionRequired}
+                    maxAllowed={product.maxOmamoriAllowed || 1}
+                  />
+                  {omamoriError && (
+                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                      ⚠️ {omamoriError}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Product Specifications list */}
               {product.details && product.details.length > 0 && (
@@ -430,11 +497,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   {quantity >= availableStock && availableStock < 90 && (
                     <span className="text-[11px] text-amber-700 font-medium">Tối đa ({availableStock})</span>
                   )}
-                  {selectedCharmPrice && selectedCharmPrice > 0 ? (
+                  {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                     <span className="text-xs text-amber-800 font-medium">
-                      +{(selectedCharmPrice * quantity).toLocaleString('vi-VN')}đ (charm)
+                      +{((totalCharmPrice + totalOmamoriPrice) * quantity).toLocaleString('vi-VN')}đ (phụ kiện)
                     </span>
-                  ) : null}
+                  )}
                 </div>
               )}
             </div>
@@ -465,7 +532,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <>
                     <ShoppingBag className="w-4 h-4" />
                     <span>
-                      Thêm vào giỏ ({quantity}) — {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
+                      Thêm vào giỏ ({quantity}) — {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
                     </span>
                   </>
                 )}

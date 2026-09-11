@@ -45,6 +45,11 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
+    // Backups collection for Version History
+    match /backups/{backupId} {
+      allow read, write: if true;
+    }
+
     // Health / Connection test documents
     match /test/{testId} {
       allow read, write: if true;

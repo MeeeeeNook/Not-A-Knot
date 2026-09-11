@@ -76,20 +76,39 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   const subtotal = cartItems.reduce(
-    (acc, item) => acc + (item.product.price + (item.selectedCharmPrice || 0)) * item.quantity,
+    (acc, item) =>
+      acc +
+      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) *
+        item.quantity,
     0
   );
 
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
-      const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+      const unitPrice =
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
-      if (item.selectedCharm) {
+      if (item.selectedCharms && item.selectedCharms.length > 0) {
+        const names = item.selectedCharms.map((c) => c.name).join(', ');
+        extras.push(
+          `Charm: ${names}${
+            item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      } else if (item.selectedCharm) {
         extras.push(
           `Charm: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
+      if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
+        const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
+        extras.push(
+          `Bùa Omamori: ${omNames}${
+            item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       }
@@ -134,14 +153,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Generate text message for Facebook Messenger
   const buildMessengerOrderText = () => {
     const itemsList = cartItems.map((item, idx) => {
-      const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+      const unitPrice =
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let line = `${idx + 1}. ${item.product.name} - SL: ${item.quantity} - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
-      if (item.selectedCharm) {
+      if (item.selectedCharms && item.selectedCharms.length > 0) {
+        const names = item.selectedCharms.map((c) => c.name).join(', ');
+        extras.push(
+          `Charm: ${names}${
+            item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      } else if (item.selectedCharm) {
         extras.push(
           `Charm: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
+      if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
+        const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
+        extras.push(
+          `Bùa Omamori: ${omNames}${
+            item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       }
@@ -164,13 +199,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       productId: item.product.id,
       productName: item.product.name,
       category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0),
+      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0),
       quantity: item.quantity,
       selectedColor: item.selectedColor,
       selectedColorImage: item.selectedColorImage,
       selectedCharm: item.selectedCharm,
       selectedCharmImage: item.selectedCharmImage,
       selectedCharmPrice: item.selectedCharmPrice,
+      selectedCharms: item.selectedCharms,
+      selectedOmamoris: item.selectedOmamoris,
+      selectedOmamoriPrice: item.selectedOmamoriPrice,
       selectedSize: item.selectedSize,
       customNote: item.customNote
     }));
@@ -431,21 +469,65 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     </span>
                                   </div>
                                 )}
-                                {item.selectedCharm && (
-                                  <div className="flex items-center gap-1.5 bg-amber-50/80 border border-amber-200/80 px-2 py-0.5 rounded-lg w-fit">
-                                    {item.selectedCharmImage && (
-                                      <img
-                                        src={item.selectedCharmImage}
-                                        alt={item.selectedCharm}
-                                        className="w-4 h-4 object-contain rounded-sm"
-                                      />
+                                {((item.selectedCharms && item.selectedCharms.length > 0) || item.selectedCharm) && (
+                                  <div className="flex flex-wrap items-center gap-1.5 bg-amber-50/80 border border-amber-200/80 px-2 py-0.5 rounded-lg w-fit">
+                                    {item.selectedCharms && item.selectedCharms.length > 0 ? (
+                                      <>
+                                        {item.selectedCharms.map((c, cIdx) => (
+                                          <span key={cIdx} className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900">
+                                            {c.image && (
+                                              <img
+                                                src={c.image}
+                                                alt={c.name}
+                                                className="w-3.5 h-3.5 object-contain rounded-sm"
+                                              />
+                                            )}
+                                            {c.name}
+                                            {cIdx < item.selectedCharms!.length - 1 ? ',' : ''}
+                                          </span>
+                                        ))}
+                                      </>
+                                    ) : (
+                                      <>
+                                        {item.selectedCharmImage && (
+                                          <img
+                                            src={item.selectedCharmImage}
+                                            alt={item.selectedCharm}
+                                            className="w-4 h-4 object-contain rounded-sm"
+                                          />
+                                        )}
+                                        <span className="text-[11px] font-bold text-amber-900">
+                                          Charm: {item.selectedCharm}
+                                        </span>
+                                      </>
                                     )}
-                                    <span className="text-[11px] font-bold text-amber-900">
-                                      Charm: {item.selectedCharm}
-                                    </span>
                                     {item.selectedCharmPrice && item.selectedCharmPrice > 0 ? (
                                       <span className="text-[10px] text-amber-700 font-semibold">
                                         (+{item.selectedCharmPrice.toLocaleString('vi-VN')}đ)
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                )}
+
+                                {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 bg-rose-50/80 border border-rose-200/80 px-2 py-0.5 rounded-lg w-fit">
+                                    <span className="text-[11px] font-bold text-rose-900">Bùa:</span>
+                                    {item.selectedOmamoris.map((om, omIdx) => (
+                                      <span key={omIdx} className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-900">
+                                        {om.image && (
+                                          <img
+                                            src={om.image}
+                                            alt={om.name}
+                                            className="w-3.5 h-3.5 object-contain rounded-sm"
+                                          />
+                                        )}
+                                        {om.name}
+                                        {omIdx < item.selectedOmamoris!.length - 1 ? ',' : ''}
+                                      </span>
+                                    ))}
+                                    {item.selectedOmamoriPrice && item.selectedOmamoriPrice > 0 ? (
+                                      <span className="text-[10px] text-rose-700 font-semibold">
+                                        (+{item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)
                                       </span>
                                     ) : null}
                                   </div>
@@ -467,7 +549,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                               <div className="flex items-center justify-between mt-2.5">
                                 <span className="font-black text-neutral-950 text-xs sm:text-sm font-mono">
-                                  {((item.product.price + (item.selectedCharmPrice || 0)) * item.quantity).toLocaleString('vi-VN')}đ
+                                  {((item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) * item.quantity).toLocaleString('vi-VN')}đ
                                 </span>
 
                                  {(() => {

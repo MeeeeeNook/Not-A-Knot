@@ -16,6 +16,7 @@ interface AdminOrderDetailsModalProps {
   onUpdateStatus: (orderId: string, status: string) => void;
   onZoomReceipt: (imageUrl: string) => void;
   onEdit?: (order: StoredOrder) => void;
+  onDelete?: (orderId: string) => void;
 }
 
 export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
@@ -23,7 +24,8 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   onClose,
   onUpdateStatus,
   onZoomReceipt,
-  onEdit
+  onEdit,
+  onDelete
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
@@ -56,7 +58,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   const handleOpenPrintTab = () => {
     const success = openOrderPrintTab(order);
     if (success) {
-      showToast('Đã mở trang in chuẩn A4/A5!');
+      showToast('Đang mở tab in riêng (A4/A5)...');
     } else {
       showToast('Đã tải file phiếu in (.html) về máy của bạn!');
       downloadOrderSlipHtml(order);
@@ -96,58 +98,57 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto"
+          className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto"
           onClick={(e) => e.stopPropagation()}
         >
-        {/* Modal Header */}
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base text-slate-900">
-                Chi Tiết Đơn Hàng #{order.id}
-              </h3>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${srcConfig.badgeClass}`}>
-                {srcConfig.label}
-              </span>
+          {/* Modal Header */}
+          <div className="p-4 sm:p-5 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                  Chi Tiết Đơn Hàng #{order.id}
+                </h3>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${srcConfig.badgeClass}`}>
+                  {srcConfig.label}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                Ngày đặt: {formattedDate}
+              </p>
             </div>
-            <span className="text-xs text-slate-500 block mt-0.5 font-medium">
-              Ngày đặt: {formattedDate}
-            </span>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {onEdit && (
+            {/* Clean, neatly arranged top action buttons: Sửa, In, Đóng */}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onEdit(order);
+                  }}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                >
+                  Sửa
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => {
-                  onClose();
-                  onEdit(order);
-                }}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow-xs transition-colors"
+                onClick={handlePrintSlip}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300/80 font-bold rounded-lg text-xs transition-colors cursor-pointer"
               >
-                Sửa Đơn
+                In
               </button>
-            )}
 
-            <button
-              type="button"
-              onClick={handlePrintSlip}
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Mở bảng in và xuất phiếu giao hàng"
-            >
-              <Printer className="w-3.5 h-3.5 text-amber-400" />
-              <span>In Phiếu</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-2 py-1 text-slate-400 hover:text-slate-900 rounded text-xs font-bold hover:bg-slate-100 transition-colors"
-            >
-              Đóng [X]
-            </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* Scrollable Content Body */}
         <div ref={printRef} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-slate-700 text-xs">
@@ -244,7 +245,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             </div>
 
             {/* Bill Receipt Image (if present) */}
-            {order.bankReceiptImage && (
+            {order.bankReceiptImage && order.bankReceiptImage.trim() && (
               <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">
                 <div className="flex items-center gap-3">
                   <img
@@ -298,26 +299,26 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         {it.selectedColor && (
                           <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-800 shadow-2xs">
-                            {it.selectedColorImage && (
+                            {it.selectedColorImage && it.selectedColorImage.trim() ? (
                               <img
                                 src={it.selectedColorImage}
                                 alt={it.selectedColor}
                                 className="w-5 h-5 rounded object-cover border border-slate-200 shrink-0"
                               />
-                            )}
+                            ) : null}
                             <span>Màu: <strong className="text-slate-900">{it.selectedColor}</strong></span>
                           </div>
                         )}
 
                         {it.selectedCharm && (
                           <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-300 px-2 py-1 rounded-lg text-[11px] font-bold text-amber-950 shadow-2xs">
-                            {it.selectedCharmImage && (
+                            {it.selectedCharmImage && it.selectedCharmImage.trim() ? (
                               <img
                                 src={it.selectedCharmImage}
                                 alt={it.selectedCharm}
                                 className="w-6 h-6 rounded-md object-cover border border-amber-300 shrink-0"
                               />
-                            )}
+                            ) : null}
                             <span>Charm: <strong>{it.selectedCharm}</strong></span>
                             {it.selectedCharmPrice ? (
                               <span className="text-[10px] text-amber-700 font-mono">(+{it.selectedCharmPrice.toLocaleString('vi-VN')}đ)</span>
@@ -361,7 +362,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             </div>
           </div>
 
-          {/* Status Quick Update in Modal */}
+          {/* Status Quick Update & Action Footer */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
@@ -378,13 +379,29 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               </select>
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors"
-            >
-              Đóng Cửa Sổ
-            </button>
+            <div className="flex items-center gap-2">
+              {onDelete && order.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onDelete(order.id!);
+                  }}
+                  className="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-lg text-xs transition-colors cursor-pointer"
+                  title="Xóa đơn hàng này"
+                >
+                  Xóa Đơn
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                Đóng Cửa Sổ
+              </button>
+            </div>
           </div>
 
         </div>

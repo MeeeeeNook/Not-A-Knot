@@ -85,7 +85,10 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   // Calculate Subtotal
   const subtotal = cartItems.reduce(
-    (acc, item) => acc + (item.product.price + (item.selectedCharmPrice || 0)) * item.quantity,
+    (acc, item) =>
+      acc +
+      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) *
+        item.quantity,
     0
   );
 
@@ -122,14 +125,30 @@ export const CartPage: React.FC<CartPageProps> = ({
   // Build items description
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
-      const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+      const unitPrice =
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
-      if (item.selectedCharm) {
+      if (item.selectedCharms && item.selectedCharms.length > 0) {
+        const names = item.selectedCharms.map((c) => c.name).join(', ');
+        extras.push(
+          `Charm: ${names}${
+            item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      } else if (item.selectedCharm) {
         extras.push(
           `Charm: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
+      if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
+        const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
+        extras.push(
+          `Bùa Omamori: ${omNames}${
+            item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       }
@@ -175,13 +194,16 @@ export const CartPage: React.FC<CartPageProps> = ({
       productId: item.product.id,
       productName: item.product.name,
       category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0),
+      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0),
       quantity: item.quantity,
       selectedColor: item.selectedColor,
       selectedColorImage: item.selectedColorImage,
       selectedCharm: item.selectedCharm,
       selectedCharmImage: item.selectedCharmImage,
       selectedCharmPrice: item.selectedCharmPrice,
+      selectedCharms: item.selectedCharms,
+      selectedOmamoris: item.selectedOmamoris,
+      selectedOmamoriPrice: item.selectedOmamoriPrice,
       selectedSize: item.selectedSize,
       customNote: item.customNote
     }));
@@ -195,7 +217,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       customerName: cleanName,
       phone: cleanPhone,
       address: cleanAddress,
-      note: note.trim() ? `${note.trim()} (Đặt qua Web)` : '(Đặt qua Web)',
+      note: note.trim() ? note.trim() : undefined,
       items: formatCartItemsText(),
       itemDetails,
       totalPrice: currentOrderTotal,
@@ -363,7 +385,10 @@ export const CartPage: React.FC<CartPageProps> = ({
                     {/* Cart Items List */}
                     <div className="divide-y divide-slate-100">
                       {cartItems.map((item, index) => {
-                        const unitPrice = item.product.price + (item.selectedCharmPrice || 0);
+                        const unitPrice =
+                          item.product.price +
+                          (item.selectedCharmPrice || 0) +
+                          (item.selectedOmamoriPrice || 0);
                         const lineSubtotal = unitPrice * item.quantity;
                         const itemImage = item.selectedColorImage || item.product.image;
 
@@ -396,7 +421,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   </button>
                                 </div>
 
-                                {/* Custom Attributes: Wrist Size & Charm */}
+                                {/* Custom Attributes: Wrist Size, Color, Charms, Omamori */}
                                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
                                   {item.selectedSize && (
                                     <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md font-bold text-[11px]">
@@ -408,9 +433,19 @@ export const CartPage: React.FC<CartPageProps> = ({
                                       Màu: {item.selectedColor}
                                     </span>
                                   )}
-                                  {item.selectedCharm && (
+                                  {item.selectedCharms && item.selectedCharms.length > 0 ? (
+                                    <span className="inline-flex flex-wrap items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
+                                      Charm: {item.selectedCharms.map((c) => c.name).join(', ')} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                    </span>
+                                  ) : item.selectedCharm ? (
                                     <span className="bg-amber-50 text-amber-800 border border-amber-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
                                       Charm: {item.selectedCharm} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                    </span>
+                                  ) : null}
+
+                                  {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
+                                    <span className="inline-flex flex-wrap items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
+                                      Bùa Omamori: {item.selectedOmamoris.map((o) => o.name).join(', ')} {item.selectedOmamoriPrice ? `(+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>
                                   )}
                                 </div>
@@ -697,33 +732,6 @@ export const CartPage: React.FC<CartPageProps> = ({
                     </p>
                   </div>
 
-                  {/* Trust Badges */}
-                  <div className="bg-slate-50/70 rounded-3xl border border-slate-200/80 p-5 space-y-3 text-xs text-slate-600">
-                    <div className="flex items-start gap-3">
-                      <ShieldCheck className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <strong className="text-slate-900 block">Dây Paracord Type III 550</strong>
-                        <span>Chất liệu chuẩn quân đội, chịu tải 250kg không giãn mục.</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <Truck className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <strong className="text-slate-900 block">Đồng kiểm khi nhận</strong>
-                        <span>Mở hộp kiểm tra sản phẩm và mẫu charm trước khi nhận.</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <Phone className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <strong className="text-slate-900 block">Hotline xưởng đan</strong>
-                        <span>{hotline} (Hỗ trợ 24/7)</span>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
 
               </div>
@@ -746,7 +754,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 Đặt Hàng Thành Công!
               </h1>
               <p className="text-sm text-slate-600 mt-1 max-w-lg mx-auto">
-                Cảm ơn bạn đã lựa chọn NOT A KNOT. Nghệ nhân xưởng sẽ chuẩn bị dây Paracord và bắt đầu đan theo số đo của bạn.
+                Cảm ơn bạn đã lựa chọn NOT A KNOT. Chúng tôi sẽ giao sản phẩm của bạn trong thời gian sớm nhất.
               </p>
 
               {/* Tracking Code Highlight Box */}

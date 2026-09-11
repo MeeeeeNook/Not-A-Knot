@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
 import { SellerUser } from '../types';
-import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT } from '../utils/auth';
+import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH } from '../utils/auth';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -54,25 +54,28 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         (s) => s.username.toLowerCase() === cleanUsername
       );
 
-      // Check root admin hardcoded credentials fallback in case db is not yet synced
-      if (cleanUsername === ROOT_ADMIN_USERNAME && cleanPassword === '11242096') {
-        const rootUser: SellerUser = matchedSeller || {
-          id: 'seller-manhcuong',
-          username: ROOT_ADMIN_USERNAME,
-          name: 'Mạnh Cường',
-          passwordHash: '',
-          passwordSalt: ROOT_ADMIN_SALT,
-          isRootAdmin: true,
-          role: 'root_admin',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          avatarColor: '#B41C1A'
-        };
+      // Check root admin credentials with secure salted hash
+      if (cleanUsername === ROOT_ADMIN_USERNAME) {
+        const isRootValid = await verifyPassword(cleanPassword, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH);
+        if (isRootValid) {
+          const rootUser: SellerUser = matchedSeller || {
+            id: 'seller-manhcuong',
+            username: ROOT_ADMIN_USERNAME,
+            name: 'Mạnh Cường',
+            passwordHash: ROOT_ADMIN_HASH,
+            passwordSalt: ROOT_ADMIN_SALT,
+            isRootAdmin: true,
+            role: 'root_admin',
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            avatarColor: '#B41C1A'
+          };
 
-        saveAdminSession(rootUser, rememberMe);
-        setIsLoading(false);
-        onLoginSuccess(rootUser);
-        return;
+          saveAdminSession(rootUser, rememberMe);
+          setIsLoading(false);
+          onLoginSuccess(rootUser);
+          return;
+        }
       }
 
       if (!matchedSeller) {

@@ -38,16 +38,19 @@ export const verifyPassword = async (
   return computedHash === storedHash;
 };
 
-// Initial Root Admin Salt & Hash for password: '11242096'
-// Pre-calculated with salt 'nak_root_salt_mc2026'
+// Initial Root Admin Salt & Hash (SHA-256 with cryptographic salt & pepper)
 export const ROOT_ADMIN_USERNAME = 'manhcuong';
 export const ROOT_ADMIN_SALT = 'nak_root_salt_mc2026';
+export const ROOT_ADMIN_HASH = 'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd';
+
+export const COMMON_MEMBER_SALT = 'nak_team_member_salt_2026';
+export const DEFAULT_MEMBER_HASH = '9e9528e8f45193607092ef67fd42d9056ee549256543942c4313c114f76ce0ad';
 
 // Generates the initial 9 default team members with root admin manhcuong
 export const createDefaultSellers = async (): Promise<SellerUser[]> => {
-  const rootHash = await hashPassword('11242096', ROOT_ADMIN_SALT);
-  const commonSalt = 'nak_team_member_salt_2026';
-  const defaultMemberHash = await hashPassword('123456', commonSalt);
+  const rootHash = ROOT_ADMIN_HASH;
+  const commonSalt = COMMON_MEMBER_SALT;
+  const defaultMemberHash = DEFAULT_MEMBER_HASH;
 
   const colors = [
     '#B41C1A', '#D97706', '#059669', '#2563EB', '#7C3AED',

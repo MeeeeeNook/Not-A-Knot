@@ -952,7 +952,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                         </span>
                       </div>
                       <span className="text-xs font-bold text-amber-700 group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                        Xem chi tiết & mã QR →
+                        Xem chi tiết →
                       </span>
                     </div>
                   </div>
@@ -981,10 +981,10 @@ Cam kết bảo hành chốt khóa trọn đời!
                 href={messengerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-2 shadow-xs"
               >
-                <MessageCircle className="w-4 h-4 text-amber-400" />
-                <span>Nhắn xưởng để kiểm tra</span>
+                <MessageCircle className="w-4 h-4" />
+                <span>Nhắn tin cho Shop</span>
               </a>
               <button
                 type="button"
@@ -1050,7 +1050,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                 </div>
 
                 {/* Status Badge & Actions */}
-                <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
                   <div className={`px-4 py-2.5 rounded-2xl border font-black text-xs sm:text-sm flex items-center gap-2 ${
                     normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
@@ -1072,6 +1072,18 @@ Cam kết bảo hành chốt khóa trọn đời!
                     <span>{normalizeOrderStatus(activeOrder.status)}</span>
                   </div>
 
+                  {/* Contact Shop Button */}
+                  <a
+                    href={messengerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-xs hover:shadow-md"
+                    title="Nhắn tin trực tiếp cho shop về đơn hàng này"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="whitespace-nowrap">Nhắn tin cho Shop</span>
+                  </a>
+
                   {/* Print Button */}
                   <button
                     type="button"
@@ -1080,7 +1092,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                     title="In phiếu giao nhận và hóa đơn đơn hàng"
                   >
                     <Printer className="w-4 h-4 text-amber-400" />
-                    <span>In Phiếu Đơn</span>
+                    <span className="whitespace-nowrap">In Phiếu Đơn</span>
                   </button>
                 </div>
               </div>
@@ -1220,7 +1232,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                         return (
                           <div key={idx} className="py-4 first:pt-0 last:pb-0 flex gap-4 items-start">
                             <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-slate-50 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center shadow-2xs">
-                              {itemImg ? (
+                              {itemImg && typeof itemImg === 'string' && itemImg.trim().length > 0 ? (
                                 <img src={itemImg} alt={it.productName} className="w-full h-full object-cover" />
                               ) : (
                                 <ShoppingBag className="w-7 h-7 text-slate-300" />

@@ -51,7 +51,7 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
               }`}
             >
               {/* Optional mini image thumbnail linked with this color */}
-              {opt.image && (
+              {opt.image && opt.image.trim() ? (
                 <img
                   src={opt.image}
                   alt={opt.name}
@@ -59,10 +59,10 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
                     isSelected ? 'border-white/50' : 'border-neutral-200'
                   }`}
                 />
-              )}
+              ) : null}
 
               {/* Optional hex color dot */}
-              {!opt.image && opt.colorCode && (
+              {(!opt.image || !opt.image.trim()) && opt.colorCode && (
                 <span
                   className="w-3.5 h-3.5 rounded-full border border-neutral-300 shadow-xs flex-shrink-0"
                   style={{ backgroundColor: opt.colorCode }}

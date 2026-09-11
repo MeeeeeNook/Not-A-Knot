@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw } from 'lucide-react';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption } from '../types';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles } from 'lucide-react';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
@@ -18,6 +18,10 @@ import { AdminMessagesManager } from './AdminMessagesManager';
 import { AdminBackupManager } from './AdminBackupManager';
 import { AdminSellersManager } from './AdminSellersManager';
 import { AdminNotifications } from './AdminNotifications';
+import { AdminHeader } from './admin/AdminHeader';
+import { AdminSidebar } from './admin/AdminSidebar';
+import { AdminBankAccountPage } from './admin/AdminBankAccountPage';
+import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportOrdersWithImageOption } from '../utils/excelImageExporter';
 import { 
@@ -31,9 +35,11 @@ import {
 } from '../utils/orderFormatters';
 import { createDefaultSellers, deduplicateSellers } from '../utils/auth';
 import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
+import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import {
   subscribeQuotaStats,
   getLatestQuotaStats,
+  resetFirestoreQuotaStats,
   recalculateFirestoreStorage,
   FirestoreQuotaStats,
   fetchProductsFromFirestore,
@@ -51,6 +57,7 @@ import {
   saveOrdersToFirestore,
   subscribeToOrdersFromFirestore,
   deleteOrderFromFirestore,
+  deleteOrdersBatchFromFirestore,
   updateOrderStatusInFirestore,
   fetchContactMessagesFromFirestore,
   subscribeToContactMessagesFromFirestore,
@@ -59,8 +66,11 @@ import {
   saveSellerToFirestore,
   deleteSellerFromFirestore,
   testFirebaseConnection,
+  saveCollectionsToFirestore,
+  saveSiteContentToFirestore,
   StoredOrder
 } from '../firebase';
+import { safeStorageSetItem, safeStorageGetItem } from '../utils/storageHelper';
 
 interface HistoryAction {
   id: string;
@@ -92,9 +102,11 @@ export type AdminTabType =
   | 'sellers'
   | 'messages'
   | 'site_editor'
+  | 'bank_account'
   | 'banners'
   | 'products'
   | 'categories'
+  | 'version_history'
   | 'backup'
   | 'firebase';
 
@@ -164,7 +176,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       onUpdateCategories(newCats);
     }
     try {
-      localStorage.setItem('nak_categories', JSON.stringify(newCats));
+      safeStorageSetItem('nak_categories', JSON.stringify(newCats));
     } catch (e) {
       console.warn('Lỗi lưu categories vào localStorage:', e);
     }
@@ -188,7 +200,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       onUpdateCollections(newCols);
     }
     try {
-      localStorage.setItem('nak_collections', JSON.stringify(newCols));
+      safeStorageSetItem('nak_collections', JSON.stringify(newCols));
     } catch (e) {
       console.warn('Lỗi lưu collections vào localStorage:', e);
     }
@@ -353,16 +365,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formIsHidden, setFormIsHidden] = useState(false);
   const [isExpandedHiddenBox, setIsExpandedHiddenBox] = useState(true);
 
-  // Undo / Redo History Stacks
-  const [undoStack, setUndoStack] = useState<HistoryAction[]>([]);
-  const [redoStack, setRedoStack] = useState<HistoryAction[]>([]);
-
-  // Dynamic Product Variations (Colors with photos, Charms with photos, Sizes)
+  // Dynamic Product Variations (Colors with photos, Charms with photos, Omamori, Sizes)
   const [formEnableColorSelection, setFormEnableColorSelection] = useState(false);
   const [formColorOptions, setFormColorOptions] = useState<ProductColorOption[]>([]);
+  // Charm states
   const [formEnableCharmSelection, setFormEnableCharmSelection] = useState(false);
   const [formCharmSelectionRequired, setFormCharmSelectionRequired] = useState(false);
+  const [formMaxCharmsAllowed, setFormMaxCharmsAllowed] = useState(1);
   const [formCharmOptions, setFormCharmOptions] = useState<ProductCharmOption[]>([]);
+  // Omamori amulet states
+  const [formEnableOmamoriSelection, setFormEnableOmamoriSelection] = useState(false);
+  const [formOmamoriSelectionRequired, setFormOmamoriSelectionRequired] = useState(false);
+  const [formMaxOmamoriAllowed, setFormMaxOmamoriAllowed] = useState(1);
+  const [formOmamoriOptions, setFormOmamoriOptions] = useState<ProductOmamoriOption[]>([]);
+  // Size states
   const [formEnableSizeSelection, setFormEnableSizeSelection] = useState(false);
   const [formAvailableSizes, setFormAvailableSizes] = useState<string[]>([
     '14cm - 15cm',
@@ -428,118 +444,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     showAdminToast(`Đã tính lại dung lượng dữ liệu Firestore: ~${formatted}`);
   };
 
-  // Undo / Redo History Handlers
-  const pushHistoryAction = (
-    description: string,
-    type: 'products' | 'categories' | 'orders',
-    undoState: any,
-    redoState: any
-  ) => {
-    const action: HistoryAction = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      description,
-      type,
-      undoState: JSON.parse(JSON.stringify(undoState)),
-      redoState: JSON.parse(JSON.stringify(redoState))
-    };
-    setUndoStack((prev) => [action, ...prev].slice(0, 30));
-    setRedoStack([]); // Clear redo stack on new action
+  const handleResetQuotaSession = () => {
+    resetFirestoreQuotaStats();
+    showAdminToast('Đã đặt lại bộ đếm phiên làm việc về 0.');
   };
 
-  const handleUndo = async () => {
-    if (undoStack.length === 0) return;
-    const [actionToUndo, ...remainingUndo] = undoStack;
-    setUndoStack(remainingUndo);
-    setRedoStack((prev) => [actionToUndo, ...prev].slice(0, 30));
-
-    try {
-      if (actionToUndo.type === 'products') {
-        onUpdateProducts(actionToUndo.undoState);
-        localStorage.setItem('nak_custom_products', JSON.stringify(actionToUndo.undoState));
-        saveProductsToFirestore(actionToUndo.undoState).catch((err) =>
-          console.warn('Undo products sync err:', err)
-        );
-      } else if (actionToUndo.type === 'categories') {
-        setLocalCategories(actionToUndo.undoState);
-        onUpdateCategories?.(actionToUndo.undoState);
-        localStorage.setItem('nak_categories', JSON.stringify(actionToUndo.undoState));
-        saveCategoriesToFirestore(actionToUndo.undoState).catch((err) =>
-          console.warn('Undo categories sync err:', err)
-        );
-      } else if (actionToUndo.type === 'orders') {
-        setOrders(actionToUndo.undoState);
-        localStorage.setItem('nak_preorders', JSON.stringify(actionToUndo.undoState));
-        saveOrdersToFirestore(actionToUndo.undoState).catch((err) =>
-          console.warn('Undo orders sync err:', err)
-        );
-      }
-      showAdminToast(`Đã hoàn tác: ${actionToUndo.description}`);
-    } catch (e: any) {
-      console.warn('Lỗi khi hoàn tác:', e);
-    }
-  };
-
-  const handleRedo = async () => {
-    if (redoStack.length === 0) return;
-    const [actionToRedo, ...remainingRedo] = redoStack;
-    setRedoStack(remainingRedo);
-    setUndoStack((prev) => [actionToRedo, ...prev].slice(0, 30));
-
-    try {
-      if (actionToRedo.type === 'products') {
-        onUpdateProducts(actionToRedo.redoState);
-        localStorage.setItem('nak_custom_products', JSON.stringify(actionToRedo.redoState));
-        saveProductsToFirestore(actionToRedo.redoState).catch((err) =>
-          console.warn('Redo products sync err:', err)
-        );
-      } else if (actionToRedo.type === 'categories') {
-        setLocalCategories(actionToRedo.redoState);
-        onUpdateCategories?.(actionToRedo.redoState);
-        localStorage.setItem('nak_categories', JSON.stringify(actionToRedo.redoState));
-        saveCategoriesToFirestore(actionToRedo.redoState).catch((err) =>
-          console.warn('Redo categories sync err:', err)
-        );
-      } else if (actionToRedo.type === 'orders') {
-        setOrders(actionToRedo.redoState);
-        localStorage.setItem('nak_preorders', JSON.stringify(actionToRedo.redoState));
-        saveOrdersToFirestore(actionToRedo.redoState).catch((err) =>
-          console.warn('Redo orders sync err:', err)
-        );
-      }
-      showAdminToast(`Đã làm lại: ${actionToRedo.description}`);
-    } catch (e: any) {
-      console.warn('Lỗi khi làm lại:', e);
-    }
-  };
-
-  // Global Keyboard Shortcuts for Undo (Ctrl+Z / Cmd+Z) & Redo (Ctrl+Y / Cmd+Shift+Z)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.tagName === 'SELECT' ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
-          e.preventDefault();
-          handleUndo();
-        } else if ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y') {
-          e.preventDefault();
-          handleRedo();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack]);
+  // No-op history tracker preserving call signatures
+  const pushHistoryAction = (_description?: string, _type?: string, _undoState?: any, _redoState?: any) => {};
 
   // Fetch sellers from Firestore or defaults
   const loadSellers = async () => {
@@ -549,7 +460,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         const clean = deduplicateSellers(dbSellers);
         setSellers(clean);
         try {
-          localStorage.setItem('nak_sellers_list', JSON.stringify(clean));
+          safeStorageSetItem('nak_sellers_list', JSON.stringify(clean));
         } catch {
           // ignore
         }
@@ -567,7 +478,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           const clean = deduplicateSellers(defaults);
           setSellers(clean);
           try {
-            localStorage.setItem('nak_sellers_list', JSON.stringify(clean));
+            safeStorageSetItem('nak_sellers_list', JSON.stringify(clean));
           } catch {
             // ignore
           }
@@ -584,7 +495,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const clean = deduplicateSellers(newSellers);
     setSellers(clean);
     try {
-      localStorage.setItem('nak_sellers_list', JSON.stringify(clean));
+      safeStorageSetItem('nak_sellers_list', JSON.stringify(clean));
     } catch (e) {
       console.warn('Lỗi lưu sellers:', e);
     }
@@ -612,7 +523,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const dbOrders = await fetchOrdersFromFirestore();
       if (dbOrders && dbOrders.length > 0) {
         setOrders(dbOrders);
-        localStorage.setItem('nak_preorders', JSON.stringify(dbOrders));
+        safeStorageSetItem('nak_preorders', JSON.stringify(dbOrders));
       } else {
         const local = localStorage.getItem('nak_preorders');
         if (local) {
@@ -662,7 +573,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const unsubscribeOrders = subscribeToOrdersFromFirestore((realtimeOrders) => {
       if (realtimeOrders && realtimeOrders.length > 0) {
         setOrders(realtimeOrders);
-        localStorage.setItem('nak_preorders', JSON.stringify(realtimeOrders));
+        safeStorageSetItem('nak_preorders', JSON.stringify(realtimeOrders));
       }
     });
     const unsubscribeMessages = subscribeToContactMessagesFromFirestore((realtimeMessages) => {
@@ -670,7 +581,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         setContactMessages(realtimeMessages);
         setUnreadMessagesCount(realtimeMessages.filter((m) => !m.isRead).length);
         try {
-          localStorage.setItem('nak_contact_messages', JSON.stringify(realtimeMessages));
+          safeStorageSetItem('nak_contact_messages', JSON.stringify(realtimeMessages));
         } catch {
           // ignore
         }
@@ -706,7 +617,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       if (cloudProds && cloudProds.length > 0) {
         onUpdateProducts(cloudProds);
         try {
-          localStorage.setItem('nak_custom_products', JSON.stringify(cloudProds));
+          safeStorageSetItem('nak_custom_products', JSON.stringify(cloudProds));
         } catch {
           // ignore
         }
@@ -715,7 +626,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         setLocalCategories(cloudCats);
         onUpdateCategories?.(cloudCats);
         try {
-          localStorage.setItem('nak_categories', JSON.stringify(cloudCats));
+          safeStorageSetItem('nak_categories', JSON.stringify(cloudCats));
         } catch {
           // ignore
         }
@@ -752,8 +663,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       // 3. Đồng bộ lại localStorage
       try {
-        localStorage.setItem('nak_custom_products', JSON.stringify(products));
-        localStorage.setItem('nak_categories', JSON.stringify(localCategories));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(products));
+        safeStorageSetItem('nak_categories', JSON.stringify(localCategories));
       } catch {
         // ignore
       }
@@ -784,8 +695,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         onUpdateProducts(DEFAULT_PRODUCTS);
         setLocalCategories(DEFAULT_CATEGORIES);
         onUpdateCategories?.(DEFAULT_CATEGORIES);
-        localStorage.setItem('nak_custom_products', JSON.stringify(DEFAULT_PRODUCTS));
-        localStorage.setItem('nak_categories', JSON.stringify(DEFAULT_CATEGORIES));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(DEFAULT_PRODUCTS));
+        safeStorageSetItem('nak_categories', JSON.stringify(DEFAULT_CATEGORIES));
         setDeleteConfirmModal(null);
         showAdminToast('Đã khôi phục sản phẩm & danh mục mặc định thành công.');
       }
@@ -856,7 +767,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormColorOptions([]);
     setFormEnableCharmSelection(false);
     setFormCharmSelectionRequired(false);
+    setFormMaxCharmsAllowed(1);
     setFormCharmOptions([]);
+    setFormEnableOmamoriSelection(false);
+    setFormOmamoriSelectionRequired(false);
+    setFormMaxOmamoriAllowed(1);
+    setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
     setFormEnableSizeSelection(false);
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
     setIsAddingNew(true);
@@ -891,7 +807,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormColorOptions(loadedColors);
     setFormEnableCharmSelection(Boolean(prod.enableCharmSelection));
     setFormCharmSelectionRequired(Boolean(prod.charmSelectionRequired));
+    setFormMaxCharmsAllowed(prod.maxCharmsAllowed && prod.maxCharmsAllowed > 0 ? prod.maxCharmsAllowed : 1);
     setFormCharmOptions(prod.charmOptions || []);
+    setFormEnableOmamoriSelection(Boolean(prod.enableOmamoriSelection));
+    setFormOmamoriSelectionRequired(Boolean(prod.omamoriSelectionRequired));
+    setFormMaxOmamoriAllowed(prod.maxOmamoriAllowed && prod.maxOmamoriAllowed > 0 ? prod.maxOmamoriAllowed : 1);
+    const loadedOmamoris: ProductOmamoriOption[] = (prod.omamoriOptions && prod.omamoriOptions.length > 0)
+      ? prod.omamoriOptions
+      : DEFAULT_OMAMORI_PRESETS;
+    setFormOmamoriOptions(loadedOmamoris);
     setFormEnableSizeSelection(Boolean(prod.enableSizeSelection));
     setFormAvailableSizes(
       prod.availableSizes && prod.availableSizes.length > 0
@@ -1102,7 +1026,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
         enableCharmSelection: formEnableCharmSelection,
         charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
+        maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
         charmOptions: formEnableCharmSelection ? formCharmOptions : [],
+        enableOmamoriSelection: formEnableOmamoriSelection,
+        omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
+        maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
+        omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
         enableSizeSelection: formEnableSizeSelection,
         availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
         stock: stockNumber,
@@ -1119,7 +1048,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       pushHistoryAction(`Cập nhật sản phẩm "${updatedItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
       try {
-        localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
       } catch (e) {
         console.warn("Lỗi lưu localStorage:", e);
       }
@@ -1155,7 +1084,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
         enableCharmSelection: formEnableCharmSelection,
         charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
+        maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
         charmOptions: formEnableCharmSelection ? formCharmOptions : [],
+        enableOmamoriSelection: formEnableOmamoriSelection,
+        omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
+        maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
+        omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
         enableSizeSelection: formEnableSizeSelection,
         availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
         stock: stockNumber,
@@ -1174,7 +1108,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       pushHistoryAction(`Thêm sản phẩm mới "${newItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
       try {
-        localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
       } catch (e) {
         console.warn("Lỗi lưu localStorage:", e);
       }
@@ -1220,16 +1154,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       submessage: 'Hành động này sẽ xóa sản phẩm khỏi danh mục hiển thị và cơ sở dữ liệu.',
       confirmLabel: 'Xóa sản phẩm',
       onConfirm: async () => {
+        setDeleteConfirmModal(null);
         const updatedList = products.filter((p) => p.id !== id);
         pushHistoryAction(`Xóa sản phẩm "${name}"`, 'products', products, updatedList);
         onUpdateProducts(updatedList);
         try {
-          localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
+          safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
           await deleteProductFromFirestore(id);
         } catch (err) {
           console.warn('Firestore delete error:', err);
         }
-        setDeleteConfirmModal(null);
         showAdminToast(`Đã xóa sản phẩm "${name}" thành công.`);
       }
     });
@@ -1272,7 +1206,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     );
     onUpdateProducts(updatedList);
     try {
-      localStorage.setItem('nak_custom_products', JSON.stringify(updatedList));
+      safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
     } catch {}
     saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore product visibility toggle:', e));
     showAdminToast(
@@ -1333,7 +1267,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     showAdminToast(statusMsg);
 
     try {
-      localStorage.setItem('nak_categories', JSON.stringify(updatedCats));
+      safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
       Promise.all(updatedCats.map((c) => saveCategoryToFirestore(c)))
         .then(() => showAdminToast(`Đã đồng bộ trạng thái danh mục lên Firebase Cloud!`))
         .catch((err) => {
@@ -1391,7 +1325,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     // Save to Firestore & local storage
     try {
-      localStorage.setItem('nak_categories', JSON.stringify(updatedCats));
+      safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
       saveCategoryToFirestore(catPayload)
         .then(() => showAdminToast(`Đã lưu danh mục "${catPayload.label}" lên Firebase Cloud!`))
         .catch((err) => {
@@ -1416,6 +1350,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           : 'Danh mục sẽ bị xóa vĩnh viễn khỏi danh sách hiển thị và quản trị.',
       confirmLabel: 'Xóa danh mục',
       onConfirm: async () => {
+        setDeleteConfirmModal(null);
         const updatedCats = localCategories.filter((c) => c.id !== catId);
         const fallbackCatId = updatedCats[0]?.id || 'bracelets';
 
@@ -1426,7 +1361,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           );
           onUpdateProducts(updatedProds);
           try {
-            localStorage.setItem('nak_custom_products', JSON.stringify(updatedProds));
+            safeStorageSetItem('nak_custom_products', JSON.stringify(updatedProds));
             // Save updated products
             prodsInCat.forEach((p) => {
               saveProductToFirestore({ ...p, category: fallbackCatId }).catch((err) =>
@@ -1442,35 +1377,171 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         setLocalCategories(updatedCats);
         onUpdateCategories?.(updatedCats);
         try {
-          localStorage.setItem('nak_categories', JSON.stringify(updatedCats));
+          safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
           await deleteCategoryFromFirestore(catId);
         } catch (err) {
           console.warn('Firestore delete category error:', err);
         }
 
-        setDeleteConfirmModal(null);
         showAdminToast(`Đã xóa danh mục "${catLabel}" thành công.`);
       }
     });
   };
 
-  // Delete an order with modal
+  /**
+   * Helper: Check if an order is already in production, shipping, or completed.
+   * If true: Materials/products were already crafted/delivered, so deleting the order must NOT restore stock.
+   * If false: Order was not yet produced, so deleting it restores the reserved stock back to the inventory.
+   */
+  const isOrderProducedOrCompleted = (ord: StoredOrder): boolean => {
+    const normalized = normalizeOrderStatus(ord.status);
+    if (
+      normalized === 'Knot đang được sản xuất' ||
+      normalized === 'Đang giao hàng' ||
+      normalized === 'Đơn hàng giao thành công'
+    ) {
+      return true;
+    }
+    const raw = (ord.status || '').toLowerCase().trim();
+    if (
+      raw.includes('sản xuất') ||
+      raw.includes('crafting') ||
+      raw.includes('in_production') ||
+      raw.includes('đang giao') ||
+      raw.includes('shipping') ||
+      raw.includes('vận chuyển') ||
+      raw.includes('giao thành công') ||
+      raw.includes('hoàn thành') ||
+      raw.includes('completed') ||
+      raw.includes('delivered') ||
+      raw.includes('đã giao')
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  /**
+   * Helper: Restore product and charm stock for orders deleted prior to production.
+   */
+  const restoreStockFromDeletedOrders = async (ordersToRestore: StoredOrder[]): Promise<{ restoredCount: number; productsUpdated: number }> => {
+    if (ordersToRestore.length === 0) return { restoredCount: 0, productsUpdated: 0 };
+
+    const productQuantityMap = new Map<string, number>();
+    const charmQuantityMap = new Map<string, number>();
+    let totalRestoredUnits = 0;
+
+    for (const ord of ordersToRestore) {
+      if (ord.itemDetails && ord.itemDetails.length > 0) {
+        for (const item of ord.itemDetails) {
+          if (!item.productId) continue;
+          const qty = item.quantity || 1;
+          productQuantityMap.set(item.productId, (productQuantityMap.get(item.productId) || 0) + qty);
+          totalRestoredUnits += qty;
+
+          if (item.selectedCharm) {
+            const charmKey = `${item.productId}:::${item.selectedCharm.trim().toLowerCase()}`;
+            charmQuantityMap.set(charmKey, (charmQuantityMap.get(charmKey) || 0) + qty);
+          }
+        }
+      } else if (ord.items && ord.items.length > 0) {
+        for (const itemStr of ord.items) {
+          const matchedProd = products.find(
+            (p) => p.id === itemStr || itemStr.toLowerCase().includes(p.name.toLowerCase())
+          );
+          if (matchedProd) {
+            const qtyMatch = itemStr.match(/\(x(\d+)\)/);
+            const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+            productQuantityMap.set(matchedProd.id, (productQuantityMap.get(matchedProd.id) || 0) + qty);
+            totalRestoredUnits += qty;
+          }
+        }
+      }
+    }
+
+    if (productQuantityMap.size === 0) return { restoredCount: 0, productsUpdated: 0 };
+
+    let updatedCount = 0;
+    const updatedProducts = products.map((prod) => {
+      const qtyToAdd = productQuantityMap.get(prod.id);
+      if (!qtyToAdd) return prod;
+
+      updatedCount++;
+      const currentStock = typeof prod.stock === 'number' ? prod.stock : 0;
+      const newStock = currentStock + qtyToAdd;
+
+      let updatedCharms = prod.charmOptions ? [...prod.charmOptions] : undefined;
+      if (updatedCharms) {
+        updatedCharms = updatedCharms.map((charm) => {
+          const charmKey = `${prod.id}:::${charm.name.trim().toLowerCase()}`;
+          const charmQtyToAdd = charmQuantityMap.get(charmKey);
+          if (charmQtyToAdd && typeof charm.stock === 'number') {
+            return {
+              ...charm,
+              stock: charm.stock + charmQtyToAdd
+            };
+          }
+          return charm;
+        });
+      }
+
+      const updatedProd: Product = {
+        ...prod,
+        stock: newStock,
+        inStock: newStock > 0,
+        charmOptions: updatedCharms
+      };
+
+      // Sync updated stock to Firestore
+      saveProductToFirestore(updatedProd).catch((err) => {
+        console.warn('Lỗi hoàn tồn kho lên Firebase:', err);
+      });
+
+      return updatedProd;
+    });
+
+    onUpdateProducts(updatedProducts);
+    try {
+      safeStorageSetItem('nak_products', JSON.stringify(updatedProducts));
+    } catch (e) {
+      console.warn('Lỗi lưu tồn kho local:', e);
+    }
+
+    return { restoredCount: totalRestoredUnits, productsUpdated: updatedCount };
+  };
+
+  // Delete an order with modal and smart stock management
   const handleDeleteOrder = (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const isProduced = targetOrder ? isOrderProducedOrCompleted(targetOrder) : false;
+
     setDeleteConfirmModal({
       title: 'Xóa đơn hàng',
       message: `Bạn có chắc chắn muốn xóa đơn hàng #${orderId}?`,
-      submessage: 'Dữ liệu đơn hàng này sẽ bị xóa khỏi hệ thống quản lý.',
+      submessage: isProduced
+        ? 'Đơn hàng này đã/đang sản xuất hoặc hoàn tất nên số lượng tồn kho sẽ được giữ nguyên (không hoàn kho).'
+        : 'Đơn hàng này chưa được xác nhận sản xuất. Khi xóa, hệ thống sẽ tự động hoàn lại số lượng sản phẩm vào tồn kho.',
       confirmLabel: 'Xóa đơn hàng',
       onConfirm: async () => {
+        setDeleteConfirmModal(null);
         const updated = orders.filter((o) => o.id !== orderId);
         setOrders(updated);
         try {
-          localStorage.setItem('nak_preorders', JSON.stringify(updated));
+          safeStorageSetItem('nak_preorders', JSON.stringify(updated));
           await deleteOrderFromFirestore(orderId);
         } catch (err) {
           console.warn('Delete order error:', err);
         }
-        setDeleteConfirmModal(null);
+
+        // If order was NOT produced, restore stock
+        if (targetOrder && !isProduced) {
+          const { restoredCount } = await restoreStockFromDeletedOrders([targetOrder]);
+          if (restoredCount > 0) {
+            showAdminToast(`Đã xóa đơn #${orderId} và tự động hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
+            return;
+          }
+        }
+
         showAdminToast(`Đã xóa đơn hàng #${orderId} thành công.`);
       }
     });
@@ -1520,7 +1591,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     );
     pushHistoryAction(`Đổi trạng thái đơn #${orderId} sang "${normalizedSt}"`, 'orders', orders, updated);
     setOrders(updated);
-    localStorage.setItem('nak_preorders', JSON.stringify(updated));
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
     const targetModOrder = updated.find((o) => o.id === orderId);
     if (targetModOrder) {
       await saveOrderToFirestore(targetModOrder);
@@ -1534,7 +1605,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleSaveEditedOrder = async (updatedOrder: StoredOrder) => {
     const updated = orders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
     setOrders(updated);
-    localStorage.setItem('nak_preorders', JSON.stringify(updated));
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
     setEditingOrder(null);
     showAdminToast(`Đang đồng bộ đơn #${updatedOrder.id} lên Firebase...`);
     try {
@@ -1560,7 +1631,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         : o
     );
     setOrders(updated);
-    localStorage.setItem('nak_preorders', JSON.stringify(updated));
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
     setReceiptPromptModal(null);
     const ordToSync = updated.find((o) => o.id === orderId);
     if (ordToSync) {
@@ -1573,28 +1644,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
-  // Bulk Deletion
+  // Bulk Deletion with smart stock management
   const handleBulkDelete = () => {
     if (selectedOrderIds.length === 0) return;
+    const count = selectedOrderIds.length;
+    const idsToDelete = [...selectedOrderIds];
+    const targetOrders = orders.filter((o) => o.id && idsToDelete.includes(o.id));
+    const unproducedOrders = targetOrders.filter((o) => !isOrderProducedOrCompleted(o));
+    const producedOrders = targetOrders.filter((o) => isOrderProducedOrCompleted(o));
+
     setDeleteConfirmModal({
-      title: `Xác nhận xóa ${selectedOrderIds.length} đơn hàng`,
-      message: `Bạn có chắc chắn muốn xóa vĩnh viễn ${selectedOrderIds.length} đơn hàng đã chọn?`,
-      submessage: 'Dữ liệu sau khi xóa trên Firestore và hệ thống không thể khôi phục lại.',
-      confirmLabel: `Xóa ${selectedOrderIds.length} Đơn`,
+      title: `Xác nhận xóa ${count} đơn hàng`,
+      message: `Bạn có chắc chắn muốn xóa vĩnh viễn ${count} đơn hàng đã chọn?`,
+      submessage: unproducedOrders.length > 0
+        ? `Có ${unproducedOrders.length} đơn chưa sản xuất (sẽ tự động hoàn tồn kho), và ${producedOrders.length} đơn đã/đang sản xuất hoặc hoàn tất (giữ nguyên tồn kho).`
+        : 'Các đơn đã chọn đều đã/đang sản xuất hoặc hoàn tất nên số lượng tồn kho sẽ được giữ nguyên (không hoàn kho).',
+      confirmLabel: `Xóa ${count} Đơn`,
       onConfirm: async () => {
-        const remaining = orders.filter((o) => o.id && !selectedOrderIds.includes(o.id));
+        setDeleteConfirmModal(null);
+        setSelectedOrderIds([]);
+        const remaining = orders.filter((o) => o.id && !idsToDelete.includes(o.id));
         setOrders(remaining);
-        localStorage.setItem('nak_preorders', JSON.stringify(remaining));
-        for (const id of selectedOrderIds) {
-          try {
-            await deleteOrderFromFirestore(id);
-          } catch (e) {
-            console.error('Lỗi xóa đơn bulk:', id, e);
+        try {
+          safeStorageSetItem('nak_preorders', JSON.stringify(remaining));
+        } catch (e) {
+          console.warn('Lỗi lưu đơn local:', e);
+        }
+
+        // Batch delete on Firestore in a single atomic commit
+        try {
+          await deleteOrdersBatchFromFirestore(idsToDelete);
+        } catch (e) {
+          console.error('Lỗi xóa đơn bulk Firestore:', e);
+        }
+
+        // Restore stock only for unproduced orders
+        if (unproducedOrders.length > 0) {
+          const { restoredCount } = await restoreStockFromDeletedOrders(unproducedOrders);
+          if (restoredCount > 0) {
+            showAdminToast(`Đã xóa ${count} đơn hàng và hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
+            return;
           }
         }
-        showAdminToast(`Đã xóa ${selectedOrderIds.length} đơn hàng thành công.`);
-        setSelectedOrderIds([]);
-        setDeleteConfirmModal(null);
+
+        showAdminToast(`Đã xóa ${count} đơn hàng thành công.`);
       }
     });
   };
@@ -1611,7 +1704,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         : o
     );
     setOrders(updated);
-    localStorage.setItem('nak_preorders', JSON.stringify(updated));
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
     const toSync = updated.filter((o) => o.id && selectedOrderIds.includes(o.id));
     for (const ord of toSync) {
       try {
@@ -1638,7 +1731,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         : o
     );
     setOrders(updated);
-    localStorage.setItem('nak_preorders', JSON.stringify(updated));
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
     const toSync = updated.filter((o) => o.id && selectedOrderIds.includes(o.id));
     for (const ord of toSync) {
       try {
@@ -1955,500 +2048,104 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const outOfStockCount = products.filter((p) => p.inStock === false || (p.stock ?? 0) === 0).length;
   const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice || o.totalAmount || 0), 0);
 
-  const getTabDisplayName = () => {
+  const getTabDisplayName = (): string => {
     switch (activeTab) {
       case 'dashboard':
-        return { section: 'Tổng Quan', title: 'Bảng Điều Khiển & Doanh Thu' };
+        return 'Tổng quan';
       case 'analytics':
-        return { section: 'Tổng Quan', title: 'Thống Kê Truy Cập & Google Analytics' };
+        return 'Truy cập & GA4';
       case 'orders':
-        return { section: 'Bán Hàng & Đơn Hàng', title: `Danh Sách Đơn Hàng (${orders.length})` };
+        return 'Đơn hàng';
       case 'manual_order':
-        return { section: 'Bán Hàng & Đơn Hàng', title: 'Tạo Đơn Hàng Mới' };
+        return 'Tạo đơn hàng';
       case 'messages':
-        return { section: 'Bán Hàng & Đơn Hàng', title: 'Hộp Thư Liên Hệ Khách Hàng' };
+        return 'Hộp thư liên hệ';
       case 'products':
-        return { section: 'Sản Phẩm & Kho', title: `Quản Lý Sản Phẩm (${products.length})` };
+        return 'Sản phẩm';
       case 'categories':
-        return { section: 'Sản Phẩm & Kho', title: `Danh Mục Sản Phẩm (${localCategories.length})` };
+        return 'Danh mục';
       case 'site_editor':
-        return { section: 'Giao Diện & Nội Dung', title: 'Sửa Giao Diện & Nội Dung Website' };
+        return 'Sửa giao diện';
+      case 'bank_account':
+        return 'Tài khoản ngân hàng';
       case 'banners':
-        return { section: 'Giao Diện & Nội Dung', title: `Banners & Bộ Sưu Tập (${localCollections.length})` };
+        return 'Banners & Bộ sưu tập';
+      case 'version_history':
+        return 'Lịch sử phiên bản';
       case 'backup':
-        return { section: 'Sao Lưu & Backup', title: 'Sao Lưu & Phục Hồi Dữ Liệu Toàn Hệ Thống' };
+        return 'Sao lưu & Phục hồi';
       case 'sellers':
-        return { section: 'Sao Lưu & Backup', title: `Quản Trị Hệ Thống & Người Bán (${sellers.length} thành viên)` };
+        return 'Quản trị viên';
       case 'firebase':
-        return { section: 'Sao Lưu & Backup', title: 'Tài Khoản & Dung Lượng Firebase Cloud Quota' };
+        return 'Dung lượng Firebase';
       default:
-        return { section: 'Quản Trị', title: 'Hệ Thống' };
+        return 'Quản trị';
     }
   };
 
-  const currentTabInfo = getTabDisplayName();
+  const currentTabTitle = getTabDisplayName();
 
   return (
     <div id="admin-full-page" className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row font-sans">
-      
-      {/* Mobile Backdrop */}
-      {sidebarOpen && (
-        <div
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm lg:hidden transition-opacity"
-        />
-      )}
-
-      {/* ======================================================== */}
-      {/* SIDEBAR NAVIGATION (Sections to & nhỏ) */}
-      {/* ======================================================== */}
-      <aside
-        id="admin-sidebar"
-        className={`fixed lg:sticky top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 flex flex-col justify-between transition-all duration-300 ease-in-out shrink-0 shadow-sm ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        } ${desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0 lg:p-0' : 'lg:w-64 w-72'}`}
-      >
-        {/* Top Scrollable Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-          
-          {/* 1. App Monogram & Role Header - Clean Minimalist Typography */}
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <div className="flex items-center gap-3">
-              {siteContent?.logoUrl ? (
-                <img
-                  src={siteContent.logoUrl}
-                  alt="Logo"
-                  className="w-9 h-9 rounded-xl object-contain bg-white border border-slate-200 p-1 shadow-2xs shrink-0"
-                />
-              ) : null}
-              <div className="min-w-0">
-                <div className="font-black text-sm text-slate-900 tracking-wider leading-tight flex items-center gap-1.5 uppercase">
-                  <span className="truncate">{siteContent?.brandName || 'NOT A KNOT'}</span>
-                </div>
-                <div className="text-[11px] text-slate-500 font-medium leading-none mt-1">
-                  Quản trị hệ thống
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="px-2 py-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 lg:hidden text-xs font-bold"
-            >
-              Đóng
-            </button>
-          </div>
-
-          {/* 3. Grouped Navigation Sections */}
-          <nav className="p-3 space-y-4">
-            
-            {/* SECTION 1: TỔNG QUAN */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                TỔNG QUAN
-              </div>
-              <button
-                id="admin-sidebar-tab-dashboard"
-                onClick={() => handleSwitchTab('dashboard')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'dashboard'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Bảng điều khiển</span>
-              </button>
-
-              <button
-                id="admin-sidebar-tab-analytics"
-                onClick={() => handleSwitchTab('analytics')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'analytics'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Truy cập & GA4</span>
-                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ${
-                  activeTab === 'analytics' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
-                }`}>
-                  GA4 Live
-                </span>
-              </button>
-            </div>
-
-            {/* SECTION 2: BÁN HÀNG & ĐƠN HÀNG */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                BÁN HÀNG & ĐƠN HÀNG
-              </div>
-
-              <button
-                id="admin-sidebar-tab-orders"
-                onClick={() => handleSwitchTab('orders')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'orders'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Quản lý đơn hàng</span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  activeTab === 'orders' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {orders.length}
-                </span>
-              </button>
-
-              <button
-                id="admin-sidebar-tab-manual-order"
-                onClick={() => handleSwitchTab('manual_order')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'manual_order'
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'text-sky-700 hover:bg-sky-50'
-                }`}
-              >
-                <span>Nhập đơn thủ công</span>
-                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
-                  activeTab === 'manual_order' ? 'bg-white/20 text-white' : 'bg-sky-100 text-sky-800'
-                }`}>
-                  + Mới
-                </span>
-              </button>
-
-              <button
-                id="admin-sidebar-tab-messages"
-                onClick={() => handleSwitchTab('messages')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'messages'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Hộp thư liên hệ</span>
-                {unreadMessagesCount > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white animate-pulse shadow-xs flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping shrink-0" />
-                    <span>{unreadMessagesCount} mới</span>
-                  </span>
-                ) : (
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    activeTab === 'messages' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    0
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* SECTION 3: SẢN PHẨM & KHO */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                SẢN PHẨM & KHO
-              </div>
-
-              <button
-                id="admin-sidebar-tab-products"
-                onClick={() => handleSwitchTab('products')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'products'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Danh sách sản phẩm</span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  activeTab === 'products' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {products.length}
-                </span>
-              </button>
-
-              <button
-                id="admin-sidebar-tab-categories"
-                onClick={() => handleSwitchTab('categories')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'categories'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Danh mục sản phẩm</span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  activeTab === 'categories' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {localCategories.length}
-                </span>
-              </button>
-            </div>
-
-            {/* SECTION 4: GIAO DIỆN & NỘI DUNG */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                GIAO DIỆN & NỘI DUNG
-              </div>
-
-              <button
-                id="admin-sidebar-tab-site-editor"
-                onClick={() => handleSwitchTab('site_editor')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'site_editor'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'text-amber-700 hover:bg-amber-50'
-                }`}
-              >
-                <span>Sửa Website & Nội dung</span>
-              </button>
-
-              <button
-                id="admin-sidebar-tab-banners"
-                onClick={() => handleSwitchTab('banners')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'banners'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Banners & Bộ sưu tập</span>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  activeTab === 'banners' ? 'bg-slate-950 text-amber-300' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {localCollections.length}
-                </span>
-              </button>
-            </div>
-
-            {/* SECTION 5: SAO LƯU & BACKUP */}
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                SAO LƯU & BACKUP
-              </div>
-
-              <button
-                id="admin-sidebar-tab-backup"
-                onClick={() => handleSwitchTab('backup')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'backup'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Sao Lưu & Dữ Liệu</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 font-black">v2.0</span>
-              </button>
-
-              {isRootAdmin && (
-                <button
-                  id="admin-sidebar-tab-sellers"
-                  onClick={() => handleSwitchTab('sellers')}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                    activeTab === 'sellers'
-                      ? 'bg-amber-400 text-slate-950 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span>Quản trị</span>
-                  </div>
-                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                    activeTab === 'sellers' ? 'bg-white/20 text-slate-950' : 'bg-amber-100 text-amber-900'
-                  }`}>
-                    {sellers.length || 9}
-                  </span>
-                </button>
-              )}
-
-              <button
-                id="admin-sidebar-tab-firebase"
-                onClick={() => handleSwitchTab('firebase')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'firebase'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-emerald-700 hover:bg-emerald-50'
-                }`}
-              >
-                <span>Tài Khoản & Quota Firebase</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              </button>
-            </div>
-
-          </nav>
-        </div>
-
-        {/* Bottom Profile & Exit Area */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50 space-y-2">
-          
-          {/* User Info Tile with Logged-in Seller */}
-          <div className="p-2.5 rounded-2xl bg-white border border-slate-200 flex items-center justify-between shadow-xs">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className="w-8 h-8 rounded-full text-white font-black text-xs flex items-center justify-center flex-shrink-0 shadow-xs"
-                style={{ backgroundColor: currentSeller?.avatarColor || '#B41C1A' }}
-              >
-                {(currentSeller?.name || 'Mạnh Cường').slice(0, 1).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-900 truncate">
-                  {currentSeller?.name || 'Mạnh Cường'}
-                </div>
-                <div className="text-[10px] text-amber-700 font-semibold truncate">
-                  {currentSeller?.isRootAdmin || currentSeller?.username === 'manhcuong'
-                    ? 'Quản trị viên'
-                    : 'Người bán'}
-                </div>
-              </div>
-            </div>
-
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="px-2 py-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer text-[10px] font-bold"
-                title="Đăng xuất khỏi phiên quản trị"
-              >
-                Thoát
-              </button>
-            )}
-          </div>
-
-          {/* Quick Exit to Store Button */}
-          <button
-            id="admin-sidebar-btn-back-to-store"
-            onClick={onBackToStore}
-            className="w-full px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer"
-          >
-            <span>← Về Cửa Hàng</span>
-          </button>
-        </div>
-      </aside>
+      {/* Sidebar Navigation */}
+      <AdminSidebar
+        activeTab={activeTab}
+        onSwitchTab={handleSwitchTab}
+        sidebarOpen={sidebarOpen}
+        onCloseSidebar={() => setSidebarOpen(false)}
+        desktopSidebarCollapsed={desktopSidebarCollapsed}
+        onToggleDesktopSidebar={() => setDesktopSidebarCollapsed((prev) => !prev)}
+        siteContent={siteContent}
+        currentSeller={currentSeller}
+        isRootAdmin={isRootAdmin}
+        unreadMessagesCount={unreadMessagesCount}
+        ordersCount={orders.length}
+        productsCount={products.length}
+        categoriesCount={localCategories.length}
+        collectionsCount={localCollections.length}
+        sellersCount={sellers.length}
+        onBackToStore={onBackToStore}
+        onLogout={onLogout}
+        onOpenSwitchSellerModal={() => {
+          if (isRootAdmin) {
+            handleSwitchTab('sellers');
+          } else if (onLogout) {
+            onLogout();
+          }
+        }}
+      />
 
       {/* ======================================================== */}
       {/* MAIN CONTENT AREA */}
       {/* ======================================================== */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
-        
         {/* Top Content Header Bar */}
-        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-3 shadow-xs">
-          
-          {/* Left: Mobile Drawer Trigger & Breadcrumb */}
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 text-xs font-bold lg:hidden flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
-              title="Mở menu quản trị"
-            >
-              <Menu className="w-4 h-4" />
-              <span>Menu</span>
-            </button>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                <span>Quản trị</span>
-                <span>/</span>
-                <span className="text-slate-700">{currentTabInfo.section}</span>
-              </div>
-              <h1 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight truncate">
-                {currentTabInfo.title}
-              </h1>
-            </div>
-          </div>
-
-          {/* Right: Quick Action Controls */}
-          <div className="flex items-center gap-2">
-            {/* General Admin Notifications Component for new orders & messages */}
-            <AdminNotifications
-              orders={orders}
-              messages={contactMessages}
-              onInspectOrder={(ord) => setInspectingOrder(ord)}
-              onNavigateToOrders={() => handleSwitchTab('orders')}
-              onNavigateToMessages={() => handleSwitchTab('messages')}
-              onUpdateOrderStatus={(orderId, status) => handleUpdateOrderStatus(orderId, status)}
-              onMarkMessageRead={handleMarkMessageRead}
-              onRefresh={() => {
-                loadOrders();
-                loadMessagesCount();
-                showAdminToast('Đã làm mới dữ liệu đơn hàng & hộp thư.');
-              }}
-            />
-
-            {/* Undo & Redo History Controls */}
-            <div className="flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200 gap-0.5">
-              <button
-                type="button"
-                onClick={handleUndo}
-                disabled={undoStack.length === 0}
-                className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all text-slate-700 hover:text-slate-950 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed shadow-none hover:shadow-xs"
-                title={
-                  undoStack.length > 0
-                    ? `Hoàn tác: ${undoStack[0].description} (Ctrl+Z)`
-                    : 'Không có thao tác nào để hoàn tác (Ctrl+Z)'
-                }
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Hoàn tác</span>
-                {undoStack.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full font-black">
-                    {undoStack.length}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleRedo}
-                disabled={redoStack.length === 0}
-                className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all text-slate-700 hover:text-slate-950 hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed shadow-none hover:shadow-xs"
-                title={
-                  redoStack.length > 0
-                    ? `Làm lại: ${redoStack[0].description} (Ctrl+Y)`
-                    : 'Không có thao tác nào để làm lại (Ctrl+Y)'
-                }
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Làm lại</span>
-                {redoStack.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-sky-200 text-sky-900 rounded-full font-black">
-                    {redoStack.length}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            <button
-              onClick={() => setDesktopSidebarCollapsed((prev) => !prev)}
-              className="hidden lg:flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 text-xs font-bold transition-colors cursor-pointer"
-              title={desktopSidebarCollapsed ? 'Mở lại menu bên trái' : 'Thu gọn menu bên trái để mở rộng bảng'}
-            >
-              <span>{desktopSidebarCollapsed ? '» Mở Menu' : '« Thu Gọn Menu'}</span>
-            </button>
-
-            <button
-              onClick={handlePushAllToCloud}
-              disabled={isCloudSyncing}
-              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold text-xs transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              title="Đẩy dữ liệu hiện tại lên Firebase Cloud (ghi đè Cloud để khớp 100% với máy bạn)"
-            >
-              <CloudUpload className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
-              <span>Đẩy Lên Cloud</span>
-            </button>
-
-            <button
-              onClick={() => {
-                showAdminToast('Đang làm mới & đồng bộ dữ liệu từ Firestore...');
-                handleFetchFromCloud();
-                loadOrders();
-                loadMessagesCount();
-              }}
-              disabled={isCloudSyncing}
-              className="px-2.5 sm:px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs transition-all shadow-sm hover:shadow-md cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-              title="Đồng bộ / kéo lại dữ liệu từ Cloud về máy"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
-              <span>Đồng Bộ <span className="hidden sm:inline">Từ Cloud</span></span>
-            </button>
-          </div>
-        </header>
+        <AdminHeader
+          pageTitle={currentTabTitle}
+          desktopSidebarCollapsed={desktopSidebarCollapsed}
+          onToggleDesktopSidebar={() => setDesktopSidebarCollapsed((prev) => !prev)}
+          onOpenMobileSidebar={() => setSidebarOpen(true)}
+          orders={orders}
+          contactMessages={contactMessages}
+          onInspectOrder={(ord) => setInspectingOrder(ord)}
+          onNavigateToOrders={() => handleSwitchTab('orders')}
+          onNavigateToMessages={() => handleSwitchTab('messages')}
+          onUpdateOrderStatus={(orderId, status) => handleUpdateOrderStatus(orderId, status)}
+          onMarkMessageRead={handleMarkMessageRead}
+          onRefreshData={() => {
+            loadOrders();
+            loadMessagesCount();
+            showAdminToast('Đã làm mới dữ liệu đơn hàng & hộp thư.');
+          }}
+          isCloudSyncing={isCloudSyncing}
+          onPushAllToCloud={handlePushAllToCloud}
+          onFetchFromCloud={() => {
+            showAdminToast('Đang làm mới & đồng bộ dữ liệu từ Firestore...');
+            handleFetchFromCloud();
+            loadOrders();
+            loadMessagesCount();
+          }}
+        />
 
         {/* Cloud Sync Status Banner */}
         {cloudSyncMessage && (
@@ -2489,6 +2186,43 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               showAdminToast('Đã lưu và cập nhật cấu hình nội dung website thành công!');
             }}
             onPreviewWebsite={onBackToStore}
+          />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: TÀI KHOẢN NGÂN HÀNG (VIETQR) */}
+        {/* ======================================================== */}
+        {activeTab === 'bank_account' && (
+          <AdminBankAccountPage
+            siteContent={siteContent}
+            onUpdateSiteContent={onUpdateSiteContent}
+            onToast={showAdminToast}
+          />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: VERSION HISTORY (LỊCH SỬ PHIÊN BẢN & AUTO BACKUP) */}
+        {/* ======================================================== */}
+        {activeTab === 'version_history' && (
+          <AdminVersionHistoryPage
+            products={products}
+            categories={localCategories}
+            collections={localCollections}
+            siteContent={siteContent}
+            onUpdateProducts={onUpdateProducts}
+            onUpdateCategories={(newCats) => {
+              setLocalCategories(newCats);
+              onUpdateCategories?.(newCats);
+            }}
+            onUpdateCollections={(newColls) => {
+              setLocalCollections(newColls);
+              onUpdateCollections?.(newColls);
+            }}
+            onUpdateSiteContent={(newCfg) => {
+              onUpdateSiteContent?.(newCfg);
+            }}
+            onNotify={showAdminToast}
+            currentSellerName={currentSeller?.displayName || currentSeller?.username}
           />
         )}
 
@@ -2892,7 +2626,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               >
                                 <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
                                   <img
-                                    src={imgSrc}
+                                    src={imgSrc || '/assets/bracelet.jpg'}
                                     alt={`Ảnh ${idx + 1}`}
                                     className="w-full h-full object-cover"
                                   />
@@ -3187,7 +2921,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   {/* Linked Photo for this color */}
                                   <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
                                     <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                                      {col.image ? (
+                                      {col.image && col.image.trim() ? (
                                         <img
                                           src={col.image}
                                           alt={col.name}
@@ -3271,7 +3005,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         </label>
 
                         {formEnableCharmSelection && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -3279,7 +3013,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 onChange={(e) => setFormCharmSelectionRequired(e.target.checked)}
                                 className="rounded text-amber-600 focus:ring-amber-500"
                               />
-                              <span>Bắt buộc chọn Charm</span>
+                              <span>Bắt buộc chọn</span>
+                            </label>
+                            <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                              <span>Tối đa chọn:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={formMaxCharmsAllowed}
+                                onChange={(e) => setFormMaxCharmsAllowed(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                className="w-12 px-1 py-0.5 border border-slate-200 rounded text-center font-bold text-amber-900 focus:outline-none focus:border-amber-500 text-xs"
+                              />
+                              <span>charm</span>
                             </label>
                             <button
                               type="button"
@@ -3345,7 +3091,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   <div className="flex items-center gap-2.5">
                                     <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 relative">
                                       <img
-                                        src={charm.image}
+                                        src={charm.image || 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&auto=format&fit=crop&q=80'}
                                         alt={charm.name}
                                         className={`w-full h-full object-cover ${
                                           charm.stock !== undefined && charm.stock <= 0 ? 'opacity-60 grayscale-[30%]' : ''
@@ -3486,6 +3232,239 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       )}
                     </div>
 
+                    {/* SECTION 3: OMAMORI AMULETS */}
+                    <div className="p-3 bg-red-50/40 rounded-xl border border-red-200/70 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div 
+                          onClick={() => {
+                            const newChecked = !formEnableOmamoriSelection;
+                            setFormEnableOmamoriSelection(newChecked);
+                            if (newChecked && formOmamoriOptions.length === 0) {
+                              setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
+                            }
+                          }}
+                          className="flex items-center gap-2 cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formEnableOmamoriSelection}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              const checked = e.target.checked;
+                              setFormEnableOmamoriSelection(checked);
+                              if (checked && formOmamoriOptions.length === 0) {
+                                setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-red-600 focus:ring-red-500 cursor-pointer"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              Bật tùy chọn Bùa Omamori
+                            </span>
+                            <span className="block text-[11px] text-slate-500">
+                              Khách hàng có thể chọn nhiều bùa may mắn kèm theo sản phẩm và quản lý tồn kho từng bùa
+                            </span>
+                          </div>
+                        </div>
+
+                        {formEnableOmamoriSelection && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={formOmamoriSelectionRequired}
+                                onChange={(e) => setFormOmamoriSelectionRequired(e.target.checked)}
+                                className="rounded text-red-600 focus:ring-red-500"
+                              />
+                              <span>Bắt buộc chọn</span>
+                            </label>
+                            <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                              <span>Tối đa chọn:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={formMaxOmamoriAllowed}
+                                onChange={(e) => setFormMaxOmamoriAllowed(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                className="w-12 px-1 py-0.5 border border-slate-200 rounded text-center font-bold text-red-900 focus:outline-none focus:border-red-500 text-xs"
+                              />
+                              <span>bùa</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
+                              }}
+                              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-900 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                            >
+                              Nạp 6 Bùa Omamori mẫu
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newId = `omamori-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                                setFormOmamoriOptions((prev) => [
+                                  ...prev,
+                                  { 
+                                    id: newId, 
+                                    name: `Bùa may mắn ${prev.length + 1}`, 
+                                    image: DEFAULT_OMAMORI_PRESETS[0]?.image || '', 
+                                    priceDelta: 25000,
+                                    meaning: 'Bình an & may mắn',
+                                    stock: 20
+                                  }
+                                ]);
+                              }}
+                              className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Thêm Bùa</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {formEnableOmamoriSelection && (
+                        <div className="space-y-2 pt-2 border-t border-red-200/60">
+                          {formOmamoriOptions.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic py-2 text-center">
+                              Chưa có mẫu bùa nào. Bấm "+ Thêm Bùa" hoặc "Nạp 6 Bùa Omamori mẫu" ở trên.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {formOmamoriOptions.map((omamori, omIdx) => (
+                                <div
+                                  key={omamori.id || omIdx}
+                                  className="p-2.5 bg-white rounded-xl border border-red-200/80 shadow-xs flex flex-col gap-2 relative group"
+                                >
+                                  <div className="flex items-start gap-2.5">
+                                    <div className="w-12 h-12 rounded-lg bg-neutral-50 border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
+                                      {omamori.image && omamori.image.trim() ? (
+                                        <img
+                                          src={omamori.image}
+                                          alt={omamori.name}
+                                          className="w-full h-full object-contain"
+                                          referrerPolicy="no-referrer"
+                                          onError={(e) => {
+                                            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&auto=format&fit=crop&q=80';
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400">Không ảnh</span>
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <input
+                                          type="text"
+                                          value={omamori.name}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            setFormOmamoriOptions((prev) =>
+                                              prev.map((o, i) => (i === omIdx ? { ...o, name: val } : o))
+                                            );
+                                          }}
+                                          placeholder="Tên bùa Omamori..."
+                                          className="w-full px-2 py-0.5 font-bold text-xs text-slate-900 border border-transparent hover:border-slate-200 focus:border-red-500 rounded bg-transparent focus:bg-white focus:outline-none"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setFormOmamoriOptions((prev) => prev.filter((_, i) => i !== omIdx));
+                                          }}
+                                          className="text-slate-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50 cursor-pointer transition-colors shrink-0"
+                                          title="Xóa bùa này"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+
+                                      <input
+                                        type="text"
+                                        value={omamori.meaning || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setFormOmamoriOptions((prev) =>
+                                            prev.map((o, i) => (i === omIdx ? { ...o, meaning: val } : o))
+                                          );
+                                        }}
+                                        placeholder="Ý nghĩa bùa (ví dụ: Bình an, Tài lộc)..."
+                                        className="w-full px-2 py-0.5 text-[10px] text-slate-600 border border-slate-100 focus:border-red-400 rounded bg-slate-50 focus:bg-white focus:outline-none"
+                                      />
+
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                                          <span>Phụ thu:</span>
+                                          <input
+                                            type="number"
+                                            value={omamori.priceDelta}
+                                            onChange={(e) => {
+                                              const val = Number(e.target.value) || 0;
+                                              setFormOmamoriOptions((prev) =>
+                                                prev.map((o, i) => (i === omIdx ? { ...o, priceDelta: val } : o))
+                                              );
+                                            }}
+                                            className="w-16 px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs font-semibold text-red-900 focus:outline-none focus:border-red-500"
+                                          />
+                                          <span className="text-[10px] text-slate-400">đ</span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                                          <span>Kho:</span>
+                                          <input
+                                            type="number"
+                                            value={omamori.stock ?? ''}
+                                            placeholder="∞"
+                                            onChange={(e) => {
+                                              const val = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0);
+                                              setFormOmamoriOptions((prev) =>
+                                                prev.map((o, i) => (i === omIdx ? { ...o, stock: val } : o))
+                                              );
+                                            }}
+                                            className="w-12 px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded text-xs font-semibold text-slate-800 focus:outline-none focus:border-red-500"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormOmamoriOptions((prev) =>
+                                                prev.map((o, i) => (i === omIdx ? { ...o, stock: undefined } : o))
+                                              );
+                                            }}
+                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                                              omamori.stock === undefined
+                                                ? 'bg-red-600 text-white shadow-2xs'
+                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                            }`}
+                                            title="Không giới hạn số lượng"
+                                          >
+                                            ∞
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    value={omamori.image}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setFormOmamoriOptions((prev) =>
+                                        prev.map((o, i) => (i === omIdx ? { ...o, image: val } : o))
+                                      );
+                                    }}
+                                    placeholder="URL ảnh hoặc SVG data bùa..."
+                                    className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-red-500"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
                   {/* Form Submit Button */}
@@ -3534,7 +3513,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         {/* Top: Image, Name, Category, Badges */}
                         <div className="flex items-start gap-3">
                           <img
-                            src={p.image}
+                            src={p.image || '/assets/bracelet.jpg'}
                             alt={p.name}
                             className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
                           />
@@ -3696,7 +3675,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                               <td className="p-4 flex items-center gap-3">
                                 <img
-                                  src={p.image}
+                                  src={p.image || '/assets/bracelet.jpg'}
                                   alt={p.name}
                                   className="w-12 h-12 rounded-xl object-cover border border-slate-200 flex-shrink-0"
                                 />
@@ -3822,20 +3801,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             {/* BOX RIÊNG BIỆT: HỘP SẢN PHẨM ĐÃ ẨN (HOẶC THUỘC DANH MỤC ĐÃ ẨN) */}
             {/* ======================================================== */}
             <div className="mt-8 rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-slate-50 border-b border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-2xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
-                    <EyeOff className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-amber-100/90 text-amber-800 flex items-center justify-center font-bold flex-shrink-0 border border-amber-200/80">
+                    <EyeOff className="w-5 h-5 text-amber-800" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-extrabold text-white">Hộp Sản Phẩm Đã Ẩn</h3>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-amber-400 text-slate-950">
+                      <h3 className="text-sm font-extrabold text-slate-900">Hộp Sản Phẩm Đã Ẩn</h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-200">
                         {allHiddenProducts.length} sản phẩm
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Bao gồm các sản phẩm bị ẩn thủ công hoặc thuộc danh mục đang ẩn. Khách hàng trên website hoàn toàn không thấy các sản phẩm này.
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Sản phẩm bị ẩn chỉ không hiển thị trên website bán hàng. Toàn bộ doanh thu & số lượng từng bán vẫn được hệ thống ghi nhận đầy đủ vào báo cáo & thống kê.
                     </p>
                   </div>
                 </div>
@@ -3843,7 +3822,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsExpandedHiddenBox((prev) => !prev)}
-                  className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 font-bold text-xs border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
                   <span>{isExpandedHiddenBox ? 'Thu gọn' : 'Mở rộng xem danh sách'}</span>
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandedHiddenBox ? 'rotate-180' : ''}`} />
@@ -3864,6 +3843,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         const catObj = localCategories.find((c) => c.id === p.category);
                         const isCatHidden = hiddenCategoryIds.has(p.category);
                         const isDirectlyHidden = Boolean(p.isHidden);
+                        const sold = (productSoldMap[p.id] || 0) + (p.soldCount || 0);
+                        const revenue = sold * p.price;
 
                         return (
                           <div
@@ -3873,7 +3854,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <div className="flex items-start gap-3">
                               <div className="relative flex-shrink-0">
                                 <img
-                                  src={p.image}
+                                  src={p.image || '/assets/bracelet.jpg'}
                                   alt={p.name}
                                   className="w-14 h-14 rounded-xl object-cover border border-slate-200 bg-slate-100 opacity-80"
                                 />
@@ -3909,6 +3890,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   </span>
                                 </div>
                               </div>
+                            </div>
+
+                            {/* Revenue & Sales display for hidden product */}
+                            <div className="flex items-center justify-between text-[11px] py-1 px-2.5 bg-slate-50 rounded-xl border border-slate-100 text-slate-600">
+                              <span>Đã bán: <strong className="text-slate-900 font-bold">{sold}</strong> sp</span>
+                              <span>Doanh số: <strong className="text-amber-700 font-bold">{revenue.toLocaleString('vi-VN')}đ</strong></span>
                             </div>
 
                             {/* Hidden Card Actions */}
@@ -5534,7 +5521,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           setOrderPageSize(val);
                           setOrderCurrentPage(1);
                           try {
-                            localStorage.setItem('nak_admin_order_page_size', String(val));
+                            safeStorageSetItem('nak_admin_order_page_size', String(val));
                           } catch {}
                         }}
                         className="appearance-none pl-3 pr-7 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 cursor-pointer transition-colors"
@@ -5732,119 +5719,164 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'firebase' && (
           <div className="space-y-6 animate-fadeIn">
-            {/* Connected Account & Status Banner */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2.5">
+            {/* Top Connected Account & Main Actions Banner */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                  <h3 className="text-lg font-black text-slate-900">
-                    Tài Khoản & Quota Firebase Cloud
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Database className="w-5 h-5 text-red-600" />
+                    <span>Cơ Sở Dữ Liệu Google Firebase Cloud</span>
                   </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    {cloudConnected ? 'Đã Kết Nối Trực Tuyến' : 'Đang Kiểm Tra Kết Nối'}
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    {cloudConnected ? 'Đã Kết Nối Trực Tuyến (Online)' : 'Đang Kiểm Tra Kết Nối'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Tài khoản Google kết nối: <span className="font-bold text-slate-800 font-mono">nhunhuhao71@gmail.com</span> • Project ID: <span className="font-bold text-slate-800 font-mono">jittery-study-nzp2g</span>
-                </p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <span>Tài khoản Google: <strong className="text-slate-800 font-mono">nhunhuhao71@gmail.com</strong></span>
+                  <span>•</span>
+                  <span>Project ID: <strong className="text-slate-800 font-mono">jittery-study-nzp2g</strong></span>
+                  <span>•</span>
+                  <span>Khu vực: <strong className="text-slate-800 font-mono">asia-southeast1 (Singapore)</strong></span>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                  title="Mở bảng điều khiển Firebase Console chính thức của Google để xem thống kê chính xác 100% từ máy chủ"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Mở Firebase Console (Chính Thức)</span>
+                </a>
                 <button
                   type="button"
                   onClick={handleRecalculateStorage}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                  title="Tính toán lại chính xác dung lượng toàn bộ hình ảnh và dữ liệu"
+                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  title="Tính toán lại dung lượng toàn bộ hình ảnh và dữ liệu"
                 >
-                  <span>🔄 Tính Lại Dung Lượng</span>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Tính Lại Dung Lượng</span>
                 </button>
                 <button
                   type="button"
                   onClick={handlePushAllToCloud}
                   disabled={isCloudSyncing}
-                  className="px-4 py-2.5 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  title="Đẩy dữ liệu hiện tại trên máy lên Firebase Cloud (ghi đè Cloud để khớp 100% với máy bạn)"
+                  className="px-3.5 py-2.5 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Đẩy dữ liệu hiện tại trên máy lên Firebase Cloud"
                 >
-                  <CloudUpload className={`w-4 h-4 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
-                  <span>{isCloudSyncing ? '⏳ Đang đẩy lên Cloud...' : '☁️ Đẩy Lên Cloud (Ghi Đè)'}</span>
+                  <CloudUpload className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
+                  <span>{isCloudSyncing ? 'Đang đẩy...' : 'Đẩy Lên Cloud'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleFetchFromCloud}
                   disabled={isCloudSyncing}
-                  className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   title="Đồng bộ / kéo dữ liệu mới nhất từ Firebase Firestore về máy"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isCloudSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isCloudSyncing ? '⏳ Đang kéo về...' : '🔄 Đồng Bộ Từ Cloud'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isCloudSyncing ? 'Đang kéo...' : 'Đồng Bộ Về'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Quota Progress Cards (Daily Free Tier: 50k reads, 20k writes, 20k deletes, 1GB Storage) */}
+            {/* Quick Navigation into Official Google Firebase Console */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Reads */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-bold uppercase tracking-wider">Lượt Đọc (Reads / ngày)</span>
-                  <span className="text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
-                    Còn {(50000 - (quotaStats.readsToday || quotaStats.reads || 0)).toLocaleString('vi-VN')} lượt free
-                  </span>
+              {/* Card 1: Firestore Quota & Usage */}
+              <a
+                href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group bg-gradient-to-br from-amber-500/10 via-white to-white p-5 rounded-2xl border border-amber-200/80 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-xl bg-amber-500 text-white shadow-xs">
+                      <BarChart3 className="w-5 h-5" />
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Thời Gian Thực (Google)
+                    </span>
+                  </div>
+                  <h4 className="text-base font-black text-slate-900 group-hover:text-amber-700 transition-colors flex items-center gap-1.5">
+                    <span>Thống Kê Reads / Writes (Usage)</span>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Xem biểu đồ tổng lượt Đọc, Ghi, Xóa trực tiếp từ máy chủ Google Firebase với độ chính xác tuyệt đối.
+                  </p>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900">{quotaStats.readsToday || quotaStats.reads || 0}</span>
-                  <span className="text-xs text-slate-400 font-medium">/ 50,000 free mỗi ngày</span>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
+                  <span>Mở trang Thống Kê Firestore</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </div>
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(1, (((quotaStats.readsToday || quotaStats.reads || 0)) / 50000) * 100))}%` }}
-                  />
-                </div>
-                <span className="text-[11px] text-slate-400 block">Đã dùng {((((quotaStats.readsToday || quotaStats.reads || 0)) / 50000) * 100).toFixed(2)}% hạn mức đọc miễn phí hôm nay</span>
-              </div>
+              </a>
 
-              {/* Writes */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-bold uppercase tracking-wider">Lượt Ghi (Writes / ngày)</span>
-                  <span className="text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
-                    Còn {(20000 - (quotaStats.writesToday || quotaStats.writes || 0)).toLocaleString('vi-VN')} lượt free
-                  </span>
+              {/* Card 2: Firestore Database Explorer */}
+              <a
+                href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/databases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group bg-gradient-to-br from-sky-500/10 via-white to-white p-5 rounded-2xl border border-sky-200/80 hover:border-sky-400 hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-xl bg-sky-600 text-white shadow-xs">
+                      <Database className="w-5 h-5" />
+                    </span>
+                    <span className="text-[11px] font-bold text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md">
+                      Duyệt & Quản Lý
+                    </span>
+                  </div>
+                  <h4 className="text-base font-black text-slate-900 group-hover:text-sky-700 transition-colors flex items-center gap-1.5">
+                    <span>Trình Duyệt Dữ Liệu Cloud</span>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Trực tiếp xem các bảng documents <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">products</code>, <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">orders</code>, <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">sellers</code> trên Cloud.
+                  </p>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900">{quotaStats.writesToday || quotaStats.writes || 0}</span>
-                  <span className="text-xs text-slate-400 font-medium">/ 20,000 free mỗi ngày</span>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-sky-700">
+                  <span>Mở Firestore Database Explorer</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </div>
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-sky-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(1, (((quotaStats.writesToday || quotaStats.writes || 0)) / 20000) * 100))}%` }}
-                  />
-                </div>
-                <span className="text-[11px] text-slate-400 block">Đã dùng {((((quotaStats.writesToday || quotaStats.writes || 0)) / 20000) * 100).toFixed(2)}% hạn mức ghi miễn phí hôm nay</span>
-              </div>
+              </a>
 
-              {/* Deletes */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-bold uppercase tracking-wider">Lượt Xóa (Deletes / ngày)</span>
-                  <span className="text-emerald-700 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
-                    Còn {(20000 - (quotaStats.deletesToday || quotaStats.deletes || 0)).toLocaleString('vi-VN')} lượt free
-                  </span>
+              {/* Card 3: Project Billing & Spark Plan Limits */}
+              <a
+                href="https://console.firebase.google.com/project/jittery-study-nzp2g/usage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group bg-gradient-to-br from-emerald-500/10 via-white to-white p-5 rounded-2xl border border-emerald-200/80 hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
+                      <Server className="w-5 h-5" />
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
+                      Gói Spark Miễn Phí
+                    </span>
+                  </div>
+                  <h4 className="text-base font-black text-slate-900 group-hover:text-emerald-700 transition-colors flex items-center gap-1.5">
+                    <span>Hạn Mức & Băng Thông Dự Án</span>
+                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Theo dõi 1.0 GB dung lượng lưu trữ miễn phí vĩnh viễn, 10 GB băng thông hàng tháng và tình trạng vận hành dự án.
+                  </p>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900">{quotaStats.deletesToday || quotaStats.deletes || 0}</span>
-                  <span className="text-xs text-slate-400 font-medium">/ 20,000 free mỗi ngày</span>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-emerald-700">
+                  <span>Mở Tổng Quan Gói Dự Án</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </div>
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(1, (((quotaStats.deletesToday || quotaStats.deletes || 0)) / 20000) * 100))}%` }}
-                  />
-                </div>
-                <span className="text-[11px] text-slate-400 block">Đã dùng {((((quotaStats.deletesToday || quotaStats.deletes || 0)) / 20000) * 100).toFixed(2)}% hạn mức xóa miễn phí hôm nay</span>
-              </div>
+              </a>
             </div>
 
             {/* Storage Quota Card - Dynamically Computed */}
@@ -5872,7 +5904,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Dung Lượng Dữ Liệu & Ảnh Firestore</span>
                         <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                          Gói Miễn Phí Spark Plan
+                          Gói Miễn Phí Spark Plan (1,024 MB)
                         </span>
                       </div>
                       <div className="flex items-baseline gap-2">
@@ -5893,7 +5925,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Băng Thông Mạng (Egress Bandwidth)</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Băng Thông Mạng (Egress Bandwidth)</span>
+                        <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                          10.0 GB Miễn Phí / Tháng
+                        </span>
+                      </div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-black text-slate-900">~14.2 MB</span>
                         <span className="text-xs text-slate-500">/ 10.0 GB Free mỗi tháng (Còn lại 99.86% trống)</span>
@@ -5910,11 +5947,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   {/* Detailed Storage Breakdown Card */}
                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-xs space-y-3">
                     <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <span>📊</span>
-                      <span>Chi Tiết Phân Bổ Dung Lượng Trong Cơ Sở Dữ Liệu</span>
+                      <HardDrive className="w-4 h-4 text-slate-600" />
+                      <span>Chi Tiết Phân Bổ Dung Lượng Thực Tế Trong Cơ Sở Dữ Liệu</span>
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-slate-500 block text-[11px] font-medium">Sản phẩm & Ảnh tải lên:</span>
                         <span className="text-base font-black text-slate-900 mt-1 block">
                           ~{(productsBytes / (1024 * 1024)).toFixed(2)} MB
@@ -5922,7 +5959,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         <span className="text-[10px] text-slate-400 mt-0.5 block">{products.length} sản phẩm trên web</span>
                       </div>
 
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-slate-500 block text-[11px] font-medium">Đơn hàng & Hóa đơn:</span>
                         <span className="text-base font-black text-slate-900 mt-1 block">
                           ~{(ordersBytes / 1024).toFixed(1)} KB
@@ -5930,7 +5967,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         <span className="text-[10px] text-slate-400 mt-0.5 block">{orders.length} đơn hàng đã lưu</span>
                       </div>
 
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                         <span className="text-slate-500 block text-[11px] font-medium">Giao diện, Danh mục & Banner:</span>
                         <span className="text-base font-black text-slate-900 mt-1 block">
                           ~{(configBytes / 1024).toFixed(1)} KB
@@ -5938,14 +5975,67 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         <span className="text-[10px] text-slate-400 mt-0.5 block">{localCategories.length} danh mục, {localCollections.length} BST</span>
                       </div>
                     </div>
-
-                    <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-amber-900 text-[11px] leading-relaxed">
-                      💡 <strong>Lưu ý về số liệu Firebase Console:</strong> Trên trang quản trị Google Firebase Cloud Console, mục Thống kê Quota (Usage) được Google tổng hợp định kỳ và thường có độ trễ cập nhật từ <strong>24 đến 48 giờ</strong>. Tại trang quản trị này, hệ thống đã tính toán trực tiếp dung lượng thực tế của tất cả ảnh sản phẩm và dữ liệu bạn đã tải lên để bạn an tâm theo dõi.
-                    </div>
                   </div>
                 </div>
               );
             })()}
+
+            {/* Session Activity Counters */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-emerald-600" />
+                    <span>Lượt Đọc / Ghi Ước Tính Trong Phiên Làm Việc Hiện Tại</span>
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Bộ đếm này chỉ ghi nhận các truy vấn đọc/ghi thực hiện trên trình duyệt của bạn trong phiên hiện tại.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetQuotaSession}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                  title="Đặt lại bộ đếm phiên này về 0"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Đặt Lại Bộ Đếm Phiên</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Đọc (Reads / phiên)</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900">{quotaStats.reads || 0}</span>
+                    <span className="text-xs text-slate-400">/ 50,000 free/ngày</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Ghi (Writes / phiên)</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900">{quotaStats.writes || 0}</span>
+                    <span className="text-xs text-slate-400">/ 20,000 free/ngày</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Xóa (Deletes / phiên)</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-2xl font-black text-slate-900">{quotaStats.deletes || 0}</span>
+                    <span className="text-xs text-slate-400">/ 20,000 free/ngày</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
+                <span className="text-sm shrink-0">💡</span>
+                <div>
+                  <strong>Hướng dẫn xem thống kê chính thức từ Google:</strong> Thống kê reads/writes của toàn bộ khách hàng ghé thăm website được Google Firebase cập nhật liên tục trên Google Cloud Console. Để xem báo cáo chi tiết nhất với đồ thị thời gian thực, bạn vui lòng nhấp vào nút <strong>"Mở Firebase Console (Chính Thức)"</strong> ở trên hoặc <a href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage" target="_blank" rel="noopener noreferrer" className="underline font-bold text-amber-950 hover:text-amber-800">truy cập trực tiếp tại đây ↗</a>.
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -6013,6 +6103,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           }}
           onZoomReceipt={(img) => setZoomReceiptImage(img)}
           onEdit={(ord) => setEditingOrder(ord)}
+          onDelete={(orderId) => {
+            setInspectingOrder(null);
+            handleDeleteOrder(orderId);
+          }}
         />
       )}
 
@@ -6141,7 +6235,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => deleteConfirmModal.onConfirm()}
+                onClick={async () => {
+                  const onConfirmFn = deleteConfirmModal.onConfirm;
+                  setDeleteConfirmModal(null);
+                  try {
+                    await onConfirmFn();
+                  } catch (err) {
+                    console.error('Lỗi khi thực hiện xác nhận xóa:', err);
+                  }
+                }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
               >
                 <span>{deleteConfirmModal.confirmLabel || 'Xác nhận xóa'}</span>

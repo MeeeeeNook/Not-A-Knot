@@ -145,13 +145,15 @@ export const getStatusBadgeConfig = (status?: string) => {
 };
 
 /**
- * Làm sạch ghi chú đơn hàng, loại bỏ tiền tố tự sinh cũ [Nguồn: ...] nếu có.
- * Nếu chỉ có tiền tố nguồn mà người dùng không nhập gì thì trả về chuỗi rỗng.
+ * Làm sạch ghi chú đơn hàng, loại bỏ tiền tố tự sinh cũ [Nguồn: ...] hoặc (Đặt qua Web) nếu có.
+ * Nếu không có ghi chú thực tế từ khách thì trả về chuỗi rỗng.
  */
 export const getCleanOrderNote = (note?: string | null): string => {
   if (!note) return '';
-  const trimmed = note.trim();
-  return trimmed.replace(/^\[Nguồn:\s*[^\]]+\]\s*/i, '').trim();
+  let cleaned = note.trim();
+  cleaned = cleaned.replace(/^\[Nguồn:\s*[^\]]+\]\s*/i, '');
+  cleaned = cleaned.replace(/\(?\s*Đặt qua Web\s*\)?/gi, '');
+  return cleaned.trim();
 };
 
 /**

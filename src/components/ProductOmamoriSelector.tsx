@@ -1,95 +1,95 @@
 import React from 'react';
-import { ProductCharmOption } from '../types';
-import { Check, Sparkles, X } from 'lucide-react';
+import { ProductOmamoriOption } from '../types';
+import { Check, Flame, X } from 'lucide-react';
 
-interface ProductCharmSelectorProps {
-  charms: ProductCharmOption[];
-  selectedCharm?: string;
-  selectedCharms?: ProductCharmOption[];
-  onSelectCharm?: (charm: ProductCharmOption | null) => void;
-  onSelectCharms?: (charms: ProductCharmOption[]) => void;
+interface ProductOmamoriSelectorProps {
+  omamoris: ProductOmamoriOption[];
+  selectedOmamori?: string;
+  selectedOmamoris?: ProductOmamoriOption[];
+  onSelectOmamori?: (omamori: ProductOmamoriOption | null) => void;
+  onSelectOmamoris?: (omamoris: ProductOmamoriOption[]) => void;
   maxAllowed?: number;
   isRequired?: boolean;
 }
 
-export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
-  charms,
-  selectedCharm,
-  selectedCharms,
-  onSelectCharm,
-  onSelectCharms,
+export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
+  omamoris,
+  selectedOmamori,
+  selectedOmamoris,
+  onSelectOmamori,
+  onSelectOmamoris,
   maxAllowed = 1,
   isRequired = false,
 }) => {
-  if (!charms || charms.length === 0) return null;
+  if (!omamoris || omamoris.length === 0) return null;
 
   // Resolve current active selection array
-  const currentSelection: ProductCharmOption[] = React.useMemo(() => {
-    if (selectedCharms && selectedCharms.length > 0) {
-      return selectedCharms;
+  const currentSelection: ProductOmamoriOption[] = React.useMemo(() => {
+    if (selectedOmamoris && selectedOmamoris.length > 0) {
+      return selectedOmamoris;
     }
-    if (selectedCharm) {
-      const found = charms.find(
-        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
+    if (selectedOmamori) {
+      const found = omamoris.find(
+        (o) => o.name.trim().toLowerCase() === selectedOmamori.trim().toLowerCase()
       );
       return found ? [found] : [];
     }
     return [];
-  }, [selectedCharms, selectedCharm, charms]);
+  }, [selectedOmamoris, selectedOmamori, omamoris]);
 
   const [limitNotice, setLimitNotice] = React.useState<string | null>(null);
 
   const totalExtraPrice = React.useMemo(() => {
-    return currentSelection.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
+    return currentSelection.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
   }, [currentSelection]);
 
-  const handleToggleCharm = (charm: ProductCharmOption) => {
+  const handleToggleOmamori = (omamori: ProductOmamoriOption) => {
     const isAlreadySelected = currentSelection.some(
-      (c) => (c.id && c.id === charm.id) || c.name.trim().toLowerCase() === charm.name.trim().toLowerCase()
+      (o) => (o.id && o.id === omamori.id) || o.name.trim().toLowerCase() === omamori.name.trim().toLowerCase()
     );
 
-    let nextSelection: ProductCharmOption[];
+    let nextSelection: ProductOmamoriOption[];
 
     if (isAlreadySelected) {
       if (isRequired && currentSelection.length <= 1) {
         return;
       }
       nextSelection = currentSelection.filter(
-        (c) => !((c.id && c.id === charm.id) || c.name.trim().toLowerCase() === charm.name.trim().toLowerCase())
+        (o) => !((o.id && o.id === omamori.id) || o.name.trim().toLowerCase() === omamori.name.trim().toLowerCase())
       );
       setLimitNotice(null);
     } else {
       if (currentSelection.length >= maxAllowed) {
-        setLimitNotice(`Đã đạt tối đa ${maxAllowed} charm. Hãy bỏ chọn bớt trước khi thêm.`);
+        setLimitNotice(`Đã đạt tối đa ${maxAllowed} bùa. Hãy bỏ chọn bớt trước khi thêm.`);
         return;
       }
       setLimitNotice(null);
-      nextSelection = [...currentSelection, charm];
+      nextSelection = [...currentSelection, omamori];
     }
 
-    if (onSelectCharms) {
-      onSelectCharms(nextSelection);
+    if (onSelectOmamoris) {
+      onSelectOmamoris(nextSelection);
     }
-    if (onSelectCharm) {
-      onSelectCharm(nextSelection[0] || null);
+    if (onSelectOmamori) {
+      onSelectOmamori(nextSelection[0] || null);
     }
   };
 
-  const handleRemoveCharm = (charmIdOrName: string) => {
+  const handleRemoveOmamori = (omamoriIdOrName: string) => {
     if (isRequired && currentSelection.length <= 1) return;
     const nextSelection = currentSelection.filter(
-      (c) => (c.id ? c.id !== charmIdOrName : c.name !== charmIdOrName)
+      (o) => (o.id ? o.id !== omamoriIdOrName : o.name !== omamoriIdOrName)
     );
     setLimitNotice(null);
-    if (onSelectCharms) onSelectCharms(nextSelection);
-    if (onSelectCharm) onSelectCharm(nextSelection[0] || null);
+    if (onSelectOmamoris) onSelectOmamoris(nextSelection);
+    if (onSelectOmamori) onSelectOmamori(nextSelection[0] || null);
   };
 
   const handleClearAll = () => {
     if (isRequired) return;
     setLimitNotice(null);
-    if (onSelectCharms) onSelectCharms([]);
-    if (onSelectCharm) onSelectCharm(null);
+    if (onSelectOmamoris) onSelectOmamoris([]);
+    if (onSelectOmamori) onSelectOmamori(null);
   };
 
   return (
@@ -98,8 +98,8 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 text-xs font-bold text-slate-800 tracking-wide">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Chọn Charm {isRequired && <span className="text-rose-500">*</span>}</span>
+            <Flame className="w-3.5 h-3.5 text-rose-500" />
+            <span>Chọn Bùa Omamori {isRequired && <span className="text-rose-500">*</span>}</span>
           </div>
 
           <span className="text-[11px] text-slate-500 font-medium">
@@ -113,7 +113,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
 
         <div className="flex items-center gap-2">
           {totalExtraPrice > 0 && (
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70">
+            <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/70">
               +{totalExtraPrice.toLocaleString('vi-VN')}đ
             </span>
           )}
@@ -153,20 +153,20 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
               className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/90 text-slate-800 px-2.5 py-1 rounded-lg text-xs font-medium group transition-all"
             >
               {maxAllowed > 1 && (
-                <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
                   {idx + 1}
                 </span>
               )}
               <span className="truncate max-w-[140px]">{item.name}</span>
               {item.priceDelta && item.priceDelta > 0 ? (
-                <span className="text-[10px] text-amber-700 font-semibold">
+                <span className="text-[10px] text-rose-700 font-semibold">
                   (+{item.priceDelta.toLocaleString('vi-VN')}đ)
                 </span>
               ) : null}
               {!isRequired && (
                 <button
                   type="button"
-                  onClick={() => handleRemoveCharm(item.id || item.name)}
+                  onClick={() => handleRemoveOmamori(item.id || item.name)}
                   className="text-slate-400 hover:text-rose-500 ml-0.5 cursor-pointer p-0.5"
                   title="Bỏ chọn"
                 >
@@ -178,58 +178,58 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
         </div>
       )}
 
-      {/* Grid of charm cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {charms.map((charm, idx) => {
+      {/* Grid of Omamori cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {omamoris.map((omamori, idx) => {
           const selectedIndex = currentSelection.findIndex(
-            (c) => (c.id && c.id === charm.id) || c.name.trim().toLowerCase() === charm.name.trim().toLowerCase()
+            (o) => (o.id && o.id === omamori.id) || o.name.trim().toLowerCase() === omamori.name.trim().toLowerCase()
           );
           const isSelected = selectedIndex !== -1;
-          const isOutOfStock = typeof charm.stock === 'number' && charm.stock <= 0;
+          const isOutOfStock = typeof omamori.stock === 'number' && omamori.stock <= 0;
 
           return (
             <button
-              key={charm.id || idx}
+              key={omamori.id || idx}
               type="button"
               disabled={isOutOfStock}
               onClick={() => {
                 if (isOutOfStock) return;
-                handleToggleCharm(charm);
+                handleToggleOmamori(omamori);
               }}
               className={`relative rounded-xl p-2 text-left border transition-all duration-150 flex flex-col items-center justify-between ${
                 isOutOfStock
                   ? 'opacity-50 grayscale bg-slate-50 border-slate-200 cursor-not-allowed select-none'
                   : isSelected
-                  ? 'border-amber-500 bg-amber-50/50 shadow-xs ring-1 ring-amber-400/50 cursor-pointer'
+                  ? 'border-rose-500 bg-rose-50/50 shadow-xs ring-1 ring-rose-400/50 cursor-pointer'
                   : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50 cursor-pointer'
               }`}
             >
               {/* Selection indicator */}
               {isSelected && !isOutOfStock && (
-                <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs text-[10px] font-bold">
+                <div className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-xs text-[10px] font-bold">
                   {maxAllowed > 1 ? selectedIndex + 1 : <Check className="w-3 h-3" strokeWidth={2.5} />}
                 </div>
               )}
 
-              {/* Charm Image */}
-              <div className="w-full aspect-square rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative">
-                {charm.image && charm.image.trim() ? (
+              {/* Omamori Image */}
+              <div className="w-full aspect-[4/5] rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative">
+                {omamori.image && omamori.image.trim() ? (
                   <img
-                    src={charm.image}
-                    alt={charm.name}
+                    src={omamori.image}
+                    alt={omamori.name}
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"
                     loading="lazy"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-slate-300 font-medium">
-                    Charm
+                    Bùa
                   </div>
                 )}
 
                 {/* Extra price badge */}
-                {charm.priceDelta && charm.priceDelta > 0 ? (
+                {omamori.priceDelta && omamori.priceDelta > 0 ? (
                   <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/80 text-white font-medium px-1.5 py-0.5 rounded shadow-xs backdrop-blur-[1px]">
-                    +{charm.priceDelta.toLocaleString('vi-VN')}đ
+                    +{omamori.priceDelta.toLocaleString('vi-VN')}đ
                   </span>
                 ) : null}
 
@@ -246,11 +246,11 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
               {/* Card Label */}
               <div className="w-full text-center">
                 <span className={`text-[11px] block truncate leading-tight ${isSelected ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
-                  {charm.name}
+                  {omamori.name}
                 </span>
-                {isSelected && typeof charm.stock === 'number' && charm.stock > 0 && (
-                  <span className="text-[10px] block text-amber-700 font-semibold mt-0.5 animate-fadeIn">
-                    Còn {charm.stock} cái
+                {isSelected && typeof omamori.stock === 'number' && omamori.stock > 0 && (
+                  <span className="text-[10px] block text-rose-700 font-semibold mt-0.5 animate-fadeIn">
+                    Còn {omamori.stock} cái
                   </span>
                 )}
                 {isOutOfStock && (

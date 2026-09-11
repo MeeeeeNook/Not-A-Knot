@@ -74,7 +74,8 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
     setHasError(false);
   }, [src]);
 
-  const activeSrc = hasError ? fallbackSrc : src;
+  const validSrc = typeof src === 'string' && src.trim().length > 0 ? src : fallbackSrc;
+  const activeSrc = hasError ? fallbackSrc : validSrc;
 
   return (
     <div
@@ -92,7 +93,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
       )}
 
       {/* Actual Image rendered only when in view */}
-      {isInView && (
+      {isInView && activeSrc && (
         <img
           src={activeSrc}
           alt={alt}

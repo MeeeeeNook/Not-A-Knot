@@ -66,6 +66,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [timeRange, setTimeRange] = useState<'all' | 'today' | '7days' | '30days' | 'this_month'>('all');
   const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>('all');
+  const [productRankingSortBy, setProductRankingSortBy] = useState<'revenue' | 'quantity' | 'orders'>('revenue');
 
   type SellerSortField = 'rank' | 'name' | 'orderCount' | 'totalRevenue' | 'percent';
   const [sellerSortField, setSellerSortField] = useState<SellerSortField>('totalRevenue');
@@ -515,7 +516,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // 11. Best Selling Products Ranking
   const topProductsRanking = useMemo(() => {
-    const prodMap: Record<string, { id: string; name: string; image?: string; price: number; quantitySold: number; totalRevenue: number; stock: number }> = {};
+    const prodMap: Record<
+      string,
+      {
+        id: string;
+        name: string;
+        image?: string;
+        price: number;
+        quantitySold: number;
+        totalRevenue: number;
+        ordersCount: number;
+        stock: number;
+      }
+    > = {};
 
     products.forEach((p) => {
       prodMap[p.id] = {
@@ -525,30 +538,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         price: p.price,
         quantitySold: 0,
         totalRevenue: 0,
-        stock: p.stock ?? 15
+        ordersCount: 0,
+        stock: p.stock ?? 15,
       };
     });
 
     validOrders.forEach((ord) => {
       if (ord.itemDetails && ord.itemDetails.length > 0) {
+        const productsInOrder = new Set<string>();
         ord.itemDetails.forEach((it) => {
+          let targetId = '';
           if (prodMap[it.productId]) {
-            prodMap[it.productId].quantitySold += it.quantity;
-            prodMap[it.productId].totalRevenue += it.price * it.quantity;
+            targetId = it.productId;
           } else {
             const found = products.find((p) => p.name === it.productName);
             if (found && prodMap[found.id]) {
-              prodMap[found.id].quantitySold += it.quantity;
-              prodMap[found.id].totalRevenue += it.price * it.quantity;
+              targetId = found.id;
             }
+          }
+
+          if (targetId && prodMap[targetId]) {
+            prodMap[targetId].quantitySold += it.quantity;
+            prodMap[targetId].totalRevenue += it.price * it.quantity;
+            productsInOrder.add(targetId);
+          }
+        });
+
+        productsInOrder.forEach((pid) => {
+          if (prodMap[pid]) {
+            prodMap[pid].ordersCount += 1;
           }
         });
       }
     });
 
-    return Object.values(prodMap)
-      .sort((a, b) => b.totalRevenue - a.totalRevenue || b.quantitySold - a.quantitySold);
-  }, [validOrders, products]);
+    return Object.values(prodMap).sort((a, b) => {
+      if (productRankingSortBy === 'revenue') {
+        return b.totalRevenue - a.totalRevenue || b.quantitySold - a.quantitySold;
+      }
+      if (productRankingSortBy === 'quantity') {
+        return b.quantitySold - a.quantitySold || b.totalRevenue - a.totalRevenue;
+      }
+      if (productRankingSortBy === 'orders') {
+        return b.ordersCount - a.ordersCount || b.totalRevenue - a.totalRevenue;
+      }
+      return 0;
+    });
+  }, [validOrders, products, productRankingSortBy]);
 
   // 12. Category Breakdown
   const categoryRevenueMetrics = useMemo(() => {
@@ -804,73 +840,141 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {/* Payment Methods */}
-        <div className="lg:col-span-6 bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <h4 className="font-bold text-sm text-slate-900">
-              Phương Thức Thanh Toán
-            </h4>
-            <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-              {paymentMetrics.billAttachedCount} đơn có ảnh Bill
-            </span>
-          </div>
+        {(() => {
+          const totalPaymentRev = (paymentMetrics.bankTransfer.revenue + paymentMetrics.cod.revenue + paymentMetrics.cash.revenue) || 1;
+          const totalPaymentOrders = (paymentMetrics.bankTransfer.count + paymentMetrics.cod.count + paymentMetrics.cash.count) || 1;
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
-              <span className="text-xs font-bold text-slate-800 block">Chuyển Khoản</span>
-              <span className="text-sm font-bold text-slate-900 block">
-                {paymentMetrics.bankTransfer.revenue.toLocaleString('vi-VN')}đ
-              </span>
-              <span className="text-[10px] text-slate-500 block">
-                {paymentMetrics.bankTransfer.count} đơn
-              </span>
+          const bankTransferRevPercent = Math.round((paymentMetrics.bankTransfer.revenue / totalPaymentRev) * 100);
+          const codRevPercent = Math.round((paymentMetrics.cod.revenue / totalPaymentRev) * 100);
+          const cashRevPercent = Math.round((paymentMetrics.cash.revenue / totalPaymentRev) * 100);
+
+          const bankTransferOrderPercent = Math.round((paymentMetrics.bankTransfer.count / totalPaymentOrders) * 100);
+          const codOrderPercent = Math.round((paymentMetrics.cod.count / totalPaymentOrders) * 100);
+          const cashOrderPercent = Math.round((paymentMetrics.cash.count / totalPaymentOrders) * 100);
+
+          return (
+            <div className="lg:col-span-6 bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="font-bold text-sm text-slate-900">
+                  Phương Thức Thanh Toán
+                </h4>
+                <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                  Tổng {totalPaymentOrders.toLocaleString('vi-VN')} đơn
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Chuyển Khoản</span>
+                    <span className="text-[11px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                      {bankTransferRevPercent}%
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-slate-900 block">
+                    {paymentMetrics.bankTransfer.revenue.toLocaleString('vi-VN')}đ
+                  </span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>{paymentMetrics.bankTransfer.count} đơn</span>
+                    <span>{bankTransferOrderPercent}% số đơn</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full" style={{ width: `${Math.max(2, bankTransferRevPercent)}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Thu Tiền COD</span>
+                    <span className="text-[11px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                      {codRevPercent}%
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-slate-900 block">
+                    {paymentMetrics.cod.revenue.toLocaleString('vi-VN')}đ
+                  </span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>{paymentMetrics.cod.count} đơn</span>
+                    <span>{codOrderPercent}% số đơn</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.max(2, codRevPercent)}%` }} />
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">Tiền Mặt</span>
+                    <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                      {cashRevPercent}%
+                    </span>
+                  </div>
+                  <span className="text-sm font-bold text-slate-900 block">
+                    {paymentMetrics.cash.revenue.toLocaleString('vi-VN')}đ
+                  </span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>{paymentMetrics.cash.count} đơn</span>
+                    <span>{cashOrderPercent}% số đơn</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-600 rounded-full" style={{ width: `${Math.max(2, cashRevPercent)}%` }} />
+                  </div>
+                </div>
+              </div>
             </div>
-
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
-              <span className="text-xs font-bold text-slate-800 block">Thu Tiền COD</span>
-              <span className="text-sm font-bold text-slate-900 block">
-                {paymentMetrics.cod.revenue.toLocaleString('vi-VN')}đ
-              </span>
-              <span className="text-[10px] text-slate-500 block">
-                {paymentMetrics.cod.count} đơn
-              </span>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
-              <span className="text-xs font-bold text-slate-800 block">Tiền Mặt</span>
-              <span className="text-sm font-bold text-slate-900 block">
-                {paymentMetrics.cash.revenue.toLocaleString('vi-VN')}đ
-              </span>
-              <span className="text-[10px] text-slate-500 block">
-                {paymentMetrics.cash.count} đơn
-              </span>
-            </div>
-          </div>
-
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-            <span className="text-slate-600">
-              Kiểm tra hình ảnh chứng từ bill chuyển khoản trong mục Quản Lý Đơn Hàng
-            </span>
-            <button
-              type="button"
-              onClick={onNavigateToOrders}
-              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold text-[11px] whitespace-nowrap transition-colors"
-            >
-              Mở Đơn Hàng
-            </button>
-          </div>
-        </div>
+          );
+        })()}
 
       </div>
 
       {/* Row 4: Top Best-Selling Products Ranking */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-          <h4 className="font-bold text-sm text-slate-900">
-            Xếp Hạng Sản Phẩm Bán Chạy
-          </h4>
-          <span className="text-xs text-slate-500 font-medium">
-            Theo doanh thu
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+          <div>
+            <h4 className="font-bold text-sm text-slate-900">
+              Xếp Hạng Sản Phẩm
+            </h4>
+            <span className="text-[11px] text-slate-500 font-medium">
+              Sắp xếp theo {productRankingSortBy === 'revenue' ? 'doanh thu' : productRankingSortBy === 'quantity' ? 'số lượng bán' : 'số đơn hàng chứa sản phẩm'}
+            </span>
+          </div>
+
+          {/* Sort Selector Buttons */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setProductRankingSortBy('revenue')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                productRankingSortBy === 'revenue'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Doanh thu
+            </button>
+            <button
+              type="button"
+              onClick={() => setProductRankingSortBy('quantity')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                productRankingSortBy === 'quantity'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Số lượng bán
+            </button>
+            <button
+              type="button"
+              onClick={() => setProductRankingSortBy('orders')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                productRankingSortBy === 'orders'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Số đơn hàng
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -880,16 +984,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <th className="p-2.5">Hạng</th>
                 <th className="p-2.5">Sản Phẩm</th>
                 <th className="p-2.5">Giá Bán</th>
-                <th className="p-2.5 text-center">Đã Bán</th>
-                <th className="p-2.5">Doanh Thu</th>
+                <th className={`p-2.5 text-center ${productRankingSortBy === 'quantity' ? 'bg-amber-100/70 text-amber-950 font-black' : ''}`}>
+                  Đã Bán
+                </th>
+                <th className={`p-2.5 text-center ${productRankingSortBy === 'orders' ? 'bg-indigo-100/70 text-indigo-950 font-black' : ''}`}>
+                  Số Đơn Hàng
+                </th>
+                <th className={`p-2.5 ${productRankingSortBy === 'revenue' ? 'bg-emerald-100/70 text-emerald-950 font-black' : ''}`}>
+                  Doanh Thu
+                </th>
                 <th className="p-2.5 text-right">Tồn Kho</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {topProductsRanking.slice(0, 8).map((prod, idx) => (
+              {topProductsRanking.slice(0, 10).map((prod, idx) => (
                 <tr key={prod.id} className="hover:bg-slate-50">
                   <td className="p-2.5 font-bold text-slate-900">
-                    #{idx + 1}
+                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                      idx === 0 ? 'bg-amber-400 text-slate-950 shadow-2xs' : idx === 1 ? 'bg-slate-200 text-slate-800' : idx === 2 ? 'bg-amber-200 text-amber-900' : 'text-slate-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
                   </td>
                   <td className="p-2.5">
                     <div className="flex items-center gap-2">
@@ -910,11 +1025,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {prod.price.toLocaleString('vi-VN')}đ
                   </td>
                   <td className="p-2.5 text-center whitespace-nowrap">
-                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-bold text-xs">
+                    <span className={`px-2 py-0.5 rounded font-bold text-xs ${
+                      productRankingSortBy === 'quantity' ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 font-black' : 'bg-slate-100 text-slate-800'
+                    }`}>
                       {prod.quantitySold} cái
                     </span>
                   </td>
-                  <td className="p-2.5 whitespace-nowrap font-bold text-slate-900">
+                  <td className="p-2.5 text-center whitespace-nowrap">
+                    <span className={`px-2 py-0.5 rounded font-bold text-xs ${
+                      productRankingSortBy === 'orders' ? 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-300 font-black' : 'bg-slate-100 text-slate-800'
+                    }`}>
+                      {prod.ordersCount} đơn
+                    </span>
+                  </td>
+                  <td className={`p-2.5 whitespace-nowrap font-bold ${
+                    productRankingSortBy === 'revenue' ? 'text-emerald-700 bg-emerald-50/60 font-black' : 'text-slate-900'
+                  }`}>
                     {prod.totalRevenue.toLocaleString('vi-VN')}đ
                   </td>
                   <td className="p-2.5 text-right whitespace-nowrap">

@@ -14,6 +14,7 @@ interface ProductCatalogProps {
   onOpenProductDetail: (product: Product) => void;
   onAddToCart: (product: Product) => void;
   onBackToHome?: () => void;
+  isLoading?: boolean;
 }
 
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
@@ -25,6 +26,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   onOpenProductDetail,
   onAddToCart,
   onBackToHome,
+  isLoading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
@@ -317,8 +319,43 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               </div>
             </div>
 
-            {/* Product Grid */}
-            {filteredProducts.length === 0 ? (
+            {/* Product Grid / Skeleton */}
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5" id="product-catalog-skeleton-loader">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={`skeleton-card-${idx}`}
+                    className="bg-white rounded-2xl sm:rounded-3xl border border-neutral-200/80 p-3 sm:p-4 shadow-xs flex flex-col justify-between animate-pulse"
+                  >
+                    <div>
+                      {/* Skeleton Image with shimmering effect */}
+                      <div className="w-full aspect-square rounded-xl sm:rounded-2xl bg-neutral-200 relative overflow-hidden mb-3 sm:mb-4">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+                      </div>
+
+                      {/* Skeleton Badge Row */}
+                      <div className="flex items-center justify-between gap-1.5 mb-2">
+                        <div className="h-3 sm:h-4 w-16 sm:w-20 bg-neutral-200 rounded-full" />
+                        <div className="h-3 sm:h-4 w-10 sm:w-14 bg-neutral-200/80 rounded-full" />
+                      </div>
+
+                      {/* Skeleton Title Lines */}
+                      <div className="h-4 sm:h-5 w-4/5 bg-neutral-200 rounded-md mb-1.5" />
+                      <div className="h-3 sm:h-4 w-3/5 bg-neutral-200/70 rounded-md mb-2 sm:mb-3" />
+                    </div>
+
+                    {/* Skeleton Price & Add button */}
+                    <div className="pt-2 sm:pt-3 border-t border-neutral-100 flex items-center justify-between gap-2 mt-1 sm:mt-2">
+                      <div className="space-y-1">
+                        <div className="h-4 sm:h-6 w-16 sm:w-24 bg-neutral-200 rounded-md" />
+                        <div className="h-2.5 sm:h-3 w-12 sm:w-16 bg-neutral-200/60 rounded-md" />
+                      </div>
+                      <div className="h-7 sm:h-10 w-14 sm:w-24 bg-neutral-200 rounded-xl sm:rounded-2xl" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-3xl border border-neutral-200 max-w-xl mx-auto p-8 shadow-xs">
                 <p className="text-neutral-700 font-bold text-base mb-2">
                   Không tìm thấy sản phẩm phù hợp
@@ -340,7 +377,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
                 <AnimatePresence mode="popLayout">
                   {filteredProducts.map((product) => (
                     <ProductCard
@@ -348,6 +385,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                       product={product}
                       onOpenDetail={onOpenProductDetail}
                       onAddToCart={onAddToCart}
+                      categories={categories}
+                      collections={collections}
                     />
                   ))}
                 </AnimatePresence>

@@ -59,7 +59,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-rose-100 flex items-center gap-3 cursor-pointer hover:border-rose-300 transition-colors"
                 >
                   <img
-                    src={event2010Item.image}
+                    src={event2010Item.image || '/assets/bracelet.jpg'}
                     alt={event2010Item.name}
                     className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                     loading="lazy"
@@ -106,7 +106,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-purple-100 flex items-center gap-3 cursor-pointer hover:border-purple-300 transition-colors"
                 >
                   <img
-                    src={charmItem.image}
+                    src={charmItem.image || '/assets/bracelet.jpg'}
                     alt={charmItem.name}
                     className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                     loading="lazy"
@@ -153,7 +153,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-neutral-200 flex items-center gap-3 cursor-pointer hover:border-neutral-400 transition-colors"
                 >
                   <img
-                    src={everydayItem.image}
+                    src={everydayItem.image || '/assets/bracelet.jpg'}
                     alt={everydayItem.name}
                     className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                     loading="lazy"

@@ -6,23 +6,29 @@ import { AboutUsSection } from './components/AboutUsSection';
 import { LandingFaqCommitments } from './components/LandingFaqCommitments';
 import { AboutPage } from './components/AboutPage';
 import { ContactPage } from './components/ContactPage';
-import { DynamicCustomElements } from './components/DynamicCustomElements';
 import { CollectionDetailPage } from './components/CollectionDetailPage';
 import { ProductCatalog } from './components/ProductCatalog';
 import { ProductDetailPage } from './components/ProductDetailPage';
 import { CartDrawer } from './components/CartDrawer';
 import { CartPage } from './components/CartPage';
 import { OrderTracker } from './components/OrderTracker';
-import { AdminPage } from './components/AdminPage';
 import { Footer } from './components/Footer';
+import { FloatingChatWidget } from './components/FloatingChatWidget';
+import { FlyingProductCartAnimation, FlyingCartItemData } from './components/FlyingProductCartAnimation';
 import { PRODUCTS } from './data/products';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
-import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from './types';
+import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers } from './utils/auth';
+import { initDevToolsProtection } from './utils/securityGuard';
+
+// Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
+const AdminPage = React.lazy(() =>
+  import('./components/AdminPage').then((m) => ({ default: m.AdminPage }))
+);
 import {
   fetchProductsFromFirestore,
   fetchCategoriesFromFirestore,
@@ -47,6 +53,13 @@ import {
   recordSessionHeartbeat,
   recordPageTimeSpent
 } from './utils/analytics';
+import {
+  safeStorageGetItem,
+  safeStorageSetItem,
+  serializeCartItems,
+  deserializeCartItems,
+  evictDisposableStorageSpace,
+} from './utils/storageHelper';
 
 export default function App() {
   // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page)
@@ -105,6 +118,8 @@ export default function App() {
     return PRODUCTS;
   });
 
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
+
   const productsRef = useRef<Product[]>(products);
   useEffect(() => {
     productsRef.current = products;
@@ -146,11 +161,12 @@ export default function App() {
   });
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
 
-  // Cart state with localStorage initialization
+  // Cart state with safe storage initialization
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem('nak_cart');
-      return saved ? JSON.parse(saved) : [];
+      evictDisposableStorageSpace();
+      const saved = safeStorageGetItem('nak_cart');
+      return deserializeCartItems(saved, PRODUCTS);
     } catch {
       return [];
     }
@@ -158,6 +174,30 @@ export default function App() {
 
   // Modal visibility states
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Flying product to cart animation states
+  const [flyingCartItems, setFlyingCartItems] = useState<FlyingCartItemData[]>([]);
+  const [isCartBumping, setIsCartBumping] = useState(false);
+  const cartBumpTimerRef = useRef<any>(null);
+  const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+  useEffect(() => {
+    const handlePointer = (e: MouseEvent | TouchEvent | PointerEvent) => {
+      if ('touches' in e && e.touches.length > 0) {
+        lastPointerPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      } else if ('clientX' in e && (e.clientX > 0 || e.clientY > 0)) {
+        lastPointerPosRef.current = { x: e.clientX, y: e.clientY };
+      }
+    };
+    window.addEventListener('pointerdown', handlePointer, { passive: true, capture: true });
+    window.addEventListener('touchstart', handlePointer, { passive: true, capture: true });
+    window.addEventListener('click', handlePointer, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('pointerdown', handlePointer, { capture: true } as any);
+      window.removeEventListener('touchstart', handlePointer, { capture: true } as any);
+      window.removeEventListener('click', handlePointer, { capture: true } as any);
+    };
+  }, []);
 
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -259,6 +299,14 @@ export default function App() {
     }
   }, []);
 
+  // Initialize anti-inspection and DevTools protection (redirects non-admin visitors on F12 / inspect)
+  useEffect(() => {
+    const cleanupProtection = initDevToolsProtection();
+    return () => {
+      cleanupProtection();
+    };
+  }, []);
+
   // Listen to browser hash changes (Back / Forward buttons) & track GA4 page views
   useEffect(() => {
     const handleHashChange = () => {
@@ -316,15 +364,11 @@ export default function App() {
       try {
         const dbSellers = await fetchSellersFromFirestore();
         if (dbSellers && dbSellers.length > 0) {
-          const clean = deduplicateSellers(dbSellers);
-          setSellers(clean);
-          try {
-            localStorage.setItem('nak_sellers_list', JSON.stringify(clean));
-          } catch {
-            // ignore
-          }
+          const cleanSellersList = deduplicateSellers(dbSellers);
+          setSellers(cleanSellersList);
+          safeStorageSetItem('nak_sellers_list', JSON.stringify(cleanSellersList));
         } else {
-          const local = localStorage.getItem('nak_sellers_list');
+          const local = safeStorageGetItem('nak_sellers_list');
           if (local) {
             try {
               const parsed = JSON.parse(local);
@@ -337,11 +381,7 @@ export default function App() {
             const defaults = await createDefaultSellers();
             const clean = deduplicateSellers(defaults);
             setSellers(clean);
-            try {
-              localStorage.setItem('nak_sellers_list', JSON.stringify(clean));
-            } catch {
-              // ignore
-            }
+            safeStorageSetItem('nak_sellers_list', JSON.stringify(clean));
           }
         }
       } catch {
@@ -386,31 +426,27 @@ export default function App() {
             if (!curr) return null;
             return cloudProds.find((p) => p.id === curr.id) || curr;
           });
-          try {
-            localStorage.setItem('nak_custom_products', JSON.stringify(cloudProds));
-          } catch {}
+          safeStorageSetItem('nak_custom_products', JSON.stringify(cloudProds));
         }
         if (cloudCats && cloudCats.length > 0) {
           setCategories(cloudCats);
-          try {
-            localStorage.setItem('nak_categories', JSON.stringify(cloudCats));
-          } catch {}
+          safeStorageSetItem('nak_categories', JSON.stringify(cloudCats));
         }
         if (cloudCols && cloudCols.length > 0) {
           const sorted = [...cloudCols].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           setCollections(sorted);
-          try {
-            localStorage.setItem('nak_collections', JSON.stringify(sorted));
-          } catch {}
+          safeStorageSetItem('nak_collections', JSON.stringify(sorted));
         }
         if (cloudSite) {
           setSiteContent(cloudSite);
-          try {
-            localStorage.setItem('nak_site_content', JSON.stringify(cloudSite));
-          } catch {}
+          safeStorageSetItem('nak_site_content', JSON.stringify(cloudSite));
         }
       } catch (err) {
         console.warn('Initial cloud fetch notice:', err);
+      } finally {
+        if (isMounted) {
+          setIsProductsLoading(false);
+        }
       }
     };
     loadInitialCloudData();
@@ -418,6 +454,7 @@ export default function App() {
     // B. Real-time Products listener (auto-syncs products, prices, stock, images live)
     const unsubProducts = subscribeToProductsFromFirestore((realtimeProducts) => {
       if (!isMounted) return;
+      setIsProductsLoading(false);
       if (realtimeProducts && realtimeProducts.length > 0) {
         setProducts(realtimeProducts);
         setSelectedProduct((curr) => {
@@ -425,11 +462,7 @@ export default function App() {
           const matched = realtimeProducts.find((p) => p.id === curr.id);
           return matched || curr;
         });
-        try {
-          localStorage.setItem('nak_custom_products', JSON.stringify(realtimeProducts));
-        } catch (e) {
-          console.warn("Lỗi lưu local products từ real-time sync:", e);
-        }
+        safeStorageSetItem('nak_custom_products', JSON.stringify(realtimeProducts));
       }
     });
 
@@ -438,9 +471,7 @@ export default function App() {
       if (!isMounted) return;
       if (realtimeCats && realtimeCats.length > 0) {
         setCategories(realtimeCats);
-        try {
-          localStorage.setItem('nak_categories', JSON.stringify(realtimeCats));
-        } catch {}
+        safeStorageSetItem('nak_categories', JSON.stringify(realtimeCats));
       }
     });
 
@@ -450,11 +481,7 @@ export default function App() {
       if (realtimeCols && realtimeCols.length > 0) {
         const sorted = [...realtimeCols].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         setCollections(sorted);
-        try {
-          localStorage.setItem('nak_collections', JSON.stringify(sorted));
-        } catch (e) {
-          console.warn("Lỗi lưu local collections từ real-time sync:", e);
-        }
+        safeStorageSetItem('nak_collections', JSON.stringify(sorted));
       }
     });
 
@@ -463,11 +490,7 @@ export default function App() {
       if (!isMounted) return;
       if (realtimeContent) {
         setSiteContent(realtimeContent);
-        try {
-          localStorage.setItem('nak_site_content', JSON.stringify(realtimeContent));
-        } catch (e) {
-          console.warn("Lỗi lưu local site_content từ real-time sync:", e);
-        }
+        safeStorageSetItem('nak_site_content', JSON.stringify(realtimeContent));
       }
     });
 
@@ -514,7 +537,7 @@ export default function App() {
         if (isMounted && latest && latest.length > 0) {
           setProducts((prev) => {
             if (JSON.stringify(prev) !== JSON.stringify(latest)) {
-              try { localStorage.setItem('nak_custom_products', JSON.stringify(latest)); } catch {}
+              safeStorageSetItem('nak_custom_products', JSON.stringify(latest));
               return latest;
             }
             return prev;
@@ -539,52 +562,36 @@ export default function App() {
   const handleUpdateSiteContent = (newConfig: SiteContentConfig) => {
     setSiteContent(newConfig);
     broadcastStoreChange('siteContent', newConfig);
-    try {
-      localStorage.setItem('nak_site_content', JSON.stringify(newConfig));
-      saveSiteContentToFirestore(newConfig).catch((err) => console.warn('Lỗi đồng bộ site_content:', err));
-    } catch (e) {
-      console.warn('Lỗi lưu site_content:', e);
-    }
+    safeStorageSetItem('nak_site_content', JSON.stringify(newConfig));
+    saveSiteContentToFirestore(newConfig).catch((err) => console.warn('Lỗi đồng bộ site_content:', err));
   };
 
   const handleUpdateCollections = (newCols: CollectionInfo[]) => {
     setCollections(newCols);
     broadcastStoreChange('collections', newCols);
-    try {
-      localStorage.setItem('nak_collections', JSON.stringify(newCols));
-      Promise.all(newCols.map((c) => saveCollectionToFirestore(c))).catch((err) =>
-        console.warn('Lỗi đồng bộ collections lên Firebase:', err)
-      );
-    } catch (e) {
-      console.error("Lỗi lưu collections:", e);
-    }
+    safeStorageSetItem('nak_collections', JSON.stringify(newCols));
+    Promise.all(newCols.map((c) => saveCollectionToFirestore(c))).catch((err) =>
+      console.warn('Lỗi đồng bộ collections lên Firebase:', err)
+    );
   };
 
   const handleUpdateCategories = (newCats: CategoryItem[]) => {
     setCategories(newCats);
     broadcastStoreChange('categories', newCats);
-    try {
-      localStorage.setItem('nak_categories', JSON.stringify(newCats));
-      Promise.all(newCats.map((cat) => saveCategoryToFirestore(cat))).catch((err) =>
-        console.warn('Lỗi đồng bộ categories lên Firebase:', err)
-      );
-    } catch (e) {
-      console.error("Lỗi lưu danh mục:", e);
-    }
+    safeStorageSetItem('nak_categories', JSON.stringify(newCats));
+    Promise.all(newCats.map((cat) => saveCategoryToFirestore(cat))).catch((err) =>
+      console.warn('Lỗi đồng bộ categories lên Firebase:', err)
+    );
   };
 
   const handleUpdateProducts = (newProducts: Product[]) => {
     setProducts(newProducts);
     broadcastStoreChange('products', newProducts);
-    try {
-      localStorage.setItem('nak_custom_products', JSON.stringify(newProducts));
-      // Tự động sao lưu và đồng bộ danh sách sản phẩm lên Firestore Cloud (xóa các item thừa để luôn khớp 100%)
-      pushAndSyncProductsToFirestore(newProducts, true).catch((err) =>
-        console.warn('Lỗi tự động sao lưu sản phẩm lên Firestore:', err)
-      );
-    } catch (e) {
-      console.error("Lỗi lưu sản phẩm vào bộ nhớ:", e);
-    }
+    safeStorageSetItem('nak_custom_products', JSON.stringify(newProducts));
+    // Tự động sao lưu và đồng bộ danh sách sản phẩm lên Firestore Cloud (xóa các item thừa để luôn khớp 100%)
+    pushAndSyncProductsToFirestore(newProducts, true).catch((err) =>
+      console.warn('Lỗi tự động sao lưu sản phẩm lên Firestore:', err)
+    );
     if (selectedProduct) {
       const updatedCurr = newProducts.find((p) => p.id === selectedProduct.id);
       if (updatedCurr) {
@@ -593,12 +600,13 @@ export default function App() {
     }
   };
 
-  // Cart Persistence
+  // Cart Persistence with lightweight serialization
   useEffect(() => {
     try {
-      localStorage.setItem('nak_cart', JSON.stringify(cartItems));
+      const serialized = serializeCartItems(cartItems);
+      safeStorageSetItem('nak_cart', serialized);
     } catch (e) {
-      console.error("Lỗi lưu giỏ hàng vào localStorage:", e);
+      console.warn("Lỗi lưu giỏ hàng:", e);
     }
   }, [cartItems]);
 
@@ -618,65 +626,81 @@ export default function App() {
     selectedCharm?: string,
     selectedColorImage?: string,
     selectedCharmImage?: string,
-    selectedCharmPrice?: number
+    selectedCharmPrice?: number,
+    selectedCharms?: ProductCharmOption[],
+    selectedOmamoris?: ProductOmamoriOption[],
+    selectedOmamoriPrice?: number
   ) => {
-    // Do not cap cart quantity at 1. If stock is 1 or unset, allow standard ordering up to 99
-    const maxStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`);
       return;
     }
 
-    let addedSuccessfully = false;
+    // Determine max available stock for this product
+    const maxStock = typeof product.stock === 'number' && product.stock > 0 ? product.stock : 99;
+    const currentInCartForProduct = cartItems
+      .filter((item) => item.product.id === product.id)
+      .reduce((sum, item) => sum + item.quantity, 0);
 
-    setCartItems((prev) => {
-      const currentInCartForProduct = prev
-        .filter((item) => item.product.id === product.id)
-        .reduce((sum, item) => sum + item.quantity, 0);
+    const availableToAdd = maxStock - currentInCartForProduct;
+    if (availableToAdd <= 0 && maxStock < 99) {
+      showToast(`Bạn đã có đủ số lượng tồn kho (${maxStock} cái) của "${product.name}" trong giỏ!`);
+      return;
+    }
 
-      const availableToAdd = maxStock - currentInCartForProduct;
-      if (availableToAdd <= 0 && maxStock < 99) {
-        showToast(`Bạn đã có đủ số lượng tồn kho (${maxStock} cái) của "${product.name}" trong giỏ!`);
-        return prev;
-      }
-
-      // Check charm stock if charm selected
-      if (selectedCharm && product.charmOptions) {
-        const charmOpt = product.charmOptions.find(
-          (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
-        );
-        if (charmOpt && typeof charmOpt.stock === 'number') {
-          if (charmOpt.stock <= 0) {
-            showToast(`Mẫu charm "${selectedCharm}" hiện đã hết hàng trong kho!`);
-            return prev;
-          }
-          const currentInCartForCharm = prev
-            .filter((it) => it.product.id === product.id && (it.selectedCharm || '').trim().toLowerCase() === selectedCharm.trim().toLowerCase())
-            .reduce((sum, it) => sum + it.quantity, 0);
-          if (currentInCartForCharm + quantity > charmOpt.stock) {
-            showToast(`Mẫu charm "${selectedCharm}" chỉ còn ${charmOpt.stock} cái trong kho.`);
-            return prev;
-          }
+    // Check charm stock if charm selected
+    if (selectedCharms && selectedCharms.length > 0) {
+      for (const ch of selectedCharms) {
+        if (typeof ch.stock === 'number' && ch.stock <= 0) {
+          showToast(`Mẫu charm "${ch.name}" hiện đã hết hàng trong kho!`);
+          return;
         }
       }
+    } else if (selectedCharm && product.charmOptions) {
+      const charmOpt = product.charmOptions.find(
+        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
+      );
+      if (charmOpt && typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
+        showToast(`Mẫu charm "${selectedCharm}" hiện đã hết hàng trong kho!`);
+        return;
+      }
+    }
 
-      const qtyToAdd = Math.max(1, Math.min(quantity, availableToAdd > 0 ? availableToAdd : quantity));
+    // Check omamori stock if selected
+    if (selectedOmamoris && selectedOmamoris.length > 0) {
+      for (const om of selectedOmamoris) {
+        if (typeof om.stock === 'number' && om.stock <= 0) {
+          showToast(`Bùa "${om.name}" hiện đã hết hàng trong kho!`);
+          return;
+        }
+      }
+    }
 
-      const existingIdx = prev.findIndex(
-        (item) =>
+    const qtyToAdd = Math.max(1, Math.min(quantity, availableToAdd > 0 ? availableToAdd : quantity));
+    const charmsKey = (selectedCharms || []).map((c) => c.name).sort().join(';');
+    const omamorisKey = (selectedOmamoris || []).map((o) => o.name).sort().join(';');
+
+    setCartItems((prev) => {
+      const existingIdx = prev.findIndex((item) => {
+        const itemCharmsKey = (item.selectedCharms || []).map((c) => c.name).sort().join(';');
+        const itemOmamorisKey = (item.selectedOmamoris || []).map((o) => o.name).sort().join(';');
+        return (
           item.product.id === product.id &&
           item.selectedColor === selectedColor &&
           item.selectedCharm === selectedCharm &&
           item.selectedSize === selectedSize &&
-          item.customNote === customNote
-      );
-
-      addedSuccessfully = true;
+          item.customNote === customNote &&
+          charmsKey === itemCharmsKey &&
+          omamorisKey === itemOmamorisKey
+        );
+      });
 
       if (existingIdx > -1) {
-        const updated = [...prev];
-        updated[existingIdx].quantity += qtyToAdd;
-        return updated;
+        return prev.map((item, idx) =>
+          idx === existingIdx
+            ? { ...item, quantity: item.quantity + qtyToAdd }
+            : item
+        );
       } else {
         return [
           ...prev,
@@ -688,6 +712,9 @@ export default function App() {
             selectedCharm,
             selectedCharmImage,
             selectedCharmPrice,
+            selectedCharms,
+            selectedOmamoris,
+            selectedOmamoriPrice,
             selectedSize,
             customNote
           }
@@ -695,10 +722,68 @@ export default function App() {
       }
     });
 
-    if (addedSuccessfully) {
-      trackGA4AddToCart(product, quantity, selectedColor, selectedSize);
-      showToast(`Đã thêm "${product.name}" vào giỏ hàng!`);
+    trackGA4AddToCart(product, qtyToAdd, selectedColor, selectedSize);
+    showToast(`Đã thêm "${product.name}" vào giỏ hàng!`);
+
+    // Trigger flying product animation to cart icon
+    try {
+      const cartBtn = document.getElementById('nav-cart-btn');
+      let endX = Math.max(20, window.innerWidth - 60);
+      let endY = 32;
+      if (cartBtn) {
+        const rect = cartBtn.getBoundingClientRect();
+        endX = rect.left + rect.width / 2;
+        endY = rect.top + rect.height / 2;
+      }
+
+      let startX = lastPointerPosRef.current.x;
+      let startY = lastPointerPosRef.current.y;
+
+      // Fallback to active element if pointer pos is default
+      if (startX <= 0 || startY <= 0) {
+        if (document.activeElement && document.activeElement !== document.body) {
+          const activeRect = document.activeElement.getBoundingClientRect();
+          if (activeRect.width > 0 && activeRect.height > 0) {
+            startX = activeRect.left + activeRect.width / 2;
+            startY = activeRect.top + activeRect.height / 2;
+          }
+        }
+      }
+
+      // Clamp inside screen bounds
+      startX = Math.max(30, Math.min(window.innerWidth - 30, startX));
+      startY = Math.max(50, Math.min(window.innerHeight - 50, startY));
+      endX = Math.max(30, Math.min(window.innerWidth - 30, endX));
+      endY = Math.max(20, Math.min(window.innerHeight - 30, endY));
+
+      // Always use the primary product image as requested
+      const mainProductImage = product.image || (product.images && product.images[0]) || '/assets/bracelet.jpg';
+
+      const flyingId = `fly-${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${Math.round(performance.now())}`;
+      const flyItem: FlyingCartItemData = {
+        id: flyingId,
+        image: mainProductImage,
+        startX,
+        startY,
+        endX,
+        endY,
+      };
+
+      setFlyingCartItems((prev) => [...prev, flyItem]);
+    } catch (e) {
+      console.warn('Lỗi hiệu ứng bay vào giỏ:', e);
     }
+  };
+
+  const handleFlyingItemComplete = (id: string) => {
+    setFlyingCartItems((prev) => prev.filter((it) => it.id !== id));
+    setIsCartBumping(true);
+    if (cartBumpTimerRef.current) {
+      clearTimeout(cartBumpTimerRef.current);
+    }
+    cartBumpTimerRef.current = setTimeout(() => {
+      setIsCartBumping(false);
+    }, 450);
   };
 
   const handleUpdateCartQuantity = (index: number, quantity: number) => {
@@ -794,11 +879,7 @@ export default function App() {
       });
 
       if (hasChanges) {
-        try {
-          localStorage.setItem('nak_products', JSON.stringify(updated));
-        } catch {
-          // ignore
-        }
+        safeStorageSetItem('nak_custom_products', JSON.stringify(updated));
         return updated;
       }
       return prevProducts;
@@ -1047,6 +1128,7 @@ export default function App() {
       {currentView !== 'admin' && (
         <Navbar
           cartCount={totalCartCount}
+          isCartBumping={isCartBumping}
           categories={categories}
           collections={collections}
           siteContent={siteContent}
@@ -1070,19 +1152,6 @@ export default function App() {
         {/* VIEW 1: Landing Page */}
         {currentView === 'landing' && (
           <>
-            {/* Top Custom Dynamic Elements (if any created in Site Editor) */}
-            <DynamicCustomElements
-              elements={siteContent?.customElements}
-              position="top"
-              onActionClick={(url) => {
-                if (url.startsWith('#')) {
-                  window.location.hash = url;
-                } else {
-                  window.open(url, '_blank');
-                }
-              }}
-            />
-
             {/* Hero Carousel */}
             <HeroBanners
               slides={siteContent?.heroSlides}
@@ -1091,19 +1160,6 @@ export default function App() {
               onSelectBannerCategory={handleHeroSlideNavigation}
               onOpen0209Event={() => handleSelectCollection('event_0209')}
               onOpenAbout={handleOpenAbout}
-            />
-
-            {/* Middle Custom Dynamic Elements */}
-            <DynamicCustomElements
-              elements={siteContent?.customElements}
-              position="middle"
-              onActionClick={(url) => {
-                if (url.startsWith('#')) {
-                  window.location.hash = url;
-                } else {
-                  window.open(url, '_blank');
-                }
-              }}
             />
 
             {/* Collection Showcase Cards */}
@@ -1119,19 +1175,6 @@ export default function App() {
               onOpenContact={handleOpenContact}
               onOpenCatalog={() => handleOpenAllCatalog('all')}
               onOpenFullAbout={handleOpenAbout}
-            />
-
-            {/* Bottom Custom Dynamic Elements */}
-            <DynamicCustomElements
-              elements={siteContent?.customElements}
-              position="bottom"
-              onActionClick={(url) => {
-                if (url.startsWith('#')) {
-                  window.location.hash = url;
-                } else {
-                  window.open(url, '_blank');
-                }
-              }}
             />
 
             {/* Dedicated FAQ Section positioned at the very bottom of Landing Page */}
@@ -1170,6 +1213,7 @@ export default function App() {
             onOpenProductDetail={handleOpenProductDetail}
             onAddToCart={(p) => handleAddToCart(p, 1)}
             onBackToHome={handleNavigateLanding}
+            isLoading={isProductsLoading}
           />
         )}
 
@@ -1195,19 +1239,29 @@ export default function App() {
         {/* VIEW 6: Dedicated Standalone Admin Portal Page with Strict Auth Gating */}
         {currentView === 'admin' && (
           currentSeller ? (
-            <AdminPage
-              products={products}
-              categories={categories}
-              collections={collections}
-              siteContent={siteContent}
-              currentSeller={currentSeller}
-              onUpdateProducts={handleUpdateProducts}
-              onUpdateCategories={handleUpdateCategories}
-              onUpdateCollections={handleUpdateCollections}
-              onUpdateSiteContent={handleUpdateSiteContent}
-              onLogout={handleAdminLogout}
-              onBackToStore={handleNavigateLanding}
-            />
+            <React.Suspense
+              fallback={
+                <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white">
+                  <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
+                  <p className="text-sm font-bold text-amber-100 tracking-wide">Đang nạp không gian quản trị bảo mật...</p>
+                  <span className="text-xs text-slate-400 mt-1">Dữ liệu được bảo vệ và mã hóa theo phiên</span>
+                </div>
+              }
+            >
+              <AdminPage
+                products={products}
+                categories={categories}
+                collections={collections}
+                siteContent={siteContent}
+                currentSeller={currentSeller}
+                onUpdateProducts={handleUpdateProducts}
+                onUpdateCategories={handleUpdateCategories}
+                onUpdateCollections={handleUpdateCollections}
+                onUpdateSiteContent={handleUpdateSiteContent}
+                onLogout={handleAdminLogout}
+                onBackToStore={handleNavigateLanding}
+              />
+            </React.Suspense>
           ) : (
             <div className="min-h-[75vh] flex flex-col items-center justify-center p-6 text-center bg-slate-50">
               <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center mx-auto mb-4 shadow-xs">
@@ -1259,11 +1313,11 @@ export default function App() {
             }
             onBack={handleCloseProductDetail}
             onSelectProduct={handleOpenProductDetail}
-            onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice);
+            onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice) => {
+              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice);
             }}
-            onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice);
+            onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice) => {
+              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice);
               handleOpenCartDrawer();
             }}
           />
@@ -1317,6 +1371,20 @@ export default function App() {
         sellers={sellers}
         brandName={siteContent?.brandName}
         logoUrl={siteContent?.logoUrl}
+      />
+
+      {/* Non-intrusive Floating Customer Support & Direct Chat Bubble */}
+      {currentView !== 'admin' && (
+        <FloatingChatWidget
+          siteContent={siteContent}
+          currentOrderCode={orderTrackerInitialCode}
+        />
+      )}
+
+      {/* Interactive Fly-To-Cart Dynamic Visual Animation */}
+      <FlyingProductCartAnimation
+        items={flyingCartItems}
+        onItemComplete={handleFlyingItemComplete}
       />
     </div>
   );

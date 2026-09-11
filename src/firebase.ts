@@ -16,7 +16,7 @@ import {
   writeBatch,
   onSnapshot
 } from 'firebase/firestore';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser } from './types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
 
 // Load client configuration from firebase-applet-config.json
@@ -58,6 +58,17 @@ try {
 
 export const db = firestoreInstance;
 
+export function isQuotaExhaustedError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('resource-exhausted') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Quota exceeded') ||
+    msg.includes('Free daily write units per project')
+  );
+}
+
 /**
  * Strips undefined values recursively so Firestore setDoc/updateDoc never throws:
  * "Function setDoc() called with invalid data. Unsupported field value: undefined".
@@ -97,8 +108,8 @@ export async function compressBase64Image(
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
     return dataUrl;
   }
-  // If it's already tiny (< 60KB), return directly to save cycles
-  if (dataUrl.length < 60 * 1024) {
+  // If it's already reasonably compact (< 180KB), return directly to save CPU & memory cycles
+  if (dataUrl.length < 180 * 1024) {
     return dataUrl;
   }
 
@@ -206,28 +217,37 @@ const getTodayDateKey = (): string => {
   }
 };
 
+const sanitizeCount = (val: string | null, fallback: number = 0, maxAllowed: number = 50000): number => {
+  const num = parseInt(val || '0', 10);
+  if (isNaN(num) || num < 0 || num > maxAllowed) return fallback;
+  return num;
+};
+
+const sanitizeStorage = (val: string | null, fallback: number = 845000): number => {
+  const num = parseInt(val || '0', 10);
+  if (isNaN(num) || num < 0 || num > 1024 * 1024 * 1024) return fallback;
+  return num;
+};
+
 const storedDate = typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_ops_date') : null;
 const currentDate = getTodayDateKey();
 const isSameDay = storedDate === currentDate;
 
 if (typeof localStorage !== 'undefined' && !isSameDay) {
   localStorage.setItem('nak_fb_ops_date', currentDate);
-  // Roll over / initialize today counts
-  const prevReads = parseInt(localStorage.getItem('nak_fb_reads') || '28', 10);
-  const prevWrites = parseInt(localStorage.getItem('nak_fb_writes') || '16', 10);
-  localStorage.setItem('nak_fb_reads_today', Math.max(8, prevReads % 50).toString());
-  localStorage.setItem('nak_fb_writes_today', Math.max(4, prevWrites % 30).toString());
+  localStorage.setItem('nak_fb_reads_today', '0');
+  localStorage.setItem('nak_fb_writes_today', '0');
   localStorage.setItem('nak_fb_deletes_today', '0');
 }
 
 let quotaStats: FirestoreQuotaStats = {
-  reads: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_reads')) || '34', 10),
-  writes: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_writes')) || '18', 10),
-  deletes: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_deletes')) || '0', 10),
-  readsToday: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_reads_today')) || '34', 10),
-  writesToday: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_writes_today')) || '18', 10),
-  deletesToday: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_deletes_today')) || '0', 10),
-  estimatedStorageBytes: parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('nak_fb_storage')) || '845000', 10), // dynamically calculated
+  reads: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_reads') : null, 12),
+  writes: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_writes') : null, 6),
+  deletes: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_deletes') : null, 0),
+  readsToday: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_reads_today') : null, 12),
+  writesToday: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_writes_today') : null, 6),
+  deletesToday: sanitizeCount(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_deletes_today') : null, 0),
+  estimatedStorageBytes: sanitizeStorage(typeof localStorage !== 'undefined' ? localStorage.getItem('nak_fb_storage') : null, 845000),
   maxStorageBytes: 1024 * 1024 * 1024, // 1 GiB (1,024 MB) Spark Plan Free Tier
   lastSyncTime: new Date().toLocaleTimeString('vi-VN'),
   projectId: firebaseConfig.projectId,
@@ -260,6 +280,18 @@ export const subscribeQuotaStats = (listener: QuotaListener) => {
 };
 
 export const getLatestQuotaStats = (): FirestoreQuotaStats => {
+  return { ...quotaStats };
+};
+
+export const resetFirestoreQuotaStats = (): FirestoreQuotaStats => {
+  quotaStats.reads = 0;
+  quotaStats.writes = 0;
+  quotaStats.deletes = 0;
+  quotaStats.readsToday = 0;
+  quotaStats.writesToday = 0;
+  quotaStats.deletesToday = 0;
+  quotaStats.lastSyncTime = new Date().toLocaleTimeString('vi-VN');
+  notifyQuotaListeners();
   return { ...quotaStats };
 };
 
@@ -376,11 +408,27 @@ export interface StoredOrder {
   }[];
 }
 
+// In-memory cache for ultra-fast reads
+let productsMemoryCache: { data: Product[]; expiresAt: number } | null = null;
+let categoriesMemoryCache: { data: CategoryItem[]; expiresAt: number } | null = null;
+let ordersMemoryCache: { data: StoredOrder[]; expiresAt: number } | null = null;
+
+export const clearFirestoreMemoryCache = () => {
+  productsMemoryCache = null;
+  categoriesMemoryCache = null;
+  ordersMemoryCache = null;
+};
+
 // ----------------------------------------------------
 // Firestore Products CRUD
 // ----------------------------------------------------
-export const fetchProductsFromFirestore = async (): Promise<Product[]> => {
+export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<Product[]> => {
   try {
+    const now = Date.now();
+    if (!forceRefresh && productsMemoryCache && productsMemoryCache.expiresAt > now) {
+      return productsMemoryCache.data;
+    }
+
     recordOperation('read');
     const colRef = collection(db, 'products');
     const snap = await getDocs(colRef);
@@ -396,8 +444,10 @@ export const fetchProductsFromFirestore = async (): Promise<Product[]> => {
         price: data.price || 0,
         originalPrice: data.originalPrice,
         discountBadge: data.discountBadge,
-        image: data.image || '',
-        images: Array.isArray(data.images) && data.images.length > 0 ? data.images : (data.image ? [data.image] : []),
+        image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
+        images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
+          ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
+          : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
         description: data.description || '',
         details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây Paracord 550 cao cấp'],
         availableColors: data.availableColors,
@@ -407,6 +457,11 @@ export const fetchProductsFromFirestore = async (): Promise<Product[]> => {
         enableCharmSelection: !!data.enableCharmSelection,
         charmOptions: Array.isArray(data.charmOptions) ? data.charmOptions : undefined,
         charmSelectionRequired: !!data.charmSelectionRequired,
+        maxCharmsAllowed: typeof data.maxCharmsAllowed === 'number' ? data.maxCharmsAllowed : undefined,
+        enableOmamoriSelection: !!data.enableOmamoriSelection,
+        omamoriOptions: Array.isArray(data.omamoriOptions) ? data.omamoriOptions : undefined,
+        omamoriSelectionRequired: !!data.omamoriSelectionRequired,
+        maxOmamoriAllowed: typeof data.maxOmamoriAllowed === 'number' ? data.maxOmamoriAllowed : undefined,
         enableSizeSelection: !!data.enableSizeSelection,
         stock: rawStock,
         inStock: computedInStock,
@@ -422,10 +477,12 @@ export const fetchProductsFromFirestore = async (): Promise<Product[]> => {
       } as Product);
       recordOperation('read');
     });
+
+    productsMemoryCache = { data: results, expiresAt: now + 30000 };
     return results;
   } catch (err) {
     console.error('Lỗi tải sản phẩm từ Firestore:', err);
-    return [];
+    return productsMemoryCache ? productsMemoryCache.data : [];
   }
 };
 
@@ -453,8 +510,10 @@ export const subscribeToProductsFromFirestore = (
             price: data.price || 0,
             originalPrice: data.originalPrice,
             discountBadge: data.discountBadge,
-            image: data.image || '',
-            images: Array.isArray(data.images) && data.images.length > 0 ? data.images : (data.image ? [data.image] : []),
+            image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
+            images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
+              ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
+              : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
             description: data.description || '',
             details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây Paracord 550 cao cấp'],
             availableColors: data.availableColors,
@@ -464,6 +523,11 @@ export const subscribeToProductsFromFirestore = (
             enableCharmSelection: !!data.enableCharmSelection,
             charmOptions: Array.isArray(data.charmOptions) ? data.charmOptions : undefined,
             charmSelectionRequired: !!data.charmSelectionRequired,
+            maxCharmsAllowed: typeof data.maxCharmsAllowed === 'number' ? data.maxCharmsAllowed : undefined,
+            enableOmamoriSelection: !!data.enableOmamoriSelection,
+            omamoriOptions: Array.isArray(data.omamoriOptions) ? data.omamoriOptions : undefined,
+            omamoriSelectionRequired: !!data.omamoriSelectionRequired,
+            maxOmamoriAllowed: typeof data.maxOmamoriAllowed === 'number' ? data.maxOmamoriAllowed : undefined,
             enableSizeSelection: !!data.enableSizeSelection,
             stock: rawStock,
             inStock: computedInStock,
@@ -498,18 +562,18 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
     const stockVal = typeof prod.stock === 'number' ? prod.stock : 15;
     const inStockVal = prod.inStock !== false && stockVal > 0;
 
-    // 1. Optimize and compress main image if it is a Base64 string (HD 1400px, 0.88 quality)
+    // 1. Optimize and compress main image only if large Base64 string (> 180KB)
     let optimizedImage = prod.image;
-    if (optimizedImage && optimizedImage.startsWith('data:image/')) {
+    if (optimizedImage && optimizedImage.startsWith('data:image/') && optimizedImage.length > 180 * 1024) {
       optimizedImage = await compressBase64Image(optimizedImage, 1400, 1400, 0.88);
     }
 
-    // 2. Optimize and compress gallery images (HD 1200px, 0.86 quality)
+    // 2. Optimize and compress gallery images only if large Base64 (> 180KB)
     let optimizedImages = prod.images;
     if (Array.isArray(optimizedImages) && optimizedImages.length > 0) {
       optimizedImages = await Promise.all(
         optimizedImages.map(async (img) => {
-          if (img && img.startsWith('data:image/')) {
+          if (img && img.startsWith('data:image/') && img.length > 180 * 1024) {
             return await compressBase64Image(img, 1200, 1200, 0.86);
           }
           return img;
@@ -557,8 +621,13 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
     }
 
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', prodSize);
+    productsMemoryCache = null;
+    recordOperation('write', 1, prodSize);
   } catch (err) {
+    if (isQuotaExhaustedError(err)) {
+      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ cục bộ:', err);
+      return;
+    }
     console.error('Lỗi lưu sản phẩm lên Firestore:', err);
     throw err;
   }
@@ -568,8 +637,13 @@ export const deleteProductFromFirestore = async (productId: string): Promise<voi
   try {
     const docRef = doc(db, 'products', productId);
     await deleteDoc(docRef);
-    recordOperation('delete', -1500);
+    productsMemoryCache = null;
+    recordOperation('delete', 1, -1500);
   } catch (err) {
+    if (isQuotaExhaustedError(err)) {
+      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ cục bộ:', err);
+      return;
+    }
     console.error('Lỗi xóa sản phẩm trên Firestore:', err);
     throw err;
   }
@@ -650,8 +724,12 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
     });
     const orderSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', orderSize);
+    recordOperation('write', 1, orderSize);
   } catch (err) {
+    if (isQuotaExhaustedError(err)) {
+      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Đơn hàng tiếp tục lưu trữ cục bộ:', err);
+      return;
+    }
     console.error('Lỗi lưu đơn hàng Firestore:', err);
     throw err;
   }
@@ -682,7 +760,7 @@ export const pushAndSyncProductsToFirestore = async (
     if (purgeObsolete) {
       // 1. Lấy danh sách ID hiện tại trên Firestore
       const snap = await getDocs(collection(db, 'products'));
-      recordOperation('read', snap.size * 200);
+      recordOperation('read', 1);
       const currentIds = new Set(productsList.map((p) => p.id));
       const toDeleteDocs: string[] = [];
       snap.forEach((docSnap) => {
@@ -698,7 +776,7 @@ export const pushAndSyncProductsToFirestore = async (
           chunk.map(async (id) => {
             try {
               await deleteDoc(doc(db, 'products', id));
-              recordOperation('delete', -1500);
+              recordOperation('delete', 1, -1500);
             } catch (e) {
               console.warn('Lỗi dọn dẹp sản phẩm cũ:', id, e);
             }
@@ -733,7 +811,7 @@ export const pushAndSyncCategoriesToFirestore = async (
     let deletedCount = 0;
     if (purgeObsolete) {
       const snap = await getDocs(collection(db, 'categories'));
-      recordOperation('read', snap.size * 100);
+      recordOperation('read', 1);
       const currentCatIds = new Set(categoriesList.map((c) => c.id));
       const toDeleteDocs: string[] = [];
       snap.forEach((docSnap) => {
@@ -744,7 +822,7 @@ export const pushAndSyncCategoriesToFirestore = async (
       for (const id of toDeleteDocs) {
         try {
           await deleteDoc(doc(db, 'categories', id));
-          recordOperation('delete', -500);
+          recordOperation('delete', 1, -500);
         } catch (e) {
           console.warn('Lỗi dọn dẹp category cũ:', id, e);
         }
@@ -785,7 +863,7 @@ export const updateOrderStatusInFirestore = async (
       ...(extra?.paidAmount !== undefined ? { paidAmount: extra.paidAmount } : {}),
       updatedAt: new Date().toISOString()
     }));
-    recordOperation('write', 100);
+    recordOperation('write', 1, 100);
   } catch (err) {
     console.error('Lỗi cập nhật trạng thái đơn hàng Firestore:', err);
     throw err;
@@ -861,9 +939,30 @@ export const deleteOrderFromFirestore = async (orderId: string): Promise<void> =
   try {
     const docRef = doc(db, 'orders', orderId);
     await deleteDoc(docRef);
-    recordOperation('delete', -900);
+    ordersMemoryCache = null;
+    recordOperation('delete', 1, -900);
   } catch (err) {
     console.error('Lỗi xóa đơn hàng Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Fast bulk order deletion using atomic writeBatch for maximum speed
+ */
+export const deleteOrdersBatchFromFirestore = async (orderIds: string[]): Promise<void> => {
+  if (!orderIds || orderIds.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+    orderIds.forEach((id) => {
+      const docRef = doc(db, 'orders', id);
+      batch.delete(docRef);
+    });
+    await batch.commit();
+    ordersMemoryCache = null;
+    recordOperation('delete', orderIds.length, -900 * orderIds.length);
+  } catch (err) {
+    console.error('Lỗi xóa batch đơn hàng Firestore:', err);
     throw err;
   }
 };
@@ -871,9 +970,14 @@ export const deleteOrderFromFirestore = async (orderId: string): Promise<void> =
 // ----------------------------------------------------
 // Firestore Categories CRUD
 // ----------------------------------------------------
-export const fetchCategoriesFromFirestore = async (): Promise<CategoryItem[]> => {
+export const fetchCategoriesFromFirestore = async (forceRefresh = false): Promise<CategoryItem[]> => {
   try {
-    recordOperation('read');
+    const now = Date.now();
+    if (!forceRefresh && categoriesMemoryCache && categoriesMemoryCache.expiresAt > now) {
+      return categoriesMemoryCache.data;
+    }
+
+    recordOperation('read', 1);
     const colRef = collection(db, 'categories');
     const snap = await getDocs(colRef);
 
@@ -895,13 +999,13 @@ export const fetchCategoriesFromFirestore = async (): Promise<CategoryItem[]> =>
         isEvent: !!data.isEvent,
         isHidden: !!data.isHidden
       });
-      recordOperation('read');
     });
 
+    categoriesMemoryCache = { data: results, expiresAt: now + 30000 };
     return results;
   } catch (err) {
     console.error('Lỗi tải danh mục từ Firestore:', err);
-    return [];
+    return categoriesMemoryCache ? categoriesMemoryCache.data : DEFAULT_CATEGORIES;
   }
 };
 
@@ -955,7 +1059,7 @@ export const saveCategoryToFirestore = async (category: CategoryItem): Promise<v
     });
     const catSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', catSize);
+    recordOperation('write', 1, catSize);
   } catch (err) {
     console.error('Lỗi lưu danh mục Firestore:', err);
     throw err;
@@ -966,7 +1070,7 @@ export const deleteCategoryFromFirestore = async (categoryId: string): Promise<v
   try {
     const docRef = doc(db, 'categories', categoryId);
     await deleteDoc(docRef);
-    recordOperation('delete', -400);
+    recordOperation('delete', 1, -400);
   } catch (err) {
     console.error('Lỗi xóa danh mục Firestore:', err);
     throw err;
@@ -978,7 +1082,7 @@ export const deleteCategoryFromFirestore = async (categoryId: string): Promise<v
 // ----------------------------------------------------
 export const fetchCollectionsFromFirestore = async (): Promise<CollectionInfo[]> => {
   try {
-    recordOperation('read');
+    recordOperation('read', 1);
     const colRef = collection(db, 'collections');
     const snap = await getDocs(colRef);
     const results: CollectionInfo[] = [];
@@ -1004,7 +1108,6 @@ export const fetchCollectionsFromFirestore = async (): Promise<CollectionInfo[]>
         themeStyle: data.themeStyle || 'light',
         isHidden: !!data.isHidden
       });
-      recordOperation('read');
     });
     if (results.length > 0) {
       results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1101,7 +1204,7 @@ export const saveCollectionToFirestore = async (collectionItem: CollectionInfo):
     });
     const itemSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', itemSize);
+    recordOperation('write', 1, itemSize);
   } catch (err) {
     console.error('Lỗi lưu bộ sưu tập Firestore:', err);
     throw err;
@@ -1112,7 +1215,7 @@ export const deleteCollectionFromFirestore = async (collectionId: string): Promi
   try {
     const docRef = doc(db, 'collections', collectionId);
     await deleteDoc(docRef);
-    recordOperation('delete', -400);
+    recordOperation('delete', 1, -400);
   } catch (err) {
     console.error('Lỗi xóa bộ sưu tập Firestore:', err);
     throw err;
@@ -1302,7 +1405,7 @@ export const saveContactMessageToFirestore = async (msg: ContactMessage): Promis
       status: msg.status || 'unread'
     });
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', JSON.stringify(payload).length);
+    recordOperation('write', 1, JSON.stringify(payload).length);
 
     // Also update local cache
     try {
@@ -1335,7 +1438,7 @@ export const updateContactMessageStatusInFirestore = async (id: string, isRead: 
       status: isRead ? 'read' : 'unread',
       updatedAt: new Date().toISOString()
     }));
-    recordOperation('write', 60);
+    recordOperation('write', 1, 60);
 
     // Update local cache
     try {
@@ -1368,7 +1471,7 @@ export const deleteContactMessageFromFirestore = async (id: string): Promise<voi
   try {
     const docRef = doc(db, 'contact_messages', id);
     await deleteDoc(docRef);
-    recordOperation('delete', -300);
+    recordOperation('delete', 1, -300);
 
     // Update local cache
     try {
@@ -1402,7 +1505,7 @@ export const deleteContactMessageFromFirestore = async (id: string): Promise<voi
 // ----------------------------------------------------
 export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
   try {
-    recordOperation('read');
+    recordOperation('read', 1);
     const colRef = collection(db, 'sellers');
     const q = query(colRef, orderBy('createdAt', 'asc'));
     const snap = await getDocs(q);
@@ -1423,7 +1526,6 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         avatarColor: data.avatarColor || '#B41C1A',
         phone: data.phone || ''
       });
-      recordOperation('read');
     });
 
     // Deduplicate results by ID and username
@@ -1454,7 +1556,7 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
       updatedAt: new Date().toISOString()
     });
     await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', JSON.stringify(payload).length);
+    recordOperation('write', 1, JSON.stringify(payload).length);
   } catch (err) {
     console.error('Lỗi lưu tài khoản người bán trên Firestore:', err);
     throw err;
@@ -1471,7 +1573,7 @@ export const deleteSellerFromFirestore = async (sellerId: string): Promise<void>
   try {
     const docRef = doc(db, 'sellers', sellerId);
     await deleteDoc(docRef);
-    recordOperation('delete', -400);
+    recordOperation('delete', 1, -400);
   } catch (err) {
     console.error('Lỗi xóa người bán trên Firestore:', err);
     throw err;
@@ -1481,7 +1583,7 @@ export const deleteSellerFromFirestore = async (sellerId: string): Promise<void>
 // Ping / Connection Test
 export const testFirebaseConnection = async (): Promise<boolean> => {
   try {
-    recordOperation('read');
+    recordOperation('read', 1);
     const colRef = collection(db, 'products');
     await getDocs(query(colRef, limit(1)));
     return true;
@@ -1490,3 +1592,266 @@ export const testFirebaseConnection = async (): Promise<boolean> => {
     return false;
   }
 };
+
+// ==========================================
+// VERSION HISTORY & CLOUD BACKUPS (MAX 5)
+// ==========================================
+
+const IDB_BACKUP_DB = 'notaknot_backups_idb';
+const IDB_BACKUP_STORE = 'backups_store';
+
+function openBackupIDB(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      return resolve(null);
+    }
+    try {
+      const request = window.indexedDB.open(IDB_BACKUP_DB, 1);
+      request.onupgradeneeded = () => {
+        const idb = request.result;
+        if (!idb.objectStoreNames.contains(IDB_BACKUP_STORE)) {
+          idb.createObjectStore(IDB_BACKUP_STORE, { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function saveBackupsToIDB(backups: VersionBackup[]): Promise<void> {
+  try {
+    const idb = await openBackupIDB();
+    if (!idb) return;
+    const tx = idb.transaction(IDB_BACKUP_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_BACKUP_STORE);
+    store.clear();
+    for (const b of backups) {
+      store.put(b);
+    }
+  } catch {
+    // fallback gracefully
+  }
+}
+
+async function loadBackupsFromIDB(): Promise<VersionBackup[]> {
+  try {
+    const idb = await openBackupIDB();
+    if (!idb) return [];
+    return new Promise((resolve) => {
+      try {
+        const tx = idb.transaction(IDB_BACKUP_STORE, 'readonly');
+        const store = tx.objectStore(IDB_BACKUP_STORE);
+        const request = store.getAll();
+        request.onsuccess = () => resolve((request.result as VersionBackup[]) || []);
+        request.onerror = () => resolve([]);
+      } catch {
+        resolve([]);
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+function sanitizeBackupForFirestore(backup: VersionBackup): any {
+  const cleaned = cleanFirestoreData(backup);
+  try {
+    const str = JSON.stringify(cleaned);
+    // Firestore max document size is 1MB. If payload is large, trim heavy base64 strings
+    if (str.length > 750000 && cleaned.data) {
+      return {
+        ...cleaned,
+        data: {
+          ...cleaned.data,
+          products: cleaned.data.products?.map((p: any) => ({
+            ...p,
+            image: typeof p.image === 'string' && p.image.length > 50000 ? '' : p.image,
+            images: Array.isArray(p.images)
+              ? p.images.map((img: string) => (typeof img === 'string' && img.length > 50000 ? '' : img))
+              : p.images
+          }))
+        }
+      };
+    }
+  } catch {}
+  return cleaned;
+}
+
+export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
+  const backupMap = new Map<string, VersionBackup>();
+
+  // 1. Read from localStorage cache
+  try {
+    const cached = localStorage.getItem('notaknot_backups_cache');
+    if (cached) {
+      const list: VersionBackup[] = JSON.parse(cached);
+      if (Array.isArray(list)) {
+        list.forEach((b) => {
+          if (b && b.id) backupMap.set(b.id, b);
+        });
+      }
+    }
+  } catch {}
+
+  // 2. Read from IndexedDB
+  try {
+    const idbList = await loadBackupsFromIDB();
+    idbList.forEach((b) => {
+      if (b && b.id) {
+        const existing = backupMap.get(b.id);
+        if (!existing || (!existing.data && b.data)) {
+          backupMap.set(b.id, b);
+        }
+      }
+    });
+  } catch {}
+
+  // 3. Read from Firestore
+  try {
+    recordOperation('read');
+    const colRef = collection(db, 'backups');
+    const snap = await getDocs(colRef);
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && data.createdAt) {
+        const fsBackup = {
+          id: docSnap.id,
+          ...data
+        } as VersionBackup;
+
+        const localCopy = backupMap.get(docSnap.id);
+        // If local copy contains richer data, preserve it while updating metadata
+        if (localCopy && localCopy.data && (!fsBackup.data || Object.keys(fsBackup.data).length === 0)) {
+          backupMap.set(docSnap.id, { ...fsBackup, data: localCopy.data });
+        } else {
+          backupMap.set(docSnap.id, fsBackup);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('Không thể tải backup từ Firestore, sử dụng bộ nhớ cục bộ:', err);
+  }
+
+  const result = Array.from(backupMap.values())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  if (result.length > 0) {
+    saveBackupsToIDB(result);
+  }
+
+  return result;
+};
+
+/**
+ * Saves a backup to Firestore and IndexedDB, retaining the latest 5 backups.
+ */
+export const saveBackupToFirestore = async (backup: VersionBackup): Promise<VersionBackup[]> => {
+  // Fetch existing backups from all sources first
+  const existingList = await fetchBackupsFromFirestore();
+  const updatedList: VersionBackup[] = [
+    backup,
+    ...existingList.filter((b) => b.id !== backup.id)
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  // 1. Immediately persist to IndexedDB so storage quota in localStorage is preserved
+  await saveBackupsToIDB(updatedList);
+
+  // 2. Persist to Firestore
+  try {
+    const docRef = doc(db, 'backups', backup.id);
+    const cleaned = sanitizeBackupForFirestore(backup);
+    await setDoc(docRef, cleaned);
+    recordOperation('write', 1, 2500);
+
+    // Enforce max 5 documents on Firestore
+    const colRef = collection(db, 'backups');
+    const snap = await getDocs(colRef);
+    const fsDocs: { id: string; createdAt: string }[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      fsDocs.push({ id: d.id, createdAt: data?.createdAt || '' });
+    });
+    fsDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (fsDocs.length > 5) {
+      const toDelete = fsDocs.slice(5);
+      for (const oldDoc of toDelete) {
+        try {
+          await deleteDoc(doc(db, 'backups', oldDoc.id));
+          recordOperation('delete', 1, -2500);
+        } catch (delErr) {
+          console.warn('Không thể xóa backup cũ vượt quá giới hạn 5:', delErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Lưu backup Firestore gặp lỗi, bản sao lưu đã được lưu vào bộ nhớ cục bộ an toàn:', err);
+  }
+
+  return updatedList;
+};
+
+export const deleteBackupFromFirestore = async (backupId: string): Promise<void> => {
+  // 1. Delete from Firestore
+  try {
+    const docRef = doc(db, 'backups', backupId);
+    await deleteDoc(docRef);
+    recordOperation('delete', 1, -2500);
+  } catch (err) {
+    console.warn('Lỗi xóa backup từ Firestore:', err);
+  }
+
+  // 2. Delete from local cache and IndexedDB
+  try {
+    localStorage.removeItem('notaknot_backups_cache');
+    const dbBackups = await loadBackupsFromIDB();
+    const filtered = dbBackups.filter((b) => b.id !== backupId);
+    saveBackupsToIDB(filtered);
+  } catch {}
+};
+
+export const fetchBackupScheduleFromFirestore = async (): Promise<BackupScheduleConfig | null> => {
+  try {
+    recordOperation('read', 1);
+    const docRef = doc(db, 'site_content', 'backup_schedule');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as BackupScheduleConfig;
+      try {
+        localStorage.setItem('notaknot_backup_schedule_cache', JSON.stringify(data));
+      } catch {}
+      return data;
+    }
+  } catch (err) {
+    console.warn('Lỗi tải cấu hình auto backup từ Firestore:', err);
+  }
+
+  try {
+    const cached = localStorage.getItem('notaknot_backup_schedule_cache');
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {}
+  return null;
+};
+
+export const saveBackupScheduleToFirestore = async (schedule: BackupScheduleConfig): Promise<void> => {
+  try {
+    localStorage.setItem('notaknot_backup_schedule_cache', JSON.stringify(schedule));
+  } catch {}
+
+  try {
+    const docRef = doc(db, 'site_content', 'backup_schedule');
+    await setDoc(docRef, cleanFirestoreData(schedule));
+    recordOperation('write', 1, 200);
+  } catch (err) {
+    console.warn('Lỗi lưu cấu hình auto backup lên Firestore:', err);
+  }
+};
+

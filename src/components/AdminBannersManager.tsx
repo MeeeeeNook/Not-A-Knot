@@ -647,7 +647,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                     className="hidden"
                   />
 
-                  {formHorizontalImage ? (
+                  {formHorizontalImage && formHorizontalImage.trim() ? (
                     <div className="flex flex-col sm:flex-row items-center gap-3">
                       <div className="w-full sm:w-56 h-20 rounded-lg overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center shrink-0">
                         <img src={formHorizontalImage} alt="Horizontal Preview" className="w-full h-full object-cover" />
@@ -726,7 +726,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                     className="hidden"
                   />
 
-                  {formProductPageBanner ? (
+                  {formProductPageBanner && formProductPageBanner.trim() ? (
                     <div className="flex flex-col sm:flex-row items-center gap-3">
                       <div className="w-full sm:w-56 h-20 rounded-lg overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center shrink-0">
                         <img src={formProductPageBanner} alt="Product Page Banner Preview" className="w-full h-full object-cover" />
@@ -805,7 +805,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                     className="hidden"
                   />
 
-                  {formImage ? (
+                  {formImage && formImage.trim() ? (
                     <div className="flex flex-col sm:flex-row items-center gap-3">
                       <div className="w-full sm:w-44 h-24 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center shrink-0">
                         <img src={formImage} alt="Preview" className="w-full h-full object-cover" />

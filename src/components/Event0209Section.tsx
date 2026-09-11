@@ -28,6 +28,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
   const [prodKeychainMucoi, setProdKeychainMucoi] = useState(false);
   const [qtyKeychainMucoi, setQtyKeychainMucoi] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [createdTrackingCode, setCreatedTrackingCode] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
@@ -42,6 +43,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
 
   const handlePreorder = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     setIsSubmitting(true);
 
     const orderItems: string[] = [];
@@ -50,7 +52,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
     if (prodKeychainMucoi) orderItems.push(`Móc Mũ cối x${qtyKeychainMucoi}`);
 
     if (orderItems.length === 0) {
-      alert('Vui lòng chọn ít nhất một sản phẩm để đăng ký đặt trước.');
+      setFormError('Vui lòng chọn ít nhất một sản phẩm để đăng ký đặt trước.');
       setIsSubmitting(false);
       return;
     }
@@ -136,7 +138,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
               {/* Image Container */}
               <div className="relative aspect-[4/3] bg-neutral-850 overflow-hidden">
                 <img
-                  src={prod.image}
+                  src={prod.image || '/assets/bracelet.jpg'}
                   alt={prod.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   loading="lazy"
@@ -389,6 +391,14 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
                 className="w-full px-4 py-3 bg-neutral-800/80 border border-neutral-700 rounded-xl text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-white transition-colors"
               />
             </div>
+
+            {/* Error Message */}
+            {formError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-600/60 rounded-xl text-rose-200 text-xs font-semibold flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{formError}</span>
+              </div>
+            )}
 
             {/* Total summary & Action */}
             <div className="pt-4 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-4">

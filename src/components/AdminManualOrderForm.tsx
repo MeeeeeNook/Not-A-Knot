@@ -92,7 +92,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [orderSource, setOrderSource] = useState<'website' | 'mạng xã hội' | 'trực tiếp'>('website');
+  const [orderSource, setOrderSource] = useState<'website' | 'mạng xã hội' | 'trực tiếp'>('trực tiếp');
   const [orderNote, setOrderNote] = useState('');
   const [orderStatus, setOrderStatus] = useState<'Đã đặt' | 'Đã tiếp nhận' | 'Đã thanh toán' | 'Đã giao'>('Đã đặt');
 
@@ -493,6 +493,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       setCustomerName('');
       setPhone('');
       setAddress('');
+      setOrderSource('trực tiếp');
       setOrderNote('');
       setBankReceiptImage('');
       setBankTransferRef('');
@@ -891,7 +892,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                   className="hidden"
                 />
 
-                {!bankReceiptImage ? (
+                {!bankReceiptImage || !bankReceiptImage.trim() ? (
                   <div
                     ref={dropzoneRef}
                     onDragOver={handleDragOver}
@@ -915,7 +916,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                   <div className="bg-slate-50 text-slate-900 rounded-lg p-3 flex items-center justify-between gap-3 border border-slate-200">
                     <div className="flex items-center gap-3">
                       <img
-                        src={bankReceiptImage}
+                        src={bankReceiptImage || '/assets/bracelet.jpg'}
                         alt="Bill chuyển khoản"
                         className="w-14 h-14 rounded object-cover border border-slate-300 cursor-pointer"
                         onClick={() => setPreviewReceiptModal(bankReceiptImage)}
@@ -1044,7 +1045,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <img
-                              src={p.image}
+                              src={p.image || '/assets/bracelet.jpg'}
                               alt={p.name}
                               className="w-10 h-10 rounded object-cover border border-slate-200 shrink-0"
                             />
@@ -1090,7 +1091,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                     <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img
-                          src={currentSelectedProduct.image}
+                          src={currentSelectedProduct.image || '/assets/bracelet.jpg'}
                           alt={currentSelectedProduct.name}
                           className="w-10 h-10 rounded object-cover border border-white/20 shrink-0"
                         />
@@ -1221,7 +1222,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                       className="p-3 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-between gap-3"
                     >
                       <img
-                        src={item.product.image}
+                        src={item.product.image || '/assets/bracelet.jpg'}
                         alt={item.product.name}
                         className="w-10 h-10 rounded object-cover border border-slate-200 shrink-0"
                       />
@@ -1332,11 +1333,13 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
               </button>
             </div>
             <div className="p-2 overflow-auto flex-1 flex items-center justify-center">
-              <img
-                src={previewReceiptModal}
-                alt="Bill Receipt Preview"
-                className="max-h-[70vh] w-auto rounded object-contain"
-              />
+              {previewReceiptModal && previewReceiptModal.trim() ? (
+                <img
+                  src={previewReceiptModal}
+                  alt="Bill Receipt Preview"
+                  className="max-h-[70vh] w-auto rounded object-contain"
+                />
+              ) : null}
             </div>
           </div>
         </div>

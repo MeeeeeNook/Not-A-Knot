@@ -24,6 +24,14 @@ export interface ProductCharmOption {
   stock?: number; // Inventory quantity for this specific charm (undefined = unlimited, 0 = out of stock)
 }
 
+export interface ProductOmamoriOption {
+  id?: string;
+  name: string; // e.g. "Bùa Bình An (Đỏ)", "Bùa May Mắn (Vàng)", "Bùa Tình Duyên (Hồng)"
+  image: string; // thumbnail / photo of the Omamori amulet
+  priceDelta?: number; // optional extra price, default 0
+  stock?: number; // Inventory quantity for this specific amulet (undefined = unlimited, 0 = out of stock)
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -46,9 +54,16 @@ export interface Product {
   // Dynamic Variation Settings
   enableColorSelection?: boolean;
   colorOptions?: ProductColorOption[];
+  // Charms selection settings
   enableCharmSelection?: boolean;
   charmOptions?: ProductCharmOption[];
   charmSelectionRequired?: boolean;
+  maxCharmsAllowed?: number; // Maximum selectable charms (default: 1)
+  // Omamori amulet selection settings
+  enableOmamoriSelection?: boolean;
+  omamoriOptions?: ProductOmamoriOption[];
+  omamoriSelectionRequired?: boolean;
+  maxOmamoriAllowed?: number; // Maximum selectable Omamori amulets (default: 1)
   enableSizeSelection?: boolean;
   inStock: boolean;
   stock?: number;
@@ -79,6 +94,9 @@ export interface CartItem {
   selectedCharm?: string;
   selectedCharmImage?: string;
   selectedCharmPrice?: number;
+  selectedCharms?: ProductCharmOption[];
+  selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriPrice?: number;
   selectedSize?: string;
   customNote?: string;
 }
@@ -99,6 +117,9 @@ export interface OrderItemDetail {
   selectedCharm?: string;
   selectedCharmImage?: string;
   selectedCharmPrice?: number;
+  selectedCharms?: ProductCharmOption[];
+  selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriPrice?: number;
   selectedSize?: string;
   customNote?: string;
 }
@@ -338,4 +359,32 @@ export interface SiteContentConfig {
     tiktok?: string;
     zalo?: string;
   };
+}
+
+export interface VersionBackup {
+  id: string;
+  createdAt: string; // ISO string
+  formattedDate: string; // e.g. "15:30:25 11/09/2026"
+  createdByName?: string;
+  backupType: 'auto' | 'manual';
+  note?: string;
+  summary: {
+    productsCount: number;
+    categoriesCount: number;
+    collectionsCount: number;
+    ordersCount?: number;
+    hasSiteContent: boolean;
+  };
+  data: {
+    products: Product[];
+    categories: CategoryItem[];
+    collections: CollectionInfo[];
+    siteContent?: SiteContentConfig;
+  };
+}
+
+export interface BackupScheduleConfig {
+  enabled: boolean;
+  intervalHours: number; // e.g. 1, 6, 12, 24
+  lastBackupAt?: string;
 }

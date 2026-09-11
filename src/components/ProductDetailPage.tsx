@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption } from '../types';
+import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
+import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { ProductCharmSelector } from './ProductCharmSelector';
+import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import {
   ChevronLeft,
@@ -41,7 +43,10 @@ interface ProductDetailPageProps {
     selectedCharm?: string,
     selectedColorImage?: string,
     selectedCharmImage?: string,
-    selectedCharmPrice?: number
+    selectedCharmPrice?: number,
+    selectedCharms?: ProductCharmOption[],
+    selectedOmamoris?: ProductOmamoriOption[],
+    selectedOmamoriPrice?: number
   ) => void;
   onBuyNow: (
     product: Product,
@@ -52,7 +57,10 @@ interface ProductDetailPageProps {
     selectedCharm?: string,
     selectedColorImage?: string,
     selectedCharmImage?: string,
-    selectedCharmPrice?: number
+    selectedCharmPrice?: number,
+    selectedCharms?: ProductCharmOption[],
+    selectedOmamoris?: ProductOmamoriOption[],
+    selectedOmamoriPrice?: number
   ) => void;
 }
 
@@ -87,20 +95,84 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
   const [selectedColorImage, setSelectedColorImage] = useState<string | undefined>(initialColorImage);
-  const [selectedCharm, setSelectedCharm] = useState<string | undefined>(undefined);
-  const [selectedCharmImage, setSelectedCharmImage] = useState<string | undefined>(undefined);
-  const [selectedCharmPrice, setSelectedCharmPrice] = useState<number | undefined>(undefined);
+  const [selectedCharms, setSelectedCharms] = useState<ProductCharmOption[]>([]);
   const [charmError, setCharmError] = useState<string | null>(null);
+  const [selectedOmamoris, setSelectedOmamoris] = useState<ProductOmamoriOption[]>([]);
+  const [omamoriError, setOmamoriError] = useState<string | null>(null);
+
+  const totalCharmPrice = useMemo(() => {
+    return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
+  }, [selectedCharms]);
+
+  const totalOmamoriPrice = useMemo(() => {
+    return selectedOmamoris.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
+  }, [selectedOmamoris]);
+
+  const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice;
+
+  const selectedCharmNames = useMemo(() => {
+    return selectedCharms.map((c) => c.name).join(', ');
+  }, [selectedCharms]);
 
   const [isAdded, setIsAdded] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'warranty'>('details');
 
+  // Floating hovering purchase dock visibility observer
+  const mainCtaRef = useRef<HTMLDivElement>(null);
+  const [isMainCtaInView, setIsMainCtaInView] = useState<boolean>(true);
+  const [stockNotice, setStockNotice] = useState<string | null>(null);
+  const stockNoticeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const triggerStockNotice = (customMsg?: string) => {
+    if (stockNoticeTimerRef.current) clearTimeout(stockNoticeTimerRef.current);
+    const msg = customMsg || (
+      isOutOfStock 
+        ? 'Sản phẩm này tạm thời hết hàng.'
+        : isCartFullForProduct 
+        ? `Bạn đã thêm đủ toàn bộ số lượng trong kho (${availableStock} chiếc) vào giỏ hàng.` 
+        : `Kho chỉ còn ${availableStock} chiếc có sẵn (bạn đang chọn tối đa ${remainingAddableStock} chiếc).`
+    );
+    setStockNotice(msg);
+    stockNoticeTimerRef.current = setTimeout(() => {
+      setStockNotice(null);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    const target = mainCtaRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsMainCtaInView(entry.isIntersecting);
+      },
+      {
+        threshold: 0.15,
+        rootMargin: '0px 0px -20px 0px'
+      }
+    );
+
+    observer.observe(target);
+    return () => {
+      observer.disconnect();
+    };
+  }, [product?.id]);
+
   // Dynamic gallery images (including linked color image if present)
   const images = useMemo(() => {
-    const base = product.images && product.images.length > 0 ? [...product.images] : [product.image];
-    if (selectedColorImage && !base.includes(selectedColorImage)) {
+    const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
+    const validBase = rawList.filter(
+      (img) => typeof img === 'string' && img.trim().length > 0
+    );
+    const base = validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
+    if (
+      selectedColorImage &&
+      typeof selectedColorImage === 'string' &&
+      selectedColorImage.trim().length > 0 &&
+      !base.includes(selectedColorImage)
+    ) {
       return [selectedColorImage, ...base];
     }
     return base;
@@ -115,10 +187,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setQuantity(1);
     setSelectedColor(initCol);
     setSelectedColorImage(initImg);
-    setSelectedCharm(undefined);
-    setSelectedCharmImage(undefined);
-    setSelectedCharmPrice(undefined);
+    setSelectedCharms([]);
+    setSelectedOmamoris([]);
     setCharmError(null);
+    setOmamoriError(null);
     setIsAdded(false);
     setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -128,7 +200,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   }, [product?.id]);
 
-  const availableStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
+  const availableStock = typeof product.stock === 'number' 
+    ? product.stock 
+    : (product.inStock === false ? 0 : 99);
   const inCartQty = useMemo(() => {
     if (!cartItems || cartItems.length === 0) return 0;
     return cartItems
@@ -198,45 +272,54 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
-  // Charm selection
-  const handleSelectCharm = (charmOpt: ProductCharmOption | null) => {
+  // Charm selection (multi-selection)
+  const handleSelectCharms = (charms: ProductCharmOption[]) => {
     setCharmError(null);
-    if (!charmOpt) {
-      setSelectedCharm(undefined);
-      setSelectedCharmImage(undefined);
-      setSelectedCharmPrice(undefined);
-    } else {
-      if (typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
-        setCharmError(`Mẫu charm "${charmOpt.name}" đã hết hàng trong kho. Vui lòng chọn mẫu khác.`);
-        return;
-      }
-      setSelectedCharm(charmOpt.name);
-      setSelectedCharmImage(charmOpt.image);
-      setSelectedCharmPrice(charmOpt.priceDelta || 0);
-    }
+    setSelectedCharms(charms);
+  };
+
+  // Omamori selection (multi-selection)
+  const handleSelectOmamoris = (omamoris: ProductOmamoriOption[]) => {
+    setOmamoriError(null);
+    setSelectedOmamoris(omamoris);
   };
 
   const handleAddToCartClick = () => {
     if (isOutOfStock || remainingAddableStock <= 0) return;
 
-    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
-      setCharmError('Vui lòng chọn 1 mẫu charm trước khi thêm vào giỏ hàng.');
+    if (product.enableCharmSelection && product.charmSelectionRequired && selectedCharms.length === 0) {
+      setCharmError('Vui lòng chọn ít nhất 1 mẫu charm trước khi thêm vào giỏ hàng.');
+      return;
+    }
+
+    if (product.enableOmamoriSelection && product.omamoriSelectionRequired && selectedOmamoris.length === 0) {
+      setOmamoriError('Vui lòng chọn ít nhất 1 bùa Omamori trước khi thêm vào giỏ hàng.');
       return;
     }
 
     const addQty = Math.min(quantity, remainingAddableStock);
 
-    if (selectedCharm && product.charmOptions) {
-      const chosenCharm = product.charmOptions.find(
-        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
-      );
-      if (chosenCharm && typeof chosenCharm.stock === 'number') {
-        if (chosenCharm.stock <= 0) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+    for (const ch of selectedCharms) {
+      if (typeof ch.stock === 'number') {
+        if (ch.stock <= 0) {
+          setCharmError(`Mẫu charm "${ch.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
           return;
         }
-        if (chosenCharm.stock < addQty) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+        if (ch.stock < addQty) {
+          setCharmError(`Mẫu charm "${ch.name}" chỉ còn ${ch.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+          return;
+        }
+      }
+    }
+
+    for (const om of selectedOmamoris) {
+      if (typeof om.stock === 'number') {
+        if (om.stock <= 0) {
+          setOmamoriError(`Bùa "${om.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          return;
+        }
+        if (om.stock < addQty) {
+          setOmamoriError(`Bùa "${om.name}" chỉ còn ${om.stock} cái trong kho, không đủ số lượng ${addQty}.`);
           return;
         }
       }
@@ -248,10 +331,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       selectedColor,
       undefined,
       undefined,
-      selectedCharm,
+      selectedCharmNames || undefined,
       selectedColorImage,
-      selectedCharmImage,
-      selectedCharmPrice
+      selectedCharms[0]?.image || undefined,
+      totalCharmPrice,
+      selectedCharms,
+      selectedOmamoris,
+      totalOmamoriPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -262,24 +348,39 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const handleBuyNowClick = () => {
     if (isOutOfStock || remainingAddableStock <= 0) return;
 
-    if (product.enableCharmSelection && product.charmSelectionRequired && !selectedCharm) {
-      setCharmError('Vui lòng chọn 1 mẫu charm trước khi mua hàng.');
+    if (product.enableCharmSelection && product.charmSelectionRequired && selectedCharms.length === 0) {
+      setCharmError('Vui lòng chọn ít nhất 1 mẫu charm trước khi mua hàng.');
+      return;
+    }
+
+    if (product.enableOmamoriSelection && product.omamoriSelectionRequired && selectedOmamoris.length === 0) {
+      setOmamoriError('Vui lòng chọn ít nhất 1 bùa Omamori trước khi mua hàng.');
       return;
     }
 
     const addQty = Math.min(quantity, remainingAddableStock);
 
-    if (selectedCharm && product.charmOptions) {
-      const chosenCharm = product.charmOptions.find(
-        (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
-      );
-      if (chosenCharm && typeof chosenCharm.stock === 'number') {
-        if (chosenCharm.stock <= 0) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+    for (const ch of selectedCharms) {
+      if (typeof ch.stock === 'number') {
+        if (ch.stock <= 0) {
+          setCharmError(`Mẫu charm "${ch.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
           return;
         }
-        if (chosenCharm.stock < addQty) {
-          setCharmError(`Mẫu charm "${chosenCharm.name}" chỉ còn ${chosenCharm.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+        if (ch.stock < addQty) {
+          setCharmError(`Mẫu charm "${ch.name}" chỉ còn ${ch.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+          return;
+        }
+      }
+    }
+
+    for (const om of selectedOmamoris) {
+      if (typeof om.stock === 'number') {
+        if (om.stock <= 0) {
+          setOmamoriError(`Bùa "${om.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          return;
+        }
+        if (om.stock < addQty) {
+          setOmamoriError(`Bùa "${om.name}" chỉ còn ${om.stock} cái trong kho, không đủ số lượng ${addQty}.`);
           return;
         }
       }
@@ -291,10 +392,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       selectedColor,
       undefined,
       undefined,
-      selectedCharm,
+      selectedCharmNames || undefined,
       selectedColorImage,
-      selectedCharmImage,
-      selectedCharmPrice
+      selectedCharms[0]?.image || undefined,
+      totalCharmPrice,
+      selectedCharms,
+      selectedOmamoris,
+      totalOmamoriPrice
     );
   };
 
@@ -319,17 +423,34 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }, 1800);
   };
 
-  // Find related products in the same category (excluding hidden)
+  // Set of category IDs that are marked as hidden
+  const hiddenCategoryIds = useMemo(() => {
+    return new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
+  }, [categories]);
+
+  // Robust check: Is this product hidden (explicitly or via its category)
+  const isProductVisible = useCallback(
+    (p: Product) => {
+      if (Boolean(p.isHidden)) return false;
+      if (p.category && hiddenCategoryIds.has(p.category)) return false;
+      return true;
+    },
+    [hiddenCategoryIds]
+  );
+
+  // Find related products in the same category (strictly visible products only)
   const relatedProducts = useMemo(() => {
     return allProducts
-      .filter((p) => !p.isHidden && p.id !== product.id && p.category === product.category)
+      .filter((p) => isProductVisible(p) && p.id !== product.id && p.category === product.category)
       .slice(0, 4);
-  }, [allProducts, product]);
+  }, [allProducts, product, isProductVisible]);
 
-  // Curated 'Có thể bạn sẽ thích' (cross-collection recommendations & hot picks, excluding hidden)
+  // Curated 'Có thể bạn sẽ thích' (strictly visible products only)
   const recommendedProducts = useMemo(() => {
     // Exclude current product and hidden products
-    const otherProducts = allProducts.filter((p) => !p.isHidden && p.id !== product.id && p.inStock !== false);
+    const otherProducts = allProducts.filter(
+      (p) => isProductVisible(p) && p.id !== product.id && p.inStock !== false
+    );
     if (otherProducts.length === 0) return [];
 
     // Prioritize products with high rating, bestsellers, and complementary categories
@@ -342,7 +463,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     });
 
     return sorted.slice(0, 4);
-  }, [allProducts, product]);
+  }, [allProducts, product, isProductVisible]);
 
   const categoryName = useMemo(() => {
     const match = categories.find((c) => c.id === product.category);
@@ -437,7 +558,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 {images.map((imgSrc, idx) => (
                   <div key={idx} className="w-full h-full flex-shrink-0 relative">
                     <img
-                      src={imgSrc || product.image}
+                      src={imgSrc || product.image || '/assets/bracelet.jpg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
                       className="w-full h-full object-cover object-center select-none pointer-events-none"
                       style={{ imageRendering: '-webkit-optimize-contrast' }}
@@ -512,7 +633,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       }`}
                     >
                       <img
-                        src={img}
+                        src={img || '/assets/bracelet.jpg'}
                         alt={`${product.name} thumbnail ${idx + 1}`}
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -555,39 +676,41 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     </>
                   )}
 
-                  {isOutOfStock ? (
+                  {isOutOfStock || availableStock <= 0 ? (
                     <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-md">
                       Hết hàng
                     </span>
-                  ) : availableStock === 1 ? (
-                    <span className="text-xs font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-md animate-pulse">
-                      ⚡ Chỉ còn duy nhất 1 sản phẩm!
-                    </span>
-                  ) : availableStock <= 3 ? (
-                    <span className="text-xs font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
-                      ⚡ Chỉ còn {availableStock} sản phẩm trong kho
+                  ) : availableStock < 5 ? (
+                    <span className="text-xs font-extrabold text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                      <span>⚠️</span>
+                      <span>Sắp hết hàng (Chỉ còn {availableStock} sản phẩm)</span>
                     </span>
                   ) : (
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
-                      Còn {availableStock} sản phẩm trong kho
+                      Còn {availableStock} sản phẩm
                     </span>
                   )}
                 </div>
               </div>
 
               {/* Price Row */}
-              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100 flex items-baseline gap-3">
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100 flex flex-wrap items-baseline gap-3">
                 <span className="text-3xl font-black text-neutral-950 font-mono">
-                  {product.price.toLocaleString('vi-VN')}đ
+                  {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                 </span>
                 {product.originalPrice && (
                   <span className="text-base text-neutral-400 line-through font-mono">
-                    {product.originalPrice.toLocaleString('vi-VN')}đ
+                    {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
                   </span>
                 )}
                 {product.discountBadge && (
                   <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">
                     {product.discountBadge}
+                  </span>
+                )}
+                {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
+                  <span className="text-xs font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded">
+                    +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện
                   </span>
                 )}
               </div>
@@ -619,9 +742,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <div className="space-y-1">
                     <ProductCharmSelector
                       charms={product.charmOptions}
-                      selectedCharm={selectedCharm}
-                      onSelectCharm={handleSelectCharm}
+                      selectedCharms={selectedCharms}
+                      onSelectCharms={handleSelectCharms}
                       isRequired={product.charmSelectionRequired}
+                      maxAllowed={product.maxCharmsAllowed || 1}
                     />
                     {charmError && (
                       <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
@@ -630,6 +754,28 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     )}
                   </div>
                 )}
+
+              {/* Omamori Selection (if enabled) */}
+              {product.enableOmamoriSelection && (
+                <div className="space-y-1">
+                  <ProductOmamoriSelector
+                    omamoris={
+                      product.omamoriOptions && product.omamoriOptions.length > 0
+                        ? product.omamoriOptions
+                        : DEFAULT_OMAMORI_PRESETS
+                    }
+                    selectedOmamoris={selectedOmamoris}
+                    onSelectOmamoris={handleSelectOmamoris}
+                    isRequired={product.omamoriSelectionRequired}
+                    maxAllowed={product.maxOmamoriAllowed || 1}
+                  />
+                  {omamoriError && (
+                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                      ⚠️ {omamoriError}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* In-cart stock status alert */}
               {inCartQty > 0 && availableStock < 90 && (
@@ -657,45 +803,73 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               )}
 
               {/* Quantity Selector & Action Buttons */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center border border-neutral-200 rounded-2xl bg-neutral-50 p-1">
-                    <button
-                      type="button"
-                      disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
-                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                      className="w-8 h-8 rounded-xl bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <span className="w-12 text-center font-bold text-sm text-neutral-900">
-                      {quantity}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct}
-                      onClick={() => setQuantity((q) => Math.min(remainingAddableStock, q + 1))}
-                      className="w-8 h-8 rounded-xl bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer"
-                    >
-                      +
-                    </button>
+              <div ref={mainCtaRef} id="product-detail-main-cta" className="space-y-3 pt-2">
+                {/* Large Prominent Quantity & Subtotal Card */}
+                <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/90 shadow-2xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-bold text-neutral-600">Số lượng:</span>
+                    <div className="flex items-center border border-neutral-200 rounded-xl bg-white p-0.5 shadow-2xs">
+                      <button
+                        type="button"
+                        disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
+                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        className="w-8 h-8 rounded-lg bg-neutral-50 hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer text-sm"
+                        aria-label="Giảm số lượng"
+                      >
+                        -
+                      </button>
+                      <span className="w-10 text-center font-black text-sm text-neutral-950 font-mono">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
+                            triggerStockNotice();
+                          } else {
+                            setQuantity((q) => Math.min(remainingAddableStock, q + 1));
+                          }
+                        }}
+                        className={`w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-colors cursor-pointer text-sm ${
+                          quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct
+                            ? 'bg-neutral-200 text-neutral-400 hover:bg-neutral-300'
+                            : 'bg-neutral-50 hover:bg-neutral-200 text-neutral-800'
+                        }`}
+                        aria-label="Tăng số lượng"
+                        title={
+                          isOutOfStock
+                            ? 'Hết hàng'
+                            : isCartFullForProduct
+                            ? `Đã đạt giới hạn tồn kho (${availableStock} chiếc)`
+                            : quantity >= remainingAddableStock
+                            ? `Kho chỉ còn ${availableStock} chiếc`
+                            : 'Tăng số lượng'
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="text-xs text-neutral-500">
-                    Tạm tính:{' '}
-                    <strong className="text-neutral-950 font-mono text-sm">
-                      {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
-                    </strong>
-                    {selectedCharmPrice && selectedCharmPrice > 0 ? (
-                      <span className="text-[10px] text-amber-700 ml-1">
-                        (kèm charm +{(selectedCharmPrice * quantity).toLocaleString('vi-VN')}đ)
+                  <div className="text-right">
+                    <div className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
+                      Tạm tính ({quantity} chiếc)
+                    </div>
+                    <div className="flex items-baseline justify-end gap-1">
+                      <span className="text-xl sm:text-2xl font-black text-neutral-950 font-mono tracking-tight">
+                        {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
                       </span>
-                    ) : null}
+                    </div>
+                    {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
+                      <div className="text-[11px] font-medium text-amber-700">
+                        (gồm phụ kiện +{((totalCharmPrice + totalOmamoriPrice) * quantity).toLocaleString('vi-VN')}đ)
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Primary CTA Buttons */}
-                <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <button
                     type="button"
                     disabled={isOutOfStock || isCartFullForProduct}
@@ -891,7 +1065,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   {/* Product Image & Badges */}
                   <div className="relative aspect-square overflow-hidden bg-neutral-100">
                     <img
-                      src={rec.image}
+                      src={rec.image || '/assets/bracelet.jpg'}
                       alt={rec.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
@@ -985,7 +1159,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 >
                   <div className="relative aspect-square overflow-hidden bg-neutral-100">
                     <img
-                      src={rel.image}
+                      src={rel.image || '/assets/bracelet.jpg'}
                       alt={rel.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
@@ -1018,51 +1192,186 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
       </main>
 
-      {/* MOBILE STICKY BUY BAR (visible on mobile only) */}
-      <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-neutral-200/90 p-3 z-30 shadow-lg">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider block truncate">
-              {product.name}
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-mono font-black text-sm text-neutral-950">
-                {((product.price + (selectedCharmPrice || 0)) * quantity).toLocaleString('vi-VN')}đ
-              </span>
-              {selectedCharm && (
-                <span className="text-[10px] text-amber-700 font-medium truncate">
-                  +{selectedCharm}
-                </span>
+      {/* UNIVERSAL FLOATING PERSISTENT PURCHASE DOCK (Desktop & Mobile) */}
+      <AnimatePresence>
+        {!isMainCtaInView && (
+          <motion.div
+            key="floating-product-dock"
+            id="floating-product-dock"
+            initial={{ y: 90, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 90, opacity: 0 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+            className="fixed bottom-0 sm:bottom-5 inset-x-0 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 w-full sm:w-[94%] sm:max-w-4xl bg-white/95 backdrop-blur-md border-t sm:border border-neutral-200/90 sm:rounded-2xl p-3 sm:px-5 sm:py-3 z-40 shadow-xl sm:shadow-2xl shadow-neutral-950/10"
+          >
+            {/* Real-time stock notice tooltip inside floating bar */}
+            <AnimatePresence>
+              {stockNotice && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-lg border border-neutral-700 whitespace-nowrap flex items-center gap-1.5 z-50 pointer-events-none"
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{stockNotice}</span>
+                </motion.div>
               )}
+            </AnimatePresence>
+
+            <div className="flex items-center justify-between gap-3 sm:gap-4 max-w-7xl mx-auto">
+              
+              {/* Product Info & Thumbnail */}
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
+                  <img
+                    src={images[0] || '/assets/bracelet.jpg'}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900 truncate">
+                    {product.name}
+                  </h4>
+                  <div className="flex items-center gap-2 text-[11px] text-neutral-500 truncate">
+                    {selectedColor && (
+                      <span>Màu: <strong className="text-neutral-800">{selectedColor}</strong></span>
+                    )}
+                    {selectedCharms.length > 0 && (
+                      <span className="text-amber-700 font-medium truncate hidden md:inline">
+                        • Charm: {selectedCharms.map((c) => c.name).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Price / Subtotal */}
+              <div className="text-right flex-shrink-0 px-1 sm:px-2">
+                <div className="text-[10px] sm:text-[11px] text-neutral-500 font-medium">
+                  Tạm tính ({quantity}):
+                </div>
+                <div className="font-mono font-black text-sm sm:text-base text-neutral-950">
+                  {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
+                </div>
+              </div>
+
+              {/* Quantity selector on desktop */}
+              <div className="hidden md:flex items-center border border-neutral-200 rounded-xl bg-neutral-50 p-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="w-7 h-7 rounded-lg bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer text-xs"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center font-bold text-xs text-neutral-900 font-mono">
+                  {quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
+                    } else {
+                      setQuantity((q) => Math.min(remainingAddableStock, q + 1));
+                    }
+                  }}
+                  title={
+                    isOutOfStock
+                      ? 'Hết hàng'
+                      : isCartFullForProduct
+                      ? `Đã đạt giới hạn tồn kho (${availableStock} chiếc)`
+                      : quantity >= remainingAddableStock
+                      ? `Kho chỉ còn ${availableStock} chiếc`
+                      : 'Tăng số lượng'
+                  }
+                  className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center transition-colors text-xs cursor-pointer ${
+                    quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct
+                      ? 'bg-neutral-200 text-neutral-400 hover:bg-neutral-300'
+                      : 'bg-white hover:bg-neutral-200 text-neutral-800'
+                  }`}
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  id="floating-add-to-cart-btn"
+                  onClick={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
+                    } else {
+                      handleAddToCartClick();
+                    }
+                  }}
+                  className={`py-2.5 px-3.5 sm:px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isOutOfStock || isCartFullForProduct
+                      ? 'bg-neutral-200 text-neutral-400'
+                      : isAdded
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-neutral-950 hover:bg-neutral-800 text-white shadow-sm'
+                  }`}
+                  title={
+                    isOutOfStock
+                      ? 'Hết hàng'
+                      : isCartFullForProduct
+                      ? `Đã có đủ ${availableStock} chiếc trong giỏ`
+                      : 'Thêm vào giỏ hàng'
+                  }
+                >
+                  {isAdded ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span className="hidden sm:inline">Đã thêm ✓</span>
+                    </>
+                  ) : isCartFullForProduct ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-rose-500" />
+                      <span className="hidden sm:inline">Đã đạt tối đa</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="w-4 h-4" />
+                      <span className="hidden sm:inline">Thêm Vào Giỏ</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  id="floating-buy-now-btn"
+                  onClick={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
+                    } else {
+                      handleBuyNowClick();
+                    }
+                  }}
+                  className={`py-2.5 px-4 sm:px-5 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm ${
+                    isOutOfStock || isCartFullForProduct
+                      ? 'bg-neutral-200 text-neutral-400'
+                      : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 active:scale-95'
+                  }`}
+                  title={
+                    isOutOfStock || isCartFullForProduct
+                      ? 'Không thể đặt thêm do đã đạt giới hạn tồn kho'
+                      : 'Mua ngay'
+                  }
+                >
+                  <span>{isCartFullForProduct ? 'Hết Kho' : 'Mua Ngay'}</span>
+                </button>
+              </div>
+
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              type="button"
-              disabled={isOutOfStock || isCartFullForProduct}
-              onClick={handleAddToCartClick}
-              className={`p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                isAdded
-                  ? 'bg-emerald-600 border-emerald-600 text-white'
-                  : 'border-neutral-900 bg-white text-neutral-950 hover:bg-neutral-100'
-              }`}
-              title="Thêm vào giỏ"
-            >
-              {isAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
-            </button>
-
-            <button
-              type="button"
-              disabled={isOutOfStock || isCartFullForProduct}
-              onClick={handleBuyNowClick}
-              className="py-2.5 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 font-black text-xs text-neutral-950 shadow-sm active:scale-95 transition-all cursor-pointer"
-            >
-              Mua Ngay
-            </button>
-          </div>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

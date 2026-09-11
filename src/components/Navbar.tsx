@@ -5,6 +5,7 @@ import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../
 
 interface NavbarProps {
   cartCount: number;
+  isCartBumping?: boolean;
   categories?: CategoryItem[];
   collections?: CollectionInfo[];
   siteContent?: SiteContentConfig;
@@ -24,6 +25,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   cartCount,
+  isCartBumping = false,
   categories,
   collections = COLLECTIONS_DATA,
   siteContent,
@@ -281,21 +283,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-cart-btn"
               onClick={onOpenCart}
-              className={`relative px-3.5 py-2 rounded-xl transition-all flex items-center gap-2 border shadow-xs group cursor-pointer ${
-                currentView === 'cart'
+              className={`relative px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 border shadow-xs group cursor-pointer ${
+                isCartBumping
+                  ? 'scale-105 ring-2 ring-amber-400 bg-amber-400 text-neutral-950 font-black shadow-md border-amber-300'
+                  : currentView === 'cart'
                   ? 'bg-amber-400 text-slate-950 font-black border-amber-300'
                   : 'bg-neutral-900 hover:bg-neutral-800 text-white border-neutral-800'
               }`}
               aria-label="Mở giỏ hàng"
             >
-              <ShoppingBag className={`w-4 h-4 group-hover:scale-105 transition-transform ${currentView === 'cart' ? 'text-slate-950' : 'text-amber-400'}`} />
-              <span className="text-xs font-bold hidden sm:inline">Giỏ Hàng</span>
+              <ShoppingBag
+                className={`w-4 h-4 transition-transform duration-200 ${
+                  isCartBumping
+                    ? 'scale-115 text-neutral-950'
+                    : currentView === 'cart'
+                    ? 'text-slate-950'
+                    : 'text-amber-400 group-hover:scale-105'
+                }`}
+              />
+              <span className={`text-xs font-bold hidden sm:inline ${isCartBumping ? 'text-neutral-950 font-black' : ''}`}>
+                Giỏ Hàng
+              </span>
               {cartCount > 0 && (
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-4 text-center leading-none shadow-xs ${
-                  currentView === 'cart' ? 'bg-slate-950 text-amber-400' : 'bg-amber-400 text-neutral-950'
-                }`}>
-                  {cartCount}
-                </span>
+                <div className="relative inline-flex items-center justify-center">
+                  <span
+                    className={`relative text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-4 text-center leading-none shadow-xs transition-all duration-200 ${
+                      isCartBumping
+                        ? 'scale-110 bg-neutral-950 text-amber-400 ring-2 ring-neutral-950 shadow-sm'
+                        : currentView === 'cart'
+                        ? 'bg-slate-950 text-amber-400'
+                        : 'bg-amber-400 text-neutral-950'
+                    }`}
+                  >
+                    {cartCount}
+                  </span>
+                </div>
               )}
             </button>
 

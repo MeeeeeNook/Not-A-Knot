@@ -222,22 +222,22 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   const slideVariants = {
     enter: (dir: number) => ({
       x: dir > 0 ? '100%' : '-100%',
-      opacity: 0.9,
+      opacity: 0.4,
     }),
     center: {
       x: 0,
       opacity: 1,
       transition: {
-        x: { type: 'spring', stiffness: 280, damping: 30 },
-        opacity: { duration: 0.3 }
+        x: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.6 },
+        opacity: { duration: 0.4 }
       }
     },
     exit: (dir: number) => ({
       x: dir > 0 ? '-100%' : '100%',
-      opacity: 0.9,
+      opacity: 0.4,
       transition: {
-        x: { type: 'spring', stiffness: 280, damping: 30 },
-        opacity: { duration: 0.3 }
+        x: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.6 },
+        opacity: { duration: 0.4 }
       }
     })
   };
@@ -280,7 +280,19 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
             initial="enter"
             animate="center"
             exit="exit"
-            className="absolute inset-0 w-full h-full flex items-center justify-center"
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.15}
+            onDragEnd={(_e, { offset, velocity }) => {
+              const swipeConfidenceThreshold = 10000;
+              const swipe = Math.abs(offset.x) * velocity.x;
+              if (swipe < -swipeConfidenceThreshold || offset.x < -45) {
+                handleNext();
+              } else if (swipe > swipeConfidenceThreshold || offset.x > 45) {
+                handlePrev();
+              }
+            }}
+            className="absolute inset-0 w-full h-full flex items-center justify-center touch-pan-y"
           >
             {/* Background Image with Focal Point, Zoom & Fit Mode */}
             {(() => {
@@ -297,24 +309,25 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
 
               // Helper to render image with specific focal point, zoom, and fit mode
               const renderImageLayer = (
-                imgSrc: string,
+                imgSrc: string | undefined,
                 posX: number,
                 posY: number,
                 zoom: number,
                 fitMode: string,
                 altText: string
               ) => {
+                const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.png';
                 if (fitMode === 'contain') {
                   return (
                     <div className="absolute inset-0 w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
                       <img
-                        src={imgSrc}
+                        src={validSrc}
                         alt=""
                         aria-hidden="true"
                         className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none"
                       />
                       <img
-                        src={imgSrc}
+                        src={validSrc}
                         alt={altText}
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
@@ -328,7 +341,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                 if (fitMode === 'fill') {
                   return (
                     <img
-                      src={imgSrc}
+                      src={validSrc}
                       alt={altText}
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
@@ -341,7 +354,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                 }
                 return (
                   <img
-                    src={imgSrc}
+                    src={validSrc}
                     alt={altText}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{

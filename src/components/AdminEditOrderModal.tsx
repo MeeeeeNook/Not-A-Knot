@@ -1119,7 +1119,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                     className="hidden"
                   />
 
-                  {bankReceiptImage ? (
+                  {bankReceiptImage && bankReceiptImage.trim() ? (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
                         <img
@@ -1319,7 +1319,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         </form>
 
         {/* Zoom Lightbox */}
-        {previewZoomReceipt && bankReceiptImage && (
+        {previewZoomReceipt && bankReceiptImage && bankReceiptImage.trim() && (
           <div
             className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 animate-fadeIn"
             onClick={() => setPreviewZoomReceipt(false)}

@@ -257,7 +257,7 @@ export const AdminReceiptUploadModal: React.FC<AdminReceiptUploadModalProps> = (
             className="hidden"
           />
 
-          {!receiptImage ? (
+          {!receiptImage || !receiptImage.trim() ? (
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -371,7 +371,7 @@ export const AdminReceiptUploadModal: React.FC<AdminReceiptUploadModalProps> = (
         </div>
 
         {/* Zoom Lightbox */}
-        {previewZoom && receiptImage && (
+        {previewZoom && receiptImage && receiptImage.trim() && (
           <div
             className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4"
             onClick={() => setPreviewZoom(false)}
