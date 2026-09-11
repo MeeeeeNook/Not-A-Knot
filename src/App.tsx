@@ -1066,6 +1066,20 @@ export default function App() {
     }
   };
 
+  if (isProductsLoading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#FAF9F6] text-slate-900 select-none">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-3 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+          <div className="text-center">
+            <h1 className="text-lg font-black tracking-widest text-slate-900">NOT A KNOT</h1>
+            <p className="text-xs font-medium text-slate-400 mt-1">Đang tải dữ liệu cửa hàng...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip relative flex flex-col bg-[#FAF9F6] text-slate-900 selection:bg-amber-400 selection:text-slate-950 font-sans">
       {/* Toast notification banner */}
@@ -1084,7 +1098,7 @@ export default function App() {
       )}
 
       {/* Landing Page Exclusive Promo Announcement Banner (Full Width Infinite Continuous Loop) */}
-      {currentView === 'landing' && siteContent?.announcementActive !== false && !announcementDismissed && (
+      {currentView === 'landing' && Boolean(siteContent?.announcementActive) === true && !announcementDismissed && (
         <aside aria-label="Thông báo ưu đãi" className="bg-red-600 text-white py-2 text-xs font-bold flex items-center justify-between border-b border-red-700/50 transition-all overflow-hidden overflow-x-clip w-full max-w-full relative select-none">
           <div
             onClick={siteContent?.announcementLink ? handleAnnouncementClick : undefined}

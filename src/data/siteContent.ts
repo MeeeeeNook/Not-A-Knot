@@ -5,7 +5,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   brandTagline: 'Xưởng Chế Tác Phụ Kiện Paracord & EDC Thủ Công',
   announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa Paracord EDC cao cấp cho đơn từ 299k!',
   announcementLink: '#products',
-  announcementActive: true,
+  announcementActive: false,
   phone: '079 655 5636',
   zalo: '',
   address: 'Hanoi, Vietnam',
