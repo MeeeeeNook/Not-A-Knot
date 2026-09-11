@@ -1198,10 +1198,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <motion.div
             key="floating-product-dock"
             id="floating-product-dock"
-            initial={{ y: 90, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 90, opacity: 0 }}
-            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+            initial={{ y: 80, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 80, opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="fixed bottom-0 sm:bottom-5 inset-x-0 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 w-full sm:w-[94%] sm:max-w-4xl bg-white/95 backdrop-blur-md border-t sm:border border-neutral-200/90 sm:rounded-2xl p-3 sm:px-5 sm:py-3 z-40 shadow-xl sm:shadow-2xl shadow-neutral-950/10"
           >
             {/* Real-time stock notice tooltip inside floating bar */}
@@ -1213,7 +1213,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
                   className="absolute -top-12 left-1/2 -translate-x-1/2 bg-neutral-900 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-lg border border-neutral-700 whitespace-nowrap flex items-center gap-1.5 z-50 pointer-events-none"
                 >
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                   <span>{stockNotice}</span>
                 </motion.div>
               )}
@@ -1264,6 +1264,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   className="w-7 h-7 rounded-lg bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer text-xs"
+                  aria-label="Giảm số lượng"
                 >
                   -
                 </button>
@@ -1277,6 +1278,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       triggerStockNotice();
                     } else {
                       setQuantity((q) => Math.min(remainingAddableStock, q + 1));
+                    }
+                  }}
+                  onMouseEnter={() => {
+                    if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
                     }
                   }}
                   title={
@@ -1293,6 +1299,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       ? 'bg-neutral-200 text-neutral-400 hover:bg-neutral-300'
                       : 'bg-white hover:bg-neutral-200 text-neutral-800'
                   }`}
+                  aria-label="Tăng số lượng"
                 >
                   +
                 </button>
@@ -1308,6 +1315,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       triggerStockNotice();
                     } else {
                       handleAddToCartClick();
+                    }
+                  }}
+                  onMouseEnter={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
                     }
                   }}
                   className={`py-2.5 px-3.5 sm:px-4 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
@@ -1351,6 +1363,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       triggerStockNotice();
                     } else {
                       handleBuyNowClick();
+                    }
+                  }}
+                  onMouseEnter={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
                     }
                   }}
                   className={`py-2.5 px-4 sm:px-5 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm ${
