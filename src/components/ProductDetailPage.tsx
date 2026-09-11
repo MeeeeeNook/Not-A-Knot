@@ -129,15 +129,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     if (stockNoticeTimerRef.current) clearTimeout(stockNoticeTimerRef.current);
     const msg = customMsg || (
       isOutOfStock 
-        ? 'Sản phẩm này tạm thời hết hàng.'
+        ? '⚠️ Sản phẩm này hiện đã hết hàng.'
         : isCartFullForProduct 
-        ? `Bạn đã thêm đủ toàn bộ số lượng trong kho (${availableStock} chiếc) vào giỏ hàng.` 
-        : `Kho chỉ còn ${availableStock} chiếc có sẵn (bạn đang chọn tối đa ${remainingAddableStock} chiếc).`
+        ? `⚠️ Bạn đã thêm đủ toàn bộ tồn kho (${availableStock} chiếc) vào giỏ hàng!` 
+        : `⚠️ Kho chỉ còn ${availableStock} chiếc (bạn đã chọn ${quantity} chiếc).`
     );
     setStockNotice(msg);
     stockNoticeTimerRef.current = setTimeout(() => {
       setStockNotice(null);
-    }, 3000);
+    }, 3500);
   };
 
   useEffect(() => {
@@ -1198,10 +1198,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <motion.div
             key="floating-product-dock"
             id="floating-product-dock"
-            initial={{ y: 80, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 80, opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ y: 100, opacity: 0 }}
+            animate={{
+              y: 0,
+              opacity: 1,
+              transition: { type: 'spring', damping: 28, stiffness: 300 }
+            }}
+            exit={{
+              y: 100,
+              opacity: 0,
+              transition: { duration: 0.28, ease: [0.4, 0, 0.2, 1] }
+            }}
             className="fixed bottom-0 sm:bottom-5 inset-x-0 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 w-full sm:w-[94%] sm:max-w-4xl bg-white/95 backdrop-blur-md border-t sm:border border-neutral-200/90 sm:rounded-2xl p-3 sm:px-5 sm:py-3 z-40 shadow-xl sm:shadow-2xl shadow-neutral-950/10"
           >
             {/* Real-time stock notice tooltip inside floating bar */}

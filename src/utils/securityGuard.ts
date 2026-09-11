@@ -49,6 +49,119 @@ export function triggerRickrollRedirect(): void {
  * Inspector panel is actually opened (via inspect, menu, or shortcuts) and redirects immediately.
  */
 export function initDevToolsProtection(): () => void {
-  // Disabled auto-redirect traps to prevent false positives in iframe preview, mobile view, and browser extensions
-  return () => {};
+  if (typeof window === 'undefined') return () => {};
+
+  let lastContextMenuTime = 0;
+
+  // 1. Keyboard Shortcut Listener (F12, Ctrl+Shift+I/J/C, Cmd+Option+I/J/C, Ctrl+U)
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (isUserAdmin()) return;
+
+    const isF12 = e.key === 'F12' || e.keyCode === 123;
+    const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+    const isAlt = e.altKey;
+
+    // F12 key
+    if (isF12) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerRickrollRedirect();
+      return;
+    }
+
+    // Ctrl+Shift+I / Cmd+Option+I (Inspect)
+    if (
+      (isCtrlOrMeta && isShift && (e.key === 'I' || e.key === 'i' || e.keyCode === 73)) ||
+      (isCtrlOrMeta && isAlt && (e.key === 'I' || e.key === 'i' || e.keyCode === 73))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerRickrollRedirect();
+      return;
+    }
+
+    // Ctrl+Shift+J / Cmd+Option+J (Console)
+    if (
+      (isCtrlOrMeta && isShift && (e.key === 'J' || e.key === 'j' || e.keyCode === 74)) ||
+      (isCtrlOrMeta && isAlt && (e.key === 'J' || e.key === 'j' || e.keyCode === 74))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerRickrollRedirect();
+      return;
+    }
+
+    // Ctrl+Shift+C / Cmd+Option+C (Inspect Element)
+    if (
+      (isCtrlOrMeta && isShift && (e.key === 'C' || e.key === 'c' || e.keyCode === 67)) ||
+      (isCtrlOrMeta && isAlt && (e.key === 'C' || e.key === 'c' || e.keyCode === 67))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerRickrollRedirect();
+      return;
+    }
+
+    // Ctrl+U / Cmd+Option+U (View Source)
+    if (
+      (isCtrlOrMeta && (e.key === 'U' || e.key === 'u' || e.keyCode === 85)) ||
+      (isCtrlOrMeta && isAlt && (e.key === 'U' || e.key === 'u' || e.keyCode === 85))
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerRickrollRedirect();
+      return;
+    }
+  };
+
+  // 2. Context Menu Listener (Tracks when user opens right-click menu to click "Inspect")
+  const handleContextMenu = () => {
+    if (isUserAdmin()) return;
+    lastContextMenuTime = Date.now();
+
+    // Prepare a console getter trap specifically for right-click inspect
+    try {
+      const img = new Image();
+      Object.defineProperty(img, 'id', {
+        get: function () {
+          if (!isUserAdmin()) {
+            triggerRickrollRedirect();
+          }
+          return 'inspect-trap';
+        },
+        configurable: true
+      });
+      console.log('%c', img);
+    } catch {}
+  };
+
+  // 3. DevTools Open Detection on Window Resize
+  // Only checks when DevTools panel actually docks/opens after right click or explicit action
+  const handleResize = () => {
+    if (isUserAdmin()) return;
+
+    const widthDiff = window.outerWidth - window.innerWidth;
+    const heightDiff = window.outerHeight - window.innerHeight;
+    const isRecentlyRightClicked = Date.now() - lastContextMenuTime < 10000;
+
+    // High threshold (>200px) combined with recent right-click or significant dock size
+    if ((widthDiff > 220 || heightDiff > 220) && isRecentlyRightClicked) {
+      triggerRickrollRedirect();
+    }
+  };
+
+  // Attach Listeners
+  window.addEventListener('keydown', handleKeyDown, { capture: true });
+  document.addEventListener('keydown', handleKeyDown, { capture: true });
+  window.addEventListener('contextmenu', handleContextMenu, { capture: true });
+  window.addEventListener('resize', handleResize);
+
+  // Cleanup function
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    document.removeEventListener('keydown', handleKeyDown, { capture: true });
+    window.removeEventListener('contextmenu', handleContextMenu, { capture: true });
+    window.removeEventListener('resize', handleResize);
+  };
 }

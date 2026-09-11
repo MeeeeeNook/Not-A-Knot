@@ -3,8 +3,8 @@ import { SiteContentConfig } from '../types';
 export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   brandName: 'NOT A KNOT',
   brandTagline: 'Xưởng Chế Tác Phụ Kiện Paracord & EDC Thủ Công',
-  announcementText: '🇻🇳 Sự Kiện 02/09: Nhận đặt trước BST Hào Khí Độc Lập - Giảm 15% khi thanh toán chuyển khoản',
-  announcementLink: '#collection?id=event_0209',
+  announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa Paracord EDC cao cấp cho đơn từ 299k!',
+  announcementLink: '#products',
   announcementActive: true,
   phone: '079 655 5636',
   zalo: '',
@@ -34,18 +34,6 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     },
     {
       id: 'slide-2',
-      tag: 'Kỷ Niệm Quốc Khánh 02.09',
-      title: 'Hào Khí 02.09 — Bản Hùng Ca',
-      highlight: 'Tết Độc Lập',
-      subtitle: 'BST Phụ kiện mang sắc đỏ son & vàng kim, tôn vinh tinh thần kiên cường và niềm tự hào dân tộc.',
-      bgImage: '/assets/img_1.jpg',
-      buttonText: 'Xem BST 02/09',
-      categoryLink: 'event_0209',
-      order: 2,
-      isActive: true
-    },
-    {
-      id: 'slide-3',
       tag: 'Everyday Carry Collection',
       title: 'Phụ Kiện EDC Chuẩn Sinh Tồn',
       highlight: 'Chất Lượng Vượt Trội',
@@ -53,7 +41,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       bgImage: '/assets/img_3.jpg',
       buttonText: 'Xem sản phẩm EDC',
       categoryLink: 'keychains',
-      order: 3,
+      order: 2,
       isActive: true
     }
   ],
