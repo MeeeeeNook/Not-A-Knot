@@ -51,6 +51,24 @@ export function triggerRickrollRedirect(): void {
 export function initDevToolsProtection(): () => void {
   if (typeof window === 'undefined') return () => {};
 
+  // Print friendly message in DevTools console
+  const printConsolePlea = () => {
+    console.log(
+      '%c' +
+      'Chúng tôi chỉ là nhóm sinh viên đang cố kiếm 20% điểm giữa kỳ cho môn Quản trị tác nghiệp Thương mại điện tử. ' +
+      'Website này được vibecode trên Google AI Studio và hoàn toàn không có biện pháp bảo mật nào.\n\n' +
+      'Làm ơn đừng phá/thay đổi dữ liệu trên website. 🙏✨🌸 ⛩️ 🎌',
+      'font-size: 14px; font-weight: bold; color: #dc2626; padding: 8px 0;'
+    );
+  };
+
+  // Trigger debugger pause and print console message whenever DevTools is opened
+  try {
+    printConsolePlea();
+    // eslint-disable-next-line no-debugger
+    debugger;
+  } catch {}
+
   let lastContextMenuTime = 0;
 
   // 1. Keyboard Shortcut Listener (F12, Ctrl+Shift+I/J/C, Cmd+Option+I/J/C, Ctrl+U)

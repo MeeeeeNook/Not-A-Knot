@@ -665,33 +665,33 @@ export const CartPage: React.FC<CartPageProps> = ({
                       Tóm tắt thanh toán
                     </h3>
 
-                    <div className="space-y-3 text-xs sm:text-sm">
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span>Tiền hàng ({cartItems.reduce((s, i) => s + i.quantity, 0)} sản phẩm)</span>
-                        <span className="font-mono font-bold text-slate-900">
+                    <div className="space-y-3.5 text-xs sm:text-sm">
+                      <div className="flex items-center justify-between gap-2 text-slate-600">
+                        <span className="whitespace-nowrap font-medium">Đơn hàng</span>
+                        <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
                           {subtotal.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span>Phí giao hàng toàn quốc</span>
-                        <span className="font-bold text-emerald-700">
-                          Miễn phí vận chuyển
+                      <div className="flex items-center justify-between gap-2 text-slate-600">
+                        <span className="whitespace-nowrap font-medium">Phí vận chuyển</span>
+                        <span className="font-bold text-emerald-700 whitespace-nowrap">
+                          Miễn phí
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between text-slate-600">
-                        <span>Hình thức</span>
-                        <span className="font-bold text-slate-800">
-                          {paymentMethod === 'vietqr' ? 'Chuyển khoản VietQR' : 'Thanh toán COD'}
+                      <div className="flex items-center justify-between gap-2 text-slate-600">
+                        <span className="whitespace-nowrap font-medium">Hình thức</span>
+                        <span className="font-bold text-slate-800 whitespace-nowrap">
+                          {paymentMethod === 'vietqr' ? 'Chuyển khoản' : 'Ship COD'}
                         </span>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100 flex items-baseline justify-between">
-                        <span className="text-sm font-black text-slate-900 uppercase">
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wide whitespace-nowrap">
                           Tổng thanh toán:
                         </span>
-                        <span className="text-2xl font-black text-amber-600 font-mono">
+                        <span className="text-xl sm:text-2xl font-black text-amber-600 font-mono whitespace-nowrap">
                           {subtotal.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
@@ -718,18 +718,9 @@ export const CartPage: React.FC<CartPageProps> = ({
                           <span>Đang gửi đơn hàng...</span>
                         </>
                       ) : (
-                        <>
-                          <span>Xác nhận đặt hàng</span>
-                          <span className="text-xs font-mono font-normal opacity-80">
-                            • {subtotal.toLocaleString('vi-VN')}đ
-                          </span>
-                        </>
+                        <span>Xác nhận đặt hàng</span>
                       )}
                     </button>
-
-                    <p className="text-[11px] text-slate-400 text-center mt-3 leading-relaxed">
-                      Nhấn xác nhận đồng nghĩa với việc bạn đồng ý đặt đơn thủ công theo số đo yêu cầu.
-                    </p>
                   </div>
 
                 </div>
