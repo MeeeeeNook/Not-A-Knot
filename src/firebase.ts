@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   initializeFirestore,
   getFirestore,
@@ -57,6 +58,14 @@ try {
 }
 
 export const db = firestoreInstance;
+export const storage = getStorage(app);
+
+export async function uploadHeroArtwork(file: File, slideId: string, device: 'desktop' | 'mobile'): Promise<string> {
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const artworkRef = ref(storage, `hero-billboards/${slideId}/${device}-${Date.now()}-${safeName}`);
+  const snapshot = await uploadBytes(artworkRef, file, { contentType: file.type, cacheControl: 'public,max-age=31536000,immutable' });
+  return getDownloadURL(snapshot.ref);
+}
 
 export function isQuotaExhaustedError(err: unknown): boolean {
   if (!err) return false;
