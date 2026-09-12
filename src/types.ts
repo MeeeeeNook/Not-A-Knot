@@ -258,6 +258,20 @@ export interface HeroTextBox {
   visible: boolean;
 }
 
+export interface HeroButton {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  visible: boolean;
+  destinationType: 'category' | 'event' | 'path' | 'external';
+  destination: string;
+  backgroundColor: string;
+  textColor: string;
+  style: 'pill' | 'rounded' | 'square';
+}
+
 export interface SiteHeroSlide {
   id: string;
   tag: string;
@@ -308,6 +322,7 @@ export interface SiteHeroSlide {
   bgFitMobile?: 'cover' | 'contain' | 'fill';
   aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto';
   textBoxes?: HeroTextBox[];
+  button?: HeroButton;
 }
 
 export interface FaqItem {
