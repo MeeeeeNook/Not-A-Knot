@@ -1,26 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { SiteHeroSlide } from '../types';
+import { SiteHeroSlide, HeroTextBox } from '../types';
 import { uploadHeroArtwork } from '../firebase';
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Eye,
-  EyeOff,
-  ImagePlus,
-  Monitor,
-  Move,
-  Plus,
-  Smartphone,
-  Trash2,
-  Type,
-  Upload,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, ImagePlus, Monitor, Plus, Smartphone, Trash2, Upload, X } from 'lucide-react';
 
-interface CanvaSlideStudioProps {
+interface Props {
   slides: SiteHeroSlide[];
   onChangeSlides: (slides: SiteHeroSlide[]) => void;
   brandName?: string;
@@ -28,75 +11,41 @@ interface CanvaSlideStudioProps {
 }
 
 type Device = 'desktop' | 'mobile';
-type FontFamily = 'sans' | 'serif' | 'mono';
-
-export interface BillboardTextBox {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  fontFamily: FontFamily;
-  fontSize: number;
-  fontWeight: number;
-  color: string;
-  align: 'left' | 'center' | 'right';
-  visible: boolean;
-}
-
-const textBoxesFor = (slide: SiteHeroSlide): BillboardTextBox[] => slide.textBoxes || [
-  { id: `${slide.id}-title`, text: [slide.title, slide.highlight].filter(Boolean).join(' '), x: 8, y: 38, width: 55, fontFamily: slide.fontFamily === 'serif' ? 'serif' : 'sans', fontSize: 42, fontWeight: 800, color: slide.titleColor || '#ffffff', align: slide.textAlign || 'left', visible: slide.showText !== false },
-  { id: `${slide.id}-subtitle`, text: slide.subtitle || '', x: 8, y: 58, width: 44, fontFamily: 'sans', fontSize: 16, fontWeight: 400, color: slide.subtitleColor || '#e2e8f0', align: slide.subtitleTextAlign || slide.textAlign || 'left', visible: Boolean(slide.subtitle) && slide.showText !== false },
+const defaultBoxes = (slide: SiteHeroSlide): HeroTextBox[] => slide.textBoxes || [
+  { id: `${slide.id}-title`, text: [slide.title, slide.highlight].filter(Boolean).join(' '), x: 8, y: 35, width: 62, fontFamily: 'sans', fontSize: 42, fontWeight: 800, color: slide.titleColor || '#ffffff', align: slide.textAlign || 'left', visible: slide.showText !== false },
+  { id: `${slide.id}-subtitle`, text: slide.subtitle || '', x: 8, y: 58, width: 48, fontFamily: 'sans', fontSize: 17, fontWeight: 400, color: slide.subtitleColor || '#e2e8f0', align: slide.subtitleTextAlign || 'left', visible: Boolean(slide.subtitle) && slide.showText !== false }
 ];
+const clean = (slides: SiteHeroSlide[]) => slides.map((s, i) => ({ ...s, order: i + 1, isActive: s.isActive !== false, textBoxes: defaultBoxes(s) }));
 
-const normalize = (slide: SiteHeroSlide, index: number): SiteHeroSlide => ({
-  ...slide,
-  order: index + 1,
-  isActive: slide.isActive !== false,
-  bgFit: slide.bgFit || 'cover',
-  bgFitMobile: slide.bgFitMobile || 'cover',
-  aspectRatio: slide.aspectRatio || 'fullscreen',
-  aspectRatioMobile: slide.aspectRatioMobile || 'fullscreen',
-  textBoxes: textBoxesFor(slide),
-});
-
-export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({ slides, onChangeSlides, initialDevice = 'desktop' }) => {
+export const CanvaSlideStudio: React.FC<Props> = ({ slides, onChangeSlides, initialDevice = 'desktop' }) => {
   const [selectedId, setSelectedId] = useState(slides[0]?.id || '');
   const [device, setDevice] = useState<Device>(initialDevice);
-  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [layerId, setLayerId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const active = slides.find((slide) => slide.id === selectedId) || slides[0];
-  const normalized = useMemo(() => slides.map(normalize), [slides]);
-  const boxes = active ? textBoxesFor(active) : [];
-  const selectedBox = boxes.find((box) => box.id === selectedTextId);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const items = useMemo(() => clean(slides), [slides]);
+  const active = items.find((s) => s.id === selectedId) || items[0];
+  const boxes = active ? defaultBoxes(active) : [];
+  const layer = boxes.find((b) => b.id === layerId);
   const image = active ? (device === 'mobile' ? active.bgImageMobile || active.bgImage : active.bgImage) : '';
-
-  const commit = (patch: Partial<SiteHeroSlide>) => {
-    if (!active) return;
-    onChangeSlides(normalized.map((slide) => slide.id === active.id ? normalize({ ...slide, ...patch }, slide.order - 1) : slide));
-  };
-  const updateBox = (patch: Partial<BillboardTextBox>) => {
-    if (!active || !selectedBox) return;
-    commit({ textBoxes: boxes.map((box) => box.id === selectedBox.id ? { ...box, ...patch } : box) });
-  };
-  const addSlide = () => {
-    const slide: SiteHeroSlide = { id: `slide-${Date.now()}`, tag: 'Bộ sưu tập mới', title: 'Tiêu đề mới', highlight: '', subtitle: 'Mô tả ngắn cho billboard', bgImage: '/assets/hero-bg.png', buttonText: 'Khám phá ngay', categoryLink: 'all', order: slides.length + 1, isActive: true, aspectRatio: 'fullscreen', aspectRatioMobile: 'fullscreen' };
-    onChangeSlides([...normalized, normalize(slide, normalized.length)]); setSelectedId(slide.id);
-  };
-  const duplicate = () => { if (!active) return; const copy = { ...active, id: `slide-${Date.now()}`, title: `${active.title} (bản sao)` }; const next = [...normalized, normalize(copy, normalized.length)]; onChangeSlides(next); setSelectedId(copy.id); };
-  const remove = () => { if (!active || slides.length <= 1) return; const next = normalized.filter((slide) => slide.id !== active.id).map(normalize); onChangeSlides(next); setSelectedId(next[0]?.id || ''); };
-  const move = (direction: -1 | 1) => { if (!active) return; const index = normalized.findIndex((slide) => slide.id === active.id); const target = index + direction; if (target < 0 || target >= normalized.length) return; const next = [...normalized]; [next[index], next[target]] = [next[target], next[index]]; onChangeSlides(next.map(normalize)); };
-  const handleUpload = async (file: File) => { if (!active || !file.type.startsWith('image/')) return; if (file.size > 12 * 1024 * 1024) return alert('Ảnh tối đa 12MB.'); setUploading(true); try { const url = await uploadHeroArtwork(file, active.id, device); commit(device === 'mobile' ? { bgImageMobile: url, originalBgImageMobile: url } : { bgImage: url, originalBgImage: url }); } catch (error) { console.error('[v0] Hero artwork upload failed', error); alert('Không thể tải ảnh lên Firebase Storage.'); } finally { setUploading(false); } };
-
-  if (!active) return <div className="rounded-2xl border border-dashed p-10 text-center"><p>Chưa có billboard nào.</p><button onClick={addSlide} className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white"><Plus className="mr-2 inline h-4 w-4" />Tạo billboard</button></div>;
-  const ratio = device === 'mobile' ? 'aspect-[9/16]' : 'aspect-[16/7]';
-
-  return <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_300px]">
-    <aside className="rounded-2xl border bg-white p-3 shadow-sm"><div className="mb-3 flex items-center justify-between"><strong>Billboard</strong><button onClick={addSlide} title="Thêm billboard" className="rounded-lg bg-slate-900 p-2 text-white"><Plus className="h-4 w-4" /></button></div><div className="space-y-2">{normalized.map((slide, index) => <button key={slide.id} onClick={() => setSelectedId(slide.id)} className={`flex w-full items-center gap-2 rounded-xl border p-2 text-left ${slide.id === active.id ? 'border-amber-500 bg-amber-50' : 'border-slate-200'}`}><img src={slide.bgImageMobile || slide.bgImage} alt="" className="h-12 w-16 rounded-lg object-cover" /><span className="min-w-0 flex-1 truncate text-xs font-semibold">{index + 1}. {slide.title || 'Không có tiêu đề'}</span>{slide.isActive === false ? <EyeOff className="h-4 w-4 text-slate-400" /> : <Eye className="h-4 w-4 text-emerald-600" />}</button>)}</div></aside>
-    <main className="rounded-2xl border bg-slate-950 p-4 shadow-sm"><div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-white"><div><p className="text-xs uppercase tracking-[0.2em] text-amber-300">Live canvas</p><h2 className="font-bold">{device === 'mobile' ? 'Smartphone 9:16' : 'Desktop full bleed 16:7'}</h2></div><div className="flex rounded-lg bg-white/10 p-1"><button onClick={() => setDevice('desktop')} className={`rounded-md px-3 py-2 text-xs ${device === 'desktop' ? 'bg-white text-slate-900' : ''}`}><Monitor className="mr-1 inline h-4 w-4" />Desktop</button><button onClick={() => setDevice('mobile')} className={`rounded-md px-3 py-2 text-xs ${device === 'mobile' ? 'bg-white text-slate-900' : ''}`}><Smartphone className="mr-1 inline h-4 w-4" />Mobile</button></div></div><div className={`relative mx-auto w-full max-w-4xl overflow-hidden rounded-xl bg-slate-800 ${ratio}`} style={{ backgroundImage: image ? `url(${image})` : undefined, backgroundSize: device === 'mobile' ? active.bgFitMobile : active.bgFit, backgroundPosition: `${device === 'mobile' ? active.bgPositionXMobile ?? 50 : active.bgPositionX ?? 50}% ${device === 'mobile' ? active.bgPositionYMobile ?? 50 : active.bgPositionY ?? 50}%` }} onClick={() => setSelectedTextId(null)}>{!image && <div className="absolute inset-0 grid place-items-center text-white/60">Tải ảnh để bắt đầu</div>}{boxes.map((box) => box.visible && <button key={box.id} type="button" onClick={(event) => { event.stopPropagation(); setSelectedTextId(box.id); }} className={`absolute min-h-8 cursor-move rounded border border-dashed px-2 text-left ${selectedBox?.id === box.id ? 'border-amber-300 bg-black/20' : 'border-transparent hover:border-white/70'}`} style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.width}%`, color: box.color, fontFamily: box.fontFamily === 'serif' ? 'Georgia, serif' : box.fontFamily === 'mono' ? 'monospace' : 'sans-serif', fontSize: `${Math.max(10, box.fontSize / 2)}px`, fontWeight: box.fontWeight, textAlign: box.align }}>{box.text || 'Văn bản mới'}</button>)}</div><p className="mt-3 text-center text-xs text-slate-400">Khung xem trước dùng đúng tỷ lệ xuất bản. Kéo vị trí ảnh bằng các trường căn chỉnh bên phải.</p></main>
-    <aside className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm"><div className="flex gap-2"><button onClick={() => inputRef.current?.click()} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white" disabled={uploading}><Upload className="h-4 w-4" />{uploading ? 'Đang tải...' : `Ảnh ${device === 'mobile' ? 'mobile' : 'desktop'}`}</button><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => event.target.files?.[0] && handleUpload(event.target.files[0])} /></div><div className="grid grid-cols-4 gap-2"><button onClick={() => commit({ isActive: active.isActive === false })} title="Ẩn/hiện" className="rounded-lg border p-2">{active.isActive === false ? <EyeOff className="mx-auto h-4 w-4" /> : <Eye className="mx-auto h-4 w-4" />}</button><button onClick={() => move(-1)} title="Đưa lên" className="rounded-lg border p-2"><ChevronUp className="mx-auto h-4 w-4" /></button><button onClick={() => move(1)} title="Đưa xuống" className="rounded-lg border p-2"><ChevronDown className="mx-auto h-4 w-4" /></button><button onClick={duplicate} title="Nhân bản" className="rounded-lg border p-2"><Copy className="mx-auto h-4 w-4" /></button></div><button onClick={remove} className="w-full rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600"><Trash2 className="mr-1 inline h-4 w-4" />Xóa billboard</button><section className="border-t pt-3"><p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Ảnh & căn chỉnh</p><label className="text-xs">Vị trí ngang<input type="range" min="0" max="100" value={device === 'mobile' ? active.bgPositionXMobile ?? 50 : active.bgPositionX ?? 50} onChange={(e) => commit(device === 'mobile' ? { bgPositionXMobile: Number(e.target.value) } : { bgPositionX: Number(e.target.value) })} className="w-full" /></label><label className="text-xs">Vị trí dọc<input type="range" min="0" max="100" value={device === 'mobile' ? active.bgPositionYMobile ?? 50 : active.bgPositionY ?? 50} onChange={(e) => commit(device === 'mobile' ? { bgPositionYMobile: Number(e.target.value) } : { bgPositionY: Number(e.target.value) })} className="w-full" /></label></section><section className="border-t pt-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Text box</p><button onClick={() => { const box: BillboardTextBox = { id: `${active.id}-text-${Date.now()}`, text: 'Văn bản mới', x: 8, y: 72, width: 45, fontFamily: 'sans', fontSize: 22, fontWeight: 600, color: '#ffffff', align: 'left', visible: true }; commit({ textBoxes: [...boxes, box] }); setSelectedTextId(box.id); }} className="rounded bg-amber-400 p-1"><Plus className="h-4 w-4" /></button></div>{boxes.map((box) => <button key={box.id} onClick={() => setSelectedTextId(box.id)} className={`mb-1 flex w-full items-center gap-2 rounded border p-2 text-left text-xs ${selectedBox?.id === box.id ? 'border-amber-500' : ''}`}><Type className="h-3 w-3" />{box.text || 'Văn bản mới'}{!box.visible && <EyeOff className="ml-auto h-3 w-3" />}</button>)}{selectedBox && <div className="space-y-2 rounded-lg bg-slate-50 p-3"><input value={selectedBox.text} onChange={(e) => updateBox({ text: e.target.value })} className="w-full rounded border px-2 py-1 text-xs" /><div className="flex gap-1"><select value={selectedBox.fontFamily} onChange={(e) => updateBox({ fontFamily: e.target.value as FontFamily })} className="w-full rounded border px-2 py-1 text-xs"><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select><input type="number" min="10" max="120" value={selectedBox.fontSize} onChange={(e) => updateBox({ fontSize: Number(e.target.value) })} className="w-20 rounded border px-2 py-1 text-xs" /></div><div className="flex gap-1"><button onClick={() => updateBox({ align: 'left' })} className="rounded border p-1"><AlignLeft className="h-4 w-4" /></button><button onClick={() => updateBox({ align: 'center' })} className="rounded border p-1"><AlignCenter className="h-4 w-4" /></button><button onClick={() => updateBox({ align: 'right' })} className="rounded border p-1"><AlignRight className="h-4 w-4" /></button><input type="color" value={selectedBox.color} onChange={(e) => updateBox({ color: e.target.value })} className="ml-auto h-7 w-8" /><button onClick={() => updateBox({ visible: !selectedBox.visible })} className="rounded border p-1">{selectedBox.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button><button onClick={() => { commit({ textBoxes: boxes.filter((box) => box.id !== selectedBox.id) }); setSelectedTextId(null); }} className="rounded border p-1 text-red-600"><Trash2 className="h-4 w-4" /></button></div><label className="text-xs">X<input type="range" min="0" max="90" value={selectedBox.x} onChange={(e) => updateBox({ x: Number(e.target.value) })} className="w-full" /></label><label className="text-xs">Y<input type="range" min="0" max="90" value={selectedBox.y} onChange={(e) => updateBox({ y: Number(e.target.value) })} className="w-full" /></label></div>}</section></aside>
+  const patch = (change: Partial<SiteHeroSlide>) => active && onChangeSlides(clean(items.map((s) => s.id === active.id ? { ...s, ...change } : s)));
+  const patchLayer = (change: Partial<HeroTextBox>) => layer && patch({ textBoxes: boxes.map((b) => b.id === layer.id ? { ...b, ...change } : b) });
+  const add = () => { const id = `slide-${Date.now()}`; const slide: SiteHeroSlide = { id, tag: 'Bộ sưu tập mới', title: 'Tiêu đề mới', highlight: '', subtitle: 'Mô tả ngắn cho billboard', bgImage: '', buttonText: 'Khám phá ngay', categoryLink: 'all', order: items.length + 1, isActive: true }; onChangeSlides(clean([...items, slide])); setSelectedId(id); };
+  const duplicate = () => active && (() => { const copy = { ...active, id: `slide-${Date.now()}`, title: `${active.title} (bản sao)` }; onChangeSlides(clean([...items, copy])); setSelectedId(copy.id); })();
+  const remove = () => { if (!active || items.length < 2) return; const next = items.filter((s) => s.id !== active.id); onChangeSlides(clean(next)); setSelectedId(next[0].id); };
+  const move = (direction: -1 | 1) => { if (!active) return; const i = items.findIndex((s) => s.id === active.id); const j = i + direction; if (j < 0 || j >= items.length) return; const next = [...items]; [next[i], next[j]] = [next[j], next[i]]; onChangeSlides(clean(next)); };
+  const upload = async (file?: File) => { if (!file || !active || !file.type.startsWith('image/')) return; setUploading(true); try { const url = await uploadHeroArtwork(file, active.id, device); patch(device === 'mobile' ? { bgImageMobile: url, originalBgImageMobile: url } : { bgImage: url, originalBgImage: url }); } catch { alert('Không thể tải ảnh lên Firebase Storage.'); } finally { setUploading(false); } };
+  if (!active) return <button onClick={add} className="rounded-2xl border border-dashed p-10 text-sm font-semibold">Tạo billboard đầu tiên</button>;
+  const positionX = device === 'mobile' ? active.bgPositionXMobile ?? 50 : active.bgPositionX ?? 50;
+  const positionY = device === 'mobile' ? active.bgPositionYMobile ?? 50 : active.bgPositionY ?? 50;
+  const setPosition = (axis: 'X' | 'Y', value: number) => patch(device === 'mobile' ? { [`bgPosition${axis}Mobile`]: value } : { [`bgPosition${axis}`]: value });
+  return <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-[#f5f2ed] text-slate-950 shadow-xl">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.25em] text-amber-700">Homepage billboard</p><h2 className="text-xl font-black tracking-tight">Build the first impression</h2></div><div className="flex items-center gap-2"><button onClick={() => setDevice('desktop')} className={`rounded-full px-3 py-2 text-xs font-bold ${device === 'desktop' ? 'bg-slate-950 text-white' : 'bg-slate-100'}`}><Monitor className="mr-1 inline size-4" />Desktop</button><button onClick={() => setDevice('mobile')} className={`rounded-full px-3 py-2 text-xs font-bold ${device === 'mobile' ? 'bg-slate-950 text-white' : 'bg-slate-100'}`}><Smartphone className="mr-1 inline size-4" />Mobile</button><button onClick={add} className="rounded-full bg-amber-400 px-4 py-2 text-xs font-black"><Plus className="mr-1 inline size-4" />New slide</button></div></header>
+    <div className="grid lg:grid-cols-[220px_minmax(0,1fr)_280px]">
+      <aside className="border-b border-slate-200 bg-white p-3 lg:border-b-0 lg:border-r"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest">Slides</span><span className="text-xs text-slate-500">{items.length}</span></div><div className="flex gap-2 overflow-x-auto lg:flex-col">{items.map((slide, i) => <button key={slide.id} onClick={() => { setSelectedId(slide.id); setLayerId(null); }} className={`group flex min-w-44 items-center gap-2 rounded-2xl border p-2 text-left ${slide.id === active.id ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}><div className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-slate-200">{(slide.bgImageMobile || slide.bgImage) && <img src={slide.bgImageMobile || slide.bgImage} alt="" className="size-full object-cover" />}</div><span className="min-w-0 flex-1 truncate text-xs font-bold">{i + 1}. {slide.title || 'Untitled'}</span>{slide.isActive === false ? <EyeOff className="size-4 text-slate-400" /> : <Eye className="size-4 text-emerald-600" />}</button>)}</div></aside>
+      <main className="min-h-[560px] bg-[#1e2329] p-5"><div className="mx-auto flex h-full max-w-3xl flex-col"><div className="mb-4 flex items-center justify-between text-white"><div><p className="text-xs text-white/50">{device === 'desktop' ? 'Desktop · 1920 × 1080' : 'Mobile · 1080 × 1920'}</p><p className="font-bold">{active.title || 'Untitled slide'}</p></div><button onClick={() => patch({ isActive: active.isActive === false })} className="rounded-full border border-white/20 px-3 py-2 text-xs">{active.isActive === false ? 'Hidden from homepage' : 'Visible on homepage'}</button></div><div className={`relative mx-auto w-full overflow-hidden rounded-2xl bg-slate-700 shadow-2xl ${device === 'mobile' ? 'max-w-[330px] aspect-[9/16]' : 'aspect-[16/9]'}`} onClick={() => setLayerId(null)}>{image ? <img src={image} alt="Billboard preview" className="absolute inset-0 size-full" style={{ objectFit: device === 'mobile' ? active.bgFitMobile || 'cover' : active.bgFit || 'cover', objectPosition: `${positionX}% ${positionY}%` }} /> : <div className="absolute inset-0 grid place-items-center text-sm text-white/60">Upload artwork in the inspector</div>}<div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10" />{boxes.filter((b) => b.visible).map((b) => <button key={b.id} onClick={(e) => { e.stopPropagation(); setLayerId(b.id); }} className={`absolute min-h-8 rounded-lg border border-dashed px-2 text-left ${layerId === b.id ? 'border-amber-300 bg-black/20' : 'border-transparent hover:border-white/70'}`} style={{ left: `${b.x}%`, top: `${b.y}%`, width: `${b.width}%`, color: b.color, fontFamily: b.fontFamily === 'serif' ? 'Georgia, serif' : b.fontFamily === 'mono' ? 'monospace' : 'sans-serif', fontSize: `${Math.max(10, b.fontSize / (device === 'mobile' ? 3.6 : 5))}px`, fontWeight: b.fontWeight, textAlign: b.align }}>{b.text || 'Empty text layer'}</button>)}</div><p className="mt-3 text-center text-xs text-white/40">Select a text layer to edit it. Artwork always previews at its final device ratio.</p></div></main>
+      <aside className="max-h-[760px] overflow-y-auto border-t border-slate-200 bg-white p-4 lg:border-l lg:border-t-0"><section className="flex items-center justify-between border-b pb-3"><div><p className="text-xs font-black uppercase tracking-widest">Inspector</p><p className="text-xs text-slate-500">{layer ? 'Text layer selected' : 'Slide settings'}</p></div>{layer && <button onClick={() => patch({ textBoxes: boxes.filter((b) => b.id !== layer.id) })} aria-label="Delete text layer"><Trash2 className="size-4 text-red-500" /></button>}</section>{layer ? <div className="flex flex-col gap-3 pt-4"><label className="text-xs font-bold">Text<textarea value={layer.text} onChange={(e) => patchLayer({ text: e.target.value })} className="mt-1 min-h-20 w-full rounded-xl border p-2 text-sm" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold">Font<select value={layer.fontFamily} onChange={(e) => patchLayer({ fontFamily: e.target.value as HeroTextBox['fontFamily'] })} className="mt-1 w-full rounded-xl border p-2"><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select></label><label className="text-xs font-bold">Size<input type="number" min="10" max="120" value={layer.fontSize} onChange={(e) => patchLayer({ fontSize: Number(e.target.value) })} className="mt-1 w-full rounded-xl border p-2" /></label></div><label className="text-xs font-bold">Width <input type="range" min="10" max="90" value={layer.width} onChange={(e) => patchLayer({ width: Number(e.target.value) })} className="w-full" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold">Left<input type="range" min="0" max="90" value={layer.x} onChange={(e) => patchLayer({ x: Number(e.target.value) })} className="w-full" /></label><label className="text-xs font-bold">Top<input type="range" min="0" max="90" value={layer.y} onChange={(e) => patchLayer({ y: Number(e.target.value) })} className="w-full" /></label></div><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={layer.visible} onChange={(e) => patchLayer({ visible: e.target.checked })} /> Show layer</label></div> : <div className="flex flex-col gap-4 pt-4"><div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-3"><input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => upload(e.target.files?.[0])} /><button onClick={() => fileRef.current?.click()} disabled={uploading} className="w-full rounded-xl bg-slate-950 px-3 py-3 text-xs font-bold text-white"><Upload className="mr-2 inline size-4" />{uploading ? 'Uploading…' : `Upload ${device} artwork`}</button><p className="mt-2 text-[11px] text-amber-900">{device === 'desktop' ? 'Recommended: 1920 × 1080 px' : 'Recommended: 1080 × 1920 px'}</p></div><label className="text-xs font-bold">Title<input value={active.title} onChange={(e) => patch({ title: e.target.value })} className="mt-1 w-full rounded-xl border p-2" /></label><label className="text-xs font-bold">CTA label<input value={active.buttonText} onChange={(e) => patch({ buttonText: e.target.value })} className="mt-1 w-full rounded-xl border p-2" /></label><button onClick={() => patch({ textBoxes: [...boxes, { id: `text-${Date.now()}`, text: 'New text', x: 10, y: 72, width: 40, fontFamily: 'sans', fontSize: 22, fontWeight: 600, color: '#ffffff', align: 'left', visible: true }] })} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold"><Plus className="mr-1 inline size-4" />Add text layer</button><div><p className="mb-2 text-xs font-black uppercase tracking-widest">Image framing</p><label className="text-xs">Horizontal<input type="range" min="0" max="100" value={positionX} onChange={(e) => setPosition('X', Number(e.target.value))} className="w-full" /></label><label className="text-xs">Vertical<input type="range" min="0" max="100" value={positionY} onChange={(e) => setPosition('Y', Number(e.target.value))} className="w-full" /></label></div><div className="flex gap-2"><button onClick={() => move(-1)} className="flex-1 rounded-xl border py-2 text-xs font-bold"><ArrowUp className="mr-1 inline size-4" />Move up</button><button onClick={() => move(1)} className="flex-1 rounded-xl border py-2 text-xs font-bold"><ArrowDown className="mr-1 inline size-4" />Move down</button></div><div className="flex gap-2"><button onClick={duplicate} className="flex-1 rounded-xl border py-2 text-xs font-bold"><Copy className="mr-1 inline size-4" />Duplicate</button><button onClick={remove} className="flex-1 rounded-xl border border-red-200 py-2 text-xs font-bold text-red-600"><Trash2 className="mr-1 inline size-4" />Delete</button></div></div>}</aside>
+    </div>
   </div>;
 };
-
 export default CanvaSlideStudio;
