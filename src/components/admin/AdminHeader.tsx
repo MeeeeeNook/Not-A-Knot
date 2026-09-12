@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, CloudUpload, RefreshCw, ChevronsRight } from 'lucide-react';
+import { Menu, CloudUpload, RefreshCw, ChevronsRight, Package, Folder, ShoppingBag, Mail } from 'lucide-react';
 import { AdminNotifications } from '../AdminNotifications';
 import { StoredOrder } from '../../firebase';
 import { ContactMessage } from '../../types';
@@ -11,9 +11,14 @@ interface AdminHeaderProps {
   onOpenMobileSidebar: () => void;
   orders: StoredOrder[];
   contactMessages: ContactMessage[];
+  productsCount?: number;
+  categoriesCount?: number;
+  unreadMessagesCount?: number;
   onInspectOrder: (order: StoredOrder) => void;
   onNavigateToOrders: () => void;
   onNavigateToMessages: () => void;
+  onNavigateToProducts?: () => void;
+  onNavigateToCategories?: () => void;
   onUpdateOrderStatus: (orderId: string, status: any) => void;
   onMarkMessageRead: (msgId: string) => void;
   onRefreshData: () => void;
@@ -29,9 +34,14 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onOpenMobileSidebar,
   orders,
   contactMessages,
+  productsCount,
+  categoriesCount,
+  unreadMessagesCount = 0,
   onInspectOrder,
   onNavigateToOrders,
   onNavigateToMessages,
+  onNavigateToProducts,
+  onNavigateToCategories,
   onUpdateOrderStatus,
   onMarkMessageRead,
   onRefreshData,
@@ -40,7 +50,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onFetchFromCloud
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-2xs">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-2xs gap-3">
       {/* Left: Mobile menu toggle, expand sidebar button if collapsed, and Page Title */}
       <div className="flex items-center gap-3 min-w-0">
         <button
@@ -69,6 +79,71 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             {pageTitle}
           </h1>
         </div>
+      </div>
+
+      {/* Center: Quick Count Indicators (Sản phẩm, Danh mục, Đơn hàng, Hộp thư nếu có tin mới) */}
+      <div className="hidden lg:flex items-center gap-2">
+        {/* Sản phẩm */}
+        {typeof productsCount === 'number' && (
+          <button
+            type="button"
+            onClick={onNavigateToProducts}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80 transition-colors cursor-pointer"
+            title="Xem danh sách sản phẩm"
+          >
+            <Package className="w-3.5 h-3.5 text-slate-500" />
+            <span>Sản phẩm</span>
+            <span className="bg-slate-200 text-slate-900 px-1.5 py-0.5 rounded text-[11px] font-bold font-mono">
+              {productsCount}
+            </span>
+          </button>
+        )}
+
+        {/* Danh mục */}
+        {typeof categoriesCount === 'number' && (
+          <button
+            type="button"
+            onClick={onNavigateToCategories}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/80 transition-colors cursor-pointer"
+            title="Xem danh mục sản phẩm"
+          >
+            <Folder className="w-3.5 h-3.5 text-slate-500" />
+            <span>Danh mục</span>
+            <span className="bg-slate-200 text-slate-900 px-1.5 py-0.5 rounded text-[11px] font-bold font-mono">
+              {categoriesCount}
+            </span>
+          </button>
+        )}
+
+        {/* Đơn hàng */}
+        <button
+          type="button"
+          onClick={onNavigateToOrders}
+          className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+          title="Xem danh sách đơn hàng"
+        >
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-600" />
+          <span>Đơn hàng</span>
+          <span className="bg-amber-200/80 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black font-mono">
+            {orders.length}
+          </span>
+        </button>
+
+        {/* Hộp thư - Chỉ hiện nếu có tin nhắn mới */}
+        {unreadMessagesCount > 0 && (
+          <button
+            type="button"
+            onClick={onNavigateToMessages}
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer animate-pulse"
+            title="Có tin nhắn liên hệ mới từ khách hàng"
+          >
+            <Mail className="w-3.5 h-3.5 text-rose-600" />
+            <span>Hộp thư</span>
+            <span className="bg-rose-500 text-white px-1.5 py-0.5 rounded text-[10px] font-black font-mono">
+              {unreadMessagesCount} mới
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Right: Notifications & Cloud Icons (Icon-only with hover description) */}

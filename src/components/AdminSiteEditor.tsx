@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { SiteContentConfig, CustomElementBlock, SiteHeroSlide, CategoryItem, CollectionInfo, FaqItem } from '../types';
+import { SiteContentConfig, CustomElementBlock, SiteHeroSlide, CategoryItem, CollectionInfo, FaqItem, Product, LandingCollectionProductsConfig } from '../types';
 import { DEFAULT_SITE_CONTENT } from '../data/siteContent';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
@@ -32,11 +32,19 @@ import {
   Wifi,
   Battery,
   CreditCard,
-  QrCode
+  QrCode,
+  LayoutGrid,
+  Copy,
+  Layers,
+  EyeOff,
+  Palette,
+  Sliders,
+  SlidersHorizontal
 } from 'lucide-react';
 import { CanvaSlideStudio } from './CanvaSlideStudio';
 import { HeroBanners } from './HeroBanners';
 import { LandingCollectionBanners } from './LandingCollectionBanners';
+import { LandingProductsCollection } from './LandingProductsCollection';
 import { DynamicCustomElements } from './DynamicCustomElements';
 import { AboutUsSection } from './AboutUsSection';
 import { LandingFaqCommitments } from './LandingFaqCommitments';
@@ -46,6 +54,7 @@ interface AdminSiteEditorProps {
   initialConfig?: SiteContentConfig;
   categories?: CategoryItem[];
   collections?: CollectionInfo[];
+  products?: Product[];
   onSaveConfig: (config: SiteContentConfig) => void;
   onPreviewWebsite?: () => void;
 }
@@ -54,21 +63,233 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
   initialConfig,
   categories = DEFAULT_CATEGORIES,
   collections = COLLECTIONS_DATA,
+  products = [],
   onSaveConfig,
   onPreviewWebsite
 }) => {
   const [config, setConfig] = useState<SiteContentConfig>(() => {
-    return initialConfig || DEFAULT_SITE_CONTENT;
+    const base = initialConfig || DEFAULT_SITE_CONTENT;
+    let sections = base.landingProductSections;
+    if (!sections || sections.length === 0) {
+      if (base.landingProducts) {
+        sections = [base.landingProducts];
+      } else {
+        sections = DEFAULT_SITE_CONTENT.landingProductSections || [];
+      }
+    }
+    return {
+      ...base,
+      landingProductSections: sections,
+      landingProducts: sections[0] || base.landingProducts
+    };
   });
 
   const [isCustomAnnouncementLink, setIsCustomAnnouncementLink] = useState(false);
 
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'hero_mobile' | 'faq' | 'footer'>('general');
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'hero_mobile' | 'collection_products' | 'faq' | 'footer'>('general');
   const [mobileStudioMode, setMobileStudioMode] = useState<'cards' | 'studio'>('cards');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   
   const [showResetModal, setShowResetModal] = useState(false);
+
+  // Landing Collection Products Manager state
+  const [productSearchTerm, setProductSearchTerm] = useState('');
+  const [collectionPreviewDevice, setCollectionPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [selectedSectionIdx, setSelectedSectionIdx] = useState(0);
+  const [collectionPreviewScope, setCollectionPreviewScope] = useState<'current' | 'all'>('current');
+
+  // Multi-section accessors and mutators
+  const landingSections: LandingCollectionProductsConfig[] = React.useMemo(() => {
+    if (config.landingProductSections && config.landingProductSections.length > 0) {
+      return config.landingProductSections;
+    }
+    if (config.landingProducts) {
+      return [config.landingProducts];
+    }
+    return DEFAULT_SITE_CONTENT.landingProductSections || [];
+  }, [config.landingProductSections, config.landingProducts]);
+
+  // Compute hidden category IDs to filter out products in hidden categories
+  const hiddenCategoryIds = React.useMemo(() => {
+    return new Set((categories || []).filter((c) => c.isHidden || String(c.isHidden) === 'true').map((c) => c.id));
+  }, [categories]);
+
+  // Product is considered hidden if either explicitly hidden or category is hidden
+  const isProductHidden = (p: Product) => {
+    return Boolean(p.isHidden) || String(p.isHidden) === 'true' || Boolean(hiddenCategoryIds.has(p.category));
+  };
+
+  const currentSectionIndex = Math.min(Math.max(0, selectedSectionIdx), Math.max(0, landingSections.length - 1));
+  const currentSection: LandingCollectionProductsConfig = landingSections[currentSectionIndex] || {
+    id: 'section-the-collection',
+    title: 'THE COLLECTION',
+    subtitle: '',
+    badgeText: 'NEW',
+    viewAllText: 'Xem tất cả',
+    detailButtonText: 'Chi tiết',
+    isActive: true,
+    displayLimit: 8,
+    layoutMode: 'auto',
+    backgroundColor: '#FAF9F6',
+    textColor: 'auto',
+    filterCategory: 'all',
+    selectedProductIds: [],
+    gridColumns: 4
+  };
+
+  const updateSections = (newSections: LandingCollectionProductsConfig[]) => {
+    setConfig((prev) => ({
+      ...prev,
+      landingProductSections: newSections,
+      landingProducts: newSections[0] || prev.landingProducts
+    }));
+  };
+
+  const updateCurrentSection = (patch: Partial<LandingCollectionProductsConfig>) => {
+    const newSections = [...landingSections];
+    if (newSections[currentSectionIndex]) {
+      newSections[currentSectionIndex] = { ...newSections[currentSectionIndex], ...patch };
+      updateSections(newSections);
+    }
+  };
+
+  const processSectionBgImageUpload = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/jpeg', 0.85);
+          } catch {
+            compressed = e.target?.result as string;
+          }
+          updateCurrentSection({ backgroundImage: compressed });
+        } else {
+          updateCurrentSection({ backgroundImage: e.target?.result as string });
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddSection = (presetKey: string = 'custom') => {
+    const newId = `sec-${Date.now()}`;
+    let newSec: LandingCollectionProductsConfig = {
+      id: newId,
+      title: 'THE COLLECTION',
+      subtitle: '',
+      badgeText: 'NEW',
+      viewAllText: 'Xem tất cả',
+      detailButtonText: 'Chi tiết',
+      isActive: true,
+      displayLimit: 8,
+      filterCategory: 'all',
+      selectedProductIds: [],
+      gridColumns: 4
+    };
+
+    if (presetKey === 'best_sellers') {
+      newSec.title = 'BEST SELLERS';
+      newSec.badgeText = 'HOT';
+    } else if (presetKey === 'bracelets') {
+      newSec.title = 'VÒNG TAY PARACORD';
+      newSec.badgeText = 'PARACORD';
+      newSec.filterCategory = 'vong-tay';
+    } else if (presetKey === 'keychains') {
+      newSec.title = 'MÓC KHÓA & EDC';
+      newSec.badgeText = 'EDC';
+      newSec.filterCategory = 'moc-khoa';
+    } else if (presetKey === 'limited') {
+      newSec.title = 'LIMITED EDITION';
+      newSec.badgeText = 'LIMITED';
+      newSec.displayLimit = 4;
+    }
+
+    const updated = [...landingSections, newSec];
+    updateSections(updated);
+    setSelectedSectionIdx(updated.length - 1);
+  };
+
+  const handleDuplicateSection = (idx: number) => {
+    const target = landingSections[idx];
+    if (!target) return;
+    const duplicated: LandingCollectionProductsConfig = {
+      ...target,
+      id: `sec-${Date.now()}`,
+      title: `${target.title} (Bản sao)`
+    };
+    const updated = [...landingSections];
+    updated.splice(idx + 1, 0, duplicated);
+    updateSections(updated);
+    setSelectedSectionIdx(idx + 1);
+  };
+
+  const handleMoveSection = (idx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= landingSections.length) return;
+    const updated = [...landingSections];
+    const temp = updated[idx];
+    updated[idx] = updated[targetIdx];
+    updated[targetIdx] = temp;
+    updateSections(updated);
+    setSelectedSectionIdx(targetIdx);
+  };
+
+  const [deleteSectionModalIdx, setDeleteSectionModalIdx] = useState<number | null>(null);
+
+  const handleDeleteSection = (idx: number) => {
+    setDeleteSectionModalIdx(idx);
+  };
+
+  const handleConfirmDeleteSection = () => {
+    if (deleteSectionModalIdx === null) return;
+    const idx = deleteSectionModalIdx;
+    const targetTitle = landingSections[idx]?.title || 'Khối bộ sưu tập';
+    const updated = landingSections.filter((_, i) => i !== idx);
+    updateSections(updated);
+    setSelectedSectionIdx(Math.max(0, idx - 1));
+    setDeleteSectionModalIdx(null);
+    setStatusMsg(`Đã xóa "${targetTitle}" khỏi giao diện.`);
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus('idle'), 2500);
+  };
+
+  const handleToggleSectionActive = (idx: number) => {
+    const updated = [...landingSections];
+    if (updated[idx]) {
+      updated[idx] = {
+        ...updated[idx],
+        isActive: updated[idx].isActive === false ? true : false
+      };
+      updateSections(updated);
+    }
+  };
 
   // Drag & drop state for hero slide upload
   const [dragOverSlideId, setDragOverSlideId] = useState<string | null>(null);
@@ -380,15 +601,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             Quản lý thanh thông báo, slide trình diễn đầu trang, câu hỏi thường gặp và chân trang.
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <button
-            onClick={handleResetToDefault}
-            className="px-3.5 py-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all cursor-pointer"
-          >
-            Khôi phục gốc
-          </button>
-        </div>
       </div>
 
       {/* Status Banner */}
@@ -437,6 +649,21 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             activeSubTab === 'hero_mobile' ? 'bg-slate-950 text-amber-300' : 'bg-amber-100 text-amber-900'
           }`}>
             {config.heroSlides?.filter(s => !!s.bgImageMobile).length || 0}/{config.heroSlides?.length || 0}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('collection_products')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+            activeSubTab === 'collection_products' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
+          <span>The Collections ({landingSections.length} mục)</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+            activeSubTab === 'collection_products' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {landingSections.filter(s => s.isActive !== false).length} hiển thị
           </span>
         </button>
 
@@ -1277,7 +1504,885 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         </div>
       )}
 
-      {/* Floating Save Button */}
+      {/* ----------------------------------------------------
+          TAB: THE COLLECTION (SẢN PHẨM LANDING PAGE - HỖ TRỢ NHIỀU MỤC)
+         ---------------------------------------------------- */}
+      {activeSubTab === 'collection_products' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Header Card */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-200">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">Quản Lý Bộ Sưu Tập Sản Phẩm Trên Trang Chủ</h3>
+                  <span className="text-[10px] bg-slate-900 text-white font-mono px-2 py-0.5 rounded-full font-bold">
+                    {landingSections.length} mục
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-mono px-2 py-0.5 rounded-full font-bold">
+                    {landingSections.filter(s => s.isActive !== false).length} đang bật
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Bạn có thể tạo nhiều khối sản phẩm độc lập (THE COLLECTION, BEST SELLERS, VÒNG TAY, MÓC KHÓA...), tùy biến tiêu đề, nút bấm, lọc danh mục và sắp xếp thứ tự hiển thị.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saveStatus === 'saving'}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{saveStatus === 'saving' ? 'Đang Lưu...' : 'Lưu Thay Đổi'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Section 1: Manage Sections List & Order */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-600" />
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Danh Sách Các Khối Bộ Sưu Tập ({landingSections.length})
+                  </h4>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Nhấp vào một khối để chỉnh sửa chi tiết. Sử dụng các nút mũi tên để đổi thứ tự xuất hiện trên trang chủ.
+                </p>
+              </div>
+
+              {/* Add New Section */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAddSection('custom')}
+                  className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Thêm Khối Mới</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List of cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {landingSections.map((sec, idx) => {
+                const isSelected = idx === currentSectionIndex;
+                const isEnabled = sec.isActive !== false;
+                const catLabel = sec.filterCategory === 'all' || !sec.filterCategory
+                  ? 'Toàn bộ kho'
+                  : (categories.find(c => c.id === sec.filterCategory)?.label || sec.filterCategory);
+
+                return (
+                  <div
+                    key={sec.id || `sec-card-${idx}`}
+                    onClick={() => setSelectedSectionIdx(idx)}
+                    className={`relative p-3.5 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-50/40 shadow-sm ring-2 ring-amber-400/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                    } ${!isEnabled ? 'opacity-65' : ''}`}
+                  >
+                    <div>
+                      {/* Top Bar inside card */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-md ${
+                            isSelected ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            #{idx + 1}
+                          </span>
+                          {sec.badgeText && (
+                            <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-900 text-white uppercase">
+                              {sec.badgeText}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick Action Buttons */}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {/* Toggle Active */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSectionActive(idx)}
+                            className={`p-1 rounded-md transition-colors cursor-pointer ${
+                              isEnabled ? 'text-emerald-700 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-200'
+                            }`}
+                            title={isEnabled ? 'Mục này đang hiển thị (Bấm để ẩn)' : 'Mục này đang ẩn (Bấm để hiện)'}
+                          >
+                            {isEnabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {/* Move Up */}
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSection(idx, 'up')}
+                            disabled={idx === 0}
+                            className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded-md transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                            title="Di chuyển lên trên"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Move Down */}
+                          <button
+                            type="button"
+                            onClick={() => handleMoveSection(idx, 'down')}
+                            disabled={idx === landingSections.length - 1}
+                            className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded-md transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                            title="Di chuyển xuống dưới"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Duplicate */}
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateSection(idx)}
+                            className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+                            title="Nhân bản mục này"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSection(idx)}
+                            className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                            title="Xóa mục này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Title */}
+                      <h5 className="text-xs font-bold text-slate-900 truncate tracking-wide">
+                        {sec.title || 'THE COLLECTION'}
+                      </h5>
+                      {sec.subtitle && (
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {sec.subtitle}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Footer Info of card */}
+                    <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                      <span className="truncate max-w-[140px]">
+                        {catLabel}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0 font-medium">
+                        <span>{sec.displayLimit || 8} món</span>
+                        <span>•</span>
+                        <span className={isEnabled ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
+                          {isEnabled ? 'Đang bật' : 'Tắt'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Section 2: Selected Section Configuration Form */}
+          <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold bg-amber-500 text-slate-950 px-2 py-0.5 rounded-md">
+                  Mục #{currentSectionIndex + 1}
+                </span>
+                <h4 className="text-sm font-bold text-slate-900">
+                  Cấu Hình: {currentSection.title || 'THE COLLECTION'}
+                </h4>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Hiển thị mục này:</span>
+                <button
+                  type="button"
+                  onClick={() => updateCurrentSection({ isActive: currentSection.isActive === false ? true : false })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                    currentSection.isActive !== false ? 'bg-emerald-600' : 'bg-slate-300'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      currentSection.isActive !== false ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Text & Labels Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Tiêu đề chính */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Tiêu đề hiển thị (Header)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Mặc định: THE COLLECTION</span>
+                </label>
+                <input
+                  type="text"
+                  value={currentSection.title ?? 'THE COLLECTION'}
+                  onChange={(e) => updateCurrentSection({ title: e.target.value })}
+                  placeholder="THE COLLECTION"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium"
+                />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    'THE COLLECTION',
+                    'BEST SELLERS',
+                    'NEW ARRIVALS',
+                    'VÒNG TAY PARACORD',
+                    'MÓC KHÓA & EDC',
+                    'LIMITED EDITION'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateCurrentSection({ title: preset })}
+                      className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer transition-colors"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Phụ đề */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Phụ đề ngắn (Subtitle - Tùy chọn)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Để trống nếu không dùng</span>
+                </label>
+                <input
+                  type="text"
+                  value={currentSection.subtitle ?? ''}
+                  onChange={(e) => updateCurrentSection({ subtitle: e.target.value })}
+                  placeholder="VD: Tuyệt tác phụ kiện EDC thủ công tinh xảo..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium"
+                />
+              </div>
+
+              {/* Nhãn Badge góc sản phẩm */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Nhãn góc trên ảnh sản phẩm (Badge)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Mặc định: NEW</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={currentSection.badgeText ?? 'NEW'}
+                    onChange={(e) => updateCurrentSection({ badgeText: e.target.value })}
+                    placeholder="NEW"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium uppercase"
+                  />
+                  {currentSection.badgeText && (
+                    <span className="shrink-0 bg-[#0d2e2b] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1.5 rounded shadow-2xs">
+                      {currentSection.badgeText}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['NEW', 'HOT', 'LIMITED', 'EDC', 'PARACORD', 'SALE', ''].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateCurrentSection({ badgeText: preset })}
+                      className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer transition-colors"
+                    >
+                      {preset ? preset : 'Không hiện nhãn'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Nút Chi Tiết & Nút Xem Tất Cả */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Tên nút Chi Tiết
+                  </label>
+                  <input
+                    type="text"
+                    value={currentSection.detailButtonText ?? 'Chi tiết'}
+                    onChange={(e) => updateCurrentSection({ detailButtonText: e.target.value })}
+                    placeholder="Chi tiết"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Tên nút Xem Tất Cả
+                  </label>
+                  <input
+                    type="text"
+                    value={currentSection.viewAllText ?? 'Xem tất cả'}
+                    onChange={(e) => updateCurrentSection({ viewAllText: e.target.value })}
+                    placeholder="Xem tất cả"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Cấu hình Hành vi & Chuyển hướng khi bấm nút Chi Tiết */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Hành động khi khách bấm nút "{currentSection.detailButtonText || 'Chi tiết'}"
+                </label>
+
+                <select
+                  value={currentSection.detailActionType || 'product_detail'}
+                  onChange={(e) => updateCurrentSection({ detailActionType: e.target.value as any })}
+                  className="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-500 cursor-pointer shadow-2xs"
+                >
+                  <option value="product_detail">Xem chi tiết sản phẩm (Mở popup / trang thông tin chi tiết)</option>
+                  <option value="product_custom_url">Ưu tiên link riêng của từng sản phẩm (Shopee / TikTok Shop nếu có)</option>
+                  <option value="custom_url">Chuyển hướng link ngoài chung (Dùng 1 URL cố định cho toàn bộ nút)</option>
+                  <option value="zalo">Tư vấn qua Zalo (Mở chat Zalo kèm sẵn tên và giá sản phẩm)</option>
+                  <option value="messenger">Tư vấn qua Messenger (Mở chat Fanpage Facebook)</option>
+                  <option value="category">Mở danh mục sản phẩm (Chuyển đến trang danh mục tương ứng)</option>
+                </select>
+
+                {/* Giải thích chi tiết cơ chế hoạt động theo lựa chọn */}
+                <div className="text-[11px] text-slate-600 bg-white rounded-md p-2.5 border border-slate-200/80 leading-relaxed">
+                  {(currentSection.detailActionType || 'product_detail') === 'product_detail' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Khách bấm nút sẽ mở cửa sổ chi tiết sản phẩm với đầy đủ ảnh phóng to, mô tả, chọn màu dây, chọn size cổ tay và nút đặt hàng / thêm vào giỏ.
+                    </div>
+                  )}
+                  {currentSection.detailActionType === 'product_custom_url' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Hệ thống kiểm tra từng sản phẩm: nếu sản phẩm có cài đặt "Link ngoài tùy chỉnh" (Shopee, TikTok Shop...), khách bấm nút sẽ tự động chuyển hướng đến link đó. Nếu sản phẩm chưa có link riêng, hệ thống tự động mở xem chi tiết sản phẩm thông thường.
+                    </div>
+                  )}
+                  {currentSection.detailActionType === 'custom_url' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Tất cả sản phẩm trong khối này khi bấm nút "{currentSection.detailButtonText || 'Chi tiết'}" sẽ cùng chuyển hướng đến 1 đường dẫn URL bạn cài đặt bên dưới.
+                    </div>
+                  )}
+                  {currentSection.detailActionType === 'zalo' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Tự động mở ứng dụng hoặc web Zalo của shop ({config?.zalo || config?.phone || 'Số hotline'}), tạo sẵn tin nhắn mẫu kèm tên và giá sản phẩm để khách gửi tư vấn nhanh.
+                    </div>
+                  )}
+                  {currentSection.detailActionType === 'messenger' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Tự động mở cửa sổ chat Messenger tới Fanpage Facebook của shop để nhân viên hỗ trợ tư vấn và chốt đơn trực tiếp.
+                    </div>
+                  )}
+                  {currentSection.detailActionType === 'category' && (
+                    <div>
+                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
+                      Chuyển hướng khách hàng đến trang danh mục tương ứng của sản phẩm đó trong cửa hàng để xem thêm các mẫu cùng loại.
+                    </div>
+                  )}
+                </div>
+
+                {/* Ô nhập link khi chọn custom_url */}
+                {currentSection.detailActionType === 'custom_url' && (
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">
+                      Đường dẫn URL muốn chuyển hướng tới (Link Shopee, TikTok Shop, Website khác...):
+                    </label>
+                    <input
+                      type="url"
+                      value={currentSection.detailCustomUrl || ''}
+                      onChange={(e) => updateCurrentSection({ detailCustomUrl: e.target.value })}
+                      placeholder="https://shopee.vn/... hoặc https://zalo.me/... hoặc /danh-muc"
+                      className="w-full bg-white border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-slate-500 font-medium"
+                    />
+                    <label className="flex items-center gap-2 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={currentSection.detailOpenNewTab !== false}
+                        onChange={(e) => updateCurrentSection({ detailOpenNewTab: e.target.checked })}
+                        className="rounded text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-xs text-slate-700 font-medium">
+                        Mở liên kết trong tab mới (khuyên dùng khi liên kết sang trang ngoài)
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Product Display Limit, Layout & Filter Options */}
+            <div className="pt-4 border-t border-slate-200/80 space-y-5">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-amber-600" />
+                <span>Bố Cục, Số Lượng & Nguồn Sản Phẩm</span>
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Kiểu hiển thị & Vuốt trượt */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Kiểu bố cục hiển thị
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'auto', label: 'Tự động' },
+                      { id: 'carousel', label: 'Vuốt ngang' },
+                      { id: 'grid', label: 'Lưới tĩnh' }
+                    ].map((mode) => {
+                      const isSelected = (currentSection.layoutMode || 'auto') === mode.id;
+                      return (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => updateCurrentSection({ layoutMode: mode.id as any })}
+                          className={`py-2 px-1 text-center rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-900 border-slate-900 text-white font-bold shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {mode.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Số lượng hiển thị */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span>Số lượng SP hiển thị</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      (0 = Hiện tất cả)
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={currentSection.displayLimit ?? 8}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      updateCurrentSection({ displayLimit: isNaN(val) ? 0 : Math.max(0, val) });
+                    }}
+                    placeholder="8"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-bold outline-none focus:border-slate-400"
+                  />
+                </div>
+
+                {/* 3. Lọc theo danh mục */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-800">
+                    Lọc sản phẩm theo danh mục
+                  </label>
+                  <select
+                    value={currentSection.filterCategory || 'all'}
+                    onChange={(e) => updateCurrentSection({ filterCategory: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium cursor-pointer"
+                  >
+                    <option value="all">Tất cả sản phẩm (Toàn bộ kho hàng)</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label || cat.id} {cat.isHidden ? '(Đang ẩn)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* TÙY CHỈNH MÀU NỀN & ẢNH NỀN VÀ ĐỘ MỜ */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Màu Nền, Hình Nền & Độ Mờ Khối Này</span>
+                  </h5>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Màu nền Background Color */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">
+                      Màu nền khối (Background Color)
+                    </label>
+
+                    {/* Color picker input + Hex code */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={currentSection.backgroundColor || '#FAF9F6'}
+                        onChange={(e) => updateCurrentSection({ backgroundColor: e.target.value })}
+                        className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
+                      />
+                      <input
+                        type="text"
+                        value={currentSection.backgroundColor || '#FAF9F6'}
+                        onChange={(e) => updateCurrentSection({ backgroundColor: e.target.value })}
+                        placeholder="#FAF9F6"
+                        className="w-28 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 outline-none focus:border-slate-400"
+                      />
+                      <span className="text-[11px] text-slate-500">Mã màu HEX</span>
+                    </div>
+
+                    {/* Tông màu chữ Text Color Theme */}
+                    <div className="pt-2">
+                      <span className="text-[11px] font-bold text-slate-700 block mb-1">Màu chữ hiển thị:</span>
+                      <div className="flex items-center gap-1.5">
+                        {[
+                          { id: 'auto', label: 'Tự động' },
+                          { id: 'dark', label: 'Chữ tối' },
+                          { id: 'light', label: 'Chữ sáng' }
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => updateCurrentSection({ textColor: t.id as any })}
+                            className={`px-3 py-1 rounded-md text-xs font-medium border cursor-pointer transition-colors ${
+                              (currentSection.textColor || 'auto') === t.id
+                                ? 'bg-slate-900 text-white border-slate-900 font-bold shadow-xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hình nền & Độ mờ Background Image & Opacity */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-800 block">
+                      Hình nền khối (Tùy chọn) & Độ mờ
+                    </label>
+
+                    {/* Image Preview & Upload Controls */}
+                    <div className="flex items-center gap-3">
+                      {currentSection.backgroundImage ? (
+                        <div className="relative w-20 h-16 rounded-lg overflow-hidden border border-slate-200 bg-white shrink-0">
+                          <img
+                            src={currentSection.backgroundImage}
+                            alt="Background Preview"
+                            className="w-full h-full object-cover"
+                            style={{ opacity: typeof currentSection.bgImageOpacity === 'number' ? currentSection.bgImageOpacity : 0.25 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateCurrentSection({ backgroundImage: '' })}
+                            className="absolute top-1 right-1 p-0.5 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition-colors cursor-pointer"
+                            title="Xóa ảnh nền"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-20 h-16 rounded-lg border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 shrink-0 bg-white">
+                          <ImagePlus className="w-5 h-5" />
+                          <span className="text-[9px] mt-0.5">Chưa có ảnh</span>
+                        </div>
+                      )}
+
+                      <div className="flex-1 space-y-1.5">
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shadow-2xs">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Tải ảnh lên</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) processSectionBgImageUpload(file);
+                            }}
+                            className="hidden"
+                          />
+                        </label>
+                        
+                        <input
+                          type="text"
+                          value={currentSection.backgroundImage?.startsWith('data:') ? '' : (currentSection.backgroundImage || '')}
+                          onChange={(e) => updateCurrentSection({ backgroundImage: e.target.value })}
+                          placeholder="Hoặc dán URL ảnh tại đây..."
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-900 outline-none focus:border-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Opacity Slider */}
+                    {currentSection.backgroundImage && (
+                      <div className="pt-2 space-y-1 bg-white p-3 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-700 flex items-center gap-1">
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Độ mờ ảnh nền:</span>
+                          </span>
+                          <span className="font-bold text-amber-700 font-mono">
+                            {Math.round((typeof currentSection.bgImageOpacity === 'number' ? currentSection.bgImageOpacity : 0.25) * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.05}
+                          max={1.0}
+                          step={0.05}
+                          value={typeof currentSection.bgImageOpacity === 'number' ? currentSection.bgImageOpacity : 0.25}
+                          onChange={(e) => updateCurrentSection({ bgImageOpacity: parseFloat(e.target.value) })}
+                          className="w-full accent-amber-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-400">
+                          <span>Mờ nhẹ (5%)</span>
+                          <span>Trung bình (25%)</span>
+                          <span>Đậm rõ (100%)</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Manual Product Picker (Checklist with Search & Filtered Hidden Products) */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">
+                      Tự tay chọn từng sản phẩm hiển thị cụ thể cho mục này:
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      {currentSection.selectedProductIds?.length
+                        ? `Đang ghim ${currentSection.selectedProductIds.length} sản phẩm tự chọn (hiển thị đúng theo thứ tự đã chọn).`
+                        : 'Hiện đang ở chế độ tự động (lấy theo danh mục & sản phẩm có sẵn).'}
+                    </span>
+                  </div>
+
+                  {currentSection.selectedProductIds?.length ? (
+                    <button
+                      type="button"
+                      onClick={() => updateCurrentSection({ selectedProductIds: [] })}
+                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 font-semibold rounded-lg transition-colors cursor-pointer self-start sm:self-auto"
+                    >
+                      Bỏ chọn tất cả (Chuyển về tự động)
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Product Search Box */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={productSearchTerm}
+                    onChange={(e) => setProductSearchTerm(e.target.value)}
+                    placeholder="Tìm theo tên sản phẩm hoặc mã để chọn nhanh..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-slate-400 text-slate-900"
+                  />
+                </div>
+
+                {/* Product List Selector Grid - Explicitly filters out hidden products */}
+                <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100">
+                  {products
+                    .filter((p) => {
+                      // CRITICAL: Filter out hidden products (both directly hidden or hidden category)
+                      if (isProductHidden(p)) return false;
+                      if (!productSearchTerm.trim()) return true;
+                      const q = productSearchTerm.toLowerCase();
+                      return (
+                        p.name.toLowerCase().includes(q) ||
+                        String(p.id).toLowerCase().includes(q) ||
+                        (p.category && p.category.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((p) => {
+                      const selectedIds = (currentSection.selectedProductIds || []).map(String);
+                      const pId = String(p.id);
+                      const isChecked = selectedIds.includes(pId);
+                      const img = (p.images && p.images[0]) || p.image || '/assets/bracelet.jpg';
+                      const priceFormatted = Number(p.price || 0).toLocaleString('vi-VN') + 'đ';
+                      const orderIndex = selectedIds.indexOf(pId);
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            const current = (currentSection.selectedProductIds || []).map(String);
+                            const newSelection = isChecked
+                              ? current.filter((id) => id !== pId)
+                              : [...current, pId];
+                            updateCurrentSection({ selectedProductIds: newSelection });
+                          }}
+                          className={`p-2 rounded-lg flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                            isChecked
+                              ? 'bg-amber-50/90 border border-amber-300'
+                              : 'hover:bg-white border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              readOnly
+                              className="w-4 h-4 rounded text-slate-900 focus:ring-0 cursor-pointer"
+                            />
+                            <img
+                              src={img}
+                              alt={p.name}
+                              className="w-8 h-8 rounded object-cover bg-white border border-slate-200 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-900 truncate block">
+                                {p.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500 block">
+                                {priceFormatted} • Kho: {p.stock ?? 15}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isChecked && (
+                            <span className="text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shrink-0 font-mono">
+                              #{orderIndex + 1}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Live Preview Container (Desktop & Mobile view + Scope Selector) */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Xem Trước Trực Quan (Live Preview)</span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Mô phỏng hiển thị chính xác theo thiết kế người dùng yêu cầu trên giao diện thật.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Scope selector */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPreviewScope('current')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                      collectionPreviewScope === 'current'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Chỉ xem mục #{currentSectionIndex + 1}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPreviewScope('all')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all cursor-pointer ${
+                      collectionPreviewScope === 'all'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Xem tất cả {landingSections.length} mục
+                  </button>
+                </div>
+
+                {/* Device selector */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPreviewDevice('desktop')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all cursor-pointer ${
+                      collectionPreviewDevice === 'desktop'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                    <span>Máy tính (4 cột)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPreviewDevice('mobile')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md flex items-center gap-1 transition-all cursor-pointer ${
+                      collectionPreviewDevice === 'mobile'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Điện thoại (2 cột)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* The Actual Rendered Preview */}
+            <div className="flex justify-center p-2 bg-slate-100 rounded-xl overflow-x-auto">
+              <div
+                className={`transition-all duration-300 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden ${
+                  collectionPreviewDevice === 'mobile' ? 'w-[375px]' : 'w-full'
+                }`}
+              >
+                {collectionPreviewScope === 'current' ? (
+                  <LandingProductsCollection
+                    config={currentSection}
+                    products={products}
+                    categories={categories}
+                    collections={collections}
+                    sectionIndex={currentSectionIndex}
+                    onOpenProductDetail={(prod) => {
+                      alert(`Đã chọn xem chi tiết sản phẩm: ${prod.name} (${Number(prod.price).toLocaleString('vi-VN')}đ)`);
+                    }}
+                    onOpenAllCatalog={(cat) => {
+                      alert(`Chuyển tới catalog danh mục: ${cat || 'all'}`);
+                    }}
+                  />
+                ) : (
+                  <div>
+                    {landingSections.map((sec, idx) => (
+                      <LandingProductsCollection
+                        key={sec.id || `preview-sec-${idx}`}
+                        config={sec}
+                        products={products}
+                        categories={categories}
+                        collections={collections}
+                        sectionIndex={idx}
+                        onOpenProductDetail={(prod) => {
+                          alert(`Đã chọn xem chi tiết sản phẩm: ${prod.name} (${Number(prod.price).toLocaleString('vi-VN')}đ)`);
+                        }}
+                        onOpenAllCatalog={(cat) => {
+                          alert(`Chuyển tới catalog danh mục: ${cat || 'all'}`);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
       <div className="fixed bottom-6 right-6 z-50 animate-fadeIn">
         <button
           onClick={handleSave}
@@ -1610,6 +2715,47 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
                 Xác nhận khôi phục
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM DELETE SECTION */}
+      {deleteSectionModalIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setDeleteSectionModalIdx(null)}
+        >
+          <div
+            className="relative max-w-sm w-full bg-white p-5 rounded-2xl border border-slate-200 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Xác Nhận Xóa Khối</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Bạn có chắc muốn xóa khối "{landingSections[deleteSectionModalIdx]?.title || 'Bộ sưu tập'}" khỏi trang chủ?
+              </p>
+            </div>
+
+            <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              Hành động này sẽ xóa khối hiển thị này trên trang chủ. Sản phẩm và bộ sưu tập gốc vẫn được giữ nguyên vẹn.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteSectionModalIdx(null)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteSection}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+              >
+                Xác nhận xóa
               </button>
             </div>
           </div>

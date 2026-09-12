@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -363,6 +363,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formIsBestSeller, setFormIsBestSeller] = useState(false);
   const [formIsNew, setFormIsNew] = useState(false);
   const [formIsHidden, setFormIsHidden] = useState(false);
+  const [formCustomUrl, setFormCustomUrl] = useState('');
   const [isExpandedHiddenBox, setIsExpandedHiddenBox] = useState(true);
 
   // Dynamic Product Variations (Colors with photos, Charms with photos, Omamori, Sizes)
@@ -378,6 +379,103 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formOmamoriSelectionRequired, setFormOmamoriSelectionRequired] = useState(false);
   const [formMaxOmamoriAllowed, setFormMaxOmamoriAllowed] = useState(1);
   const [formOmamoriOptions, setFormOmamoriOptions] = useState<ProductOmamoriOption[]>([]);
+  const [draggedCharmIndex, setDraggedCharmIndex] = useState<number | null>(null);
+  const [draggedOmamoriIndex, setDraggedOmamoriIndex] = useState<number | null>(null);
+  const [activeCharmDropIndex, setActiveCharmDropIndex] = useState<number | null>(null);
+  const [activeOmamoriDropIndex, setActiveOmamoriDropIndex] = useState<number | null>(null);
+  const [dragOverCharmFileIdx, setDragOverCharmFileIdx] = useState<number | null>(null);
+  const [dragOverOmamoriFileIdx, setDragOverOmamoriFileIdx] = useState<number | null>(null);
+  const [isBulkCharmDragOver, setIsBulkCharmDragOver] = useState(false);
+  const [isBulkOmamoriDragOver, setIsBulkOmamoriDragOver] = useState(false);
+
+  const cleanNameFromFileName = (fileName: string) => {
+    const withoutExt = fileName.replace(/\.[^/.]+$/, '');
+    return withoutExt
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const handleBulkCharmUpload = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (fileArray.length === 0) {
+      showAdminToast('Không tìm thấy file hình ảnh hợp lệ.');
+      return;
+    }
+
+    let processedCount = 0;
+    const newCharms: ProductCharmOption[] = [];
+
+    fileArray.forEach((file, i) => {
+      processOptionImageFile(file, (dataUrl) => {
+        const charmName = cleanNameFromFileName(file.name) || `Charm ${formCharmOptions.length + i + 1}`;
+        newCharms.push({
+          id: `charm-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+          name: charmName,
+          image: dataUrl,
+          priceDelta: 0,
+          stock: 10
+        });
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setFormCharmOptions(prev => [...prev, ...newCharms]);
+          showAdminToast(`Đã thêm ${newCharms.length} charm từ ảnh thành công!`);
+        }
+      });
+    });
+  };
+
+  const handleBulkOmamoriUpload = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (fileArray.length === 0) {
+      showAdminToast('Không tìm thấy file hình ảnh hợp lệ.');
+      return;
+    }
+
+    let processedCount = 0;
+    const newOmamoris: ProductOmamoriOption[] = [];
+
+    fileArray.forEach((file, i) => {
+      processOptionImageFile(file, (dataUrl) => {
+        const omamoriName = cleanNameFromFileName(file.name) || `Bùa may mắn ${formOmamoriOptions.length + i + 1}`;
+        newOmamoris.push({
+          id: `omamori-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+          name: omamoriName,
+          image: dataUrl,
+          priceDelta: 25000,
+          meaning: 'Bình an & may mắn',
+          stock: 20
+        });
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setFormOmamoriOptions(prev => [...prev, ...newOmamoris]);
+          showAdminToast(`Đã thêm ${newOmamoris.length} bùa Omamori từ ảnh thành công!`);
+        }
+      });
+    });
+  };
+
+  const handleMoveCharm = (fromIdx: number, toIdx: number) => {
+    setFormCharmOptions((prev) => {
+      if (toIdx < 0 || toIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(toIdx, 0, moved);
+      return copy;
+    });
+  };
+
+  const handleMoveOmamori = (fromIdx: number, toIdx: number) => {
+    setFormOmamoriOptions((prev) => {
+      if (toIdx < 0 || toIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(toIdx, 0, moved);
+      return copy;
+    });
+  };
   // Size states
   const [formEnableSizeSelection, setFormEnableSizeSelection] = useState(false);
   const [formAvailableSizes, setFormAvailableSizes] = useState<string[]>([
@@ -762,6 +860,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormIsBestSeller(false);
     setFormIsNew(true);
     setFormIsHidden(false);
+    setFormCustomUrl('');
     // Variations initialization
     setFormEnableColorSelection(false);
     setFormColorOptions([]);
@@ -799,6 +898,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormIsBestSeller(!!prod.isBestSeller);
     setFormIsNew(!!prod.isNew);
     setFormIsHidden(Boolean(prod.isHidden));
+    setFormCustomUrl(prod.customUrl || '');
     // Variations loading
     setFormEnableColorSelection(Boolean(prod.enableColorSelection));
     const loadedColors: ProductColorOption[] = (prod.colorOptions && prod.colorOptions.length > 0)
@@ -905,6 +1005,66 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             return updated;
           });
         };
+        img.src = rawResult;
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Dedicated image file processor for Charm & Omamori options (optimized thumbnail ~500px)
+  const processOptionImageFile = (file: File, onDone: (dataUrl: string) => void, maxDim = 500) => {
+    if (!file.type.startsWith('image/')) {
+      showAdminToast('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, JPEG, WEBP, SVG).');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      showAdminToast('Dung lượng ảnh tối đa là 15MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawResult = event.target?.result;
+      if (typeof rawResult === 'string') {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let width = img.width || 400;
+            let height = img.height || 400;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, width);
+            canvas.height = Math.max(1, height);
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, width, height);
+              let compressed = '';
+              try {
+                compressed = canvas.toDataURL('image/webp', 0.92);
+                if (!compressed || !compressed.startsWith('data:image/webp')) {
+                  compressed = canvas.toDataURL('image/jpeg', 0.90);
+                }
+              } catch {
+                compressed = canvas.toDataURL('image/jpeg', 0.90);
+              }
+              onDone(compressed || rawResult);
+              return;
+            }
+          } catch (e) {
+            console.warn('Option image canvas compression fallback:', e);
+          }
+          onDone(rawResult);
+        };
+        img.onerror = () => onDone(rawResult);
         img.src = rawResult;
       }
     };
@@ -1041,6 +1201,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isBestSeller: formIsBestSeller,
         isNew: formIsNew,
         isHidden: formIsHidden,
+        customUrl: formCustomUrl.trim() || undefined,
         updatedAt: new Date().toISOString()
       };
 
@@ -1099,6 +1260,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isBestSeller: formIsBestSeller,
         isNew: formIsNew,
         isHidden: formIsHidden,
+        customUrl: formCustomUrl.trim() || undefined,
         rating: 5.0,
         reviewsCount: 1,
         updatedAt: new Date().toISOString()
@@ -2127,9 +2289,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           onOpenMobileSidebar={() => setSidebarOpen(true)}
           orders={orders}
           contactMessages={contactMessages}
+          productsCount={products.length}
+          categoriesCount={localCategories.length}
+          unreadMessagesCount={unreadMessagesCount}
           onInspectOrder={(ord) => setInspectingOrder(ord)}
           onNavigateToOrders={() => handleSwitchTab('orders')}
           onNavigateToMessages={() => handleSwitchTab('messages')}
+          onNavigateToProducts={() => handleSwitchTab('products')}
+          onNavigateToCategories={() => handleSwitchTab('categories')}
           onUpdateOrderStatus={(orderId, status) => handleUpdateOrderStatus(orderId, status)}
           onMarkMessageRead={handleMarkMessageRead}
           onRefreshData={() => {
@@ -2179,6 +2346,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             initialConfig={siteContent}
             categories={categories}
             collections={collections}
+            products={products}
             onSaveConfig={(newCfg) => {
               if (onUpdateSiteContent) {
                 onUpdateSiteContent(newCfg);
@@ -2567,6 +2735,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           value={formDescription}
                           onChange={(e) => setFormDescription(e.target.value)}
                           placeholder="Mô tả phong cách, ý nghĩa và chất liệu..."
+                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                          <span>Link liên kết riêng của sản phẩm (Tùy chọn)</span>
+                          <span className="text-[10px] text-slate-400 font-normal">Shopee, TikTok Shop, Web ngoài...</span>
+                        </label>
+                        <input
+                          type="url"
+                          value={formCustomUrl}
+                          onChange={(e) => setFormCustomUrl(e.target.value)}
+                          placeholder="https://shopee.vn/... (nút Chi tiết trên bộ sưu tập sẽ bay đến đây nếu bật)"
                           className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                         />
                       </div>
@@ -3027,6 +3209,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               />
                               <span>charm</span>
                             </label>
+                            {/* Hidden bulk file input for charms */}
+                            <input
+                              type="file"
+                              id="bulk-charm-files-input"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                handleBulkCharmUpload(e.target.files);
+                                e.target.value = '';
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('bulk-charm-files-input')?.click()}
+                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Chọn nhiều file ảnh từ máy để nạp charm cùng lúc"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Tải nhiều ảnh</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -3061,35 +3264,213 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </div>
 
                       {formEnableCharmSelection && (
-                        <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <div
+                          onDragOver={(e) => {
+                            if (e.dataTransfer.types.includes('Files')) {
+                              e.preventDefault();
+                              setIsBulkCharmDragOver(true);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                            setIsBulkCharmDragOver(false);
+                          }}
+                          onDrop={(e) => {
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              e.preventDefault();
+                              setIsBulkCharmDragOver(false);
+                              handleBulkCharmUpload(e.dataTransfer.files);
+                            }
+                          }}
+                          className={`space-y-2 pt-2 border-t border-slate-200 relative transition-all ${
+                            isBulkCharmDragOver ? 'ring-2 ring-amber-500 rounded-xl bg-amber-50/40 p-2' : ''
+                          }`}
+                        >
+                          {isBulkCharmDragOver && (
+                            <div className="p-4 border-2 border-dashed border-amber-400 bg-amber-100/70 rounded-xl text-center text-amber-900 font-bold text-xs flex items-center justify-center gap-2 mb-2 animate-pulse">
+                              <Upload className="w-4 h-4" />
+                              <span>Thả các file ảnh vào đây để tự động tạo nhiều charm mới!</span>
+                            </div>
+                          )}
+
                           {formCharmOptions.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic py-2 text-center">
-                              Chưa có mẫu charm nào. Bấm "+ Thêm Charm" hoặc "Nạp 8 Charm mẫu có kho" ở trên.
-                            </p>
+                            <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                              <p className="text-xs text-slate-500 font-medium">
+                                Chưa có mẫu charm nào. Kéo thả ảnh charm trực tiếp vào đây hoặc bấm nút phía trên.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => document.getElementById('bulk-charm-files-input')?.click()}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Chọn ảnh tải lên</span>
+                              </button>
+                            </div>
                           ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                               {formCharmOptions.map((charm, chIdx) => (
                                 <div
                                   key={charm.id || chIdx}
+                                  onDragEnter={(e) => {
+                                    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setDragOverCharmFileIdx(chIdx);
+                                    }
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+                                      if (dragOverCharmFileIdx !== chIdx) setDragOverCharmFileIdx(chIdx);
+                                    } else if (draggedCharmIndex !== null && draggedCharmIndex !== chIdx) {
+                                      setActiveCharmDropIndex(chIdx);
+                                    }
+                                  }}
+                                  onDragLeave={(e) => {
+                                    e.preventDefault();
+                                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                    if (dragOverCharmFileIdx === chIdx) setDragOverCharmFileIdx(null);
+                                    if (activeCharmDropIndex === chIdx) setActiveCharmDropIndex(null);
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setDragOverCharmFileIdx(null);
+                                    setActiveCharmDropIndex(null);
+
+                                    // 1. Files dropped directly on this charm
+                                    const files = e.dataTransfer.files;
+                                    if (files && files.length > 0) {
+                                      const fileList = (Array.from(files) as File[]).filter((f) => f.type.startsWith('image/'));
+                                      if (fileList.length > 0) {
+                                        processOptionImageFile(fileList[0], (imgUrl) => {
+                                          setFormCharmOptions((prev) =>
+                                            prev.map((c, i) => (i === chIdx ? { ...c, image: imgUrl } : c))
+                                          );
+                                          showAdminToast(`Đã đổi ảnh cho charm #${chIdx + 1}`);
+                                        });
+                                        if (fileList.length > 1) {
+                                          handleBulkCharmUpload(fileList.slice(1));
+                                        }
+                                        return;
+                                      }
+                                    }
+
+                                    // 2. Image URL dropped from browser
+                                    const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+                                    if (uri && (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('data:image/'))) {
+                                      setFormCharmOptions((prev) =>
+                                        prev.map((c, i) => (i === chIdx ? { ...c, image: uri.trim() } : c))
+                                      );
+                                      showAdminToast(`Đã nhận ảnh URL cho charm #${chIdx + 1}`);
+                                      return;
+                                    }
+
+                                    // 3. Card reorder
+                                    if (draggedCharmIndex !== null && draggedCharmIndex !== chIdx) {
+                                      handleMoveCharm(draggedCharmIndex, chIdx);
+                                    }
+                                    setDraggedCharmIndex(null);
+                                  }}
                                   className={`p-2.5 bg-white rounded-xl border transition-all flex flex-col gap-2 shadow-2xs relative group ${
-                                    charm.stock !== undefined && charm.stock <= 0
+                                    dragOverCharmFileIdx === chIdx
+                                      ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-50/50'
+                                      : activeCharmDropIndex === chIdx
+                                      ? 'ring-2 ring-amber-400 border-amber-400 bg-amber-50/20'
+                                      : charm.stock !== undefined && charm.stock <= 0
                                       ? 'border-rose-300 bg-rose-50/20'
                                       : 'border-slate-200'
                                   }`}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFormCharmOptions((prev) => prev.filter((_, i) => i !== chIdx));
+                                  {/* Drag-over feedback overlay */}
+                                  {dragOverCharmFileIdx === chIdx && (
+                                    <div className="absolute inset-0 bg-amber-600/90 rounded-xl z-20 flex flex-col items-center justify-center text-white font-black text-xs gap-1 pointer-events-none shadow-lg animate-fadeIn">
+                                      <Upload className="w-5 h-5 animate-bounce" />
+                                      <span>Thả ảnh vào để đổi ảnh charm</span>
+                                    </div>
+                                  )}
+
+                                  {/* Hidden file input for charm image */}
+                                  <input
+                                    type="file"
+                                    id={`charm-file-input-${chIdx}`}
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        processOptionImageFile(file, (imgUrl) => {
+                                          setFormCharmOptions((prev) =>
+                                            prev.map((c, i) => (i === chIdx ? { ...c, image: imgUrl } : c))
+                                          );
+                                          showAdminToast(`Đã tải ảnh cho charm #${chIdx + 1}`);
+                                        });
+                                      }
+                                      e.target.value = '';
                                     }}
-                                    className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-full bg-slate-100 hover:bg-rose-50 text-xs font-bold cursor-pointer"
-                                    title="Xóa charm này"
-                                  >
-                                    ✕
-                                  </button>
+                                  />
+
+                                  {/* Header: Drag handle + Index + Move Up/Down + Delete */}
+                                  <div className="flex items-center justify-between gap-1 pb-1 border-b border-slate-100">
+                                    <div className="flex items-center gap-1">
+                                      <div
+                                        draggable
+                                        onDragStart={(e) => {
+                                          e.stopPropagation();
+                                          e.dataTransfer.setData('text/plain', String(chIdx));
+                                          setDraggedCharmIndex(chIdx);
+                                        }}
+                                        className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 p-0.5 rounded hover:bg-slate-100"
+                                        title="Giữ và kéo để đổi thứ tự charm"
+                                      >
+                                        <GripVertical className="w-3.5 h-3.5" />
+                                      </div>
+                                      <span className="text-[10px] font-mono font-bold text-slate-400">
+                                        #{chIdx + 1}
+                                      </span>
+                                      <div className="flex items-center">
+                                        <button
+                                          type="button"
+                                          disabled={chIdx === 0}
+                                          onClick={() => handleMoveCharm(chIdx, chIdx - 1)}
+                                          className="p-0.5 text-slate-400 hover:text-amber-600 disabled:opacity-20 cursor-pointer"
+                                          title="Di chuyển lên trước"
+                                        >
+                                          <ArrowUp className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={chIdx === formCharmOptions.length - 1}
+                                          onClick={() => handleMoveCharm(chIdx, chIdx + 1)}
+                                          className="p-0.5 text-slate-400 hover:text-amber-600 disabled:opacity-20 cursor-pointer"
+                                          title="Di chuyển xuống sau"
+                                        >
+                                          <ArrowDown className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFormCharmOptions((prev) => prev.filter((_, i) => i !== chIdx));
+                                      }}
+                                      className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-rose-600 rounded-md bg-slate-100 hover:bg-rose-50 text-xs font-bold cursor-pointer"
+                                      title="Xóa charm này"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
 
                                   <div className="flex items-center gap-2.5">
-                                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 relative">
+                                    {/* Image Drop Zone & Click to Upload */}
+                                    <div
+                                      onClick={() => document.getElementById(`charm-file-input-${chIdx}`)?.click()}
+                                      className="w-14 h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 relative cursor-pointer group/img hover:border-amber-500 transition-all shadow-2xs"
+                                      title="Bấm để tải ảnh hoặc kéo thả ảnh vào đây"
+                                    >
                                       <img
                                         src={charm.image || 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&auto=format&fit=crop&q=80'}
                                         alt={charm.name}
@@ -3100,13 +3481,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&auto=format&fit=crop&q=80';
                                         }}
                                       />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/img:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                                        <Upload className="w-3.5 h-3.5" />
+                                        <span className="text-[8px] font-bold mt-0.5">Tải/Đổi ảnh</span>
+                                      </div>
                                       {charm.stock !== undefined && charm.stock <= 0 && (
-                                        <div className="absolute inset-0 bg-rose-950/40 flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-rose-950/40 flex items-center justify-center pointer-events-none">
                                           <span className="text-[8px] font-black text-white bg-rose-600 px-1 py-0.5 rounded">HẾT</span>
                                         </div>
                                       )}
                                     </div>
-                                    <div className="flex-1 min-w-0 pr-5">
+
+                                    <div className="flex-1 min-w-0">
                                       <input
                                         type="text"
                                         value={charm.name}
@@ -3212,18 +3598,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     </div>
                                   </div>
 
-                                  <input
-                                    type="text"
-                                    value={charm.image}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFormCharmOptions((prev) =>
-                                        prev.map((c, i) => (i === chIdx ? { ...c, image: val } : c))
-                                      );
-                                    }}
-                                    placeholder="URL ảnh charm..."
-                                    className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-amber-500"
-                                  />
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={charm.image}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFormCharmOptions((prev) =>
+                                          prev.map((c, i) => (i === chIdx ? { ...c, image: val } : c))
+                                        );
+                                      }}
+                                      placeholder="URL hoặc kéo thả ảnh..."
+                                      className="flex-1 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => document.getElementById(`charm-file-input-${chIdx}`)?.click()}
+                                      className="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                                      title="Tải ảnh từ máy"
+                                    >
+                                      <Upload className="w-3 h-3" />
+                                      <span>Tải</span>
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -3291,6 +3688,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               />
                               <span>bùa</span>
                             </label>
+                            {/* Hidden bulk file input for omamori */}
+                            <input
+                              type="file"
+                              id="bulk-omamori-files-input"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                handleBulkOmamoriUpload(e.target.files);
+                                e.target.value = '';
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => document.getElementById('bulk-omamori-files-input')?.click()}
+                              className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title="Chọn nhiều file ảnh bùa từ máy để nạp cùng lúc"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Tải nhiều ảnh</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -3326,20 +3744,211 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </div>
 
                       {formEnableOmamoriSelection && (
-                        <div className="space-y-2 pt-2 border-t border-red-200/60">
+                        <div
+                          onDragOver={(e) => {
+                            if (e.dataTransfer.types.includes('Files')) {
+                              e.preventDefault();
+                              setIsBulkOmamoriDragOver(true);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                            setIsBulkOmamoriDragOver(false);
+                          }}
+                          onDrop={(e) => {
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              e.preventDefault();
+                              setIsBulkOmamoriDragOver(false);
+                              handleBulkOmamoriUpload(e.dataTransfer.files);
+                            }
+                          }}
+                          className={`space-y-2 pt-2 border-t border-red-200/60 relative transition-all ${
+                            isBulkOmamoriDragOver ? 'ring-2 ring-red-500 rounded-xl bg-red-50/50 p-2' : ''
+                          }`}
+                        >
+                          {isBulkOmamoriDragOver && (
+                            <div className="p-4 border-2 border-dashed border-red-400 bg-red-100/70 rounded-xl text-center text-red-900 font-bold text-xs flex items-center justify-center gap-2 mb-2 animate-pulse">
+                              <Upload className="w-4 h-4" />
+                              <span>Thả các file ảnh vào đây để tự động tạo nhiều bùa mới!</span>
+                            </div>
+                          )}
+
                           {formOmamoriOptions.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic py-2 text-center">
-                              Chưa có mẫu bùa nào. Bấm "+ Thêm Bùa" hoặc "Nạp 6 Bùa Omamori mẫu" ở trên.
-                            </p>
+                            <div className="text-center py-6 border-2 border-dashed border-red-200 rounded-xl bg-red-50/30 space-y-2">
+                              <p className="text-xs text-slate-500 font-medium">
+                                Chưa có mẫu bùa nào. Kéo thả ảnh bùa trực tiếp vào đây hoặc bấm nút phía trên.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => document.getElementById('bulk-omamori-files-input')?.click()}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Chọn ảnh tải lên</span>
+                              </button>
+                            </div>
                           ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               {formOmamoriOptions.map((omamori, omIdx) => (
                                 <div
                                   key={omamori.id || omIdx}
-                                  className="p-2.5 bg-white rounded-xl border border-red-200/80 shadow-xs flex flex-col gap-2 relative group"
+                                  onDragEnter={(e) => {
+                                    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setDragOverOmamoriFileIdx(omIdx);
+                                    }
+                                  }}
+                                  onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+                                      if (dragOverOmamoriFileIdx !== omIdx) setDragOverOmamoriFileIdx(omIdx);
+                                    } else if (draggedOmamoriIndex !== null && draggedOmamoriIndex !== omIdx) {
+                                      setActiveOmamoriDropIndex(omIdx);
+                                    }
+                                  }}
+                                  onDragLeave={(e) => {
+                                    e.preventDefault();
+                                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                    if (dragOverOmamoriFileIdx === omIdx) setDragOverOmamoriFileIdx(null);
+                                    if (activeOmamoriDropIndex === omIdx) setActiveOmamoriDropIndex(null);
+                                  }}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setDragOverOmamoriFileIdx(null);
+                                    setActiveOmamoriDropIndex(null);
+
+                                    // 1. Files dropped directly on this omamori
+                                    const files = e.dataTransfer.files;
+                                    if (files && files.length > 0) {
+                                      const fileList = (Array.from(files) as File[]).filter((f) => f.type.startsWith('image/'));
+                                      if (fileList.length > 0) {
+                                        processOptionImageFile(fileList[0], (imgUrl) => {
+                                          setFormOmamoriOptions((prev) =>
+                                            prev.map((o, i) => (i === omIdx ? { ...o, image: imgUrl } : o))
+                                          );
+                                          showAdminToast(`Đã đổi ảnh cho bùa #${omIdx + 1}`);
+                                        });
+                                        if (fileList.length > 1) {
+                                          handleBulkOmamoriUpload(fileList.slice(1));
+                                        }
+                                        return;
+                                      }
+                                    }
+
+                                    // 2. Image URL dropped from browser
+                                    const uri = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+                                    if (uri && (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('data:image/'))) {
+                                      setFormOmamoriOptions((prev) =>
+                                        prev.map((o, i) => (i === omIdx ? { ...o, image: uri.trim() } : o))
+                                      );
+                                      showAdminToast(`Đã nhận ảnh URL cho bùa #${omIdx + 1}`);
+                                      return;
+                                    }
+
+                                    // 3. Card reorder
+                                    if (draggedOmamoriIndex !== null && draggedOmamoriIndex !== omIdx) {
+                                      handleMoveOmamori(draggedOmamoriIndex, omIdx);
+                                    }
+                                    setDraggedOmamoriIndex(null);
+                                  }}
+                                  className={`p-2.5 bg-white rounded-xl border transition-all flex flex-col gap-2 shadow-xs relative group ${
+                                    dragOverOmamoriFileIdx === omIdx
+                                      ? 'ring-2 ring-red-500 border-red-500 bg-red-50/50'
+                                      : activeOmamoriDropIndex === omIdx
+                                      ? 'ring-2 ring-red-500 border-red-400 bg-red-50/20'
+                                      : 'border-red-200/80'
+                                  }`}
                                 >
+                                  {/* Drag-over feedback overlay */}
+                                  {dragOverOmamoriFileIdx === omIdx && (
+                                    <div className="absolute inset-0 bg-red-600/90 rounded-xl z-20 flex flex-col items-center justify-center text-white font-black text-xs gap-1 pointer-events-none shadow-lg animate-fadeIn">
+                                      <Upload className="w-5 h-5 animate-bounce" />
+                                      <span>Thả ảnh vào để đổi ảnh bùa</span>
+                                    </div>
+                                  )}
+
+                                  {/* Hidden file input for omamori image */}
+                                  <input
+                                    type="file"
+                                    id={`omamori-file-input-${omIdx}`}
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        processOptionImageFile(file, (imgUrl) => {
+                                          setFormOmamoriOptions((prev) =>
+                                            prev.map((o, i) => (i === omIdx ? { ...o, image: imgUrl } : o))
+                                          );
+                                          showAdminToast(`Đã tải ảnh cho bùa #${omIdx + 1}`);
+                                        });
+                                      }
+                                      e.target.value = '';
+                                    }}
+                                  />
+
+                                  {/* Header: Drag handle + Index + Move Up/Down + Delete */}
+                                  <div className="flex items-center justify-between gap-1 pb-1 border-b border-red-100">
+                                    <div className="flex items-center gap-1">
+                                      <div
+                                        draggable
+                                        onDragStart={(e) => {
+                                          e.stopPropagation();
+                                          e.dataTransfer.setData('text/plain', String(omIdx));
+                                          setDraggedOmamoriIndex(omIdx);
+                                        }}
+                                        className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 p-0.5 rounded hover:bg-slate-100"
+                                        title="Giữ và kéo để đổi thứ tự bùa"
+                                      >
+                                        <GripVertical className="w-3.5 h-3.5" />
+                                      </div>
+                                      <span className="text-[10px] font-mono font-bold text-red-800">
+                                        #{omIdx + 1}
+                                      </span>
+                                      <div className="flex items-center">
+                                        <button
+                                          type="button"
+                                          disabled={omIdx === 0}
+                                          onClick={() => handleMoveOmamori(omIdx, omIdx - 1)}
+                                          className="p-0.5 text-slate-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
+                                          title="Di chuyển lên trước"
+                                        >
+                                          <ArrowUp className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={omIdx === formOmamoriOptions.length - 1}
+                                          onClick={() => handleMoveOmamori(omIdx, omIdx + 1)}
+                                          className="p-0.5 text-slate-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
+                                          title="Di chuyển xuống sau"
+                                        >
+                                          <ArrowDown className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFormOmamoriOptions((prev) => prev.filter((_, i) => i !== omIdx));
+                                      }}
+                                      className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-600 rounded-md bg-slate-100 hover:bg-red-50 text-xs font-bold cursor-pointer transition-colors shrink-0"
+                                      title="Xóa bùa này"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+
                                   <div className="flex items-start gap-2.5">
-                                    <div className="w-12 h-12 rounded-lg bg-neutral-50 border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center p-1">
+                                    {/* Image Drop Zone & Click to Upload */}
+                                    <div
+                                      onClick={() => document.getElementById(`omamori-file-input-${omIdx}`)?.click()}
+                                      className="w-14 h-14 rounded-lg bg-neutral-50 border border-neutral-200 overflow-hidden shrink-0 flex items-center justify-center p-1 relative cursor-pointer group/img hover:border-red-500 transition-all shadow-2xs"
+                                      title="Bấm để tải ảnh hoặc kéo thả ảnh vào đây"
+                                    >
                                       {omamori.image && omamori.image.trim() ? (
                                         <img
                                           src={omamori.image}
@@ -3351,34 +3960,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           }}
                                         />
                                       ) : (
-                                        <span className="text-[10px] text-slate-400">Không ảnh</span>
+                                        <span className="text-[10px] text-slate-400 text-center leading-tight">Chưa có ảnh</span>
                                       )}
-                                    </div>
-                                    <div className="flex-1 min-w-0 space-y-1">
-                                      <div className="flex items-center justify-between gap-1">
-                                        <input
-                                          type="text"
-                                          value={omamori.name}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            setFormOmamoriOptions((prev) =>
-                                              prev.map((o, i) => (i === omIdx ? { ...o, name: val } : o))
-                                            );
-                                          }}
-                                          placeholder="Tên bùa Omamori..."
-                                          className="w-full px-2 py-0.5 font-bold text-xs text-slate-900 border border-transparent hover:border-slate-200 focus:border-red-500 rounded bg-transparent focus:bg-white focus:outline-none"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setFormOmamoriOptions((prev) => prev.filter((_, i) => i !== omIdx));
-                                          }}
-                                          className="text-slate-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50 cursor-pointer transition-colors shrink-0"
-                                          title="Xóa bùa này"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                                        <Upload className="w-3.5 h-3.5" />
+                                        <span className="text-[8px] font-bold mt-0.5">Đổi ảnh</span>
                                       </div>
+                                    </div>
+
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                      <input
+                                        type="text"
+                                        value={omamori.name}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setFormOmamoriOptions((prev) =>
+                                            prev.map((o, i) => (i === omIdx ? { ...o, name: val } : o))
+                                          );
+                                        }}
+                                        placeholder="Tên bùa Omamori..."
+                                        className="w-full px-2 py-0.5 font-bold text-xs text-slate-900 border border-transparent hover:border-slate-200 focus:border-red-500 rounded bg-transparent focus:bg-white focus:outline-none"
+                                      />
 
                                       <input
                                         type="text"
@@ -3445,18 +4047,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     </div>
                                   </div>
 
-                                  <input
-                                    type="text"
-                                    value={omamori.image}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFormOmamoriOptions((prev) =>
-                                        prev.map((o, i) => (i === omIdx ? { ...o, image: val } : o))
-                                      );
-                                    }}
-                                    placeholder="URL ảnh hoặc SVG data bùa..."
-                                    className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-red-500"
-                                  />
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={omamori.image}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFormOmamoriOptions((prev) =>
+                                          prev.map((o, i) => (i === omIdx ? { ...o, image: val } : o))
+                                        );
+                                      }}
+                                      placeholder="URL hoặc kéo thả ảnh..."
+                                      className="flex-1 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-red-500"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => document.getElementById(`omamori-file-input-${omIdx}`)?.click()}
+                                      className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-900 rounded text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                                      title="Tải ảnh từ máy"
+                                    >
+                                      <Upload className="w-3 h-3" />
+                                      <span>Tải</span>
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -6333,7 +6946,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Package className="w-5 h-5" />
+            <div className="relative">
+              <Package className="w-5 h-5" />
+              {products.length > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 bg-slate-800 text-white text-[9px] font-bold px-1 py-0.5 rounded flex items-center justify-center shadow-xs font-mono">
+                  {products.length > 99 ? '99+' : products.length}
+                </span>
+              )}
+            </div>
             <span className="text-[10px] mt-0.5 font-medium">Sản phẩm</span>
           </button>
 

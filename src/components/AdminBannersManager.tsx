@@ -26,7 +26,6 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
 
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<CollectionInfo | null>(null);
-  const [showResetModal, setShowResetModal] = useState(false);
 
   // Form fields
   const [formTitle, setFormTitle] = useState('');
@@ -338,10 +337,6 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
 
   // Delete Banner Click (Opens in-app confirmation modal)
   const handleDelete = (col: CollectionInfo) => {
-    if (collections.length <= 1) {
-      setErrorMsg('Hệ thống cần giữ ít nhất 1 banner bộ sưu tập trên trang chủ.');
-      return;
-    }
     setDeleteConfirmModal(col);
   };
 
@@ -353,35 +348,25 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     try {
       const remaining = collections.filter((c) => c.id !== colToDelete.id);
       const reordered = remaining.map((item, idx) => ({ ...item, order: idx }));
+      
+      // Update app state and clean sync to Firestore
       onUpdateCollections(reordered);
 
-      await deleteCollectionFromFirestore(colToDelete.id);
-      setSuccessMsg(`Đã xóa banner "${colToDelete.title}" thành công.`);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      // Explicitly delete from Firestore
+      await deleteCollectionFromFirestore(colToDelete.id).catch((e) => {
+        console.warn('Lỗi delete Firestore collection document:', e);
+      });
+
+      setSuccessMsg(`Đã xóa bộ sưu tập "${colToDelete.title}" thành công.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setErrorMsg('Lỗi xóa banner: ' + err.message);
+      console.error('Lỗi khi xóa banner/bộ sưu tập:', err);
+      const remaining = collections.filter((c) => c.id !== colToDelete.id);
+      onUpdateCollections(remaining);
+      setSuccessMsg(`Đã xóa "${colToDelete.title}" khỏi danh sách.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
     } finally {
       setDeleteConfirmModal(null);
-    }
-  };
-
-  // Reset to default 3 showcases
-  const handleResetDefaults = () => {
-    setShowResetModal(true);
-  };
-
-  // Confirm Reset Defaults handler
-  const handleConfirmReset = async () => {
-    onUpdateCollections(COLLECTIONS_DATA);
-    try {
-      await Promise.all(COLLECTIONS_DATA.map((c) => saveCollectionToFirestore(c)));
-      setSuccessMsg('Đã khôi phục 3 banner mặc định thành công!');
-      setTimeout(() => setSuccessMsg(null), 4000);
-    } catch (err: any) {
-      console.warn('Lỗi reset Firestore:', err);
-      setErrorMsg('Lỗi khôi phục mặc định: ' + err.message);
-    } finally {
-      setShowResetModal(false);
     }
   };
 
@@ -409,14 +394,6 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
           >
             <Eye className="w-3.5 h-3.5" />
             <span>Xem Trước Banner</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleResetDefaults}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all border border-slate-200"
-          >
-            Mặc Định
           </button>
           
           <button
@@ -1206,50 +1183,6 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-colors shadow-md shadow-rose-600/20 cursor-pointer"
               >
                 Xác nhận xóa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: CONFIRM RESET DEFAULTS */}
-      {showResetModal && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setShowResetModal(false)}
-        >
-          <div
-            className="relative max-w-md w-full bg-white p-6 rounded-2xl border border-slate-200 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <h3 className="font-bold text-base text-slate-900">Khôi Phục Banner Mặc Định</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Đặt lại 3 banner gốc của hệ thống</p>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1">
-              <p className="text-sm font-semibold text-slate-800">
-                Khôi phục lại 3 Banner Showcase mặc định (02/09, 20/10, Paracord EDC)?
-              </p>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Tất cả các banner tùy chỉnh hiện tại sẽ được thay thế bằng 3 bộ sưu tập chuẩn ban đầu.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowResetModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReset}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
-              >
-                Xác nhận khôi phục
               </button>
             </div>
           </div>

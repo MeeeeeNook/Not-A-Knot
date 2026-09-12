@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { HeroBanners } from './components/HeroBanners';
+import { LandingProductsCollection } from './components/LandingProductsCollection';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
 import { AboutUsSection } from './components/AboutUsSection';
 import { LandingFaqCommitments } from './components/LandingFaqCommitments';
@@ -40,6 +41,7 @@ import {
   saveCollectionToFirestore,
   saveProductToFirestore,
   pushAndSyncProductsToFirestore,
+  pushAndSyncCollectionsToFirestore,
   subscribeToProductsFromFirestore,
   subscribeToCategoriesFromFirestore,
   subscribeToCollectionsFromFirestore,
@@ -478,7 +480,7 @@ export default function App() {
     // D. Real-time Collections / Banners listener
     const unsubCols = subscribeToCollectionsFromFirestore((realtimeCols) => {
       if (!isMounted) return;
-      if (realtimeCols && realtimeCols.length > 0) {
+      if (realtimeCols) {
         const sorted = [...realtimeCols].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         setCollections(sorted);
         safeStorageSetItem('nak_collections', JSON.stringify(sorted));
@@ -570,7 +572,7 @@ export default function App() {
     setCollections(newCols);
     broadcastStoreChange('collections', newCols);
     safeStorageSetItem('nak_collections', JSON.stringify(newCols));
-    Promise.all(newCols.map((c) => saveCollectionToFirestore(c))).catch((err) =>
+    pushAndSyncCollectionsToFirestore(newCols, true).catch((err) =>
       console.warn('Lỗi đồng bộ collections lên Firebase:', err)
     );
   };
@@ -1054,6 +1056,16 @@ export default function App() {
   const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
+  const landingProductSections = useMemo(() => {
+    if (siteContent?.landingProductSections && siteContent.landingProductSections.length > 0) {
+      return siteContent.landingProductSections;
+    }
+    if (siteContent?.landingProducts) {
+      return [siteContent.landingProducts];
+    }
+    return DEFAULT_SITE_CONTENT.landingProductSections || [];
+  }, [siteContent]);
+
   const handleAnnouncementClick = () => {
     const link = siteContent?.announcementLink?.trim();
     if (!link) return;
@@ -1176,12 +1188,21 @@ export default function App() {
               onOpenAbout={handleOpenAbout}
             />
 
-            {/* Collection Showcase Cards */}
-            <LandingCollectionBanners
-              collections={collections}
-              onSelectCollection={handleSelectCollection}
-              onOpenAllCatalog={() => handleOpenAllCatalog('all')}
-            />
+            {/* The Collection(s) - Landing Page Direct Products Grid(s) */}
+            {landingProductSections.map((secConfig, idx) => (
+              <LandingProductsCollection
+                key={secConfig.id || `landing-sec-${idx}`}
+                config={secConfig}
+                products={visibleProducts}
+                categories={categories}
+                collections={collections}
+                sectionIndex={idx}
+                zaloPhone={siteContent?.zalo || siteContent?.phone}
+                messengerLink={siteContent?.socialLinks?.messenger || siteContent?.socialLinks?.facebook}
+                onOpenProductDetail={handleOpenProductDetail}
+                onOpenAllCatalog={(cat) => handleOpenAllCatalog(cat || 'all')}
+              />
+            ))}
 
             {/* About Us Brand Teaser & Craftsmanship Narrative */}
             <AboutUsSection

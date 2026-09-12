@@ -9,7 +9,10 @@ import {
   saveProductsToFirestore,
   saveCategoriesToFirestore,
   saveCollectionsToFirestore,
-  saveSiteContentToFirestore
+  pushAndSyncCategoriesToFirestore,
+  pushAndSyncCollectionsToFirestore,
+  saveSiteContentToFirestore,
+  syncLocalBackupsToFirestore
 } from '../../firebase';
 import { 
   History, 
@@ -27,7 +30,9 @@ import {
   Layout, 
   Settings, 
   Check,
-  Calendar
+  Calendar,
+  Cloud,
+  CloudUpload
 } from 'lucide-react';
 
 interface AdminVersionHistoryPageProps {
@@ -105,6 +110,29 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
   useEffect(() => {
     loadBackupsAndSchedule();
   }, []);
+
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
+
+  // Manual trigger to force sync any local-only backups to Firebase Cloud
+  const handleSyncLocalBackups = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const res = await syncLocalBackupsToFirestore();
+      if (res.syncedCount > 0) {
+        onNotify(`Đã đồng bộ ${res.syncedCount} bản sao lưu lên Firebase Cloud thành công!`);
+        await loadBackupsAndSchedule();
+      } else if (res.errors > 0) {
+        onNotify('Không thể đồng bộ một số bản sao lưu lên Firebase do vượt giới hạn dung lượng.');
+      } else {
+        onNotify('Tất cả các bản sao lưu đã được lưu trữ đồng bộ trên Firebase Cloud!');
+      }
+    } catch (e) {
+      console.error('Lỗi đồng bộ lên cloud:', e);
+      onNotify('Lỗi đồng bộ bản sao lưu lên Firebase.');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
 
   // Format date helper
   const formatDateTime = (isoString: string) => {
@@ -259,13 +287,13 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       // 2. Restore Categories
       if (data.categories && Array.isArray(data.categories)) {
         onUpdateCategories(data.categories);
-        await saveCategoriesToFirestore(data.categories);
+        await pushAndSyncCategoriesToFirestore(data.categories);
       }
 
       // 3. Restore Collections
       if (data.collections && Array.isArray(data.collections)) {
         onUpdateCollections(data.collections);
-        await saveCollectionsToFirestore(data.collections);
+        await pushAndSyncCollectionsToFirestore(data.collections);
       }
 
       // 4. Restore Site Content
@@ -314,6 +342,18 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
         </div>
 
         <div className="flex items-center gap-2">
+          {backups.some((b) => b.syncedToCloud === false) && (
+            <button
+              onClick={handleSyncLocalBackups}
+              disabled={isSyncingCloud}
+              className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Đồng bộ các bản sao lưu cục bộ lên Firebase Cloud"
+            >
+              <CloudUpload className={`w-4 h-4 ${isSyncingCloud ? 'animate-bounce' : ''}`} />
+              <span>{isSyncingCloud ? 'Đang đồng bộ...' : 'Đồng bộ Cloud'}</span>
+            </button>
+          )}
+
           <button
             onClick={() => loadBackupsAndSchedule()}
             disabled={isLoading}
@@ -462,10 +502,36 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
             <strong>Giới hạn lưu trữ:</strong> Hệ thống lưu trữ tối đa <strong>5 điểm khôi phục</strong>. Hiện có <strong>{backups.length}/5</strong> bản sao lưu trên Firebase Cloud.
           </div>
         </div>
-        <span className="text-[11px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+        <span className="text-[11px] font-mono font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900">
           {backups.length}/5
         </span>
       </div>
+
+      {/* Cloud Sync Alert Banner if any backup is local only */}
+      {backups.some((b) => b.syncedToCloud === false) && (
+        <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-100 rounded-lg text-amber-700 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-amber-950">Phát hiện bản sao lưu chưa đồng bộ lên Firebase Cloud</div>
+              <div className="text-[11px] text-amber-800 mt-0.5">
+                Một số bản sao lưu đang lưu tạm trên máy này và có thể chưa hiển thị trên thiết bị khác. Bấm nút bên cạnh để đẩy trực tiếp lên Firebase Cloud.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSyncLocalBackups}
+            disabled={isSyncingCloud}
+            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold flex items-center gap-2 shrink-0 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            <CloudUpload className={`w-4 h-4 ${isSyncingCloud ? 'animate-bounce' : ''}`} />
+            <span>{isSyncingCloud ? 'Đang đồng bộ...' : 'Đồng bộ lên Firebase ngay'}</span>
+          </button>
+        </div>
+      )}
 
       {/* Backups List */}
       <div className="space-y-3">
@@ -522,6 +588,25 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
                       {b.backupType === 'auto' ? 'Tự Động' : 'Thủ Công'}
                     </span>
 
+                    {/* Cloud vs Local Sync Status Badge */}
+                    {b.syncedToCloud !== false ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"
+                        title="Bản sao lưu này đã được lưu trữ an toàn trên Firebase Cloud (sẵn sàng trên mọi thiết bị)"
+                      >
+                        <Cloud className="w-3 h-3 text-blue-600" />
+                        Firebase Cloud
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300"
+                        title="Bản sao lưu này đang lưu tạm cục bộ trên trình duyệt này"
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                        Chỉ lưu cục bộ
+                      </span>
+                    )}
+
                     <span className="text-[11px] text-slate-400 font-medium">
                       ({getRelativeTime(b.createdAt)})
                     </span>
@@ -567,9 +652,21 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
 
                 {/* Right: Actions */}
                 <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-3 md:pt-0 border-slate-100">
+                  {b.syncedToCloud === false && (
+                    <button
+                      onClick={handleSyncLocalBackups}
+                      disabled={isSyncingCloud}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                      title="Đẩy bản sao lưu này lên Firebase Cloud ngay"
+                    >
+                      <CloudUpload className={`w-3.5 h-3.5 ${isSyncingCloud ? 'animate-bounce' : ''}`} />
+                      <span>Đẩy lên Cloud</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => handleDownloadBackup(b)}
-                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all"
+                    className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer"
                     title="Tải về file JSON dự phòng"
                   >
                     <Download className="w-4 h-4" />
@@ -577,7 +674,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
 
                   <button
                     onClick={() => setDeleteCandidate(b)}
-                    className="p-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all"
+                    className="p-2 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-all cursor-pointer"
                     title="Xóa bản sao lưu này"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -585,7 +682,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
 
                   <button
                     onClick={() => setRestoreCandidate(b)}
-                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
                     <span>Khôi Phục</span>

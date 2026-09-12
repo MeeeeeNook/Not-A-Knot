@@ -1222,6 +1222,39 @@ export const deleteCollectionFromFirestore = async (collectionId: string): Promi
   }
 };
 
+/**
+ * Clean orphans and synchronize entire collections list to Firestore
+ */
+export const pushAndSyncCollectionsToFirestore = async (
+  collectionsList: CollectionInfo[],
+  cleanOrphans = true
+): Promise<{ saved: number; deleted: number }> => {
+  try {
+    let deletedCount = 0;
+    if (cleanOrphans) {
+      const existing = await fetchCollectionsFromFirestore();
+      const currentIds = new Set(collectionsList.map((c) => c.id));
+      const toDeleteDocs = existing.filter((c) => !currentIds.has(c.id)).map((c) => c.id);
+
+      for (const id of toDeleteDocs) {
+        try {
+          await deleteDoc(doc(db, 'collections', id));
+          recordOperation('delete', 1, -400);
+        } catch (e) {
+          console.warn('Lỗi dọn dẹp collection cũ:', id, e);
+        }
+      }
+      deletedCount = toDeleteDocs.length;
+    }
+
+    await Promise.all(collectionsList.map((c) => saveCollectionToFirestore(c)));
+    return { saved: collectionsList.length, deleted: deletedCount };
+  } catch (err) {
+    console.error('Lỗi pushAndSyncCollectionsToFirestore:', err);
+    throw err;
+  }
+};
+
 // ----------------------------------------------------
 // Site Content & Visual Elements Configuration Sync
 // ----------------------------------------------------
@@ -1656,60 +1689,59 @@ async function loadBackupsFromIDB(): Promise<VersionBackup[]> {
   }
 }
 
+function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'string') {
+    // If it's a base64 image data URI that is heavy, replace with safe fallback asset
+    if (obj.startsWith('data:image/') && obj.length > maxDataUriLen) {
+      return '/assets/bracelet.jpg';
+    }
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => deepSanitizeBackup(item, maxDataUriLen));
+  }
+  if (typeof obj === 'object') {
+    const res: Record<string, any> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== undefined) {
+        res[k] = deepSanitizeBackup(v, maxDataUriLen);
+      }
+    }
+    return res;
+  }
+  return obj;
+}
+
 function sanitizeBackupForFirestore(backup: VersionBackup): any {
-  const cleaned = cleanFirestoreData(backup);
+  // 1. Clean undefined and non-serializable fields
+  let cleaned = cleanFirestoreData(backup);
+  // 2. Strip excessive base64 strings so document fits within Firestore's 1MB limit
+  cleaned = deepSanitizeBackup(cleaned, 1500);
+
   try {
-    const str = JSON.stringify(cleaned);
-    // Firestore max document size is 1MB. If payload is large, trim heavy base64 strings
-    if (str.length > 750000 && cleaned.data) {
-      return {
-        ...cleaned,
-        data: {
-          ...cleaned.data,
-          products: cleaned.data.products?.map((p: any) => ({
-            ...p,
-            image: typeof p.image === 'string' && p.image.length > 50000 ? '' : p.image,
-            images: Array.isArray(p.images)
-              ? p.images.map((img: string) => (typeof img === 'string' && img.length > 50000 ? '' : img))
-              : p.images
-          }))
-        }
-      };
+    let str = JSON.stringify(cleaned);
+    // If payload is still approaching 600KB, strip all base64 data URIs down
+    if (str.length > 600000) {
+      cleaned = deepSanitizeBackup(cleaned, 200);
+      str = JSON.stringify(cleaned);
+    }
+    if (str.length > 600000) {
+      cleaned = deepSanitizeBackup(cleaned, 50);
     }
   } catch {}
+
+  if (cleaned && typeof cleaned === 'object') {
+    delete (cleaned as any).syncedToCloud;
+  }
   return cleaned;
 }
 
 export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
   const backupMap = new Map<string, VersionBackup>();
+  const cloudDocIds = new Set<string>();
 
-  // 1. Read from localStorage cache
-  try {
-    const cached = localStorage.getItem('notaknot_backups_cache');
-    if (cached) {
-      const list: VersionBackup[] = JSON.parse(cached);
-      if (Array.isArray(list)) {
-        list.forEach((b) => {
-          if (b && b.id) backupMap.set(b.id, b);
-        });
-      }
-    }
-  } catch {}
-
-  // 2. Read from IndexedDB
-  try {
-    const idbList = await loadBackupsFromIDB();
-    idbList.forEach((b) => {
-      if (b && b.id) {
-        const existing = backupMap.get(b.id);
-        if (!existing || (!existing.data && b.data)) {
-          backupMap.set(b.id, b);
-        }
-      }
-    });
-  } catch {}
-
-  // 3. Read from Firestore
+  // 1. Query Firestore FIRST (Primary Cloud source of truth across all devices)
   try {
     recordOperation('read');
     const colRef = collection(db, 'backups');
@@ -1717,22 +1749,75 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
     snap.forEach((docSnap) => {
       const data = docSnap.data();
       if (data && data.createdAt) {
-        const fsBackup = {
+        cloudDocIds.add(docSnap.id);
+        backupMap.set(docSnap.id, {
           id: docSnap.id,
-          ...data
-        } as VersionBackup;
-
-        const localCopy = backupMap.get(docSnap.id);
-        // If local copy contains richer data, preserve it while updating metadata
-        if (localCopy && localCopy.data && (!fsBackup.data || Object.keys(fsBackup.data).length === 0)) {
-          backupMap.set(docSnap.id, { ...fsBackup, data: localCopy.data });
-        } else {
-          backupMap.set(docSnap.id, fsBackup);
-        }
+          ...data,
+          syncedToCloud: true
+        } as VersionBackup);
       }
     });
   } catch (err) {
     console.warn('Không thể tải backup từ Firestore, sử dụng bộ nhớ cục bộ:', err);
+  }
+
+  // 2. Read from IndexedDB (local cache fallback / enrichment)
+  const unsyncedBackups: VersionBackup[] = [];
+  try {
+    const idbList = await loadBackupsFromIDB();
+    idbList.forEach((b) => {
+      if (b && b.id) {
+        const existing = backupMap.get(b.id);
+        if (!existing) {
+          const isCloud = cloudDocIds.has(b.id);
+          const withStatus = { ...b, syncedToCloud: isCloud };
+          backupMap.set(b.id, withStatus);
+          if (!isCloud) {
+            unsyncedBackups.push(withStatus);
+          }
+        } else if (!existing.data && b.data) {
+          existing.data = b.data;
+        }
+      }
+    });
+  } catch {}
+
+  // 3. Read from localStorage cache fallback
+  try {
+    const cached = localStorage.getItem('notaknot_backups_cache');
+    if (cached) {
+      const list: VersionBackup[] = JSON.parse(cached);
+      if (Array.isArray(list)) {
+        list.forEach((b) => {
+          if (b && b.id && !backupMap.has(b.id)) {
+            const isCloud = cloudDocIds.has(b.id);
+            const withStatus = { ...b, syncedToCloud: isCloud };
+            backupMap.set(b.id, withStatus);
+            if (!isCloud) {
+              unsyncedBackups.push(withStatus);
+            }
+          }
+        });
+      }
+    }
+  } catch {}
+
+  // 4. AUTO-SYNC: If there are local backups that only exist on this machine, upload them to Firebase Cloud!
+  if (unsyncedBackups.length > 0) {
+    console.log(`Tự động đồng bộ ${unsyncedBackups.length} bản sao lưu từ máy này lên Firebase Cloud...`);
+    for (const unsynced of unsyncedBackups) {
+      try {
+        const docRef = doc(db, 'backups', unsynced.id);
+        const cleaned = sanitizeBackupForFirestore(unsynced);
+        await setDoc(docRef, cleaned);
+        recordOperation('write', 1, 2000);
+        unsynced.syncedToCloud = true;
+        const inMap = backupMap.get(unsynced.id);
+        if (inMap) inMap.syncedToCloud = true;
+      } catch (e) {
+        console.warn('Lỗi khi đồng bộ backup lên Cloud:', e);
+      }
+    }
   }
 
   const result = Array.from(backupMap.values())
@@ -1741,33 +1826,27 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
 
   if (result.length > 0) {
     saveBackupsToIDB(result);
+    try {
+      localStorage.setItem('notaknot_backups_cache', JSON.stringify(result));
+    } catch {}
   }
 
   return result;
 };
 
 /**
- * Saves a backup to Firestore and IndexedDB, retaining the latest 5 backups.
+ * Saves a backup to Firestore Cloud, IndexedDB, and localStorage cache, retaining the latest 5 backups.
  */
 export const saveBackupToFirestore = async (backup: VersionBackup): Promise<VersionBackup[]> => {
-  // Fetch existing backups from all sources first
-  const existingList = await fetchBackupsFromFirestore();
-  const updatedList: VersionBackup[] = [
-    backup,
-    ...existingList.filter((b) => b.id !== backup.id)
-  ]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
-
-  // 1. Immediately persist to IndexedDB so storage quota in localStorage is preserved
-  await saveBackupsToIDB(updatedList);
-
-  // 2. Persist to Firestore
+  // 1. Persist to Firestore Cloud FIRST
+  let cloudSuccess = false;
   try {
     const docRef = doc(db, 'backups', backup.id);
     const cleaned = sanitizeBackupForFirestore(backup);
     await setDoc(docRef, cleaned);
     recordOperation('write', 1, 2500);
+    cloudSuccess = true;
+    backup.syncedToCloud = true;
 
     // Enforce max 5 documents on Firestore
     const colRef = collection(db, 'backups');
@@ -1790,11 +1869,71 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
         }
       }
     }
-  } catch (err) {
-    console.warn('Lưu backup Firestore gặp lỗi, bản sao lưu đã được lưu vào bộ nhớ cục bộ an toàn:', err);
+  } catch (err: any) {
+    console.error('Lưu backup Firestore gặp lỗi lần 1, đang thử nén siêu gọn...', err);
+    try {
+      const ultraCleaned = deepSanitizeBackup(cleanFirestoreData(backup), 50);
+      delete (ultraCleaned as any).syncedToCloud;
+      const docRef = doc(db, 'backups', backup.id);
+      await setDoc(docRef, ultraCleaned);
+      recordOperation('write', 1, 1500);
+      cloudSuccess = true;
+      backup.syncedToCloud = true;
+    } catch (retryErr: any) {
+      console.warn('Không thể lưu backup lên Firestore (vượt quá dung lượng 1MB hoặc lỗi mạng), chuyển sang lưu trữ an toàn cục bộ trên máy:', retryErr);
+      cloudSuccess = false;
+      backup.syncedToCloud = false;
+    }
   }
 
+  // 2. Fetch existing backups from all sources
+  const existingList = await fetchBackupsFromFirestore();
+  const updatedList: VersionBackup[] = [
+    { ...backup, syncedToCloud: cloudSuccess },
+    ...existingList.filter((b) => b.id !== backup.id)
+  ]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  // 3. Immediately persist to IndexedDB and localStorage
+  await saveBackupsToIDB(updatedList);
+  try {
+    localStorage.setItem('notaknot_backups_cache', JSON.stringify(updatedList));
+  } catch {}
+
   return updatedList;
+};
+
+export const syncLocalBackupsToFirestore = async (): Promise<{ syncedCount: number; errors: number }> => {
+  let syncedCount = 0;
+  let errors = 0;
+  try {
+    const list = await fetchBackupsFromFirestore();
+    for (const b of list) {
+      if (!b.syncedToCloud) {
+        try {
+          const docRef = doc(db, 'backups', b.id);
+          const cleaned = sanitizeBackupForFirestore(b);
+          await setDoc(docRef, cleaned);
+          recordOperation('write', 1, 2000);
+          b.syncedToCloud = true;
+          syncedCount++;
+        } catch (err) {
+          console.error(`Lỗi đồng bộ bản sao lưu ${b.id}:`, err);
+          errors++;
+        }
+      }
+    }
+    if (syncedCount > 0) {
+      await saveBackupsToIDB(list);
+      try {
+        localStorage.setItem('notaknot_backups_cache', JSON.stringify(list));
+      } catch {}
+    }
+  } catch (e) {
+    console.error('Lỗi khi thực hiện đồng bộ Cloud:', e);
+  }
+  return { syncedCount, errors };
 };
 
 export const deleteBackupFromFirestore = async (backupId: string): Promise<void> => {

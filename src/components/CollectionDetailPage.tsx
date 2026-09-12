@@ -27,7 +27,7 @@ import {
   Camera,
   FileText
 } from 'lucide-react';
-import { saveOrderToFirestore, saveCollectionToFirestore } from '../firebase';
+import { saveOrderToFirestore, saveCollectionToFirestore, deleteCollectionFromFirestore } from '../firebase';
 import { ProductCard } from './ProductCard';
 
 interface CollectionDetailPageProps {
@@ -267,6 +267,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
 
   // Local state for editing the collection (description, banner image, theme/bg color, etc.)
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Enforce security: non-admins cannot stay in editing mode
   useEffect(() => {
@@ -935,6 +936,21 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>{isEditing ? 'Đóng' : 'Sửa BST'}</span>
               </button>
+
+              {/* Delete Collection Button */}
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  isDark
+                    ? 'bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/50'
+                    : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+                }`}
+                title="Xóa bộ sưu tập này"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xóa BST</span>
+              </button>
             </div>
           )}
         </div>
@@ -1431,6 +1447,62 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
           </div>
         </div>
       </section>
+
+      {/* CONFIRM DELETE COLLECTION MODAL */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="relative max-w-sm w-full bg-white p-5 rounded-2xl border border-slate-200 shadow-2xl space-y-4 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Xác Nhận Xóa Bộ Sưu Tập</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Bạn có chắc chắn muốn xóa bộ sưu tập "{currentCollection.title}"?
+              </p>
+            </div>
+
+            <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              Banner và trang chi tiết của bộ sưu tập này sẽ bị xóa khỏi hệ thống. Sản phẩm bên trong vẫn được lưu trữ đầy đủ trong kho hàng.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    if (onUpdateCollections && collections) {
+                      const remaining = collections.filter((c) => c.id !== currentCollection.id);
+                      onUpdateCollections(remaining);
+                    }
+                    await deleteCollectionFromFirestore(currentCollection.id).catch((err) =>
+                      console.warn('Lỗi xóa Firestore:', err)
+                    );
+                    setShowDeleteModal(false);
+                    onBackToLanding();
+                  } catch (e) {
+                    console.error('Lỗi xóa:', e);
+                    onBackToLanding();
+                  }
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

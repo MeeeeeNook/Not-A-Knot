@@ -46,6 +46,36 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     }
   ],
 
+  landingProducts: {
+    id: 'section-the-collection',
+    title: 'THE COLLECTION',
+    subtitle: '',
+    badgeText: 'NEW',
+    viewAllText: 'Xem tất cả',
+    detailButtonText: 'Chi tiết',
+    isActive: true,
+    displayLimit: 8,
+    filterCategory: 'all',
+    selectedProductIds: [],
+    gridColumns: 4
+  },
+
+  landingProductSections: [
+    {
+      id: 'section-the-collection',
+      title: 'THE COLLECTION',
+      subtitle: '',
+      badgeText: 'NEW',
+      viewAllText: 'Xem tất cả',
+      detailButtonText: 'Chi tiết',
+      isActive: true,
+      displayLimit: 8,
+      filterCategory: 'all',
+      selectedProductIds: [],
+      gridColumns: 4
+    }
+  ],
+
   faqTitle: 'Câu Hỏi Thường Gặp',
   faqSubtitle: 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công',
   faqs: [

@@ -125,24 +125,33 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </div>
               <button
                 onClick={() => onSwitchTab('dashboard')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'dashboard'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Tổng quan</span>
+                <span>Bảng điều khiển</span>
               </button>
 
               <button
                 onClick={() => onSwitchTab('analytics')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'analytics'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Truy cập & GA4</span>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                    activeTab === 'analytics'
+                      ? 'bg-black/10 text-slate-950 border-black/15'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                  }`}
+                >
+                  GA4 Live
+                </span>
               </button>
             </div>
 
@@ -154,35 +163,58 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
               <button
                 onClick={() => onSwitchTab('orders')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'orders'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Đơn hàng</span>
+                <span>Quản lý đơn hàng</span>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                    activeTab === 'orders'
+                      ? 'bg-black/15 text-slate-950 border-transparent'
+                      : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                  }`}
+                >
+                  {ordersCount}
+                </span>
               </button>
 
               <button
                 onClick={() => onSwitchTab('manual_order')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'manual_order'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Tạo đơn thủ công</span>
+                <span>Nhập đơn thủ công</span>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                    activeTab === 'manual_order'
+                      ? 'bg-black/10 text-slate-950 border-black/15'
+                      : 'bg-sky-50 text-sky-700 border-sky-200/60'
+                  }`}
+                >
+                  + Mới
+                </span>
               </button>
 
               <button
                 onClick={() => onSwitchTab('messages')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'messages'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Hộp thư liên hệ</span>
+                {unreadMessagesCount > 0 ? (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white animate-pulse shadow-xs font-mono">
+                    {unreadMessagesCount}
+                  </span>
+                ) : null}
               </button>
             </div>
 
@@ -194,117 +226,163 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
               <button
                 onClick={() => onSwitchTab('products')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'products'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Sản phẩm</span>
+                <span>Danh sách sản phẩm</span>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                    activeTab === 'products'
+                      ? 'bg-black/15 text-slate-950 border-transparent'
+                      : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                  }`}
+                >
+                  {productsCount}
+                </span>
               </button>
 
               <button
                 onClick={() => onSwitchTab('categories')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'categories'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Danh mục</span>
+                <span>Danh mục sản phẩm</span>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                    activeTab === 'categories'
+                      ? 'bg-black/15 text-slate-950 border-transparent'
+                      : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                  }`}
+                >
+                  {categoriesCount}
+                </span>
               </button>
             </div>
 
             {/* SECTION 4: GIAO DIỆN & NỘI DUNG */}
             <div className="space-y-1">
               <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                GIAO DIỆN & THANH TOÁN
+                GIAO DIỆN & NỘI DUNG
               </div>
 
               <button
                 onClick={() => onSwitchTab('site_editor')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'site_editor'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Sửa giao diện</span>
+                <span>Sửa Website & Nội dung</span>
+              </button>
+
+              <button
+                onClick={() => onSwitchTab('banners')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'banners'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>Banners & Bộ sưu tập</span>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                    activeTab === 'banners'
+                      ? 'bg-black/15 text-slate-950 border-transparent'
+                      : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                  }`}
+                >
+                  {collectionsCount}
+                </span>
               </button>
 
               <button
                 onClick={() => onSwitchTab('bank_account')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'bank_account'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Tài khoản ngân hàng</span>
               </button>
-
-              <button
-                onClick={() => onSwitchTab('banners')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'banners'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Banners & Bộ sưu tập</span>
-              </button>
             </div>
 
-            {/* SECTION 5: SAO LƯU & HỆ THỐNG */}
+            {/* SECTION 5: SAO LƯU & BACKUP */}
             <div className="space-y-1">
               <div className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                 SAO LƯU & BACKUP
               </div>
 
               <button
+                onClick={() => onSwitchTab('backup')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'backup'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>Sao Lưu & Dữ Liệu</span>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                    activeTab === 'backup'
+                      ? 'bg-black/10 text-slate-950 border-black/15'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                  }`}
+                >
+                  v2.0
+                </span>
+              </button>
+
+              <button
                 onClick={() => onSwitchTab('version_history')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'version_history'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Lịch sử phiên bản</span>
               </button>
 
-              <button
-                onClick={() => onSwitchTab('backup')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'backup'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Xuất / Nhập file</span>
-              </button>
-
               {isRootAdmin && (
                 <button
                   onClick={() => onSwitchTab('sellers')}
-                  className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeTab === 'sellers'
-                      ? 'bg-slate-900 text-white shadow-xs'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <span>Quản trị viên</span>
+                  <span>Quản trị</span>
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                      activeTab === 'sellers'
+                        ? 'bg-black/15 text-slate-950 border-transparent'
+                        : 'bg-amber-100 text-amber-900 border-amber-200/70'
+                    }`}
+                  >
+                    {sellersCount}
+                  </span>
                 </button>
               )}
 
               <button
                 onClick={() => onSwitchTab('firebase')}
-                className={`w-full flex items-center px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === 'firebase'
-                    ? 'bg-slate-900 text-white shadow-xs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Dung lượng Firebase</span>
+                <span>Tài Khoản & Quota Firebase</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-2xs shrink-0" title="Firebase Online" />
               </button>
             </div>
           </nav>

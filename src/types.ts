@@ -29,6 +29,7 @@ export interface ProductOmamoriOption {
   name: string; // e.g. "Bùa Bình An (Đỏ)", "Bùa May Mắn (Vàng)", "Bùa Tình Duyên (Hồng)"
   image: string; // thumbnail / photo of the Omamori amulet
   priceDelta?: number; // optional extra price, default 0
+  meaning?: string; // e.g. "Bình an, may mắn"
   stock?: number; // Inventory quantity for this specific amulet (undefined = unlimited, 0 = out of stock)
 }
 
@@ -69,6 +70,7 @@ export interface Product {
   stock?: number;
   soldCount?: number;
   isHidden?: boolean;
+  customUrl?: string; // Optional custom redirect link (e.g. Shopee, external landing, affiliate)
   updatedAt?: string;
 }
 
@@ -308,6 +310,36 @@ export interface BankAccountConfig {
   qrTemplate?: 'compact' | 'compact2' | 'qr_only' | 'print';
 }
 
+export type LandingDetailActionType =
+  | 'product_detail'     // Mở xem chi tiết sản phẩm (Mặc định)
+  | 'custom_url'         // Chuyển hướng đến liên kết ngoài / URL tùy chỉnh
+  | 'product_custom_url' // Ưu tiên mở link riêng của sản phẩm (nếu có)
+  | 'category'           // Chuyển đến trang danh mục sản phẩm
+  | 'zalo'               // Nhắn tin Zalo tư vấn về sản phẩm
+  | 'messenger';         // Nhắn tin Messenger tư vấn về sản phẩm
+
+export interface LandingCollectionProductsConfig {
+  id?: string;
+  title: string;
+  subtitle?: string;
+  badgeText?: string;
+  viewAllText?: string;
+  detailButtonText?: string;
+  detailActionType?: LandingDetailActionType;
+  detailCustomUrl?: string;
+  detailOpenNewTab?: boolean;
+  isActive: boolean;
+  displayLimit: number;
+  filterCategory: string;
+  selectedProductIds?: string[];
+  gridColumns?: number;
+  layoutMode?: 'grid' | 'carousel' | 'auto';
+  backgroundColor?: string;
+  backgroundImage?: string;
+  bgImageOpacity?: number;
+  textColor?: 'dark' | 'light' | 'auto';
+}
+
 export interface SiteContentConfig {
   logoUrl?: string;
   brandName: string;
@@ -321,6 +353,8 @@ export interface SiteContentConfig {
   email: string;
   bankAccount?: BankAccountConfig;
   heroSlides: SiteHeroSlide[];
+  landingProducts?: LandingCollectionProductsConfig;
+  landingProductSections?: LandingCollectionProductsConfig[];
   faqTitle?: string;
   faqSubtitle?: string;
   faqs?: FaqItem[];
@@ -368,6 +402,7 @@ export interface VersionBackup {
   createdByName?: string;
   backupType: 'auto' | 'manual';
   note?: string;
+  syncedToCloud?: boolean; // Indicates if document exists in Firebase Firestore Cloud
   summary: {
     productsCount: number;
     categoriesCount: number;
