@@ -244,6 +244,20 @@ export interface CustomElementBlock {
   bgStyle?: 'dark' | 'glass' | 'gold_gradient' | 'minimal';
 }
 
+export interface HeroTextBox {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  fontFamily: 'sans' | 'serif' | 'mono';
+  fontSize: number;
+  fontWeight: number;
+  color: string;
+  align: 'left' | 'center' | 'right';
+  visible: boolean;
+}
+
 export interface SiteHeroSlide {
   id: string;
   tag: string;
@@ -293,6 +307,7 @@ export interface SiteHeroSlide {
   bgZoomMobile?: number; // 100 to 250% (default 100)
   bgFitMobile?: 'cover' | 'contain' | 'fill';
   aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto';
+  textBoxes?: HeroTextBox[];
 }
 
 export interface FaqItem {
