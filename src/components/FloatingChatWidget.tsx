@@ -14,11 +14,13 @@ import { saveContactMessageToFirestore } from '../firebase';
 interface FloatingChatWidgetProps {
   siteContent?: SiteContentConfig;
   currentOrderCode?: string;
+  isProductDetail?: boolean;
 }
 
 export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   siteContent,
   currentOrderCode,
+  isProductDetail = false,
 }) => {
   // STRICT REQUIREMENT: Does NOT auto-open until user clicks
   const [isOpen, setIsOpen] = useState(false);
@@ -96,7 +98,11 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
     <div 
       ref={containerRef}
       id="floating-chat-widget-root"
-      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end pointer-events-auto select-none font-sans"
+      className={`fixed z-50 flex flex-col items-end pointer-events-auto select-none font-sans transition-all duration-300 ${
+        isProductDetail 
+          ? 'bottom-[78px] right-3 sm:bottom-6 sm:right-6' 
+          : 'bottom-4 right-4 sm:bottom-6 sm:right-6'
+      }`}
     >
       {/* 1. EXPANDED POPUP CARD (Light Mode Pure Design with Smooth Animation) */}
       <AnimatePresence>
@@ -308,7 +314,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
         aria-label="Mở menu tư vấn trực tiếp"
         whileTap={{ scale: 0.92 }}
         whileHover={{ scale: 1.05 }}
-        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] text-white shadow-blue-500/30 cursor-pointer"
+        className="w-11 h-11 sm:w-14 sm:h-14 rounded-full shadow-lg flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] text-white shadow-blue-500/30 cursor-pointer"
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
@@ -319,7 +325,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
               exit={{ rotate: 90, opacity: 0 }}
               transition={{ duration: 0.18 }}
             >
-              <X className="w-7 h-7 text-white" />
+              <X className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
             </motion.div>
           ) : (
             <motion.div
@@ -329,7 +335,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
               exit={{ rotate: -90, opacity: 0 }}
               transition={{ duration: 0.18 }}
             >
-              <MessageCircle className="w-7 h-7 text-white" />
+              <MessageCircle className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
             </motion.div>
           )}
         </AnimatePresence>

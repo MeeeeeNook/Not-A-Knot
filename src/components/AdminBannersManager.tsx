@@ -346,11 +346,15 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     const colToDelete = deleteConfirmModal;
     
     try {
-      const remaining = collections.filter((c) => c.id !== colToDelete.id);
+      const remaining = collections.filter((c) => c.id !== colToDelete.id && c.categoryKey !== colToDelete.id);
       const reordered = remaining.map((item, idx) => ({ ...item, order: idx }));
       
       // Update app state and clean sync to Firestore
       onUpdateCollections(reordered);
+      try {
+        localStorage.setItem('nak_collections', JSON.stringify(reordered));
+        localStorage.setItem('nak_collections_data', JSON.stringify(reordered));
+      } catch {}
 
       // Explicitly delete from Firestore
       await deleteCollectionFromFirestore(colToDelete.id).catch((e) => {
@@ -361,8 +365,12 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
       console.error('Lỗi khi xóa banner/bộ sưu tập:', err);
-      const remaining = collections.filter((c) => c.id !== colToDelete.id);
+      const remaining = collections.filter((c) => c.id !== colToDelete.id && c.categoryKey !== colToDelete.id);
       onUpdateCollections(remaining);
+      try {
+        localStorage.setItem('nak_collections', JSON.stringify(remaining));
+        localStorage.setItem('nak_collections_data', JSON.stringify(remaining));
+      } catch {}
       setSuccessMsg(`Đã xóa "${colToDelete.title}" khỏi danh sách.`);
       setTimeout(() => setSuccessMsg(null), 3000);
     } finally {

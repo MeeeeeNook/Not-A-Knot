@@ -30,7 +30,9 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
       order: 1,
-      isActive: true
+      isActive: true,
+      aspectRatioMobile: '1:1',
+      bgFitMobile: 'cover'
     },
     {
       id: 'slide-2',

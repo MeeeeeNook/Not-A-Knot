@@ -76,9 +76,9 @@ export default function App() {
   const [collections, setCollections] = useState<CollectionInfo[]>(() => {
     try {
       const saved = localStorage.getItem('nak_collections');
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -95,7 +95,11 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // Filter out obsolete legacy dummy items if present
+          const sanitized = parsed.filter(
+            (c: CategoryItem) => !['charm_bracelet', 'everyday', 'keychains', 'lanyards'].includes(c.id)
+          );
+          if (sanitized.length > 0) return sanitized;
         }
       }
     } catch (e) {
@@ -1332,6 +1336,7 @@ export default function App() {
             product={selectedProduct}
             allProducts={visibleProducts}
             categories={categories}
+            collections={collections}
             cartItems={cartItems}
             backLabel={
               previousView === 'catalog'
@@ -1413,6 +1418,7 @@ export default function App() {
         <FloatingChatWidget
           siteContent={siteContent}
           currentOrderCode={orderTrackerInitialCode}
+          isProductDetail={currentView === 'product_detail'}
         />
       )}
 

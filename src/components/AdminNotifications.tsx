@@ -218,7 +218,7 @@ export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
         type="button"
         id="admin-notification-bell-btn"
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
+        className={`relative p-1.5 sm:p-2.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer ${
           isOpen
             ? 'bg-slate-100 text-slate-900 border-slate-300 shadow-xs'
             : totalUnreadCount > 0

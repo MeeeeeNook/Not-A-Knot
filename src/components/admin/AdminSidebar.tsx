@@ -72,15 +72,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Sidebar Container */}
       <aside
         id="admin-sidebar"
-        className={`fixed lg:sticky top-0 left-0 z-50 h-screen bg-white border-r border-slate-200 flex flex-col justify-between transition-all duration-300 ease-in-out shrink-0 shadow-sm ${
+        className={`fixed lg:sticky top-0 left-0 z-50 h-screen max-h-[100dvh] bg-white border-r border-slate-200 flex flex-col justify-between transition-all duration-300 ease-in-out shrink-0 shadow-sm ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         } ${desktopSidebarCollapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0 lg:p-0' : 'lg:w-64 w-72'}`}
       >
         {/* Top Scrollable Content */}
         <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
-          {/* 1. Header with Store Logo and Top Collapse Button */}
-          <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-            <div className="flex items-center">
+          {/* 1. Header with Store Logo, Về Shop, and Top Collapse Button */}
+          <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 gap-2">
+            <div className="flex items-center gap-2">
               {siteContent?.logoUrl ? (
                 <img
                   src={siteContent.logoUrl}
@@ -92,6 +92,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   {(siteContent?.brandName || 'N').charAt(0)}
                 </div>
               )}
+
+              {/* Direct Về Shop button right at top of sidebar */}
+              <button
+                type="button"
+                onClick={onBackToStore}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all shadow-xs border border-amber-500/30 cursor-pointer"
+                title="Quay lại trang bán hàng (Về Shop)"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Về shop</span>
+              </button>
             </div>
 
             {/* Top Collapse Button for Desktop, Close button for Mobile */}
@@ -389,7 +400,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         </div>
 
         {/* 3. Bottom Footer Profile & Back to Store */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
+        <div className="p-3 pb-24 lg:pb-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
           {/* Seller User Identity */}
           {currentSeller && (
             <div className="p-2 bg-white rounded-xl border border-slate-200/80 flex items-center justify-between">
@@ -425,16 +436,16 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onBackToStore}
-              className="flex-1 px-3 py-2 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 px-3 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-amber-500/40"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Về Web Khách</span>
+              <ArrowLeft className="w-4 h-4" />
+              <span>Về shop</span>
             </button>
 
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
+                className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition-colors cursor-pointer"
                 title="Đăng xuất"
               >
                 Thoát

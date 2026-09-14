@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, CloudUpload, RefreshCw, ChevronsRight, Package, Folder, ShoppingBag, Mail } from 'lucide-react';
+import { Menu, CloudUpload, RefreshCw, ChevronsRight, Package, Folder, ShoppingBag, Mail, ArrowLeft } from 'lucide-react';
 import { AdminNotifications } from '../AdminNotifications';
 import { StoredOrder } from '../../firebase';
 import { ContactMessage } from '../../types';
@@ -25,6 +25,7 @@ interface AdminHeaderProps {
   isCloudSyncing: boolean;
   onPushAllToCloud: () => void;
   onFetchFromCloud: () => void;
+  onBackToStore?: () => void;
 }
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({
@@ -47,15 +48,16 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   onRefreshData,
   isCloudSyncing,
   onPushAllToCloud,
-  onFetchFromCloud
+  onFetchFromCloud,
+  onBackToStore
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-2xs gap-3">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between shadow-2xs gap-2 sm:gap-3">
       {/* Left: Mobile menu toggle, expand sidebar button if collapsed, and Page Title */}
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1">
         <button
           onClick={onOpenMobileSidebar}
-          className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden cursor-pointer"
+          className="p-1.5 sm:p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 lg:hidden cursor-pointer shrink-0"
           title="Mở menu quản trị"
         >
           <Menu className="w-5 h-5" />
@@ -65,7 +67,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         {desktopSidebarCollapsed && (
           <button
             onClick={onToggleDesktopSidebar}
-            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer border border-slate-200"
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold transition-colors cursor-pointer border border-slate-200 shrink-0"
             title="Mở rộng lại menu bên trái"
           >
             <ChevronsRight className="w-4 h-4" />
@@ -74,8 +76,8 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         )}
 
         {/* Page Title: Exactly just the page name, no breadcrumbs */}
-        <div className="min-w-0">
-          <h1 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm sm:text-lg font-extrabold text-slate-900 tracking-tight truncate">
             {pageTitle}
           </h1>
         </div>
@@ -146,8 +148,21 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         )}
       </div>
 
-      {/* Right: Notifications & Cloud Icons (Icon-only with hover description) */}
-      <div className="flex items-center gap-2">
+      {/* Right: Notifications & Cloud Icons & Back to Store */}
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* Direct Back to Store button */}
+        {onBackToStore && (
+          <button
+            type="button"
+            onClick={onBackToStore}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black transition-all border border-amber-500/30 cursor-pointer shadow-xs shrink-0 active:scale-95"
+            title="Quay lại trang bán hàng cho khách (Về Shop)"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-slate-950 stroke-[2.5]" />
+            <span className="font-extrabold text-xs">Về shop</span>
+          </button>
+        )}
+
         {/* Admin Notifications */}
         <AdminNotifications
           orders={orders}
@@ -165,7 +180,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <button
             onClick={onPushAllToCloud}
             disabled={isCloudSyncing}
-            className="p-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-1.5 sm:p-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Đẩy dữ liệu hiện tại lên Firebase Cloud (Ghi đè Cloud để khớp với máy bạn)"
             aria-label="Đẩy lên Cloud"
           >
@@ -181,7 +196,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           <button
             onClick={onFetchFromCloud}
             disabled={isCloudSyncing}
-            className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
+            className="p-1.5 sm:p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Đồng bộ dữ liệu mới nhất từ Firebase Cloud về máy"
             aria-label="Đồng bộ từ Cloud"
           >

@@ -18,11 +18,15 @@ import {
   Search,
   CreditCard,
   QrCode,
-  Check
+  Check,
+  Building2,
+  MapPin,
+  Gift
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
 import { generateTrackingNumber } from '../utils/orderFormatters';
+import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -55,7 +59,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [step, setStep] = useState<'cart' | 'select-method' | 'form-checkout' | 'success'>('cart');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [province, setProvince] = useState('');
+  const [district, setDistrict] = useState('');
+  const [detailedAddress, setDetailedAddress] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedMessengerOrder, setCopiedMessengerOrder] = useState(false);
@@ -65,6 +71,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [copiedTrackingCode, setCopiedTrackingCode] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
   const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
+  const [confirmedTotalAmount, setConfirmedTotalAmount] = useState<number>(0);
 
   const bankConfig = siteContent?.bankAccount || {
     bankId: 'VCB',
@@ -75,6 +82,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     qrTemplate: 'compact2'
   };
 
+  // Available districts for selected province
+  const availableDistricts = getDistrictsByProvince(province);
+
+  // Real-time dynamic shipping fee based on administrative boundaries (only computed when selected)
+  const shippingInfo = calculateShippingFee(province, district);
+  const shippingFee = shippingInfo.fee;
+
+  const handleProvinceChange = (newProvince: string) => {
+    setProvince(newProvince);
+    setDistrict('');
+  };
+
   const subtotal = cartItems.reduce(
     (acc, item) =>
       acc +
@@ -82,6 +101,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         item.quantity,
     0
   );
+
+  const grandTotal = subtotal + shippingFee;
 
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
@@ -216,20 +237,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const trackingCode = generateTrackingNumber();
     setCreatedTrackingCode(trackingCode);
 
+    const fullAddress = contactMethod === 'facebook'
+      ? (detailedAddress ? `${detailedAddress}, ${district}, ${province}` : '')
+      : `${detailedAddress.trim()}, ${district.trim()}, ${province.trim()}`;
+
+    const totalToRecord = contactMethod === 'facebook' ? subtotal : grandTotal;
+    setConfirmedTotalAmount(totalToRecord);
+
     return {
       id: trackingCode,
       trackingNumber: trackingCode,
       date: new Date().toLocaleString('vi-VN'),
       createdAt: new Date().toISOString(),
-      name: name || 'Khách Facebook Messenger',
-      customerName: name || 'Khách Facebook Messenger',
-      phone: phone || '',
-      address: address || '',
+      name: name.trim() || 'Khách Facebook Messenger',
+      customerName: name.trim() || 'Khách Facebook Messenger',
+      phone: phone.trim() || '',
+      address: fullAddress,
+      province: province.trim(),
+      district: district.trim(),
+      detailedAddress: detailedAddress.trim(),
+      shippingFee: contactMethod === 'facebook' ? 0 : shippingFee,
       note: note ? `${note} (Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})` : `(Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})`,
       items: formattedItems,
       itemDetails,
-      totalPrice: subtotal,
-      totalAmount: subtotal,
+      totalPrice: totalToRecord,
+      totalAmount: totalToRecord,
       source: contactMethod === 'facebook' ? ('facebook' as const) : ('website' as const),
       type: 'standard_order' as const,
       status: 'Chờ xác nhận' as const,
@@ -241,8 +273,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Option 1: Submit via system form (Shop calls/texts to confirm)
   const handleSubmitSystemOrder = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!name.trim() || !phone.trim() || !address.trim()) {
-      alert('Vui lòng điền đầy đủ Họ tên, Số điện thoại và Địa chỉ nhận hàng.');
+    if (!name.trim()) {
+      alert('Vui lòng nhập Họ và tên người nhận.');
+      return;
+    }
+    if (!phone.trim() || phone.trim().length < 9) {
+      alert('Vui lòng nhập Số điện thoại hợp lệ (ít nhất 9 số).');
+      return;
+    }
+    if (!province.trim()) {
+      alert('Vui lòng chọn Tỉnh / Thành phố nhận hàng.');
+      return;
+    }
+    if (!district.trim()) {
+      alert('Vui lòng chọn Quận / Huyện nhận hàng.');
+      return;
+    }
+    if (!detailedAddress.trim()) {
+      alert('Vui lòng nhập Địa chỉ chi tiết (số nhà, tên đường, tòa nhà, phường/xã...).');
       return;
     }
     if (cartItems.length === 0) return;
@@ -691,36 +739,83 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       />
                     </div>
 
+                    {/* Province & District Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                          Tỉnh / Thành phố <span className="text-red-600">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={province}
+                            onChange={(e) => handleProvinceChange(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-xs sm:text-sm text-neutral-950 font-medium focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors cursor-pointer appearance-none pr-9 shadow-2xs"
+                          >
+                            <option value="">-- Chọn Tỉnh / TP --</option>
+                            {VIETNAM_PROVINCES.map((prov) => (
+                              <option key={prov.code} value={prov.name}>
+                                {prov.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Building2 className="w-4 h-4 text-neutral-400 absolute right-3 top-3.5 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-950 mb-1.5">
+                          Quận / Huyện <span className="text-red-600">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={district}
+                            onChange={(e) => setDistrict(e.target.value)}
+                            disabled={!province || availableDistricts.length === 0}
+                            className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-xs sm:text-sm text-neutral-950 font-medium focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors cursor-pointer appearance-none pr-9 shadow-2xs disabled:opacity-50"
+                          >
+                            <option value="">-- Chọn Quận / Huyện --</option>
+                            {availableDistricts.map((dist) => (
+                              <option key={dist} value={dist}>
+                                {dist}
+                              </option>
+                            ))}
+                          </select>
+                          <MapPin className="w-4 h-4 text-neutral-400 absolute right-3 top-3.5 pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detailed Address */}
                     <div>
                       <label className="block text-xs font-bold text-neutral-950 mb-1.5">
-                        Địa chỉ nhận hàng <span className="text-red-600">*</span>
+                        Địa chỉ chi tiết <span className="text-red-600">*</span>
                       </label>
-                      <textarea
+                      <input
+                        type="text"
                         required
-                        rows={2}
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện, tỉnh/TP..."
+                        value={detailedAddress}
+                        onChange={(e) => setDetailedAddress(e.target.value)}
+                        placeholder="Số nhà, tên ngõ/ngách/đường, tòa nhà, phường/xã..."
                         className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-neutral-950 mb-1.5">
-                        Ghi chú đơn hàng (không bắt buộc)
+                        Ghi chú thêm (nếu có)
                       </label>
                       <input
                         type="text"
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
-                        placeholder="Ghi chú thêm về yêu cầu charm hoặc thời gian giao hàng..."
+                        placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi giao..."
                         className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
                     </div>
                   </div>
 
                   {/* Payment Method Selector */}
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <label className="block text-xs font-bold text-neutral-950">
                       Phương thức thanh toán <span className="text-red-600">*</span>
                     </label>
@@ -728,72 +823,58 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <button
                         type="button"
                         onClick={() => setPaymentMethod('vietqr')}
-                        className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
                           paymentMethod === 'vietqr'
                             ? 'border-amber-500 bg-amber-50/50 shadow-xs'
                             : 'border-neutral-200 hover:border-neutral-300 bg-white'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs flex items-center gap-1.5 text-slate-950">
-                            <QrCode className="w-4 h-4 text-amber-600" />
-                            Chuyển khoản VietQR
-                          </span>
-                          {paymentMethod === 'vietqr' && <Check className="w-4 h-4 text-amber-600 font-bold" />}
-                        </div>
-                        <p className="text-[11px] text-neutral-600 mt-1.5 font-medium leading-tight">
-                          Quét mã QR 24/7 (Tự động điền đúng số tiền & nội dung)
-                        </p>
+                        <span className="font-bold text-xs text-slate-950">
+                          Chuyển khoản
+                        </span>
+                        {paymentMethod === 'vietqr' && <Check className="w-4 h-4 text-amber-600 font-bold" />}
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setPaymentMethod('cod')}
-                        className={`p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
                           paymentMethod === 'cod'
                             ? 'border-neutral-950 bg-neutral-50 shadow-xs'
                             : 'border-neutral-200 hover:border-neutral-300 bg-white'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs flex items-center gap-1.5 text-slate-950">
-                            <Truck className="w-4 h-4 text-neutral-800" />
-                            Thanh toán COD
-                          </span>
-                          {paymentMethod === 'cod' && <Check className="w-4 h-4 text-neutral-950 font-bold" />}
-                        </div>
-                        <p className="text-[11px] text-neutral-600 mt-1.5 font-medium leading-tight">
-                          Nhận hàng kiểm tra và thanh toán tiền mặt cho Shipper
-                        </p>
+                        <span className="font-bold text-xs text-slate-950">
+                          Thanh toán khi nhận hàng
+                        </span>
+                        {paymentMethod === 'cod' && <Check className="w-4 h-4 text-neutral-950 font-bold" />}
                       </button>
                     </div>
-
-                    {paymentMethod === 'vietqr' && (
-                      <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <CreditCard className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Thanh toán VietQR tiện lợi:</span>
-                        </div>
-                        <p className="text-[11px] text-amber-800 leading-relaxed">
-                          Mã QR kèm thông tin số tài khoản ({bankConfig.bankName || bankConfig.bankId}) và cú pháp chuyển khoản chính xác sẽ hiển thị ngay khi bạn bấm <strong>Xác nhận đặt hàng</strong>.
-                        </p>
-                      </div>
-                    )}
                   </div>
 
                   {/* Order total preview */}
-                  <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-neutral-800 font-semibold">
-                      <span>Số lượng:</span>
-                      <span className="font-bold text-neutral-950">{cartItems.reduce((a, b) => a + b.quantity, 0)} món</span>
+                  <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 space-y-2.5 text-xs">
+                    <div className="flex justify-between items-center text-neutral-700">
+                      <span>Tạm tính ({cartItems.reduce((a, b) => a + b.quantity, 0)} món):</span>
+                      <span className="font-bold text-neutral-950 font-mono">{subtotal.toLocaleString('vi-VN')}đ</span>
                     </div>
+
+                    <div className="flex justify-between items-center text-neutral-700">
+                      <span className="flex items-center gap-1.5">
+                        <Truck className="w-3.5 h-3.5 text-neutral-500" />
+                        Phí vận chuyển:
+                      </span>
+                      <span className="font-bold font-mono text-neutral-950">
+                        {shippingInfo.isPending ? 'Chưa tính' : shippingInfo.isFree ? '0đ' : `${shippingFee.toLocaleString('vi-VN')}đ`}
+                      </span>
+                    </div>
+
                     <div className="flex justify-between items-center pt-2.5 border-t border-neutral-200 text-sm">
                       <span className="font-bold text-neutral-950">Tổng thanh toán:</span>
-                      <span className="font-black text-neutral-950 text-base font-mono">{subtotal.toLocaleString('vi-VN')}đ</span>
+                      <span className="font-black text-neutral-950 text-base font-mono">
+                        {(subtotal + (shippingInfo.isPending ? 0 : shippingFee)).toLocaleString('vi-VN')}đ
+                      </span>
                     </div>
-                    <p className="text-xs text-neutral-600 font-medium pt-1">
-                      💡 Shop sẽ tự liên hệ với bạn để xác nhận đơn hàng trước khi gửi.
-                    </p>
                   </div>
 
                   {/* Submit button */}
@@ -945,7 +1026,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-xl border border-amber-200">
                             <div className="w-36 h-36 flex-shrink-0 bg-white rounded-lg p-1.5 border border-neutral-200 shadow-2xs flex items-center justify-center">
                               <img
-                                src={`https://img.vietqr.io/image/${bankConfig.bankId || 'VCB'}-${bankConfig.accountNumber}-${bankConfig.qrTemplate || 'compact2'}.png?amount=${subtotal}&addInfo=${encodeURIComponent(createdTrackingCode || `NOTAKNOT ${phone}`)}&accountName=${encodeURIComponent(bankConfig.accountHolder || 'NOT A KNOT')}`}
+                                src={`https://img.vietqr.io/image/${bankConfig.bankId || 'VCB'}-${bankConfig.accountNumber}-${bankConfig.qrTemplate || 'compact2'}.png?amount=${confirmedTotalAmount || grandTotal || subtotal}&addInfo=${encodeURIComponent(createdTrackingCode || `NOTAKNOT ${phone}`)}&accountName=${encodeURIComponent(bankConfig.accountHolder || 'NOT A KNOT')}`}
                                 alt="Mã VietQR thanh toán"
                                 className="w-full h-full object-contain"
                                 loading="lazy"
@@ -981,11 +1062,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                               <div className="flex items-center justify-between bg-neutral-50 px-2 py-1 rounded">
                                 <span className="text-neutral-500 font-medium">Số tiền:</span>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-mono font-black text-amber-600">{subtotal.toLocaleString('vi-VN')}đ</span>
+                                  <span className="font-mono font-black text-amber-600">{(confirmedTotalAmount || grandTotal || subtotal).toLocaleString('vi-VN')}đ</span>
                                   <button
                                     type="button"
                                     onClick={async () => {
-                                      await copyTextToClipboard(String(subtotal));
+                                      await copyTextToClipboard(String(confirmedTotalAmount || grandTotal || subtotal));
                                       setCopiedBankField('amount');
                                       setTimeout(() => setCopiedBankField(null), 2000);
                                     }}
@@ -1034,7 +1115,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                             <span>Hình thức thanh toán: COD (Khi nhận hàng)</span>
                           </div>
                           <p className="text-neutral-700 font-medium leading-relaxed">
-                            Quý khách vui lòng chuẩn bị số tiền <strong>{subtotal.toLocaleString('vi-VN')}đ</strong> để gửi cho Shipper khi đơn hàng giao đến.
+                            Quý khách vui lòng chuẩn bị số tiền <strong>{(confirmedTotalAmount || grandTotal || subtotal).toLocaleString('vi-VN')}đ</strong> để gửi cho Shipper khi đơn hàng giao đến.
                           </p>
                         </div>
                       )}

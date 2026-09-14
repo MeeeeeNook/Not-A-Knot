@@ -90,6 +90,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
   const [mobileStudioMode, setMobileStudioMode] = useState<'cards' | 'studio'>('cards');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
+  const [dimensionNotice, setDimensionNotice] = useState<{ id: string; text: string } | null>(null);
   
   const [showResetModal, setShowResetModal] = useState(false);
 
@@ -267,15 +268,27 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     setDeleteSectionModalIdx(idx);
   };
 
-  const handleConfirmDeleteSection = () => {
+  const handleConfirmDeleteSection = async () => {
     if (deleteSectionModalIdx === null) return;
     const idx = deleteSectionModalIdx;
     const targetTitle = landingSections[idx]?.title || 'Khối bộ sưu tập';
     const updated = landingSections.filter((_, i) => i !== idx);
-    updateSections(updated);
+    const newConfig: SiteContentConfig = {
+      ...config,
+      landingProductSections: updated,
+      landingProducts: updated[0] || config.landingProducts
+    };
+    setConfig(newConfig);
     setSelectedSectionIdx(Math.max(0, idx - 1));
     setDeleteSectionModalIdx(null);
-    setStatusMsg(`Đã xóa "${targetTitle}" khỏi giao diện.`);
+    try {
+      localStorage.setItem('nak_site_content', JSON.stringify(newConfig));
+      onSaveConfig(newConfig);
+      await saveSiteContentToFirestore(newConfig);
+    } catch {
+      onSaveConfig(newConfig);
+    }
+    setStatusMsg(`Đã xóa "${targetTitle}" và cập nhật giao diện.`);
     setSaveStatus('success');
     setTimeout(() => setSaveStatus('idle'), 2500);
   };
@@ -1222,13 +1235,32 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                       <div className="lg:col-span-5 space-y-4">
                         <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                           <span>Mô phỏng hiển thị trên Smartphone</span>
-                          <span className="text-amber-700 font-mono text-[11px]">
-                            {currentRatio === '9:16' ? 'Chuẩn Dọc 9:16' : currentRatio} • {currentFit}
+                          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-mono text-[11px] font-bold">
+                            {currentRatio === '1:1' ? '⏹️ 1080 × 1080 px (1:1)' :
+                             currentRatio === '4:5' ? '📸 1080 × 1350 px (4:5)' :
+                             currentRatio === '9:16' ? '📱 1080 × 1920 px (9:16)' :
+                             currentRatio === '16:9' ? '🎬 1920 × 1080 px (16:9)' :
+                             currentRatio === 'auto' ? '⚡ Tự Động Khớp Ảnh' :
+                             currentRatio === 'custom' ? `📏 Chiều cao ${slide.customHeightMobile || 400}px` :
+                             '📲 Toàn Màn Hình'}
                           </span>
                         </div>
 
-                        {/* Smartphone Mockup Container */}
-                        <div className="relative mx-auto w-48 sm:w-56 aspect-[9/16] rounded-3xl p-2.5 bg-slate-950 shadow-2xl border-4 border-slate-800 flex flex-col justify-between overflow-hidden">
+                        {/* Smartphone Mockup Container (Dimensions dynamically adjust to selected ratio) */}
+                        <div
+                          className={`relative mx-auto transition-all duration-300 ${
+                            currentRatio === '1:1'
+                              ? 'w-52 sm:w-60 aspect-square'
+                              : currentRatio === '4:5'
+                              ? 'w-48 sm:w-56 aspect-[4/5]'
+                              : currentRatio === '16:9'
+                              ? 'w-64 sm:w-72 aspect-[16/9]'
+                              : currentRatio === 'custom'
+                              ? 'w-52 sm:w-60'
+                              : 'w-48 sm:w-56 aspect-[9/16]'
+                          } rounded-3xl p-2.5 bg-slate-950 shadow-2xl border-4 border-slate-800 flex flex-col justify-between overflow-hidden`}
+                          style={currentRatio === 'custom' ? { height: `${Math.min(500, Math.max(220, (slide.customHeightMobile || 400) * 0.75))}px` } : undefined}
+                        >
                           {/* Top Speaker / Dynamic Island Notch */}
                           <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-4 bg-slate-900 rounded-full z-30 border border-slate-800/80 flex items-center justify-center">
                             <div className="w-2 h-2 rounded-full bg-slate-950 mr-2" />
@@ -1392,40 +1424,225 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                           </div>
                         </div>
 
-                        {/* 3. Smartphone Aspect Ratio & Fit Mode */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                          {/* Aspect Ratio */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-800">
-                              Tỷ Lệ Hiển Thị Smartphone
+                        {/* Notification for Dimension auto detect */}
+                        {dimensionNotice && dimensionNotice.id === slide.id && (
+                          <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-800 flex items-center gap-2 animate-fadeIn">
+                            <span>{dimensionNotice.text}</span>
+                          </div>
+                        )}
+
+                        {/* 3. Smartphone Dimension Selector & Auto Detect */}
+                        <div className="space-y-2.5 pt-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <span>📐 Chọn Dimension Kích Thước Smartphone</span>
                             </label>
-                            <select
-                              value={slide.aspectRatioMobile || '9:16'}
-                              onChange={(e) => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-amber-400 cursor-pointer"
+
+                            {/* One-Click Auto Detect Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const targetUrl = slide.bgImageMobile || slide.bgImage;
+                                if (!targetUrl) return;
+                                const img = new Image();
+                                img.crossOrigin = 'anonymous';
+                                img.src = targetUrl;
+                                img.onload = () => {
+                                  const w = img.naturalWidth;
+                                  const h = img.naturalHeight;
+                                  const ratio = w / h;
+                                  let chosenRatio: any = '1:1';
+                                  let ratioName = '';
+
+                                  if (ratio >= 0.85 && ratio <= 1.15) {
+                                    chosenRatio = '1:1';
+                                    ratioName = 'Vuông 1:1 (1080 × 1080 px)';
+                                  } else if (ratio >= 0.68 && ratio < 0.85) {
+                                    chosenRatio = '4:5';
+                                    ratioName = 'Dọc Gọn 4:5 (1080 × 1350 px)';
+                                  } else if (ratio < 0.68) {
+                                    chosenRatio = '9:16';
+                                    ratioName = 'Dọc 9:16 (1080 × 1920 px)';
+                                  } else if (ratio > 1.3) {
+                                    chosenRatio = '16:9';
+                                    ratioName = 'Ngang 16:9 (1920 × 1080 px)';
+                                  } else {
+                                    chosenRatio = 'auto';
+                                    ratioName = `Tự động (${w}×${h} px)`;
+                                  }
+
+                                  handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', chosenRatio);
+                                  handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'cover');
+                                  setDimensionNotice({
+                                    id: slide.id,
+                                    text: `✅ Đã chọn Dimension chuẩn cho ảnh: ${ratioName} - Vừa khít, không bị viền đen!`
+                                  });
+                                  setTimeout(() => setDimensionNotice(null), 4500);
+                                };
+                              }}
+                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
                             >
-                              <option value="9:16">📱 Chuẩn Dọc 9:16 (TikTok / Reels - Tốt nhất)</option>
-                              <option value="4:5">📸 Dọc Gọn 4:5 (Instagram Feed)</option>
-                              <option value="1:1">⏹️ Vuông Cân Đối 1:1</option>
-                              <option value="16:9">🎬 Chuẩn Ngang 16:9</option>
-                              <option value="fullscreen">📲 Tràn Toàn Màn Hình Điện Thoại</option>
-                            </select>
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>⚡ Tự động căn Dimension theo ảnh</span>
+                            </button>
                           </div>
 
-                          {/* Fit Mode */}
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-800">
-                              Chế Độ Vừa Khung (Fit)
-                            </label>
-                            <select
-                              value={slide.bgFitMobile || (hasMobileImg ? 'cover' : 'contain')}
-                              onChange={(e) => handleUpdateHeroSlide(slide.id, 'bgFitMobile', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-amber-400 cursor-pointer"
+                          {/* Dimension Choice Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '1:1')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === '1:1'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
                             >
-                              <option value="cover">Phủ kín khung viền (Cover - Sắc nét nhất)</option>
-                              <option value="contain">Hiển thị trọn 100% ảnh + nền mờ sang trọng (Contain)</option>
-                              <option value="fill">Kéo giãn vừa khít khung (Fill)</option>
-                            </select>
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>⏹️ Vuông 1:1</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1080 px</div>
+                              <div className="text-[9px] text-amber-800 font-medium mt-1">Đẹp nhất cho vòng tay / charm</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '4:5')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === '4:5'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>📸 Dọc Gọn 4:5</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1350 px</div>
+                              <div className="text-[9px] text-slate-500 mt-1">Chuẩn Instagram Feed</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '9:16')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === '9:16'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>📱 Dọc 9:16</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1920 px</div>
+                              <div className="text-[9px] text-slate-500 mt-1">TikTok / Story / Reels</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '16:9')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === '16:9'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>🎬 Ngang 16:9</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1920 × 1080 px</div>
+                              <div className="text-[9px] text-slate-500 mt-1">Banner ngang truyền thống</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', 'auto')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === 'auto'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>⚡ Tự Động (Auto)</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Theo kích cỡ ảnh</div>
+                              <div className="text-[9px] text-slate-500 mt-1">Khớp 100% tỷ lệ gốc</div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', 'custom')}
+                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                                slide.aspectRatioMobile === 'custom'
+                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="font-bold text-xs flex items-center gap-1">
+                                <span>📏 Chiều Cao px</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{slide.customHeightMobile || 380} px</div>
+                              <div className="text-[9px] text-slate-500 mt-1">Nhập số px tùy ý</div>
+                            </button>
+                          </div>
+
+                          {/* Custom Height Input if 'custom' selected */}
+                          {slide.aspectRatioMobile === 'custom' && (
+                            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 flex items-center gap-3">
+                              <span className="text-xs font-bold text-slate-800 shrink-0">Chiều cao banner trên mobile:</span>
+                              <input
+                                type="number"
+                                min="180"
+                                max="850"
+                                step="10"
+                                value={slide.customHeightMobile || 380}
+                                onChange={(e) => handleUpdateHeroSlide(slide.id, 'customHeightMobile', Number(e.target.value))}
+                                className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                              />
+                              <span className="text-xs text-slate-500">pixels (px)</span>
+                            </div>
+                          )}
+
+                          {/* Fit Mode Selector */}
+                          <div className="pt-2">
+                            <label className="text-xs font-bold text-slate-800 block mb-1">
+                              Chế Độ Khớp Khung Hình (Fit Mode)
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'cover')}
+                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
+                                  slide.bgFitMobile === 'cover' || !slide.bgFitMobile
+                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                Phủ kín viền (Cover)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'contain')}
+                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
+                                  slide.bgFitMobile === 'contain'
+                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                Trọn vẹn 100% (Contain)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'fill')}
+                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
+                                  slide.bgFitMobile === 'fill'
+                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                Kéo giãn (Fill)
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -1731,7 +1948,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
                   <span>Tiêu đề hiển thị (Header)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Mặc định: THE COLLECTION</span>
                 </label>
                 <input
                   type="text"
@@ -1740,25 +1956,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                   placeholder="THE COLLECTION"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium"
                 />
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {[
-                    'THE COLLECTION',
-                    'BEST SELLERS',
-                    'NEW ARRIVALS',
-                    'VÒNG TAY PARACORD',
-                    'MÓC KHÓA & EDC',
-                    'LIMITED EDITION'
-                  ].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => updateCurrentSection({ title: preset })}
-                      className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer transition-colors"
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Phụ đề */}
@@ -1780,14 +1977,13 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
                   <span>Nhãn góc trên ảnh sản phẩm (Badge)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Mặc định: NEW</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={currentSection.badgeText ?? 'NEW'}
                     onChange={(e) => updateCurrentSection({ badgeText: e.target.value })}
-                    placeholder="NEW"
+                    placeholder="NEW (hoặc để trống)"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-slate-400 font-medium uppercase"
                   />
                   {currentSection.badgeText && (
@@ -1795,18 +1991,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                       {currentSection.badgeText}
                     </span>
                   )}
-                </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {['NEW', 'HOT', 'LIMITED', 'EDC', 'PARACORD', 'SALE', ''].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => updateCurrentSection({ badgeText: preset })}
-                      className="text-[10px] px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded cursor-pointer transition-colors"
-                    >
-                      {preset ? preset : 'Không hiện nhãn'}
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -1858,45 +2042,21 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                   <option value="category">Mở danh mục sản phẩm (Chuyển đến trang danh mục tương ứng)</option>
                 </select>
 
-                {/* Giải thích chi tiết cơ chế hoạt động theo lựa chọn */}
-                <div className="text-[11px] text-slate-600 bg-white rounded-md p-2.5 border border-slate-200/80 leading-relaxed">
-                  {(currentSection.detailActionType || 'product_detail') === 'product_detail' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Khách bấm nút sẽ mở cửa sổ chi tiết sản phẩm với đầy đủ ảnh phóng to, mô tả, chọn màu dây, chọn size cổ tay và nút đặt hàng / thêm vào giỏ.
-                    </div>
-                  )}
-                  {currentSection.detailActionType === 'product_custom_url' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Hệ thống kiểm tra từng sản phẩm: nếu sản phẩm có cài đặt "Link ngoài tùy chỉnh" (Shopee, TikTok Shop...), khách bấm nút sẽ tự động chuyển hướng đến link đó. Nếu sản phẩm chưa có link riêng, hệ thống tự động mở xem chi tiết sản phẩm thông thường.
-                    </div>
-                  )}
-                  {currentSection.detailActionType === 'custom_url' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Tất cả sản phẩm trong khối này khi bấm nút "{currentSection.detailButtonText || 'Chi tiết'}" sẽ cùng chuyển hướng đến 1 đường dẫn URL bạn cài đặt bên dưới.
-                    </div>
-                  )}
-                  {currentSection.detailActionType === 'zalo' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Tự động mở ứng dụng hoặc web Zalo của shop ({config?.zalo || config?.phone || 'Số hotline'}), tạo sẵn tin nhắn mẫu kèm tên và giá sản phẩm để khách gửi tư vấn nhanh.
-                    </div>
-                  )}
-                  {currentSection.detailActionType === 'messenger' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Tự động mở cửa sổ chat Messenger tới Fanpage Facebook của shop để nhân viên hỗ trợ tư vấn và chốt đơn trực tiếp.
-                    </div>
-                  )}
-                  {currentSection.detailActionType === 'category' && (
-                    <div>
-                      <span className="font-bold text-slate-900">Chi tiết cơ chế: </span>
-                      Chuyển hướng khách hàng đến trang danh mục tương ứng của sản phẩm đó trong cửa hàng để xem thêm các mẫu cùng loại.
-                    </div>
-                  )}
-                </div>
+                {/* Giải thích ngắn gọn cơ chế hoạt động */}
+                <p className="text-[11px] text-slate-500 italic">
+                  {(currentSection.detailActionType || 'product_detail') === 'product_detail' &&
+                    'Mở popup / trang chi tiết sản phẩm để khách chọn size, màu và đặt mua.'}
+                  {currentSection.detailActionType === 'product_custom_url' &&
+                    'Tự động mở link riêng của sản phẩm (Shopee/TikTok) hoặc mở chi tiết nếu chưa có link.'}
+                  {currentSection.detailActionType === 'custom_url' &&
+                    'Tất cả sản phẩm sẽ cùng chuyển hướng đến 1 đường dẫn URL cố định cài đặt bên dưới.'}
+                  {currentSection.detailActionType === 'zalo' &&
+                    'Mở chat Zalo kèm sẵn tên và giá sản phẩm để tư vấn nhanh.'}
+                  {currentSection.detailActionType === 'messenger' &&
+                    'Mở chat Fanpage Facebook để tư vấn trực tiếp.'}
+                  {currentSection.detailActionType === 'category' &&
+                    'Chuyển hướng đến trang danh mục tương ứng của sản phẩm.'}
+                </p>
 
                 {/* Ô nhập link khi chọn custom_url */}
                 {currentSection.detailActionType === 'custom_url' && (

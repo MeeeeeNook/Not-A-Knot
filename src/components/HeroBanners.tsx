@@ -26,6 +26,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   const [direction, setDirection] = useState<number>(1); // 1 = right/next, -1 = left/prev
   const [isAutoPlay, setIsAutoPlay] = useState(true);
   const [isBrightBg, setIsBrightBg] = useState(false);
+  const [imageNaturalRatio, setImageNaturalRatio] = useState<number | null>(null);
 
   // Use dynamic slides if provided and active, otherwise fallback to banners
   const dynamicSlides: (SiteHeroSlide | (BannerItem & { textAlign?: string; textPosition?: string; titleFontSize?: number; subtitleFontSize?: number; fontFamily?: string; overlayOpacity?: number; titleColor?: string; highlightColor?: string; showButton?: boolean; showText?: boolean; hideOverlay?: boolean }))[] = 
@@ -85,21 +86,28 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
 
   const currentSlide = activeSlides[currentIndex] || activeSlides[0];
 
-  // Automatic bottom-region luminance detection to adapt indicator & scroll button colors
+  // Automatic bottom-region luminance detection & natural image ratio calculation
   useEffect(() => {
-    if (!currentSlide?.bgImage) {
+    const s = currentSlide as SiteHeroSlide;
+    const activeImgSrc = s?.bgImageMobile || currentSlide?.bgImage;
+    if (!activeImgSrc) {
       setIsBrightBg(false);
+      setImageNaturalRatio(null);
       return;
     }
 
     let isMounted = true;
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = currentSlide.bgImage;
+    img.src = activeImgSrc;
 
     img.onload = () => {
       if (!isMounted) return;
       try {
+        if (img.naturalWidth && img.naturalHeight) {
+          setImageNaturalRatio(img.naturalWidth / img.naturalHeight);
+        }
+
         const canvas = document.createElement('canvas');
         canvas.width = 30;
         canvas.height = 30;
@@ -133,7 +141,6 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
         }
 
         const avgBrightness = validPixels > 0 ? totalLum / validPixels : 40;
-        const s = currentSlide as SiteHeroSlide;
         const overlayOp = s.overlayOpacity ?? 0.3;
         const hideOverlay = s.hideOverlay;
 
@@ -157,6 +164,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     };
   }, [
     currentSlide?.bgImage,
+    (currentSlide as SiteHeroSlide)?.bgImageMobile,
     (currentSlide as SiteHeroSlide)?.overlayOpacity,
     (currentSlide as SiteHeroSlide)?.hideOverlay
   ]);
@@ -242,33 +250,74 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     })
   };
 
+  const s = currentSlide as SiteHeroSlide;
+
+  // Calculate dynamic mobile aspect ratio
+  const mobileAspectRatioClass = (() => {
+    if (s.aspectRatioMobile === '1:1') {
+      return 'max-sm:aspect-square max-sm:w-full';
+    }
+    if (s.aspectRatioMobile === '4:5') {
+      return 'max-sm:aspect-[4/5] max-sm:w-full';
+    }
+    if (s.aspectRatioMobile === '9:16') {
+      return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
+    }
+    if (s.aspectRatioMobile === '16:9') {
+      return 'max-sm:aspect-[16/9] max-sm:w-full';
+    }
+    if (s.aspectRatioMobile === 'fullscreen') {
+      return 'max-sm:h-[calc(100svh-3.5rem)] max-sm:min-h-[480px] max-sm:max-h-[820px] max-sm:w-full';
+    }
+    if (s.aspectRatioMobile === 'custom' && s.customHeightMobile) {
+      return 'max-sm:w-full';
+    }
+
+    // Auto / Smart detection if image ratio is known
+    if (imageNaturalRatio) {
+      // Near square (0.85 - 1.15) e.g. 1024x1024 bracelet image
+      if (imageNaturalRatio >= 0.85 && imageNaturalRatio <= 1.15) {
+        return 'max-sm:aspect-square max-sm:w-full';
+      }
+      // Instagram portrait (4:5 or 3:4)
+      if (imageNaturalRatio >= 0.68 && imageNaturalRatio < 0.85) {
+        return 'max-sm:aspect-[4/5] max-sm:w-full';
+      }
+      // Reels / TikTok portrait (9:16)
+      if (imageNaturalRatio < 0.68) {
+        return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
+      }
+      // Landscape (16:9)
+      if (imageNaturalRatio > 1.3) {
+        return 'max-sm:aspect-[16/9] max-sm:w-full';
+      }
+    }
+
+    // Fallback if not detected yet
+    if (s.bgImageMobile) {
+      return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
+    }
+    return 'max-sm:aspect-square max-sm:w-full';
+  })();
+
+  const mobileCustomStyle: React.CSSProperties | undefined = 
+    s.aspectRatioMobile === 'custom' && s.customHeightMobile
+      ? { height: `${s.customHeightMobile}px` }
+      : undefined;
+
   return (
-    <section id="hero-banner-section" className="relative bg-slate-950 text-white overflow-hidden overflow-x-clip w-full max-w-full select-none">
+    <section id="hero-banner-section" className={`relative ${isBrightBg ? 'bg-white text-slate-900' : 'bg-slate-950 text-white'} overflow-hidden overflow-x-clip w-full max-w-full select-none transition-colors duration-300`}>
       {/* Main Cinematic Hero Billboard (Device-optimized for PC and Smartphone) */}
       <div
-        className={`relative w-full max-w-full overflow-hidden overflow-x-clip select-none bg-slate-950 transition-all ${
+        style={mobileCustomStyle}
+        className={`relative w-full max-w-full overflow-hidden overflow-x-clip select-none ${isBrightBg ? 'bg-white' : 'bg-slate-950'} transition-all ${
           // Desktop aspect ratio
-          (currentSlide as SiteHeroSlide).aspectRatio === '16:9'
+          s.aspectRatio === '16:9'
             ? 'sm:aspect-[16/9] sm:min-h-[520px] sm:max-h-[800px]'
-            : (currentSlide as SiteHeroSlide).aspectRatio === 'cinematic'
+            : s.aspectRatio === 'cinematic'
             ? 'sm:aspect-[21/9] sm:min-h-[460px] sm:max-h-[700px]'
             : 'sm:h-[calc(100vh-3.5rem)] sm:min-h-[560px]'
-        } ${
-          // Mobile smartphone aspect ratio: strictly sized for smartphone screens
-          (currentSlide as SiteHeroSlide).aspectRatioMobile === '9:16'
-            ? 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh] max-sm:min-h-[460px]'
-            : (currentSlide as SiteHeroSlide).aspectRatioMobile === '4:5'
-            ? 'max-sm:aspect-[4/5] max-sm:w-full max-sm:min-h-[400px]'
-            : (currentSlide as SiteHeroSlide).aspectRatioMobile === '1:1'
-            ? 'max-sm:aspect-square max-sm:w-full max-sm:min-h-[320px]'
-            : (currentSlide as SiteHeroSlide).aspectRatioMobile === '16:9'
-            ? 'max-sm:aspect-[16/9] max-sm:w-full max-sm:min-h-[220px]'
-            : (currentSlide as SiteHeroSlide).aspectRatioMobile === 'fullscreen'
-            ? 'max-sm:h-[calc(100svh-3.5rem)] max-sm:min-h-[480px] max-sm:max-h-[820px] max-sm:w-full'
-            : (currentSlide as SiteHeroSlide).bgImageMobile
-            ? 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh] max-sm:min-h-[460px]'
-            : 'max-sm:aspect-[16/9] max-sm:w-full max-sm:min-h-[220px] max-sm:max-h-[380px]'
-        }`}
+        } ${mobileAspectRatioClass}`}
         onMouseEnter={() => setIsAutoPlay(false)}
         onMouseLeave={() => setIsAutoPlay(true)}
       >
@@ -319,12 +368,12 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                 const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.png';
                 if (fitMode === 'contain') {
                   return (
-                    <div className="absolute inset-0 w-full h-full bg-slate-950 flex items-center justify-center overflow-hidden">
+                    <div className={`absolute inset-0 w-full h-full ${isBrightBg ? 'bg-white' : 'bg-slate-950'} flex items-center justify-center overflow-hidden transition-colors duration-300`}>
                       <img
                         src={validSrc}
                         alt=""
                         aria-hidden="true"
-                        className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none"
+                        className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
                       />
                       <img
                         src={validSrc}

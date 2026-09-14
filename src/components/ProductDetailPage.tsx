@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
+import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption, CollectionInfo } from '../types';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
@@ -30,6 +30,7 @@ interface ProductDetailPageProps {
   product: Product;
   allProducts: Product[];
   categories?: CategoryItem[];
+  collections?: CollectionInfo[];
   cartItems?: CartItem[];
   backLabel?: string;
   onBack: () => void;
@@ -68,6 +69,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
   allProducts,
   categories = [],
+  collections = [],
   cartItems = [],
   backLabel,
   onBack,
@@ -160,23 +162,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
   }, [product?.id]);
 
-  // Dynamic gallery images (including linked color image if present)
+  // Stable gallery images (including all product images and color variant images)
   const images = useMemo(() => {
     const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
-    const validBase = rawList.filter(
-      (img) => typeof img === 'string' && img.trim().length > 0
-    );
-    const base = validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
-    if (
-      selectedColorImage &&
-      typeof selectedColorImage === 'string' &&
-      selectedColorImage.trim().length > 0 &&
-      !base.includes(selectedColorImage)
-    ) {
-      return [selectedColorImage, ...base];
-    }
-    return base;
-  }, [product, selectedColorImage]);
+    const set = new Set<string>();
+    rawList.forEach((img) => {
+      if (typeof img === 'string' && img.trim().length > 0) set.add(img.trim());
+    });
+    product.colorOptions?.forEach((opt) => {
+      if (opt.image && opt.image.trim().length > 0) set.add(opt.image.trim());
+    });
+    const list = Array.from(set);
+    return list.length > 0 ? list : ['/assets/bracelet.jpg'];
+  }, [product]);
 
   // Reset state when product changes
   useEffect(() => {
@@ -244,6 +242,43 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     paginate(1);
   }, [paginate]);
 
+  // Mobile touch swipe gestures for image gallery
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchDeltaXRef = useRef<number>(0);
+  const isSwipingRef = useRef<boolean>(false);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+      touchDeltaXRef.current = 0;
+      isSwipingRef.current = true;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isSwipingRef.current || touchStartXRef.current === null) return;
+    const currentX = e.touches[0].clientX;
+    touchDeltaXRef.current = currentX - touchStartXRef.current;
+  };
+
+  const handleTouchEnd = () => {
+    if (isSwipingRef.current && touchStartXRef.current !== null) {
+      const deltaX = touchDeltaXRef.current;
+      const swipeThreshold = 30; // px threshold
+      if (deltaX < -swipeThreshold) {
+        nextImage();
+      } else if (deltaX > swipeThreshold) {
+        prevImage();
+      }
+    }
+    isSwipingRef.current = false;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    touchDeltaXRef.current = 0;
+  };
+
   // Keyboard navigation for image gallery
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -265,9 +300,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       const imgIdx = images.indexOf(colorOpt.image);
       if (imgIdx > -1) {
         setActiveImageIdx(imgIdx);
-      } else {
-        // Will be prepended by useMemo
-        setActiveImageIdx(0);
       }
     }
   };
@@ -466,17 +498,23 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   }, [allProducts, product, isProductVisible]);
 
   const categoryName = useMemo(() => {
+    if (collections && collections.length > 0) {
+      const matchCol = collections.find(
+        (c) => c.id === product.category || c.categoryKey === product.category
+      );
+      if (matchCol && (matchCol.tag || matchCol.title)) return matchCol.tag || matchCol.title;
+    }
     const match = categories.find((c) => c.id === product.category);
     if (match) return match.label;
     if (product.category === 'event_0209') return 'BST Quốc Khánh 02.09';
-    if (product.category === 'event_2010') return 'BST 20/10 Quà Nàng';
-    if (product.category === 'charm_bracelet') return 'Vòng Charm Phong Cách';
-    if (product.category === 'everyday') return 'Everyday Wear';
-    if (product.category === 'bracelets') return 'Vòng Paracord 550';
-    if (product.category === 'keychains') return 'Móc Khóa EDC';
-    if (product.category === 'lanyards') return 'Dây Đeo Phụ Kiện';
-    return 'Phụ Kiện Thủ Công';
-  }, [categories, product.category]);
+    if (product.category === 'event_2010') return 'BST Phụ Nữ 20.10';
+    if (product.category === 'bracelets') return 'Bản Đan Paracord EDC';
+    if (product.category === 'back_to_school') return 'BST Back 2 School';
+    if (product.category && product.category.trim().length > 0) {
+      return product.category.startsWith('BST') ? product.category : `BST ${product.category}`;
+    }
+    return 'Bộ Sưu Tập NOT A KNOT';
+  }, [categories, collections, product.category]);
 
   // Automatically update page title, meta description, keywords, Open Graph, Twitter cards, and JSON-LD schema for this product
   useProductSEO(product, categoryName);
@@ -517,13 +555,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     >
       {/* Top Breadcrumb & Navigation Bar */}
       <div className="bg-white border-b border-neutral-200/80 sticky top-14 z-20 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-2 text-xs font-bold text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-neutral-950 hover:text-neutral-700 transition-colors cursor-pointer py-1.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:scale-95 border border-neutral-200/80 shadow-2xs"
+            title="Quay lại cửa hàng (Về shop)"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{backLabel || 'Quay lại danh mục sản phẩm'}</span>
+            <ArrowLeft className="w-4 h-4 text-neutral-950 stroke-[2.5]" />
+            <span>Về shop</span>
+            <span className="hidden sm:inline font-normal text-neutral-500">• {backLabel || 'Danh mục sản phẩm'}</span>
           </button>
 
           <div className="flex items-center gap-3">
@@ -532,7 +572,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </span>
             <button
               onClick={handleShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors cursor-pointer active:scale-95"
               title="Sao chép link sản phẩm"
             >
               <Share2 className="w-3.5 h-3.5" />
@@ -549,7 +589,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           
           {/* LEFT: Compact Interactive High-Res Gallery */}
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3.5">
-            <div className="relative aspect-square max-h-[440px] rounded-3xl overflow-hidden bg-white border border-neutral-200 shadow-sm group">
+            <div 
+              className="relative aspect-square max-h-[440px] rounded-3xl overflow-hidden bg-white border border-neutral-200 shadow-sm group select-none touch-pan-y"
+              style={{ touchAction: 'pan-y' }}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
@@ -568,39 +614,37 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 ))}
               </div>
 
-              {/* Navigation Arrows for switching photos - Minimalist transparent glass, visible only on left/right edge hover */}
+              {/* Navigation Arrows for switching photos - Non-blocking overlay with stopPropagation */}
               {images.length > 1 && (
                 <>
-                  {/* Left edge hover zone */}
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-16 sm:w-20 z-20 flex items-center justify-start pl-2.5 group/edge-left cursor-pointer select-none"
-                    onClick={prevImage}
-                    title="Ảnh trước (Phím ←)"
-                  >
+                  {/* Left arrow button */}
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         prevImage();
                       }}
-                      className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 backdrop-blur-md border border-white/20 text-white flex items-center justify-center opacity-0 group-hover/edge-left:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      className="pointer-events-auto w-8 h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
                       aria-label="Ảnh trước (hoặc phím mũi tên trái)"
                     >
                       <ChevronLeft className="w-4 h-4" strokeWidth={2} />
                     </button>
                   </div>
 
-                  {/* Right edge hover zone */}
-                  <div
-                    className="absolute right-0 top-0 bottom-0 w-16 sm:w-20 z-20 flex items-center justify-end pr-2.5 group/edge-right cursor-pointer select-none"
-                    onClick={nextImage}
-                    title="Ảnh tiếp theo (Phím →)"
-                  >
+                  {/* Right arrow button */}
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         nextImage();
                       }}
-                      className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/50 backdrop-blur-md border border-white/20 text-white flex items-center justify-center opacity-0 group-hover/edge-right:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-xs"
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      className="pointer-events-auto w-8 h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
                       aria-label="Ảnh tiếp theo (hoặc phím mũi tên phải)"
                     >
                       <ChevronRight className="w-4 h-4" strokeWidth={2} />
@@ -609,11 +653,40 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </>
               )}
 
-              {/* Photo Index Counter */}
+              {/* Photo Index Counter & Mobile Pagination Dots */}
               {images.length > 1 && (
-                <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/65 backdrop-blur-md text-white text-[11px] font-bold rounded-full pointer-events-none z-10">
-                  {activeImageIdx + 1} / {images.length}
-                </div>
+                <>
+                  {/* Mobile pagination dots */}
+                  <div 
+                    className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 px-2.5 py-1 bg-black/40 backdrop-blur-md rounded-full sm:hidden pointer-events-auto"
+                    onClick={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onTouchMove={(e) => e.stopPropagation()}
+                    onTouchEnd={(e) => e.stopPropagation()}
+                  >
+                    {images.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          selectImage(idx);
+                        }}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onTouchEnd={(e) => e.stopPropagation()}
+                        aria-label={`Chuyển đến ảnh ${idx + 1}`}
+                        className={`h-1.5 rounded-full transition-all duration-300 p-0 border-0 cursor-pointer ${
+                          idx === activeImageIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Desktop Photo Index Counter */}
+                  <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/65 backdrop-blur-md text-white text-[11px] font-bold rounded-full pointer-events-none z-10 hidden sm:block">
+                    {activeImageIdx + 1} / {images.length}
+                  </div>
+                </>
               )}
             </div>
 
@@ -694,22 +767,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>
 
               {/* Price Row */}
-              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100 flex flex-wrap items-baseline gap-3">
-                <span className="text-3xl font-black text-neutral-950 font-mono">
-                  {effectiveUnitPrice.toLocaleString('vi-VN')}đ
-                </span>
-                {product.originalPrice && (
-                  <span className="text-base text-neutral-400 line-through font-mono">
-                    {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100 flex flex-wrap items-baseline justify-between gap-3">
+                <div className="flex flex-wrap items-baseline gap-2.5">
+                  <span className="text-2xl sm:text-3xl font-black text-neutral-950 font-mono">
+                    {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                   </span>
-                )}
-                {product.discountBadge && (
-                  <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">
-                    {product.discountBadge}
-                  </span>
-                )}
+                  {product.originalPrice && (
+                    <span className="text-sm sm:text-base text-neutral-400 line-through font-mono">
+                      {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
+                    </span>
+                  )}
+                  {product.discountBadge && (
+                    <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">
+                      {product.discountBadge}
+                    </span>
+                  )}
+                </div>
                 {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
-                  <span className="text-xs font-bold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded">
+                  <span className="text-xs font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded shrink-0">
                     +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện
                   </span>
                 )}
@@ -1226,11 +1301,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               )}
             </AnimatePresence>
 
-            <div className="flex items-center justify-between gap-3 sm:gap-4 max-w-7xl mx-auto">
+            <div className="flex items-center justify-between gap-2.5 sm:gap-4 max-w-7xl mx-auto">
               
               {/* Product Info & Thumbnail */}
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0 hidden xs:block">
                   <img
                     src={images[0] || '/assets/bracelet.jpg'}
                     alt={product.name}
@@ -1238,24 +1313,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900 truncate">
+                  <h4 className="font-bold text-xs sm:text-sm text-neutral-900 truncate leading-tight">
                     {product.name}
                   </h4>
-                  <div className="flex items-center gap-2 text-[11px] text-neutral-500 truncate">
-                    {selectedColor && (
-                      <span>Màu: <strong className="text-neutral-800">{selectedColor}</strong></span>
-                    )}
-                    {selectedCharms.length > 0 && (
-                      <span className="text-amber-700 font-medium truncate hidden md:inline">
-                        • Charm: {selectedCharms.map((c) => c.name).join(', ')}
-                      </span>
-                    )}
+                  <div className="font-mono font-black text-xs sm:text-sm text-neutral-950 mt-0.5">
+                    {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
                   </div>
                 </div>
               </div>
 
-              {/* Price / Subtotal */}
-              <div className="text-right flex-shrink-0 px-1 sm:px-2">
+              {/* Price / Subtotal (visible on md+) */}
+              <div className="text-right flex-shrink-0 px-1 sm:px-2 hidden md:block">
                 <div className="text-[10px] sm:text-[11px] text-neutral-500 font-medium">
                   Tạm tính ({quantity}):
                 </div>
@@ -1347,17 +1415,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   {isAdded ? (
                     <>
                       <Check className="w-4 h-4" />
-                      <span className="hidden sm:inline">Đã thêm ✓</span>
+                      <span className="text-xs font-bold whitespace-nowrap">Đã thêm</span>
                     </>
                   ) : isCartFullForProduct ? (
                     <>
                       <AlertCircle className="w-4 h-4 text-rose-500" />
-                      <span className="hidden sm:inline">Đã đạt tối đa</span>
+                      <span className="text-xs font-bold whitespace-nowrap">Hết hàng</span>
                     </>
                   ) : (
                     <>
                       <ShoppingBag className="w-4 h-4" />
-                      <span className="hidden sm:inline">Thêm Vào Giỏ</span>
+                      <span className="text-xs font-bold whitespace-nowrap">Thêm giỏ</span>
                     </>
                   )}
                 </button>
@@ -1377,7 +1445,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       triggerStockNotice();
                     }
                   }}
-                  className={`py-2.5 px-4 sm:px-5 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm ${
+                  className={`py-2.5 px-3.5 sm:px-5 rounded-xl font-black text-xs transition-all cursor-pointer shadow-sm whitespace-nowrap ${
                     isOutOfStock || isCartFullForProduct
                       ? 'bg-neutral-200 text-neutral-400'
                       : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 active:scale-95'

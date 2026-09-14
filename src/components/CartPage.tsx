@@ -21,12 +21,15 @@ import {
   Search,
   ChevronRight,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  Building2,
+  Gift
 } from 'lucide-react';
 import { CartItem, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
+import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 
 interface CartPageProps {
   cartItems: CartItem[];
@@ -59,7 +62,9 @@ export const CartPage: React.FC<CartPageProps> = ({
   // Form Fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [province, setProvince] = useState('');
+  const [district, setDistrict] = useState('');
+  const [detailedAddress, setDetailedAddress] = useState('');
   const [note, setNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +88,19 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   const hotline = siteContent?.phone || '079 655 5636';
 
-  // Calculate Subtotal
+  // Available districts for chosen province
+  const availableDistricts = getDistrictsByProvince(province);
+
+  // Calculate Real-time Shipping Fee based on Vietnam Administrative rules (only when address chosen)
+  const shippingInfo = calculateShippingFee(province, district);
+  const shippingFee = shippingInfo.fee;
+
+  const handleProvinceChange = (newProvince: string) => {
+    setProvince(newProvince);
+    setDistrict('');
+  };
+
+  // Calculate Subtotal & Total
   const subtotal = cartItems.reduce(
     (acc, item) =>
       acc +
@@ -91,6 +108,8 @@ export const CartPage: React.FC<CartPageProps> = ({
         item.quantity,
     0
   );
+
+  const grandTotal = subtotal + shippingFee;
 
   // Track Begin Checkout on mount if items exist
   useEffect(() => {
@@ -166,7 +185,9 @@ export const CartPage: React.FC<CartPageProps> = ({
 
     const cleanName = name.trim();
     const cleanPhone = phone.trim();
-    const cleanAddress = address.trim();
+    const cleanProvince = province.trim();
+    const cleanDistrict = district.trim();
+    const cleanDetail = detailedAddress.trim();
 
     if (!cleanName) {
       setFormError('Vui lòng nhập Họ và tên người nhận.');
@@ -176,8 +197,16 @@ export const CartPage: React.FC<CartPageProps> = ({
       setFormError('Vui lòng nhập Số điện thoại hợp lệ (ít nhất 9 chữ số).');
       return;
     }
-    if (!cleanAddress) {
-      setFormError('Vui lòng nhập Địa chỉ nhận hàng chi tiết.');
+    if (!cleanProvince) {
+      setFormError('Vui lòng chọn Tỉnh / Thành phố nhận hàng.');
+      return;
+    }
+    if (!cleanDistrict) {
+      setFormError('Vui lòng chọn Quận / Huyện nhận hàng.');
+      return;
+    }
+    if (!cleanDetail) {
+      setFormError('Vui lòng nhập Địa chỉ chi tiết (số nhà, tên đường, ngõ ngách, tòa nhà...).');
       return;
     }
     if (cartItems.length === 0) {
@@ -187,8 +216,9 @@ export const CartPage: React.FC<CartPageProps> = ({
 
     setIsSubmitting(true);
 
+    const fullAddress = `${cleanDetail}, ${cleanDistrict}, ${cleanProvince}`;
     const trackingCode = generateTrackingNumber();
-    const currentOrderTotal = subtotal;
+    const currentOrderTotal = grandTotal;
 
     const itemDetails = cartItems.map((item) => ({
       productId: item.product.id,
@@ -216,7 +246,11 @@ export const CartPage: React.FC<CartPageProps> = ({
       name: cleanName,
       customerName: cleanName,
       phone: cleanPhone,
-      address: cleanAddress,
+      address: fullAddress,
+      province: cleanProvince,
+      district: cleanDistrict,
+      detailedAddress: cleanDetail,
+      shippingFee,
       note: note.trim() ? note.trim() : undefined,
       items: formatCartItemsText(),
       itemDetails,
@@ -543,16 +577,64 @@ export const CartPage: React.FC<CartPageProps> = ({
                         </div>
                       </div>
 
-                      {/* Address */}
+                      {/* Province & District Row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Province / City */}
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Tỉnh / Thành phố <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={province}
+                              onChange={(e) => handleProvinceChange(e.target.value)}
+                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-400 focus:outline-hidden transition-colors cursor-pointer appearance-none pr-10"
+                            >
+                              <option value="">-- Chọn Tỉnh / Thành phố --</option>
+                              {VIETNAM_PROVINCES.map((prov) => (
+                                <option key={prov.code} value={prov.name}>
+                                  {prov.name}
+                                </option>
+                              ))}
+                            </select>
+                            <Building2 className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
+                          </div>
+                        </div>
+
+                        {/* District */}
+                        <div>
+                          <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+                            Quận / Huyện <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={district}
+                              onChange={(e) => setDistrict(e.target.value)}
+                              disabled={!province || availableDistricts.length === 0}
+                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-400 focus:outline-hidden transition-colors cursor-pointer appearance-none pr-10 disabled:opacity-50"
+                            >
+                              <option value="">-- Chọn Quận / Huyện --</option>
+                              {availableDistricts.map((dist) => (
+                                <option key={dist} value={dist}>
+                                  {dist}
+                                </option>
+                              ))}
+                            </select>
+                            <MapPin className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Detailed Address */}
                       <div>
                         <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                          Địa chỉ nhận hàng chi tiết <span className="text-rose-500">*</span>
+                          Địa chỉ chi tiết <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="text"
-                          value={address}
-                          onChange={(e) => setAddress(e.target.value)}
-                          placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố"
+                          value={detailedAddress}
+                          onChange={(e) => setDetailedAddress(e.target.value)}
+                          placeholder="Số nhà, tên ngõ/ngách/đường, tòa nhà, phường/xã..."
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-400 focus:outline-hidden transition-colors"
                         />
                       </div>
@@ -560,7 +642,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       {/* Note */}
                       <div>
                         <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                          Ghi chú thêm cho thợ đan & shipper (không bắt buộc)
+                          Ghi chú thêm (nếu có)
                         </label>
                         <input
                           type="text"
@@ -582,75 +664,42 @@ export const CartPage: React.FC<CartPageProps> = ({
                       </h2>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Option 1: VietQR */}
-                      <div
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Option 1: Chuyển khoản */}
+                      <button
+                        type="button"
                         onClick={() => setPaymentMethod('vietqr')}
-                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                        className={`px-4 py-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-left ${
                           paymentMethod === 'vietqr'
                             ? 'border-amber-500 bg-amber-50/40 shadow-xs'
                             : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
                         }`}
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${paymentMethod === 'vietqr' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                                <QrCode className="w-4 h-4" />
-                              </div>
-                              <span className="text-sm font-black text-slate-900">
-                                Chuyển khoản VietQR
-                              </span>
-                            </div>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">
-                              Khuyên dùng
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                            Mã QR thông minh tự động điền số tiền & nội dung theo họ tên và SĐT của bạn. Chế tác và giao hàng nhanh hơn.
-                          </p>
+                        <span className="text-sm font-bold text-slate-900">
+                          Chuyển khoản
+                        </span>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'vietqr' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
+                          {paymentMethod === 'vietqr' && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
+                      </button>
 
-                        <div className="mt-4 pt-2 border-t border-slate-200/60 flex items-center gap-2 text-xs font-bold text-amber-900">
-                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'vietqr' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
-                            {paymentMethod === 'vietqr' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                          </div>
-                          <span>Xác nhận tự động 24/7</span>
-                        </div>
-                      </div>
-
-                      {/* Option 2: COD */}
-                      <div
+                      {/* Option 2: Thanh toán khi nhận hàng */}
+                      <button
+                        type="button"
                         onClick={() => setPaymentMethod('cod')}
-                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                        className={`px-4 py-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-left ${
                           paymentMethod === 'cod'
                             ? 'border-amber-500 bg-amber-50/40 shadow-xs'
                             : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
                         }`}
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${paymentMethod === 'cod' ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                                <Truck className="w-4 h-4" />
-                              </div>
-                              <span className="text-sm font-black text-slate-900">
-                                Thanh toán khi nhận (COD)
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                            Thanh toán tiền mặt cho nhân viên giao hàng khi nhận kiện hàng. Được đồng kiểm tra hàng trước khi thanh toán.
-                          </p>
+                        <span className="text-sm font-bold text-slate-900">
+                          Thanh toán khi nhận hàng
+                        </span>
+                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'cod' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
+                          {paymentMethod === 'cod' && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
-
-                        <div className="mt-4 pt-2 border-t border-slate-200/60 flex items-center gap-2 text-xs font-bold text-amber-900">
-                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === 'cod' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
-                            {paymentMethod === 'cod' && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                          </div>
-                          <span>Kiểm tra hàng trước khi trả</span>
-                        </div>
-                      </div>
+                      </button>
                     </div>
                   </div>
 
@@ -675,8 +724,8 @@ export const CartPage: React.FC<CartPageProps> = ({
 
                       <div className="flex items-center justify-between gap-2 text-slate-600">
                         <span className="whitespace-nowrap font-medium">Phí vận chuyển</span>
-                        <span className="font-bold text-emerald-700 whitespace-nowrap">
-                          Miễn phí
+                        <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {shippingInfo.isPending ? 'Chưa tính' : shippingInfo.isFree ? '0đ' : `${shippingFee.toLocaleString('vi-VN')}đ`}
                         </span>
                       </div>
 
@@ -692,7 +741,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                           Tổng thanh toán:
                         </span>
                         <span className="text-xl sm:text-2xl font-black text-amber-600 font-mono whitespace-nowrap">
-                          {subtotal.toLocaleString('vi-VN')}đ
+                          {(subtotal + (shippingInfo.isPending ? 0 : shippingFee)).toLocaleString('vi-VN')}đ
                         </span>
                       </div>
                     </div>

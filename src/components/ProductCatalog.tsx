@@ -37,11 +37,66 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     return new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
   }, [categories]);
 
+  // Helper to check if a product matches a category or collection
+  const isProductMatchingCategory = (p: Product, targetCatId: string) => {
+    if (targetCatId === 'all') return true;
+    if (p.category === targetCatId) return true;
+    const col = collections.find(c => c.id === targetCatId || c.categoryKey === targetCatId);
+    if (col && (p.category === col.categoryKey || p.category === col.id)) return true;
+    return false;
+  };
+
   const categoryOptions = useMemo(() => {
-    const allOpt = { id: 'all', label: 'Tất cả sản phẩm', badge: 'All' };
-    const visibleCats = categories.filter((c) => !c.isHidden);
-    return [allOpt, ...visibleCats];
-  }, [categories]);
+    const allOpt: CategoryItem = { id: 'all', label: 'Tất cả sản phẩm', badge: 'All' };
+    const catMap = new Map<string, CategoryItem>();
+
+    // 1. Add from collections (source of truth for store BSTs)
+    collections.forEach((col) => {
+      if (col.isHidden) return;
+      const key = col.categoryKey || col.id;
+      catMap.set(key, {
+        id: key,
+        label: col.tag || col.title || key,
+        description: col.subtitle || col.description || '',
+        highlightColor: col.themeColor || '#B41C1A',
+        badge: col.badge || undefined,
+        bannerImage: col.productPageBanner || col.bannerImage || col.bgImage,
+        isEvent: col.themeStyle === 'event0209'
+      });
+    });
+
+    // 2. Add or merge explicit categories from categories prop
+    categories.forEach((cat) => {
+      if (cat.isHidden) return;
+      if (catMap.has(cat.id)) {
+        const existing = catMap.get(cat.id)!;
+        catMap.set(cat.id, {
+          ...existing,
+          ...cat,
+          label: cat.label || existing.label
+        });
+      } else {
+        const count = products.filter(p => !p.isHidden && p.category === cat.id).length;
+        const isLegacyDummy = ['charm_bracelet', 'everyday', 'keychains', 'lanyards'].includes(cat.id);
+        if (!isLegacyDummy || count > 0) {
+          catMap.set(cat.id, cat);
+        }
+      }
+    });
+
+    // 3. Dynamically discover any category key from products that might not be in the list
+    products.forEach((p) => {
+      if (!p.isHidden && p.category && !hiddenCategoryIds.has(p.category) && !catMap.has(p.category)) {
+        catMap.set(p.category, {
+          id: p.category,
+          label: p.category.startsWith('BST') ? p.category : `BST ${p.category}`,
+          highlightColor: '#475569'
+        });
+      }
+    });
+
+    return [allOpt, ...Array.from(catMap.values())];
+  }, [categories, collections, products, hiddenCategoryIds]);
 
   // Fallback to 'all' if active selectedCategory is hidden
   useEffect(() => {
@@ -70,7 +125,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     const matched = products.filter((p) => {
       if (p.isHidden) return false;
       if (p.category && hiddenCategoryIds.has(p.category)) return false;
-      const matchesCategory = selectedCategory === 'all' ? true : p.category === selectedCategory;
+      const matchesCategory = isProductMatchingCategory(p, selectedCategory);
       const matchesSearch =
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -90,15 +145,14 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       inStockCount: inCount,
       outOfStockCount: outCount
     };
-  }, [products, selectedCategory, searchQuery, hiddenCategoryIds]);
+  }, [products, selectedCategory, searchQuery, hiddenCategoryIds, collections]);
 
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
         if (p.isHidden) return false;
         if (p.category && hiddenCategoryIds.has(p.category)) return false;
-        const matchesCategory =
-          selectedCategory === 'all' ? true : p.category === selectedCategory;
+        const matchesCategory = isProductMatchingCategory(p, selectedCategory);
         const matchesSearch =
           p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -183,7 +237,9 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
               <div className="space-y-1">
                 {categoryOptions.map((cat) => {
                   const isSelected = selectedCategory === cat.id;
-                  const matchingCount = products.filter(p => !p.isHidden && (cat.id === 'all' ? (!p.category || !hiddenCategoryIds.has(p.category)) : p.category === cat.id)).length;
+                  const matchingCount = products.filter(
+                    (p) => !p.isHidden && (!p.category || !hiddenCategoryIds.has(p.category)) && isProductMatchingCategory(p, cat.id)
+                  ).length;
 
                   return (
                     <button

@@ -372,6 +372,9 @@ export interface StoredOrder {
   customerName?: string;
   phone: string;
   address: string;
+  province?: string;
+  district?: string;
+  detailedAddress?: string;
   note?: string;
   items: string[];
   itemDetails?: {
@@ -679,6 +682,9 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         customerName: data.customerName || data.name || '',
         phone: data.phone || '',
         address: data.address || '',
+        province: data.province || '',
+        district: data.district || '',
+        detailedAddress: data.detailedAddress || '',
         note: data.note || '',
         items: data.items || [],
         itemDetails: data.itemDetails || [],
@@ -903,6 +909,9 @@ export const subscribeToOrdersFromFirestore = (
             customerName: data.customerName || data.name || '',
             phone: data.phone || '',
             address: data.address || '',
+            province: data.province || '',
+            district: data.district || '',
+            detailedAddress: data.detailedAddress || '',
             note: data.note || '',
             items: data.items || [],
             itemDetails: data.itemDetails || [],
@@ -1098,6 +1107,7 @@ export const fetchCollectionsFromFirestore = async (): Promise<CollectionInfo[]>
     snap.forEach((docSnap) => {
       const data = docSnap.data();
       results.push({
+        ...data,
         id: docSnap.id,
         categoryKey: data.categoryKey || docSnap.id,
         tag: data.tag || '',
@@ -1108,6 +1118,8 @@ export const fetchCollectionsFromFirestore = async (): Promise<CollectionInfo[]>
         craftDetails: data.craftDetails || [],
         bgImage: data.bgImage || '',
         bannerImage: data.bannerImage || data.bgImage || '',
+        horizontalImage: data.horizontalImage || data.bannerImage || data.bgImage || '',
+        productPageBanner: data.productPageBanner || data.bannerImage || data.bgImage || '',
         badge: data.badge || '',
         isPreorder: !!data.isPreorder,
         themeColor: data.themeColor || '#B41C1A',
@@ -1144,6 +1156,7 @@ export const subscribeToCollectionsFromFirestore = (
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           results.push({
+            ...data,
             id: docSnap.id,
             categoryKey: data.categoryKey || docSnap.id,
             tag: data.tag || '',
@@ -1154,6 +1167,8 @@ export const subscribeToCollectionsFromFirestore = (
             craftDetails: data.craftDetails || [],
             bgImage: data.bgImage || '',
             bannerImage: data.bannerImage || data.bgImage || '',
+            horizontalImage: data.horizontalImage || data.bannerImage || data.bgImage || '',
+            productPageBanner: data.productPageBanner || data.bannerImage || data.bgImage || '',
             badge: data.badge || '',
             isPreorder: !!data.isPreorder,
             themeColor: data.themeColor || '#B41C1A',
@@ -1168,13 +1183,13 @@ export const subscribeToCollectionsFromFirestore = (
         callback(results);
       },
       (error) => {
-        console.warn('Real-time collections snapshot error:', error);
+        console.warn('Lỗi lắng nghe realtime collections:', error);
         if (onError) onError(error);
       }
     );
     return unsubscribe;
   } catch (err) {
-    console.warn('Cannot subscribe to collections:', err);
+    console.error('Lỗi thiết lập realtime collections:', err);
     return () => {};
   }
 };
@@ -1225,6 +1240,23 @@ export const deleteCollectionFromFirestore = async (collectionId: string): Promi
     const docRef = doc(db, 'collections', collectionId);
     await deleteDoc(docRef);
     recordOperation('delete', 1, -400);
+
+    // Also verify and delete any doc where categoryKey or id matches to ensure 100% clean deletion
+    try {
+      const snap = await getDocs(collection(db, 'collections'));
+      const extraDeletes: Promise<any>[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (d.id === collectionId || data.id === collectionId || data.categoryKey === collectionId) {
+          extraDeletes.push(deleteDoc(doc(db, 'collections', d.id)));
+        }
+      });
+      if (extraDeletes.length > 0) {
+        await Promise.all(extraDeletes);
+      }
+    } catch {
+      // ignore secondary lookup errors
+    }
   } catch (err) {
     console.error('Lỗi xóa bộ sưu tập Firestore:', err);
     throw err;

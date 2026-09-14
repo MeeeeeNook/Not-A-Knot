@@ -20,18 +20,18 @@ export const getCategoryLabel = (
 ): string => {
   if (!category || category === 'all') return 'Bộ Sưu Tập NOT A KNOT';
 
-  // Check provided categories
-  if (categories && categories.length > 0) {
-    const found = categories.find((c) => c.id === category);
-    if (found && found.label) return found.label;
-  }
-
   // Check provided collections
   if (collections && collections.length > 0) {
     const foundCol = collections.find(
       (c) => c.id === category || c.categoryKey === category
     );
-    if (foundCol && foundCol.title) return foundCol.title;
+    if (foundCol && (foundCol.tag || foundCol.title)) return foundCol.tag || foundCol.title;
+  }
+
+  // Check provided categories
+  if (categories && categories.length > 0) {
+    const found = categories.find((c) => c.id === category);
+    if (found && found.label) return found.label;
   }
 
   // Check DEFAULT_CATEGORIES
@@ -43,16 +43,10 @@ export const getCategoryLabel = (
       return 'BST Quốc Khánh 02.09';
     case 'event_2010':
       return 'BST Phụ Nữ 20.10';
-    case 'charm_bracelet':
-      return 'BST Vòng Charm';
-    case 'everyday':
-      return 'BST Everyday Wear';
     case 'bracelets':
-      return 'BST Vòng Paracord 550';
-    case 'keychains':
-      return 'BST Móc Khóa EDC';
-    case 'lanyards':
-      return 'BST Dây Đeo Phụ Kiện';
+      return 'Bản Đan Paracord EDC';
+    case 'back_to_school':
+      return 'BST Back 2 School';
     default:
       if (category.trim().length > 0) {
         return category.startsWith('BST') ? category : `BST ${category}`;

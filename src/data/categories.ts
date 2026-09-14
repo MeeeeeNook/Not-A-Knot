@@ -18,38 +18,18 @@ export const DEFAULT_CATEGORIES: CategoryItem[] = [
     isEvent: true
   },
   {
-    id: 'charm_bracelet',
-    label: 'Charm Bracelet',
-    description: 'Vòng Charm Phong Thủy, Biểu Tượng & Ký Tự',
-    highlightColor: '#9333EA',
-    badge: 'Charm'
-  },
-  {
-    id: 'everyday',
-    label: 'Everyday Wear',
-    description: 'Bản Đan Siêu Nhẹ 12g & Tinh Tế Cho Hằng Ngày',
-    highlightColor: '#475569',
-    badge: 'Everyday'
-  },
-  {
     id: 'bracelets',
-    label: 'Vòng Paracord 550',
-    description: 'Dây Quân Đội Chịu Tải 250kg & Khóa Kim Loại Chiến Thuật',
-    highlightColor: '#4D7C0F',
+    label: 'Bản Đan Paracord EDC',
+    description: 'Dây Quân Đội Chịu Tải 250kg & Khóa Kim Loại Sinh Tồn',
+    highlightColor: '#D97706',
     badge: 'Tactical'
   },
   {
-    id: 'keychains',
-    label: 'Móc Khóa EDC',
-    description: 'Móc Khóa Sinh Tồn Tiện Ích & Chuôi Kim Loại',
-    highlightColor: '#D97706',
-    badge: 'EDC'
-  },
-  {
-    id: 'lanyards',
-    label: 'Dây Đeo Phụ Kiện',
-    description: 'Dây Đeo Điện Thoại, Thẻ & Dao Gấp EDC',
+    id: 'back_to_school',
+    label: 'BST Back 2 School',
+    description: 'Hành Trang Phong Cách Khởi Đầu Năm Học Mới',
     highlightColor: '#2563EB',
-    badge: 'Lanyard'
+    badge: 'School'
   }
 ];
+

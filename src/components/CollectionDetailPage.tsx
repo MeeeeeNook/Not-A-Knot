@@ -1481,11 +1481,16 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 type="button"
                 onClick={async () => {
                   try {
+                    const targetId = currentCollection.id;
                     if (onUpdateCollections && collections) {
-                      const remaining = collections.filter((c) => c.id !== currentCollection.id);
+                      const remaining = collections.filter((c) => c.id !== targetId && c.categoryKey !== targetId);
                       onUpdateCollections(remaining);
+                      try {
+                        localStorage.setItem('nak_collections', JSON.stringify(remaining));
+                        localStorage.setItem('nak_collections_data', JSON.stringify(remaining));
+                      } catch {}
                     }
-                    await deleteCollectionFromFirestore(currentCollection.id).catch((err) =>
+                    await deleteCollectionFromFirestore(targetId).catch((err) =>
                       console.warn('Lỗi xóa Firestore:', err)
                     );
                     setShowDeleteModal(false);

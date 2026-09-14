@@ -149,6 +149,9 @@ export interface OrderRecord {
   customerName?: string;
   phone: string;
   address: string;
+  province?: string;
+  district?: string;
+  detailedAddress?: string;
   note?: string;
   items: string[];
   itemDetails?: OrderItemDetail[];
@@ -244,20 +247,6 @@ export interface CustomElementBlock {
   bgStyle?: 'dark' | 'glass' | 'gold_gradient' | 'minimal';
 }
 
-export interface HeroTextBox {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  fontFamily: 'sans' | 'serif' | 'mono';
-  fontSize: number;
-  fontWeight: number;
-  color: string;
-  align: 'left' | 'center' | 'right';
-  visible: boolean;
-}
-
 export interface SiteHeroSlide {
   id: string;
   tag: string;
@@ -306,8 +295,9 @@ export interface SiteHeroSlide {
   bgPositionYMobile?: number; // 0 to 100% (default 50)
   bgZoomMobile?: number; // 100 to 250% (default 100)
   bgFitMobile?: 'cover' | 'contain' | 'fill';
-  aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto';
-  textBoxes?: HeroTextBox[];
+  aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto' | 'custom';
+  customHeightMobile?: number; // Custom height in pixels on mobile (e.g. 380, 420)
+  bgColor?: string; // Optional custom background color for letterbox / margins
 }
 
 export interface FaqItem {

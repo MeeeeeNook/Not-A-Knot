@@ -2312,6 +2312,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             loadOrders();
             loadMessagesCount();
           }}
+          onBackToStore={onBackToStore}
         />
 
         {/* Cloud Sync Status Banner */}

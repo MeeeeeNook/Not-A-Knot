@@ -130,55 +130,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
         </div>
       </div>
 
-      {/* Limit Notice Toast */}
-      {limitNotice && (
-        <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
-          <span>⚠️ {limitNotice}</span>
-          <button
-            type="button"
-            onClick={() => setLimitNotice(null)}
-            className="text-amber-600 hover:text-amber-900 p-0.5 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {/* Selected Items Chips (Clean & Minimalist) */}
-      {currentSelection.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-          {currentSelection.map((item, idx) => (
-            <div
-              key={item.id || idx}
-              className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/90 text-slate-800 px-2.5 py-1 rounded-lg text-xs font-medium group transition-all"
-            >
-              {maxAllowed > 1 && (
-                <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
-                  {idx + 1}
-                </span>
-              )}
-              <span className="truncate max-w-[140px]">{item.name}</span>
-              {item.priceDelta && item.priceDelta > 0 ? (
-                <span className="text-[10px] text-amber-700 font-semibold">
-                  (+{item.priceDelta.toLocaleString('vi-VN')}đ)
-                </span>
-              ) : null}
-              {!isRequired && (
-                <button
-                  type="button"
-                  onClick={() => handleRemoveCharm(item.id || item.name)}
-                  className="text-slate-400 hover:text-rose-500 ml-0.5 cursor-pointer p-0.5"
-                  title="Bỏ chọn"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Grid of charm cards */}
+      {/* Grid of charm cards - Fixed height to avoid any jumping */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {charms.map((charm, idx) => {
           const selectedIndex = currentSelection.findIndex(
@@ -196,11 +148,11 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                 if (isOutOfStock) return;
                 handleToggleCharm(charm);
               }}
-              className={`relative rounded-xl p-2 text-left border transition-all duration-150 flex flex-col items-center justify-between ${
+              className={`relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
                 isOutOfStock
                   ? 'opacity-50 grayscale bg-slate-50 border-slate-200 cursor-not-allowed select-none'
                   : isSelected
-                  ? 'border-amber-500 bg-amber-50/50 shadow-xs ring-1 ring-amber-400/50 cursor-pointer'
+                  ? 'border-amber-500 bg-amber-50/50 shadow-xs cursor-pointer'
                   : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50 cursor-pointer'
               }`}
             >
@@ -243,26 +195,73 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                 )}
               </div>
 
-              {/* Card Label */}
-              <div className="w-full text-center">
-                <span className={`text-[11px] block truncate leading-tight ${isSelected ? 'font-bold text-slate-900' : 'font-medium text-slate-700'}`}>
+              {/* Card Label - Strictly fixed height so selecting never shifts card height */}
+              <div className="w-full text-center h-8 flex flex-col justify-center">
+                <span className="text-[11px] block truncate leading-tight font-semibold text-slate-800">
                   {charm.name}
                 </span>
-                {isSelected && typeof charm.stock === 'number' && charm.stock > 0 && (
-                  <span className="text-[10px] block text-amber-700 font-semibold mt-0.5 animate-fadeIn">
-                    Còn {charm.stock} cái
-                  </span>
-                )}
-                {isOutOfStock && (
-                  <span className="text-[10px] block text-rose-500 font-medium mt-0.5">
-                    Tạm hết
-                  </span>
-                )}
+                <span className="text-[10px] block h-3.5 leading-none mt-0.5">
+                  {isOutOfStock ? (
+                    <span className="text-rose-500 font-medium">Hết hàng</span>
+                  ) : typeof charm.stock === 'number' && charm.stock > 0 ? (
+                    <span className={isSelected ? 'text-amber-700 font-semibold' : 'text-slate-400 font-medium'}>
+                      Còn {charm.stock}
+                    </span>
+                  ) : (
+                    <span className="text-transparent select-none">-</span>
+                  )}
+                </span>
               </div>
             </button>
           );
         })}
       </div>
+
+      {/* Limit Notice Toast - Rendered below grid to prevent layout jumping */}
+      {limitNotice && (
+        <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
+          <span>⚠️ {limitNotice}</span>
+          <button
+            type="button"
+            onClick={() => setLimitNotice(null)}
+            className="text-amber-600 hover:text-amber-900 p-0.5 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Selected Items Chips (Rendered BELOW grid to guarantee zero layout shifts during selection) */}
+      {currentSelection.length > 0 && maxAllowed > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {currentSelection.map((item, idx) => (
+            <div
+              key={item.id || idx}
+              className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/90 text-slate-800 px-2.5 py-1 rounded-lg text-xs font-medium group transition-all"
+            >
+              <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {idx + 1}
+              </span>
+              <span className="truncate max-w-[140px]">{item.name}</span>
+              {item.priceDelta && item.priceDelta > 0 ? (
+                <span className="text-[10px] text-amber-700 font-semibold">
+                  (+{item.priceDelta.toLocaleString('vi-VN')}đ)
+                </span>
+              ) : null}
+              {!isRequired && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveCharm(item.id || item.name)}
+                  className="text-slate-400 hover:text-rose-500 ml-0.5 cursor-pointer p-0.5"
+                  title="Bỏ chọn"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
