@@ -1,15 +1,6 @@
-import React, { useState } from 'react';
-import {
-  ShieldCheck,
-  Award,
-  Sparkles,
-  ArrowRight,
-  MessageSquare,
-  ChevronDown,
-  ChevronUp,
-  MapPin,
-  ArrowLeft
-} from 'lucide-react';
+import React from 'react';
+import { ArrowLeft } from 'lucide-react';
+import { motion } from 'motion/react';
 import { SiteContentConfig } from '../types';
 
 interface AboutPageProps {
@@ -20,297 +11,119 @@ interface AboutPageProps {
 }
 
 export const AboutPage: React.FC<AboutPageProps> = ({
-  siteContent,
   onNavigateHome,
   onOpenCatalog,
   onOpenContact
 }) => {
-  const brandName = siteContent?.brandName || 'NOT A KNOT';
-  const facebookUrl = siteContent?.socialLinks?.facebook || 'https://www.facebook.com/profile.php?id=61593591390851';
-
-  // FAQ Accordion State
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
-
-  const defaultFaqs = [
-    {
-      id: 'faq-1',
-      q: 'Dây Paracord 550 có bị phai màu hay ẩm mốc khi dính nước không?',
-      a: 'Dây Paracord 550 Type III được dệt từ sợi tổng hợp cao cấp kèm 7 lõi dù xoắn kép, có đặc tính kháng nước, nhanh khô và bền màu. Bạn có thể sử dụng thoải mái trong các hoạt động hằng ngày, đi mưa hay chơi thể thao.'
-    },
-    {
-      id: 'faq-2',
-      q: 'Làm thế nào để chọn đúng kích cỡ vòng tay vừa vặn?',
-      a: 'Các mẫu vòng tay của NOT A KNOT đều được thiết kế theo kích cỡ tiêu chuẩn phù hợp với đa số người dùng hoặc có thể dễ dàng thu phóng nới lỏng tùy chỉnh trực tiếp trên nút thắt.'
-    },
-    {
-      id: 'faq-3',
-      q: 'Thời gian hoàn thiện và nhận hàng mất bao lâu?',
-      a: 'Vì sản phẩm được đan thủ công, thời gian hoàn thiện thường từ 1 - 2 ngày làm việc. Thời gian giao hàng toàn quốc từ 2 - 4 ngày. Khách hàng được kiểm tra hàng trước khi thanh toán.'
-    },
-    {
-      id: 'faq-4',
-      q: 'Xưởng có hỗ trợ đan theo màu sắc và yêu cầu riêng không?',
-      a: 'Có. Chúng tớ nhận phối màu theo sở thích và tùy biến kiểu nút thắt. Bạn có thể nhắn tin trực tiếp qua Facebook, Instagram hoặc Threads của xưởng để trao đổi chi tiết.'
-    }
-  ];
-
-  const faqs = siteContent?.faqs && siteContent.faqs.length > 0 ? siteContent.faqs : defaultFaqs;
-  const faqTitle = siteContent?.faqTitle || 'Câu Hỏi Thường Gặp';
-  const faqSubtitle = siteContent?.faqSubtitle || 'Giải đáp các thắc mắc phổ biến của khách hàng';
-
-  const coreCommitments = [
-    {
-      icon: <Sparkles className="w-5 h-5 text-slate-900" />,
-      title: 'Đan Tay Tỉ Mỉ',
-      desc: 'Từng nút thắt được nghệ nhân siết lực đều đặn, đảm bảo form dáng chắc chắn, đầm tay và tinh xảo.'
-    },
-    {
-      icon: <ShieldCheck className="w-5 h-5 text-slate-900" />,
-      title: 'Paracord 550 Type III',
-      desc: 'Cấu trúc 7 lõi dù bền bỉ, không co rút, chịu lực tốt và thích ứng với mọi điều kiện thời tiết.'
-    },
-    {
-      icon: <Award className="w-5 h-5 text-slate-900" />,
-      title: 'Phụ Kiện Chống Gỉ',
-      desc: 'Khóa Shackle, Inox và hợp kim đúc nguyên khối chống oxy hóa, giữ độ thẩm mỹ bền lâu.'
-    },
-    {
-      icon: <MapPin className="w-5 h-5 text-slate-900" />,
-      title: 'Chế Tác Tại Hà Nội',
-      desc: 'Xưởng thủ công đặt tại khu vực NEU - Đại học Kinh tế Quốc dân, hỗ trợ giao hàng toàn quốc.'
-    }
-  ];
+  // Cinematic yet responsive scroll reveal animation (~1.25s duration)
+  const scrollAnim = {
+    initial: { opacity: 0, y: 26 },
+    whileInView: { opacity: 1, y: 0 },
+    viewport: { once: true, amount: 0.15 },
+    transition: { duration: 1.25, ease: [0.16, 1, 0.3, 1] }
+  };
 
   return (
-    <div id="about-page-container" className="w-full bg-slate-50 text-slate-900 min-h-screen font-sans pb-24 selection:bg-slate-900 selection:text-white">
+    <div id="about-page-container" className="w-full bg-[#FAF9F6] text-stone-900 min-h-screen selection:bg-stone-900 selection:text-white">
       
-      {/* 1. Header Navigation Bar (Clean Light Mode, No Dark Breadcrumbs) */}
-      <header className="bg-white border-b border-slate-200/80 sticky top-14 z-30 py-3.5 px-4 sm:px-8 shadow-2xs">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      {/* Navigation Header Bar - Aligned to wider container */}
+      <header className="bg-[#FAF9F6]/80 backdrop-blur-md border-b border-stone-200/70 sticky top-14 z-30 py-3.5 px-6 sm:px-12 lg:px-16">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           <button
             onClick={onNavigateHome}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-stone-600 hover:text-stone-950 transition-colors cursor-pointer group"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
             <span>Quay lại Trang Chủ</span>
           </button>
-
-          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Về {brandName}
-          </span>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 space-y-12 sm:space-y-16">
+      {/* Main Narrative Container - Generously widened text area */}
+      <main className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16 py-12 sm:py-20 space-y-14 sm:space-y-18">
 
-        {/* 1. Brand Introduction */}
-        <section className="space-y-4">
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight">
-            Nghệ Thuật Nút Thắt & Tinh Thần Bền Bỉ
-          </h1>
-
-          <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-3xl">
-            <strong className="text-slate-900">{brandName}</strong> là xưởng thủ công chuyên chế tác vòng tay và phụ kiện từ dây dù Paracord 550 quân sự tại Hà Nội. Chúng tớ trân trọng sự tỉ mỉ của đôi bàn tay và cá tính riêng trong từng sản phẩm.
+        {/* ------------------------------------------------------------------ */}
+        {/* PARAGRAPH 1: Ý tưởng đơn giản (Sans-serif) + Biến sợi dây (Serif to hơn) */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.div {...scrollAnim} className="space-y-3">
+          <p className="font-sans text-sm sm:text-base md:text-lg font-medium text-stone-500 tracking-wide">
+            Not A Knot bắt đầu từ một ý tưởng đơn giản:
           </p>
-        </section>
+          <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal text-stone-950 leading-[1.2] tracking-tight">
+            Biến những sợi dây thành những điều có ý nghĩa.
+          </h1>
+        </motion.div>
 
-        {/* 2. Story Card & Workshop Image */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Left Text Box */}
-          <div className="lg:col-span-7 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-2xs space-y-4 flex flex-col justify-between">
-            <div className="space-y-4">
-              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                <span>Ý nghĩa tên gọi &quot;NOT A KNOT&quot;</span>
-              </h2>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Tên gọi <strong>NOT A KNOT</strong> thể hiện góc nhìn của chúng tớ: một chiếc vòng tay không chỉ là những nút thắt dây đơn thuần, mà là sự gắn kết của phong cách cá nhân, sự chỉn chu và độ bền đồng hành cùng bạn mỗi ngày.
-              </p>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Thay vì sản xuất công nghiệp đại trà, từng mẫu vòng đều được đan thủ công tỉ mỉ và phối màu theo phong cách riêng bạn mong muốn.
-              </p>
-            </div>
-
-            {/* CTAs */}
-            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-100">
-              <button
-                onClick={onOpenCatalog}
-                className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs sm:text-sm hover:bg-slate-800 transition-all flex items-center gap-2 shadow-2xs"
-              >
-                <span>Xem bộ sưu tập</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={onOpenContact}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition-all flex items-center gap-2"
-              >
-                <MessageSquare className="w-4 h-4 text-slate-600" />
-                <span>Liên hệ tư vấn</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Right Visual Box */}
-          <div className="lg:col-span-5 rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-2xs relative group min-h-[260px] flex flex-col">
+        {/* ------------------------------------------------------------------ */}
+        {/* PARAGRAPH 2: Chiếm ~2/3 bề ngang, text-justify, đè lên ảnh có fade */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.div
+          {...scrollAnim}
+          className="relative rounded-3xl overflow-hidden bg-stone-100/85 border border-stone-200/80 shadow-2xs min-h-[300px] sm:min-h-[360px] flex items-center p-6 sm:p-10 lg:p-14"
+        >
+          {/* Khung ảnh nền với gradient fade bên phải và bên trái */}
+          <div className="absolute inset-y-0 right-0 w-full sm:w-3/5 lg:w-1/2 overflow-hidden pointer-events-none">
             <img
               src="/assets/bracelet.jpg"
-              alt="Chế tác NOT A KNOT"
-              className="w-full h-full object-cover object-center flex-1"
+              alt="Hình ảnh không gian Not A Knot"
+              className="w-full h-full object-cover object-center opacity-85"
             />
-            <div className="p-4 bg-white border-t border-slate-200">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-                <MapPin className="w-3.5 h-3.5 text-slate-700" />
-                <span>Khuôn viên NEU (Đại học Kinh tế Quốc dân), Hà Nội</span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Chế tác và kiểm tra thủ công từng sản phẩm trước khi giao.
-              </p>
-            </div>
+            {/* Gradient hòa vào nền bên trái để text luôn sắc nét */}
+            <div className="absolute inset-0 bg-gradient-to-r from-stone-100 via-stone-100/85 to-transparent" />
+            {/* Gradient fade bên phải theo yêu cầu */}
+            <div className="absolute inset-0 bg-gradient-to-l from-stone-100 via-transparent to-transparent" />
+            {/* Subtle edge blend */}
+            <div className="absolute inset-0 bg-gradient-to-b from-stone-100/40 via-transparent to-stone-100/40" />
           </div>
-        </section>
 
-        {/* 3. Core Values Grid */}
-        <section className="space-y-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Đặc Điểm Sản Phẩm
-            </h2>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1">
-              Những tiêu chí quan trọng trong từng sản phẩm xuất xưởng
+          {/* Text chiếm khoảng 2/3 bề ngang, căn đều (justify) */}
+          <div className="relative z-10 w-full md:w-3/4 lg:w-7/12">
+            <p className="font-sans text-base sm:text-lg md:text-xl text-stone-800 leading-relaxed sm:leading-loose text-justify">
+              Xuất phát điểm là một nhóm <strong className="font-semibold text-stone-950">9 người trẻ</strong> cùng chung niềm yêu thích với các sản phẩm thủ công, chúng tôi nhận ra rằng những món phụ kiện nhỏ bé như vòng tay hay móc khóa hoàn toàn có thể trở thành cách để mỗi người thể hiện cá tính và mang theo một phần câu chuyện của riêng mình, đồng hành cùng ta trong cuộc sống hàng ngày.
             </p>
           </div>
+        </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {coreCommitments.map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-white rounded-2xl p-5 border border-slate-200 shadow-2xs space-y-3"
-              >
-                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                  {item.icon}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 mb-1">
-                    {item.title}
-                  </h3>
-                  <p className="text-slate-600 text-xs leading-relaxed">
-                    {item.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* ------------------------------------------------------------------ */}
+        {/* PARAGRAPH 3: Tên gọi "Not A Knot" + (xuống dòng) Knot là một nút thắt... */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.div {...scrollAnim} className="space-y-4">
+          <p className="font-serif text-2xl sm:text-3xl md:text-4xl text-stone-950 font-normal leading-snug">
+            Tên gọi “Not A Knot” cũng bắt nguồn từ chính tinh thần ấy.
+          </p>
 
-        {/* 4. Material Focus */}
-        <section className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-2xs space-y-6">
-          <div className="max-w-2xl space-y-1.5">
-            <span className="text-xs font-bold uppercase text-slate-500 tracking-wider">
-              Chất liệu cốt lõi
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-              Dây Dù Paracord 550 Type III
-            </h2>
-            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
-              Dây Paracord 550 là chuẩn dây dù quân đội nổi tiếng trong giới EDC và sinh tồn nhờ sự dẻo dai, không mục nát và độ thẩm mỹ cao.
-            </p>
-          </div>
+          <p className="font-sans text-base sm:text-lg md:text-xl text-stone-700 leading-relaxed sm:leading-loose text-justify pt-1">
+            Knot là một nút thắt, nhưng với chúng tôi, nó không đơn thuần chỉ là cách những sợi dây kết nối với nhau. Một nút thắt là sự kết nối giữa con người, giữa những giá trị thủ công và hơi thở hiện đại, giữa người tạo ra sản phẩm và người lựa chọn mang nó bên mình. Vì vậy, Not A Knot không chỉ là “một nút thắt”, mà là một câu chuyện được kết nối.
+          </p>
+        </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-              <div className="font-bold text-xs sm:text-sm text-slate-900">7 Lõi Dù Xoắn Kép</div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Bên trong mỗi sợi là 7 lõi sợi nhỏ bện đôi, mang lại độ bền cơ học cao và form vòng đầm chắc.
-              </p>
-            </div>
+        {/* ------------------------------------------------------------------ */}
+        {/* PARAGRAPH 4: Chúng tôi tin rằng một sản phẩm handmade... */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.div {...scrollAnim} className="pt-2">
+          <blockquote className="font-serif text-2xl sm:text-3xl md:text-4xl font-normal text-stone-950 leading-relaxed sm:leading-snug italic text-justify sm:text-left">
+            “Chúng tôi tin rằng một sản phẩm handmade không chỉ được tạo nên bởi nguyên liệu hay kỹ thuật. Nó được tạo nên bởi thời gian, sự tỉ mỉ và câu chuyện mà người làm gửi gắm vào từng nút thắt.”
+          </blockquote>
+        </motion.div>
 
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-              <div className="font-bold text-xs sm:text-sm text-slate-900">Kháng Nước & Mau Khô</div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Không giữ ẩm mốc, dễ dàng rửa sạch với nước và xà phòng sau thời gian dài sử dụng.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-              <div className="font-bold text-xs sm:text-sm text-slate-900">Khóa Kim Loại Chống Gỉ</div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Sử dụng các loại khóa Titan, Inox và hợp kim chịu lực có độ bền màu và chống oxy hóa.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* 5. FAQ (Câu hỏi thường gặp) Section */}
-        <section id="faq-section" className="space-y-6">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              {faqTitle}
-            </h2>
-            <p className="text-slate-500 text-xs sm:text-sm mt-1">
-              {faqSubtitle}
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {faqs.map((faq, index) => {
-              const isOpen = openFaqIndex === index;
-              return (
-                <div
-                  key={index}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden transition-colors"
-                >
-                  <button
-                    onClick={() => setOpenFaqIndex(isOpen ? null : index)}
-                    className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-slate-900"
-                  >
-                    <span>{faq.q}</span>
-                    <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
-                      {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="px-4 sm:px-5 pb-5 pt-1 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100">
-                      {faq.a}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* 6. Simple Bottom Connect Section */}
-        <section className="bg-slate-900 text-white rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="space-y-1 text-center sm:text-left">
-            <h3 className="text-base sm:text-lg font-black text-white">
-              Cần trao đổi thêm về mẫu vòng?
-            </h3>
-            <p className="text-slate-300 text-xs leading-relaxed">
-              Bạn có thể nhắn tin trực tiếp qua fanpage hoặc để lại lời nhắn tại trang liên hệ.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <a
-              href={facebookUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2.5 bg-[#1877F2] hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Facebook</span>
-            </a>
-
-            <button
-              onClick={onOpenContact}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-colors border border-white/20"
-            >
-              <span>Trang liên hệ</span>
-            </button>
-          </div>
-        </section>
+        {/* Bottom Actions */}
+        <motion.div
+          {...scrollAnim}
+          className="pt-8 border-t border-stone-200/80 flex flex-wrap items-center gap-4"
+        >
+          <button
+            onClick={onOpenCatalog}
+            className="px-6 py-3 rounded-xl bg-stone-900 text-white font-sans font-bold text-xs sm:text-sm hover:bg-stone-800 transition-colors cursor-pointer shadow-2xs"
+          >
+            Xem bộ sưu tập
+          </button>
+          <button
+            onClick={onOpenContact}
+            className="px-6 py-3 rounded-xl bg-stone-200/80 text-stone-800 font-sans font-bold text-xs sm:text-sm hover:bg-stone-300 transition-colors cursor-pointer"
+          >
+            Liên hệ tư vấn
+          </button>
+        </motion.div>
 
       </main>
     </div>

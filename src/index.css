@@ -2,6 +2,7 @@
 
 @theme {
   --font-sans: 'Montserrat', sans-serif;
+  --font-serif: 'Lora', Georgia, Cambria, 'Times New Roman', Times, serif;
   --color-brand-red: #B41C1A;
   --color-brand-gold: #DDB652;
   --color-brand-dark: #1a1a1a;
