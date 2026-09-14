@@ -351,12 +351,9 @@ export const CartPage: React.FC<CartPageProps> = ({
                 <div className="w-20 h-20 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto mb-5">
                   <ShoppingBag className="w-10 h-10 stroke-[1.5]" />
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-2 font-display">
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 mb-6 font-display">
                   Giỏ hàng của bạn đang trống
                 </h2>
-                <p className="text-sm text-slate-500 leading-relaxed mb-8">
-                  Hãy khám phá những tác phẩm vòng tay và phụ kiện Paracord 550 thủ công độc bản được chế tác tỉ mỉ dành riêng cho bạn.
-                </p>
                 <button
                   onClick={onContinueShopping}
                   className="w-full sm:w-auto px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl shadow-md transition-all cursor-pointer inline-flex items-center justify-center gap-2"

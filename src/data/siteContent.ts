@@ -79,7 +79,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   ],
 
   faqTitle: 'Câu Hỏi Thường Gặp',
-  faqSubtitle: 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công',
+  faqSubtitle: '',
   faqs: [
     {
       id: 'faq-1',

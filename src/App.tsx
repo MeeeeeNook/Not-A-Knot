@@ -3,7 +3,6 @@ import { Navbar } from './components/Navbar';
 import { HeroBanners } from './components/HeroBanners';
 import { LandingProductsCollection } from './components/LandingProductsCollection';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
-import { AboutUsSection } from './components/AboutUsSection';
 import { LandingFaqCommitments } from './components/LandingFaqCommitments';
 import { AboutPage } from './components/AboutPage';
 import { ContactPage } from './components/ContactPage';
@@ -1208,13 +1207,6 @@ export default function App() {
               />
             ))}
 
-            {/* About Us Brand Teaser & Craftsmanship Narrative */}
-            <AboutUsSection
-              content={siteContent?.aboutUs}
-              onOpenContact={handleOpenContact}
-              onOpenCatalog={() => handleOpenAllCatalog('all')}
-              onOpenFullAbout={handleOpenAbout}
-            />
 
             {/* Dedicated FAQ Section positioned at the very bottom of Landing Page */}
             <LandingFaqCommitments

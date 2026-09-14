@@ -43,20 +43,16 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
 
   const faqs = siteContent?.faqs && siteContent.faqs.length > 0 ? siteContent.faqs : defaultFaqs;
   const title = siteContent?.faqTitle || 'Câu Hỏi Thường Gặp';
-  const subtitle = siteContent?.faqSubtitle || 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công';
 
   return (
     <section id="landing-faq-section" className="py-10 sm:py-14 bg-slate-50 text-slate-900 border-t border-slate-200/80 font-sans">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
         
         {/* Header */}
-        <div className="text-center max-w-2xl mx-auto space-y-1.5">
+        <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
             {title}
           </h2>
-          <p className="text-slate-600 text-xs sm:text-sm">
-            {subtitle}
-          </p>
         </div>
 
         {/* FAQ Accordion List */}

@@ -79,7 +79,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
           {/* Text chiếm khoảng 2/3 bề ngang, căn đều (justify) */}
           <div className="relative z-10 w-full md:w-3/4 lg:w-7/12">
             <p className="font-sans text-base sm:text-lg md:text-xl text-stone-800 leading-relaxed sm:leading-loose text-justify">
-              Xuất phát điểm là một nhóm <strong className="font-semibold text-stone-950">9 người trẻ</strong> cùng chung niềm yêu thích với các sản phẩm thủ công, chúng tôi nhận ra rằng những món phụ kiện nhỏ bé như vòng tay hay móc khóa hoàn toàn có thể trở thành cách để mỗi người thể hiện cá tính và mang theo một phần câu chuyện của riêng mình, đồng hành cùng ta trong cuộc sống hàng ngày.
+              Xuất phát điểm là một nhóm 9 sinh viên cùng chung niềm yêu thích với các sản phẩm thủ công, chúng tôi nhận ra rằng những món phụ kiện nhỏ bé như vòng tay, hay móc khóa hoàn toàn có thể trở thành cách để mỗi người thể hiện cá tính và mang theo một phần câu chuyện của riêng mình, đồng hành cùng ta trong cuộc sống hàng ngày.
             </p>
           </div>
         </motion.div>
