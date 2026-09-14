@@ -56,7 +56,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       const key = col.categoryKey || col.id;
       catMap.set(key, {
         id: key,
-        label: col.tag || col.title || key,
+        label: (col.title || col.tag || key).replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim(),
         description: col.subtitle || col.description || '',
         highlightColor: col.themeColor || '#B41C1A',
         badge: col.badge || undefined,
@@ -89,7 +89,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       if (!p.isHidden && p.category && !hiddenCategoryIds.has(p.category) && !catMap.has(p.category)) {
         catMap.set(p.category, {
           id: p.category,
-          label: p.category.startsWith('BST') ? p.category : `BST ${p.category}`,
+          label: p.category.replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim() || 'Vòng Tay Paracord',
           highlightColor: '#475569'
         });
       }

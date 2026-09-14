@@ -247,6 +247,20 @@ export interface CustomElementBlock {
   bgStyle?: 'dark' | 'glass' | 'gold_gradient' | 'minimal';
 }
 
+export interface BillboardTextBox {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  fontFamily: 'sans' | 'serif' | 'mono' | 'display';
+  fontSize: number;
+  fontWeight: number;
+  color: string;
+  align: 'left' | 'center' | 'right';
+  visible: boolean;
+}
+
 export interface SiteHeroSlide {
   id: string;
   tag: string;
@@ -298,6 +312,7 @@ export interface SiteHeroSlide {
   aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto' | 'custom';
   customHeightMobile?: number; // Custom height in pixels on mobile (e.g. 380, 420)
   bgColor?: string; // Optional custom background color for letterbox / margins
+  textBoxes?: BillboardTextBox[];
 }
 
 export interface FaqItem {

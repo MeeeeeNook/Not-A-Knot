@@ -227,8 +227,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Images Section */}
-          <div className="bg-neutral-50 p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-white shadow-sm mb-4 group">
+          <div className="bg-neutral-50 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
+            <div className="relative aspect-square max-h-[260px] sm:max-h-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group">
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
@@ -287,11 +287,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 </>
               )}
 
-              {product.isEvent0209 && (
-                <div className="absolute top-3 left-3 bg-brand-red text-white text-xs font-semibold px-3 py-1 rounded-full shadow-sm z-10">
+              {/* Promo Badge on top left of image */}
+              {product.discountBadge ? (
+                <div className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-md z-10 max-w-[85%] truncate">
+                  {product.discountBadge}
+                </div>
+              ) : product.isEvent0209 ? (
+                <div className="absolute top-2.5 left-2.5 bg-brand-red text-white text-xs font-semibold px-2.5 py-1 rounded-lg shadow-sm z-10">
                   Bản giới hạn 02.09
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Thumbnail switcher */}
@@ -342,24 +347,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   : 'Phụ Kiện Thủ Công'}
               </span>
 
-              {/* Title & Stock badge */}
+              {/* Title */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-xl sm:text-2xl font-bold text-neutral-950 tracking-tight">
                     {product.name}
                   </h2>
                   {product.soldCount !== undefined && product.soldCount > 0 && (
-                    <span className="bg-neutral-100 text-neutral-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border border-neutral-200">
-                      Đã bán {product.soldCount}
-                    </span>
-                  )}
-                  {isOutOfStock ? (
-                    <span className="bg-red-100 text-brand-red text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                      Hết hàng
-                    </span>
-                  ) : (
-                    <span className="bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200">
-                      Còn {availableStock} sản phẩm
+                    <span className="text-neutral-500 text-xs font-medium">
+                      • Đã bán {product.soldCount}
                     </span>
                   )}
                 </div>
@@ -373,11 +369,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {product.originalPrice && (
                   <span className="text-sm text-neutral-400 line-through font-normal">
                     {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
-                  </span>
-                )}
-                {product.discountBadge && !isOutOfStock && (
-                  <span className="bg-red-50 text-brand-red text-xs font-semibold px-2 py-0.5 rounded-full border border-red-200">
-                    {product.discountBadge}
                   </span>
                 )}
                 {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
@@ -474,7 +465,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
               {/* Quantity */}
               {!isOutOfStock && (
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-3 pt-1 flex-wrap">
                   <span className="text-xs font-semibold text-neutral-700">Số lượng:</span>
                   <div className="flex items-center border border-neutral-300 rounded-full overflow-hidden bg-white">
                     <button
@@ -494,9 +485,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       +
                     </button>
                   </div>
-                  {quantity >= availableStock && availableStock < 90 && (
-                    <span className="text-[11px] text-amber-700 font-medium">Tối đa ({availableStock})</span>
-                  )}
+                  <span className="text-[11px] text-neutral-500">
+                    {availableStock < 5 ? `(chỉ còn ${availableStock})` : `(còn ${availableStock})`}
+                  </span>
                   {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                     <span className="text-xs text-amber-800 font-medium">
                       +{((totalCharmPrice + totalOmamoriPrice) * quantity).toLocaleString('vi-VN')}đ (phụ kiện)

@@ -10,18 +10,17 @@ import {
   ChevronRight,
   ShoppingBag,
   Check,
-  Star,
   Share2,
   ArrowLeft,
   Plus,
   AlertCircle,
   ShieldCheck,
-  Droplets,
   PackageCheck,
   Truck,
   RotateCcw,
   Sparkles,
-  Award
+  Award,
+  MessageCircle
 } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
 import { useProductSEO } from '../utils/seo';
@@ -109,6 +108,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const totalOmamoriPrice = useMemo(() => {
     return selectedOmamoris.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
   }, [selectedOmamoris]);
+
+  const totalCartCount = useMemo(() => {
+    return cartItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+  }, [cartItems]);
 
   const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice;
 
@@ -587,15 +590,22 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         {/* Product Hero: Left Gallery, Right Details */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
           
-          {/* LEFT: Compact Interactive High-Res Gallery */}
-          <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3.5">
+          {/* LEFT: Compact Interactive High-Res Gallery (Shopee Mobile-optimized) */}
+          <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
-              className="relative aspect-square max-h-[440px] rounded-3xl overflow-hidden bg-white border border-neutral-200 shadow-sm group select-none touch-pan-y"
+              className="relative aspect-square max-h-[320px] sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
+              {/* Promo / Discount Badge Overlay */}
+              {product.discountBadge && (
+                <div className="absolute top-2.5 left-2.5 z-20 px-2.5 py-1 bg-rose-600/95 backdrop-blur-sm text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-md flex items-center gap-1 max-w-[85%] pointer-events-none">
+                  <span className="truncate">{product.discountBadge}</span>
+                </div>
+              )}
+
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
@@ -614,11 +624,20 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 ))}
               </div>
 
-              {/* Navigation Arrows for switching photos - Non-blocking overlay with stopPropagation */}
+              {/* Shopee-style Photo Counter Pill */}
+              {images.length > 1 && (
+                <div className="absolute bottom-2.5 right-2.5 px-2.5 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] sm:text-xs font-bold rounded-full pointer-events-none z-10 flex items-center gap-1 shadow-sm">
+                  <span>{activeImageIdx + 1}</span>
+                  <span className="opacity-60">/</span>
+                  <span>{images.length}</span>
+                </div>
+              )}
+
+              {/* Navigation Arrows for switching photos */}
               {images.length > 1 && (
                 <>
                   {/* Left arrow button */}
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -627,15 +646,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       }}
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
-                      className="pointer-events-auto w-8 h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
-                      aria-label="Ảnh trước (hoặc phím mũi tên trái)"
+                      className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
+                      aria-label="Ảnh trước"
                     >
-                      <ChevronLeft className="w-4 h-4" strokeWidth={2} />
+                      <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
                     </button>
                   </div>
 
                   {/* Right arrow button */}
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -644,62 +663,54 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       }}
                       onTouchStart={(e) => e.stopPropagation()}
                       onTouchEnd={(e) => e.stopPropagation()}
-                      className="pointer-events-auto w-8 h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
-                      aria-label="Ảnh tiếp theo (hoặc phím mũi tên phải)"
+                      className="pointer-events-auto w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/30 text-white flex items-center justify-center opacity-85 sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shadow-md"
+                      aria-label="Ảnh tiếp theo"
                     >
-                      <ChevronRight className="w-4 h-4" strokeWidth={2} />
+                      <ChevronRight className="w-4 h-4" strokeWidth={2.5} />
                     </button>
                   </div>
                 </>
               )}
 
-              {/* Photo Index Counter & Mobile Pagination Dots */}
+              {/* Mobile pagination dots */}
               {images.length > 1 && (
-                <>
-                  {/* Mobile pagination dots */}
-                  <div 
-                    className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 px-2.5 py-1 bg-black/40 backdrop-blur-md rounded-full sm:hidden pointer-events-auto"
-                    onClick={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onTouchMove={(e) => e.stopPropagation()}
-                    onTouchEnd={(e) => e.stopPropagation()}
-                  >
-                    {images.map((_, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          selectImage(idx);
-                        }}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        onTouchEnd={(e) => e.stopPropagation()}
-                        aria-label={`Chuyển đến ảnh ${idx + 1}`}
-                        className={`h-1.5 rounded-full transition-all duration-300 p-0 border-0 cursor-pointer ${
-                          idx === activeImageIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80'
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Desktop Photo Index Counter */}
-                  <div className="absolute bottom-3 right-3 px-2.5 py-0.5 bg-black/65 backdrop-blur-md text-white text-[11px] font-bold rounded-full pointer-events-none z-10 hidden sm:block">
-                    {activeImageIdx + 1} / {images.length}
-                  </div>
-                </>
+                <div 
+                  className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-full sm:hidden pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchMove={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                >
+                  {images.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectImage(idx);
+                      }}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => e.stopPropagation()}
+                      aria-label={`Chuyển đến ảnh ${idx + 1}`}
+                      className={`h-1.5 rounded-full transition-all duration-300 p-0 border-0 cursor-pointer ${
+                        idx === activeImageIdx ? 'w-3.5 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/80'
+                      }`}
+                    />
+                  ))}
+                </div>
               )}
             </div>
 
             {/* Thumbnail Strip (Click to choose photo) */}
             {images.length > 1 && (
-              <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 {images.map((img, idx) => {
                   const isActive = idx === activeImageIdx;
                   return (
                     <button
                       key={idx}
                       onClick={() => selectImage(idx)}
-                      className={`relative w-16 h-16 sm:w-[68px] sm:h-[68px] rounded-2xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white cursor-pointer ${
+                      className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 bg-white cursor-pointer ${
                         isActive
                           ? 'border-neutral-950 ring-2 ring-neutral-950/20 scale-102 shadow-xs'
                           : 'border-neutral-200 opacity-60 hover:opacity-100 hover:border-neutral-400'
@@ -713,8 +724,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         decoding="async"
                       />
                       {idx === 0 && (
-                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[8px] text-white text-center font-bold py-0.5">
-                          Ảnh chính
+                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[7px] text-white text-center font-bold py-0.2">
+                          Chính
                         </span>
                       )}
                     </button>
@@ -725,75 +736,49 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
 
           {/* RIGHT: Product Information & Purchase Panel */}
-          <div className="lg:col-span-7 xl:col-span-7 space-y-6">
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm space-y-6">
+          <div className="lg:col-span-7 xl:col-span-7 space-y-5">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 border border-neutral-200/90 shadow-xs space-y-4 sm:space-y-6">
               
-              {/* Category & Title */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider block">
-                  {categoryName}
-                </span>
-
-                <h1 className="text-2xl sm:text-3xl font-black text-neutral-950 tracking-tight leading-tight">
+              {/* Product Title */}
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight">
                   {product.name}
                 </h1>
-
-                {/* Stock & sales status */}
-                <div className="flex items-center gap-3 pt-1 flex-wrap">
-                  {product.soldCount !== undefined && product.soldCount > 0 && (
-                    <>
-                      <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-md">
-                        Đã bán {product.soldCount}
-                      </span>
-                      <span className="text-neutral-300">•</span>
-                    </>
-                  )}
-
-                  {isOutOfStock || availableStock <= 0 ? (
-                    <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-md">
-                      Hết hàng
-                    </span>
-                  ) : availableStock < 5 ? (
-                    <span className="text-xs font-extrabold text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
-                      <span>⚠️</span>
-                      <span>Sắp hết hàng (Chỉ còn {availableStock} sản phẩm)</span>
-                    </span>
-                  ) : (
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
-                      Còn {availableStock} sản phẩm
-                    </span>
-                  )}
-                </div>
               </div>
 
-              {/* Price Row */}
-              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100 flex flex-wrap items-baseline justify-between gap-3">
-                <div className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="text-2xl sm:text-3xl font-black text-neutral-950 font-mono">
-                    {effectiveUnitPrice.toLocaleString('vi-VN')}đ
-                  </span>
-                  {product.originalPrice && (
-                    <span className="text-sm sm:text-base text-neutral-400 line-through font-mono">
-                      {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
+              {/* Price & Sales Row */}
+              <div className="p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/80 flex items-baseline justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex flex-wrap items-baseline gap-2.5">
+                    <span className="text-2xl sm:text-3xl font-black text-neutral-950 font-mono tracking-tight">
+                      {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                     </span>
-                  )}
-                  {product.discountBadge && (
-                    <span className="text-xs font-bold text-rose-600 bg-rose-100 px-2 py-0.5 rounded">
-                      {product.discountBadge}
-                    </span>
+                    {product.originalPrice && (
+                      <span className="text-sm sm:text-base text-neutral-400 line-through font-mono">
+                        {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
+                      </span>
+                    )}
+                  </div>
+                  {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
+                    <div className="text-xs font-medium text-amber-800">
+                      +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện
+                    </div>
                   )}
                 </div>
-                {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
-                  <span className="text-xs font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded shrink-0">
-                    +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện
+
+                {product.soldCount !== undefined && product.soldCount > 0 && (
+                  <span className="text-xs font-medium text-neutral-500 shrink-0">
+                    Đã bán {product.soldCount}
                   </span>
                 )}
               </div>
 
               {/* Short Description */}
-              <p className="text-sm text-neutral-600 leading-relaxed">
-                {product.description}
-              </p>
+              {product.description && (
+                <p className="text-sm text-neutral-600 leading-relaxed">
+                  {product.description}
+                </p>
+              )}
 
               {/* Color Selection (if enabled) */}
               {product.enableColorSelection !== false &&
@@ -881,7 +866,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div ref={mainCtaRef} id="product-detail-main-cta" className="space-y-3 pt-2">
                 {/* Large Prominent Quantity & Subtotal Card */}
                 <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/90 shadow-2xs">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="text-xs font-bold text-neutral-600">Số lượng:</span>
                     <div className="flex items-center border border-neutral-200 rounded-xl bg-white p-0.5 shadow-2xs">
                       <button
@@ -924,6 +909,21 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         +
                       </button>
                     </div>
+
+                    {/* Small subtle stock counter */}
+                    {isOutOfStock || availableStock <= 0 ? (
+                      <span className="text-[11px] font-semibold text-rose-600">
+                        Hết hàng
+                      </span>
+                    ) : availableStock < 5 ? (
+                      <span className="text-[11px] font-medium text-amber-700">
+                        (chỉ còn {availableStock})
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-neutral-500">
+                        (còn {availableStock})
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-right">
@@ -986,23 +986,25 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </button>
                 </div>
 
-                {/* 4 Trust & Craft Commitments */}
-                <div className="pt-4 border-t border-neutral-100 grid grid-cols-2 gap-2 text-[11px] text-neutral-600">
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
-                    <ShieldCheck className="w-4 h-4 text-amber-700 flex-shrink-0" />
-                    <span className="font-semibold text-neutral-800">Dây Paracord 550 chính hãng</span>
+                {/* Service Guarantees */}
+                <div className="pt-4 border-t border-neutral-100 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-neutral-700">
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
+                    <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <Truck className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium truncate">Freeship từ 300k</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
-                    <Droplets className="w-4 h-4 text-sky-600 flex-shrink-0" />
-                    <span className="font-semibold text-neutral-800">Chống nước, không phai màu</span>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
+                    <div className="w-6 h-6 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium truncate">Bảo hành trọn đời</span>
                   </div>
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
-                    <PackageCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span className="font-semibold text-neutral-800">Đồng kiểm tra trước khi trả tiền</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/80">
-                    <RotateCcw className="w-4 h-4 text-amber-700 flex-shrink-0" />
-                    <span className="font-semibold text-neutral-800">Đổi size miễn phí trong 7 ngày</span>
+                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
+                    <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium truncate">Đổi trả 7 ngày</span>
                   </div>
                 </div>
               </div>
@@ -1301,11 +1303,103 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               )}
             </AnimatePresence>
 
-            <div className="flex items-center justify-between gap-2.5 sm:gap-4 max-w-7xl mx-auto">
+            {/* MOBILE SHOPEE-STYLE BAR (< sm) */}
+            <div className="flex sm:hidden items-center justify-between gap-1.5 w-full">
+              {/* Left quick action icons */}
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Chat button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const zaloLink = 'https://zalo.me';
+                    window.open(zaloLink, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="flex flex-col items-center justify-center w-12 py-1 text-neutral-600 hover:text-amber-700 active:scale-90 transition-transform cursor-pointer"
+                  title="Chat tư vấn ngay"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="text-[9px] font-medium mt-0.5">Chat</span>
+                </button>
+
+                {/* Cart with badge */}
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="relative flex flex-col items-center justify-center w-12 py-1 text-neutral-600 hover:text-amber-700 active:scale-90 transition-transform cursor-pointer"
+                  title="Xem giỏ hàng"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  {totalCartCount > 0 && (
+                    <span className="absolute -top-0.5 right-1.5 min-w-[15px] h-[15px] bg-rose-600 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-xs">
+                      {totalCartCount > 99 ? '99+' : totalCartCount}
+                    </span>
+                  )}
+                  <span className="text-[9px] font-medium mt-0.5">Giỏ hàng</span>
+                </button>
+              </div>
+
+              {/* Action buttons (Shopee split style) */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <button
+                  type="button"
+                  id="mobile-floating-add-to-cart-btn"
+                  disabled={isOutOfStock || isCartFullForProduct}
+                  onClick={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
+                    } else {
+                      handleAddToCartClick();
+                    }
+                  }}
+                  className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-150 flex items-center justify-center gap-1 ${
+                    isOutOfStock || isCartFullForProduct
+                      ? 'bg-neutral-100 text-neutral-400 border border-neutral-200'
+                      : isAdded
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-amber-100/90 hover:bg-amber-200 text-amber-950 border border-amber-300 shadow-2xs active:scale-95 cursor-pointer'
+                  }`}
+                >
+                  {isAdded ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span className="truncate">Đã thêm</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span className="truncate">{isCartFullForProduct ? 'Hết kho' : 'Thêm giỏ'}</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  id="mobile-floating-buy-now-btn"
+                  disabled={isOutOfStock || isCartFullForProduct}
+                  onClick={() => {
+                    if (isOutOfStock || isCartFullForProduct) {
+                      triggerStockNotice();
+                    } else {
+                      handleBuyNowClick();
+                    }
+                  }}
+                  className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-black transition-all duration-150 flex items-center justify-center shadow-xs ${
+                    isOutOfStock || isCartFullForProduct
+                      ? 'bg-neutral-200 text-neutral-400'
+                      : 'bg-rose-600 hover:bg-rose-700 text-white active:scale-95 cursor-pointer shadow-rose-600/20'
+                  }`}
+                >
+                  <span className="truncate">{isCartFullForProduct ? 'Hết Kho' : 'Mua Ngay'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* DESKTOP / TABLET DOCK (sm+) */}
+            <div className="hidden sm:flex items-center justify-between gap-2.5 sm:gap-4 max-w-7xl mx-auto">
               
               {/* Product Info & Thumbnail */}
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0 hidden xs:block">
+                <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
                   <img
                     src={images[0] || '/assets/bracelet.jpg'}
                     alt={product.name}
@@ -1316,14 +1410,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <h4 className="font-bold text-xs sm:text-sm text-neutral-900 truncate leading-tight">
                     {product.name}
                   </h4>
-                  <div className="font-mono font-black text-xs sm:text-sm text-neutral-950 mt-0.5">
+                  <div className="font-mono font-black text-xs sm:text-sm text-rose-600 mt-0.5">
                     {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
                   </div>
                 </div>
               </div>
 
-              {/* Price / Subtotal (visible on md+) */}
-              <div className="text-right flex-shrink-0 px-1 sm:px-2 hidden md:block">
+              {/* Price / Subtotal */}
+              <div className="text-right flex-shrink-0 px-1 sm:px-2">
                 <div className="text-[10px] sm:text-[11px] text-neutral-500 font-medium">
                   Tạm tính ({quantity}):
                 </div>
@@ -1333,7 +1427,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>
 
               {/* Quantity selector on desktop */}
-              <div className="hidden md:flex items-center border border-neutral-200 rounded-xl bg-neutral-50 p-0.5 flex-shrink-0">
+              <div className="flex items-center border border-neutral-200 rounded-xl bg-neutral-50 p-0.5 flex-shrink-0">
                 <button
                   type="button"
                   disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}

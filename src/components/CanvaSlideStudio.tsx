@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { SiteHeroSlide } from '../types';
+import { SiteHeroSlide, BillboardTextBox } from '../types';
 import { uploadHeroArtwork } from '../firebase';
 import {
   AlignCenter,
@@ -28,21 +28,7 @@ interface CanvaSlideStudioProps {
 }
 
 type Device = 'desktop' | 'mobile';
-type FontFamily = 'sans' | 'serif' | 'mono';
-
-export interface BillboardTextBox {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  fontFamily: FontFamily;
-  fontSize: number;
-  fontWeight: number;
-  color: string;
-  align: 'left' | 'center' | 'right';
-  visible: boolean;
-}
+type FontFamily = 'sans' | 'serif' | 'mono' | 'display';
 
 const textBoxesFor = (slide: SiteHeroSlide): BillboardTextBox[] => slide.textBoxes || [
   { id: `${slide.id}-title`, text: [slide.title, slide.highlight].filter(Boolean).join(' '), x: 8, y: 38, width: 55, fontFamily: slide.fontFamily === 'serif' ? 'serif' : 'sans', fontSize: 42, fontWeight: 800, color: slide.titleColor || '#ffffff', align: slide.textAlign || 'left', visible: slide.showText !== false },

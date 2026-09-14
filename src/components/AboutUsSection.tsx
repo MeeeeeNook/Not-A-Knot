@@ -1,20 +1,19 @@
 import React from 'react';
-import { ArrowRight, MessageCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { SiteContentConfig } from '../types';
 
 interface AboutUsSectionProps {
   content?: SiteContentConfig['aboutSection'];
   onOpenFullAbout?: () => void;
   onOpenAboutPage?: () => void;
-  onOpenContact: () => void;
+  onOpenContact?: () => void;
   onOpenCatalog: () => void;
 }
 
 export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
   content,
   onOpenFullAbout,
-  onOpenAboutPage,
-  onOpenContact
+  onOpenAboutPage
 }) => {
   const handleOpenAbout = onOpenFullAbout || onOpenAboutPage || (() => {
     window.location.hash = '#about';
@@ -63,7 +62,7 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Button */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 id="about-cta-full-page-btn"
@@ -72,15 +71,6 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
               >
                 <span>Xem chi tiết về chúng tôi</span>
                 <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                id="about-cta-contact-btn"
-                onClick={onOpenContact}
-                className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm border border-slate-200 transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <MessageCircle className="w-4 h-4 text-amber-600" />
-                <span>Liên hệ xưởng</span>
               </button>
             </div>
           </div>
