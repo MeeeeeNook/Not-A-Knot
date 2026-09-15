@@ -132,8 +132,16 @@ export default function App() {
 
   // Publicly visible products (filtered to exclude hidden items or items in hidden categories on storefront)
   const visibleProducts = useMemo(() => {
-    const hiddenCategoryIds = new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
-    return products.filter((p) => !p.isHidden && !hiddenCategoryIds.has(p.category));
+    const hiddenCategoryIds = new Set(
+      categories
+        .filter((c) => c.isHidden === true || String(c.isHidden) === 'true')
+        .map((c) => c.id)
+    );
+    return products.filter((p) => {
+      const isHidden = p.isHidden === true || String(p.isHidden) === 'true';
+      const isCatHidden = Boolean(p.category && hiddenCategoryIds.has(p.category));
+      return !isHidden && !isCatHidden;
+    });
   }, [products, categories]);
 
   // Site Content Configuration (CMS) state
@@ -634,7 +642,10 @@ export default function App() {
     selectedCharmPrice?: number,
     selectedCharms?: ProductCharmOption[],
     selectedOmamoris?: ProductOmamoriOption[],
-    selectedOmamoriPrice?: number
+    selectedOmamoriPrice?: number,
+    selectedKhoen?: string,
+    selectedKhoenImage?: string,
+    selectedKhoenPrice?: number
   ) => {
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`);
@@ -681,6 +692,17 @@ export default function App() {
       }
     }
 
+    // Check khoen stock if selected
+    if (selectedKhoen && product.khoenOptions) {
+      const khoenOpt = product.khoenOptions.find(
+        (k) => k.name.trim().toLowerCase() === selectedKhoen.trim().toLowerCase()
+      );
+      if (khoenOpt && typeof khoenOpt.stock === 'number' && khoenOpt.stock <= 0) {
+        showToast(`Khoen "${selectedKhoen}" hiện đã hết hàng trong kho!`);
+        return;
+      }
+    }
+
     const qtyToAdd = Math.max(1, Math.min(quantity, availableToAdd > 0 ? availableToAdd : quantity));
     const charmsKey = (selectedCharms || []).map((c) => c.name).sort().join(';');
     const omamorisKey = (selectedOmamoris || []).map((o) => o.name).sort().join(';');
@@ -693,6 +715,7 @@ export default function App() {
           item.product.id === product.id &&
           item.selectedColor === selectedColor &&
           item.selectedCharm === selectedCharm &&
+          item.selectedKhoen === selectedKhoen &&
           item.selectedSize === selectedSize &&
           item.customNote === customNote &&
           charmsKey === itemCharmsKey &&
@@ -720,6 +743,9 @@ export default function App() {
             selectedCharms,
             selectedOmamoris,
             selectedOmamoriPrice,
+            selectedKhoen,
+            selectedKhoenImage,
+            selectedKhoenPrice,
             selectedSize,
             customNote
           }
@@ -1203,7 +1229,7 @@ export default function App() {
               <LandingProductsCollection
                 key={secConfig.id || `landing-sec-${idx}`}
                 config={secConfig}
-                products={products.filter((p) => !p.isHidden)}
+                products={visibleProducts}
                 categories={categories}
                 collections={collections}
                 sectionIndex={idx}
@@ -1352,11 +1378,11 @@ export default function App() {
             }
             onBack={handleCloseProductDetail}
             onSelectProduct={handleOpenProductDetail}
-            onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice);
+            onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
+              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
             }}
-            onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice);
+            onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
+              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
               handleOpenCartDrawer();
             }}
           />

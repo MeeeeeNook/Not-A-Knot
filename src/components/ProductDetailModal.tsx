@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
+import { Product, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption } from '../types';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
+import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
+import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
-import { X, Check, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { X, Check, ShoppingBag, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
 
 interface ProductDetailModalProps {
@@ -23,7 +26,10 @@ interface ProductDetailModalProps {
     selectedCharmPrice?: number,
     selectedCharms?: ProductCharmOption[],
     selectedOmamoris?: ProductOmamoriOption[],
-    selectedOmamoriPrice?: number
+    selectedOmamoriPrice?: number,
+    selectedKhoen?: string,
+    selectedKhoenImage?: string,
+    selectedKhoenPrice?: number
   ) => void;
 }
 
@@ -58,6 +64,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [charmError, setCharmError] = useState<string | null>(null);
   const [selectedOmamoris, setSelectedOmamoris] = useState<ProductOmamoriOption[]>([]);
   const [omamoriError, setOmamoriError] = useState<string | null>(null);
+  const [selectedKhoen, setSelectedKhoen] = useState<ProductKhoenOption | null>(null);
+  const [khoenError, setKhoenError] = useState<string | null>(null);
 
   const totalCharmPrice = useMemo(() => {
     return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
@@ -67,7 +75,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     return selectedOmamoris.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
   }, [selectedOmamoris]);
 
-  const effectiveUnitPrice = (product?.price || 0) + totalCharmPrice + totalOmamoriPrice;
+  const totalKhoenPrice = selectedKhoen?.priceDelta || 0;
+
+  const effectiveUnitPrice = (product?.price || 0) + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice;
 
   const selectedCharmNames = useMemo(() => {
     return selectedCharms.map((c) => c.name).join(', ');
@@ -80,8 +90,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     setSelectedColorImage(product?.colorOptions?.[0]?.image);
     setSelectedCharms([]);
     setSelectedOmamoris([]);
+    setSelectedKhoen(null);
     setCharmError(null);
     setOmamoriError(null);
+    setKhoenError(null);
 
     if (product) {
       trackGA4ViewItem(product);
@@ -104,6 +116,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     }
     return base;
   }, [product, selectedColorImage]);
+
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  const compareItems: CompareItem[] = useMemo(() => {
+    return images.map((img, i) => {
+      const matchingColor = product?.colorOptions?.find((c) => c.image === img);
+      return {
+        id: `modal-img-${i}`,
+        title: matchingColor ? `${product?.name} (${matchingColor.name})` : `${product?.name || 'Sản phẩm'} - Ảnh ${i + 1}`,
+        image: img,
+        subtitle: matchingColor ? `Phân loại: ${matchingColor.name}` : undefined,
+        type: 'product',
+        originalData: matchingColor,
+      };
+    });
+  }, [images, product]);
 
   const availableStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
   const isOutOfStock = product.inStock === false;
@@ -160,6 +188,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       return;
     }
 
+    const khoenTitleLabel = product.khoenTitle?.trim() || 'Khoen';
+    if (product.enableKhoenSelection && product.khoenSelectionRequired && !selectedKhoen) {
+      setKhoenError(`Vui lòng chọn 1 tùy chọn trong "${khoenTitleLabel}" trước khi thêm.`);
+      return;
+    }
+
     for (const ch of selectedCharms) {
       if (typeof ch.stock === 'number') {
         if (ch.stock <= 0) {
@@ -186,6 +220,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       }
     }
 
+    if (selectedKhoen && typeof selectedKhoen.stock === 'number') {
+      if (selectedKhoen.stock <= 0) {
+        setKhoenError(`Mục "${selectedKhoen.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+        return;
+      }
+      if (selectedKhoen.stock < quantity) {
+        setKhoenError(`Mục "${selectedKhoen.name}" chỉ còn ${selectedKhoen.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+        return;
+      }
+    }
+
     onAddToCart(
       product,
       quantity,
@@ -198,7 +243,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       totalCharmPrice,
       selectedCharms,
       selectedOmamoris,
-      totalOmamoriPrice
+      totalOmamoriPrice,
+      selectedKhoen?.name || undefined,
+      selectedKhoen?.image || undefined,
+      totalKhoenPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -231,7 +279,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2">
           {/* Images Section */}
           <div className="bg-neutral-50 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
-            <div className="relative aspect-square max-h-[260px] sm:max-h-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group">
+            <div 
+              onClick={() => setCompareModalOpen(true)}
+              className="relative aspect-square max-h-[260px] sm:max-h-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
+            >
+              {/* Zoom & Compare Overlay Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCompareModalOpen(true);
+                }}
+                className="absolute top-2.5 right-2.5 z-20 px-2 sm:px-2.5 py-1 bg-black/60 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
+                title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
+              >
+                <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Phóng to</span>
+              </button>
+
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
@@ -424,7 +489,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     />
                     {charmError && (
                       <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                        ⚠️ {charmError}
+                        {charmError}
                       </p>
                     )}
                   </div>
@@ -447,7 +512,32 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   />
                   {omamoriError && (
                     <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                      ⚠️ {omamoriError}
+                      {omamoriError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Khoen Selection (if enabled) */}
+              {product.enableKhoenSelection && (
+                <div className="space-y-1">
+                  <ProductKhoenSelector
+                    title={product.khoenTitle}
+                    khoenOptions={
+                      product.khoenOptions && product.khoenOptions.length > 0
+                        ? product.khoenOptions
+                        : DEFAULT_KHOEN_PRESETS
+                    }
+                    selectedKhoen={selectedKhoen}
+                    onSelectKhoen={(khoen) => {
+                      setKhoenError(null);
+                      setSelectedKhoen(khoen);
+                    }}
+                    isRequired={product.khoenSelectionRequired}
+                  />
+                  {khoenError && (
+                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                      {khoenError}
                     </p>
                   )}
                 </div>
@@ -528,7 +618,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   <>
                     <ShoppingBag className="w-4 h-4" />
                     <span>
-                      Thêm vào giỏ ({quantity}) — {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
+                      Thêm vào giỏ ({quantity}) - {(effectiveUnitPrice * quantity).toLocaleString('vi-VN')}đ
                     </span>
                   </>
                 )}
@@ -551,6 +641,29 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Product Image Zoom & Compare Modal */}
+      <ProductImageCompareModal
+        isOpen={compareModalOpen}
+        onClose={() => setCompareModalOpen(false)}
+        items={compareItems}
+        initialIndex={activeImageIdx}
+        title={`Ảnh chi tiết: ${product?.name || 'Sản phẩm'}`}
+        onSelectItem={(item) => {
+          if (item.originalData) {
+            handleSelectColor(item.originalData);
+          } else {
+            const idx = images.indexOf(item.image);
+            if (idx !== -1) setActiveImageIdx(idx);
+          }
+        }}
+        isItemSelected={(item) => {
+          if (item.originalData) {
+            return selectedColor === item.originalData.name;
+          }
+          return images[activeImageIdx] === item.image;
+        }}
+      />
     </div>
   );
 };

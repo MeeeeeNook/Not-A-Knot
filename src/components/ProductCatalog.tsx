@@ -34,7 +34,11 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 
   // Set of hidden category IDs
   const hiddenCategoryIds = useMemo(() => {
-    return new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
+    return new Set(
+      categories
+        .filter((c) => c.isHidden === true || String(c.isHidden) === 'true')
+        .map((c) => c.id)
+    );
   }, [categories]);
 
   // Helper to check if a product matches a category or collection
@@ -123,7 +127,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Compute category-level stock counts for toggle badges
   const { totalCount, inStockCount, outOfStockCount } = useMemo(() => {
     const matched = products.filter((p) => {
-      if (p.isHidden) return false;
+      if (p.isHidden === true || String(p.isHidden) === 'true') return false;
       if (p.category && hiddenCategoryIds.has(p.category)) return false;
       const matchesCategory = isProductMatchingCategory(p, selectedCategory);
       const matchesSearch =
@@ -150,7 +154,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        if (p.isHidden) return false;
+        if (p.isHidden === true || String(p.isHidden) === 'true') return false;
         if (p.category && hiddenCategoryIds.has(p.category)) return false;
         const matchesCategory = isProductMatchingCategory(p, selectedCategory);
         const matchesSearch =

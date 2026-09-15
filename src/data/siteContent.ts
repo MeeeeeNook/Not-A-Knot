@@ -30,9 +30,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
       order: 1,
-      isActive: true,
-      aspectRatioMobile: '1:1',
-      bgFitMobile: 'cover'
+      isActive: true
     },
     {
       id: 'slide-2',
@@ -84,61 +82,66 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     {
       id: 'faq-1',
       q: 'Dây Paracord có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
-      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt/mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
+      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt và nước mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
     },
     {
       id: 'faq-2',
-      q: 'Kích cỡ và kiểu dáng sản phẩm như thế nào?',
-      a: 'Tất cả sản phẩm đều được thiết kế và chế tác hoàn chỉnh theo chuẩn form dáng cố định tối ưu nhất, ôm tay thoải mái và dễ đeo cho hầu hết người dùng. Bạn chỉ cần chọn mẫu ưng ý và đặt hàng trực tiếp.'
+      q: 'Kích cỡ sản phẩm như thế nào?',
+      a: 'Sản phẩm của chúng tôi bán không có size. Thiết kế dạng freesize linh hoạt, dễ dàng điều chỉnh độ vừa vặn phù hợp cho mọi kích thước cổ tay.'
     },
     {
       id: 'faq-3',
-      q: 'Thời gian hoàn thiện và giao hàng là bao lâu?',
-      a: 'Mỗi sản phẩm đều sẵn sàng xuất xưởng nhanh chóng từ 1 - 2 ngày làm việc. Thời gian giao hàng toàn quốc từ 2 - 4 ngày. Bạn được quyền kiểm tra hàng trước khi thanh toán.'
+      q: 'Quy cách đóng gói và thời gian giao hàng như thế nào?',
+      a: 'Mỗi sản phẩm đều được đóng gói cẩn thận trong hộp giấy cứng cáp. Thời gian giao hàng tại Hà Nội từ 1 đến 2 ngày làm việc, các tỉnh thành khác từ 2 đến 4 ngày làm việc. Khách hàng được kiểm tra hàng trước khi nhận.'
     },
     {
       id: 'faq-4',
-      q: 'Chính sách bảo hành nút đan và đổi trả sản phẩm như thế nào?',
-      a: 'NOT A KNOT áp dụng chính sách Bảo hành nút thắt trọn đời: hỗ trợ vệ sinh và làm mới miễn phí. Nếu nhận hàng có lỗi kỹ thuật từ nhà sản xuất, bạn được hỗ trợ đổi mới miễn phí trong 7 ngày đầu tiên.'
+      q: 'Chính sách bảo hành và đổi trả sản phẩm như thế nào?',
+      a: 'Chúng tôi có chính sách bảo hành chi tiết đối với từng thành phần: khoen, charm, bùa, phụ kiện, hoặc dây khi gặp sự cố kỹ thuật trong quá trình sử dụng.'
+    },
+    {
+      id: 'faq-5',
+      q: 'Chính sách phí vận chuyển như thế nào?',
+      a: 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng tại quận Hai Bà Trưng, Hà Nội. Phí vận chuyển 5.000đ áp dụng cho các quận huyện còn lại tại Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.'
     }
   ],
 
   aboutSection: {
-    badge: 'Về Chúng Tôi · NOT A KNOT',
+    badge: 'Về Chúng Tôi',
     title: 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh',
-    subtitle: 'Xưởng chế tác phụ kiện dây dù Paracord 550 & EDC thủ công tại NEU - Hà Nội.',
+    subtitle: 'Xưởng chế tác phụ kiện dây dù Paracord 550 và EDC thủ công tại Hà Nội.',
     storyParagraph1: 'NOT A KNOT ra đời từ niềm đam mê chế tác thủ công bền bỉ. Tên gọi NOT A KNOT mang thông điệp: mỗi chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần kiên cường, kỷ luật và phong cách cá nhân.',
-    storyParagraph2: 'Chúng tôi tuyển chọn 100% dây dù Paracord 550 chuẩn Type III với 7 lõi dù quân sự chịu tải 250kg, kết hợp cùng khóa titan và inox 316L đúc nguyên khối chống gỉ sét tuyệt đối. Mỗi sản phẩm đều được nghệ nhân đan thủ công tỉ mỉ theo form dáng chuẩn tối ưu nhất.',
-    quote: '“Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.”',
+    storyParagraph2: 'Chúng tôi tuyển chọn dây dù Paracord 550 chuẩn Type III với 7 lõi dù quân sự chịu tải 250kg, kết hợp cùng khóa titan và inox 316L đúc nguyên khối chống gỉ sét. Sản phẩm được đóng gói trang trọng trong hộp giấy.',
+    quote: 'Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.',
     stats: [
       { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
       { label: 'Chuẩn Paracord 550', value: '100%', desc: '7 lõi dù Type III bền bỉ' },
-      { label: 'Bảo Hành Nút Thắt', value: 'Trọn Đời', desc: 'Vệ sinh & đan lại miễn phí' },
+      { label: 'Bảo Hành Chi Tiết', value: 'Dài Hạn', desc: 'Khoen, charm, bùa, dây' },
       { label: 'Độ Hài Lòng', value: '100%', desc: 'Khách hàng toàn quốc' }
     ],
     coreValues: [
       {
         id: 'val-1',
-        title: '100% Đan Thủ Công Tỉ Mỉ',
-        desc: 'Từng mắt đan được nghệ nhân siết lực đều đặn, đảm bảo form dáng đan chắc nịch và sắc nét.',
+        title: 'Đan Thủ Công Tỉ Mỉ',
+        desc: 'Từng mắt đan được siết lực đều đặn, đảm bảo form dáng chắc nịch và sắc nét.',
         icon: 'Sparkles'
       },
       {
         id: 'val-2',
         title: 'Dây Paracord 550 Chuẩn 7 Lõi',
-        desc: 'Chịu tải 250kg, chống mài mòn, không xơ xước và không phai màu khi tiếp xúc với nước sinh hoạt hay đi mưa.',
+        desc: 'Chịu tải 250kg, chống mài mòn, không xơ xước và không phai màu khi tiếp xúc với nước.',
         icon: 'ShieldCheck'
       },
       {
         id: 'val-3',
         title: 'Phụ Kiện Kim Loại Cao Cấp',
-        desc: 'Khóa titan, inox 316L và hợp kim đúc chống oxy hóa gỉ sét, mạ điện phân bền bỉ với thời gian.',
+        desc: 'Khóa titan, inox 316L và hợp kim đúc chống oxy hóa gỉ sét bền bỉ với thời gian.',
         icon: 'Award'
       },
       {
         id: 'val-4',
-        title: 'Bảo Hành Nút Thắt Trọn Đời',
-        desc: 'Hỗ trợ vệ sinh, làm mới và thắt lại nút dây miễn phí trọn đời cho toàn bộ sản phẩm xuất xưởng.',
+        title: 'Bảo Hành Chi Tiết Từng Phụ Kiện',
+        desc: 'Bảo hành rõ ràng cho khoen, charm, bùa, phụ kiện hoặc dây.',
         icon: 'HeartHandshake'
       }
     ],
@@ -147,10 +150,10 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
 
   customElements: [],
 
-  footerDescription: 'Xưởng chế tác phụ kiện Paracord 550 và đồ EDC thủ công tại NEU - Hà Nội. Thiết kế độc bản, đan thủ công tỉ mỉ, bảo hành nút thắt trọn đời.',
+  footerDescription: 'Xưởng chế tác phụ kiện Paracord 550 và đồ EDC thủ công tại Hà Nội. Đóng gói hộp giấy trang trọng, bảo hành chi tiết khoen, charm, bùa, phụ kiện hoặc dây.',
   copyrightText: '© 2026 NOT A KNOT. All rights reserved. Thủ công từ Việt Nam.',
-  warrantyPolicy: 'Bảo hành nút thắt trọn đời: hỗ trợ đan lại dây, vệ sinh làm mới miễn phí. Đổi mới phụ kiện kim loại bị lỗi kỹ thuật trong 30 ngày.',
-  shippingPolicy: 'Giao hàng toàn quốc từ 2-4 ngày. Hỗ trợ kiểm tra hàng trước khi thanh toán (COD). Miễn phí vận chuyển cho đơn hàng từ 400.000đ.',
+  warrantyPolicy: 'Sản phẩm không có size. Có bảo hành chi tiết đối với khoen, charm, bùa, phụ kiện, hoặc dây. Đóng gói trong hộp giấy trang trọng.',
+  shippingPolicy: 'Miễn phí giao hàng (0đ) tại quận Hai Bà Trưng, Hà Nội. Phí vận chuyển 5.000đ cho các quận huyện Hà Nội khác. Phí vận chuyển đồng giá 20.000đ toàn quốc.',
   socialLinks: {
     facebook: 'https://www.facebook.com/profile.php?id=61593591390851',
     messenger: 'https://m.me/61593591390851',

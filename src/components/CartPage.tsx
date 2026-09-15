@@ -104,7 +104,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   const subtotal = cartItems.reduce(
     (acc, item) =>
       acc +
-      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) *
+      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0)) *
         item.quantity,
     0
   );
@@ -145,11 +145,12 @@ export const CartPage: React.FC<CartPageProps> = ({
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
       const unitPrice =
-        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
       const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+      const khoenLabel = item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen';
 
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
@@ -171,6 +172,13 @@ export const CartPage: React.FC<CartPageProps> = ({
         extras.push(
           `${omamoriLabel}: ${omNames}${
             item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
+      if (item.selectedKhoen) {
+        extras.push(
+          `${khoenLabel}: ${item.selectedKhoen}${
+            item.selectedKhoenPrice ? ` (+${item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       }
@@ -227,7 +235,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       productId: item.product.id,
       productName: item.product.name,
       category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0),
+      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
       quantity: item.quantity,
       selectedColor: item.selectedColor,
       selectedColorImage: item.selectedColorImage,
@@ -237,6 +245,9 @@ export const CartPage: React.FC<CartPageProps> = ({
       selectedCharms: item.selectedCharms,
       selectedOmamoris: item.selectedOmamoris,
       selectedOmamoriPrice: item.selectedOmamoriPrice,
+      selectedKhoen: item.selectedKhoen,
+      selectedKhoenImage: item.selectedKhoenImage,
+      selectedKhoenPrice: item.selectedKhoenPrice,
       selectedSize: item.selectedSize,
       customNote: item.customNote
     }));
@@ -422,7 +433,8 @@ export const CartPage: React.FC<CartPageProps> = ({
                         const unitPrice =
                           item.product.price +
                           (item.selectedCharmPrice || 0) +
-                          (item.selectedOmamoriPrice || 0);
+                          (item.selectedOmamoriPrice || 0) +
+                          (item.selectedKhoenPrice || 0);
                         const lineSubtotal = unitPrice * item.quantity;
                         const itemImage = item.selectedColorImage || item.product.image;
 
@@ -455,7 +467,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   </button>
                                 </div>
 
-                                {/* Custom Attributes: Wrist Size, Color, Charms, Omamori */}
+                                {/* Custom Attributes: Wrist Size, Color, Charms, Omamori, Khoen */}
                                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs">
                                   {item.selectedSize && (
                                     <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md font-bold text-[11px]">
@@ -480,6 +492,15 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
                                     <span className="inline-flex flex-wrap items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
                                       {item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori'}: {item.selectedOmamoris.map((o) => o.name).join(', ')} {item.selectedOmamoriPrice ? `(+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                    </span>
+                                  )}
+
+                                  {item.selectedKhoen && (
+                                    <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-900 border border-sky-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
+                                      {item.selectedKhoenImage && (
+                                        <img src={item.selectedKhoenImage} alt={item.selectedKhoen} className="w-3.5 h-3.5 object-contain rounded-xs" />
+                                      )}
+                                      {item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen'}: {item.selectedKhoen} {item.selectedKhoenPrice ? `(+${item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>
                                   )}
                                 </div>

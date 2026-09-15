@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ProductCharmOption } from '../types';
-import { Check, Sparkles, X } from 'lucide-react';
+import { Check, Sparkles, X, ZoomIn } from 'lucide-react';
+import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 
 interface ProductCharmSelectorProps {
   charms: ProductCharmOption[];
@@ -26,6 +27,21 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   if (!charms || charms.length === 0) return null;
 
   const displayTitle = title?.trim() || 'Chọn Charm';
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [activeCompareIdx, setActiveCompareIdx] = useState(0);
+
+  // Convert charms to CompareItems for zoom/compare modal
+  const compareItems: CompareItem[] = useMemo(() => {
+    return charms.map((c, i) => ({
+      id: c.id || `charm-${i}`,
+      title: c.name,
+      image: c.image || '',
+      priceDelta: c.priceDelta,
+      stock: c.stock,
+      type: 'charm',
+      originalData: c,
+    }));
+  }, [charms]);
 
   // Resolve current active selection array
   const currentSelection: ProductCharmOption[] = React.useMemo(() => {
@@ -116,6 +132,19 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCompareIdx(0);
+              setCompareModalOpen(true);
+            }}
+            className="text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+            title="Bấm để phóng to và so sánh các mẫu charm"
+          >
+            <ZoomIn className="w-3 h-3" />
+            <span>So sánh ({charms.length})</span>
+          </button>
+
           {totalExtraPrice > 0 && (
             <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70">
               +{totalExtraPrice.toLocaleString('vi-VN')}đ
@@ -152,7 +181,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                 if (isOutOfStock) return;
                 handleToggleCharm(charm);
               }}
-              className={`relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
+              className={`group relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
                 isOutOfStock
                   ? 'opacity-50 grayscale bg-slate-50 border-slate-200 cursor-not-allowed select-none'
                   : isSelected
@@ -167,8 +196,33 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                 </div>
               )}
 
-              {/* Charm Image */}
-              <div className="w-full aspect-square rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative">
+              {/* Charm Image - Click image to zoom & compare */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveCompareIdx(idx);
+                  setCompareModalOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    setActiveCompareIdx(idx);
+                    setCompareModalOpen(true);
+                  }
+                }}
+                className="w-full aspect-square rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative cursor-zoom-in group/img"
+                title="Bấm vào ảnh để phóng to & so sánh chi tiết"
+              >
+                {/* Zoom / Compare Button */}
+                <span
+                  className="absolute top-1 left-1 z-10 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all opacity-85 sm:opacity-0 group-hover:opacity-100 hover:scale-110 shadow-xs pointer-events-none"
+                  aria-label="Phóng to"
+                >
+                  <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                </span>
+
                 {charm.image && charm.image.trim() ? (
                   <img
                     src={charm.image}
@@ -182,9 +236,17 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                   </div>
                 )}
 
+                {/* Hover zoom pill overlay */}
+                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <span className="px-2 py-0.5 rounded-full bg-black/80 text-white text-[10px] font-bold flex items-center gap-1 shadow-md">
+                    <ZoomIn className="w-3 h-3 text-amber-300" />
+                    <span>Phóng to</span>
+                  </span>
+                </div>
+
                 {/* Extra price badge */}
                 {charm.priceDelta && charm.priceDelta > 0 ? (
-                  <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/80 text-white font-medium px-1.5 py-0.5 rounded shadow-xs backdrop-blur-[1px]">
+                  <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/80 text-white font-medium px-1.5 py-0.5 rounded shadow-xs backdrop-blur-[1px] z-10">
                     +{charm.priceDelta.toLocaleString('vi-VN')}đ
                   </span>
                 ) : null}
@@ -224,7 +286,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
       {/* Limit Notice Toast - Rendered below grid to prevent layout jumping */}
       {limitNotice && (
         <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
-          <span>⚠️ {limitNotice}</span>
+          <span>{limitNotice}</span>
           <button
             type="button"
             onClick={() => setLimitNotice(null)}
@@ -266,6 +328,27 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
           ))}
         </div>
       )}
+
+      {/* Fullscreen Zoom & Compare Modal */}
+      <ProductImageCompareModal
+        isOpen={compareModalOpen}
+        onClose={() => setCompareModalOpen(false)}
+        items={compareItems}
+        initialIndex={activeCompareIdx}
+        title={`So sánh mẫu ${displayTitle}`}
+        onSelectItem={(item) => {
+          if (item.originalData) {
+            handleToggleCharm(item.originalData);
+          }
+        }}
+        isItemSelected={(item) => {
+          return currentSelection.some(
+            (c) =>
+              (c.id && c.id === item.id) ||
+              c.name.trim().toLowerCase() === item.title.trim().toLowerCase()
+          );
+        }}
+      />
     </div>
   );
 };

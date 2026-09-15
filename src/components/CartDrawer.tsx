@@ -97,7 +97,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const subtotal = cartItems.reduce(
     (acc, item) =>
       acc +
-      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) *
+      (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0)) *
         item.quantity,
     0
   );
@@ -107,11 +107,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
       const unitPrice =
-        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
       const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+      const khoenLabel = item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen';
 
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
@@ -133,6 +134,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         extras.push(
           `${omamoriLabel}: ${omNames}${
             item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
+      if (item.selectedKhoen) {
+        extras.push(
+          `${khoenLabel}: ${item.selectedKhoen}${
+            item.selectedKhoenPrice ? ` (+${item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       }
@@ -178,11 +186,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const buildMessengerOrderText = () => {
     const itemsList = cartItems.map((item, idx) => {
       const unitPrice =
-        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
+        item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0);
       let line = `${idx + 1}. ${item.product.name} - SL: ${item.quantity} - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
       const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
       const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+      const khoenLabel = item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen';
 
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
@@ -207,6 +216,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           }`
         );
       }
+      if (item.selectedKhoen) {
+        extras.push(
+          `${khoenLabel}: ${item.selectedKhoen}${
+            item.selectedKhoenPrice ? ` (+${item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''
+          }`
+        );
+      }
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) line += ` (${extras.join(', ')})`;
@@ -226,7 +242,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       productId: item.product.id,
       productName: item.product.name,
       category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0),
+      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
       quantity: item.quantity,
       selectedColor: item.selectedColor,
       selectedColorImage: item.selectedColorImage,
@@ -236,6 +252,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       selectedCharms: item.selectedCharms,
       selectedOmamoris: item.selectedOmamoris,
       selectedOmamoriPrice: item.selectedOmamoriPrice,
+      selectedKhoen: item.selectedKhoen,
+      selectedKhoenImage: item.selectedKhoenImage,
+      selectedKhoenPrice: item.selectedKhoenPrice,
       selectedSize: item.selectedSize,
       customNote: item.customNote
     }));
@@ -588,6 +607,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     ) : null}
                                   </div>
                                 )}
+
+                                {item.selectedKhoen && (
+                                  <div className="flex items-center gap-1.5 bg-sky-50/80 border border-sky-200/80 px-2 py-0.5 rounded-lg w-fit">
+                                    {item.selectedKhoenImage && (
+                                      <img
+                                        src={item.selectedKhoenImage}
+                                        alt={item.selectedKhoen}
+                                        className="w-3.5 h-3.5 object-contain rounded-sm"
+                                      />
+                                    )}
+                                    <span className="text-[11px] font-bold text-sky-900">
+                                      {item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen'}: {item.selectedKhoen}
+                                    </span>
+                                    {item.selectedKhoenPrice && item.selectedKhoenPrice > 0 ? (
+                                      <span className="text-[10px] text-sky-700 font-semibold">
+                                        (+{item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                )}
                                 {item.selectedSize && (
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-neutral-500 text-[11px]">Size:</span>
@@ -605,7 +644,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                               <div className="flex items-center justify-between mt-2.5">
                                 <span className="font-black text-neutral-950 text-xs sm:text-sm font-mono">
-                                  {((item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0)) * item.quantity).toLocaleString('vi-VN')}đ
+                                  {((item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0)) * item.quantity).toLocaleString('vi-VN')}đ
                                 </span>
 
                                  {(() => {

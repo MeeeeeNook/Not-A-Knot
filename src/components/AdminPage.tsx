@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption } from '../types';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, GripVertical, ArrowUp, ArrowDown, Copy } from 'lucide-react';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
@@ -22,6 +22,7 @@ import { AdminHeader } from './admin/AdminHeader';
 import { AdminSidebar } from './admin/AdminSidebar';
 import { AdminBankAccountPage } from './admin/AdminBankAccountPage';
 import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
+import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportOrdersWithImageOption } from '../utils/excelImageExporter';
 import { 
@@ -36,6 +37,7 @@ import {
 import { createDefaultSellers, deduplicateSellers } from '../utils/auth';
 import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
+import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import {
   subscribeQuotaStats,
   getLatestQuotaStats,
@@ -381,6 +383,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formOmamoriSelectionRequired, setFormOmamoriSelectionRequired] = useState(false);
   const [formMaxOmamoriAllowed, setFormMaxOmamoriAllowed] = useState(1);
   const [formOmamoriOptions, setFormOmamoriOptions] = useState<ProductOmamoriOption[]>([]);
+  // Khoen / Ring & Clasp states
+  const [formEnableKhoenSelection, setFormEnableKhoenSelection] = useState(false);
+  const [formKhoenTitle, setFormKhoenTitle] = useState('');
+  const [formKhoenSelectionRequired, setFormKhoenSelectionRequired] = useState(false);
+  const [formKhoenOptions, setFormKhoenOptions] = useState<ProductKhoenOption[]>([]);
   const [draggedCharmIndex, setDraggedCharmIndex] = useState<number | null>(null);
   const [draggedOmamoriIndex, setDraggedOmamoriIndex] = useState<number | null>(null);
   const [activeCharmDropIndex, setActiveCharmDropIndex] = useState<number | null>(null);
@@ -471,6 +478,46 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   const handleMoveOmamori = (fromIdx: number, toIdx: number) => {
     setFormOmamoriOptions((prev) => {
+      if (toIdx < 0 || toIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIdx, 1);
+      copy.splice(toIdx, 0, moved);
+      return copy;
+    });
+  };
+
+  const handleBulkKhoenUpload = (files: FileList | File[] | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (fileArray.length === 0) {
+      showAdminToast('Không tìm thấy file hình ảnh hợp lệ.');
+      return;
+    }
+
+    let processedCount = 0;
+    const newKhoens: ProductKhoenOption[] = [];
+
+    fileArray.forEach((file, i) => {
+      processOptionImageFile(file, (dataUrl) => {
+        const khoenName = cleanNameFromFileName(file.name) || `Khoen ${formKhoenOptions.length + i + 1}`;
+        newKhoens.push({
+          id: `khoen-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+          name: khoenName,
+          image: dataUrl,
+          priceDelta: 0,
+          stock: 30
+        });
+        processedCount++;
+        if (processedCount === fileArray.length) {
+          setFormKhoenOptions((prev) => [...prev, ...newKhoens]);
+          showAdminToast(`Đã thêm ${newKhoens.length} khoen từ ảnh thành công!`);
+        }
+      });
+    });
+  };
+
+  const handleMoveKhoen = (fromIdx: number, toIdx: number) => {
+    setFormKhoenOptions((prev) => {
       if (toIdx < 0 || toIdx >= prev.length) return prev;
       const copy = [...prev];
       const [moved] = copy.splice(fromIdx, 1);
@@ -877,6 +924,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormOmamoriSelectionRequired(false);
     setFormMaxOmamoriAllowed(1);
     setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
+    // Khoen initialization
+    setFormEnableKhoenSelection(false);
+    setFormKhoenTitle('');
+    setFormKhoenSelectionRequired(false);
+    setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
     setFormEnableSizeSelection(false);
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
     setIsAddingNew(true);
@@ -923,6 +975,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       ? prod.omamoriOptions
       : DEFAULT_OMAMORI_PRESETS;
     setFormOmamoriOptions(loadedOmamoris);
+    // Khoen loading
+    setFormEnableKhoenSelection(Boolean(prod.enableKhoenSelection));
+    setFormKhoenTitle(prod.khoenTitle || '');
+    setFormKhoenSelectionRequired(Boolean(prod.khoenSelectionRequired));
+    const loadedKhoens: ProductKhoenOption[] = (prod.khoenOptions && prod.khoenOptions.length > 0)
+      ? prod.khoenOptions
+      : DEFAULT_KHOEN_PRESETS;
+    setFormKhoenOptions(loadedKhoens);
     setFormEnableSizeSelection(Boolean(prod.enableSizeSelection));
     setFormAvailableSizes(
       prod.availableSizes && prod.availableSizes.length > 0
@@ -1201,6 +1261,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
         maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
         omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
+        enableKhoenSelection: formEnableKhoenSelection,
+        khoenTitle: formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined,
+        khoenSelectionRequired: formEnableKhoenSelection && formKhoenSelectionRequired,
+        khoenOptions: formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : [],
         enableSizeSelection: formEnableSizeSelection,
         availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
         stock: stockNumber,
@@ -1222,6 +1286,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       } catch (e) {
         console.warn("Lỗi lưu localStorage:", e);
       }
+
+      // If saving as visible, ensure its category is not hidden and filters don't hide it
+      if (!formIsHidden && formCategory) {
+        const catObj = localCategories.find((c) => c.id === formCategory);
+        if (catObj && (catObj.isHidden === true || String(catObj.isHidden) === 'true')) {
+          const updatedCat = { ...catObj, isHidden: false };
+          const updatedCats = localCategories.map((c) => (c.id === catObj.id ? updatedCat : c));
+          setLocalCategories(updatedCats);
+          onUpdateCategories?.(updatedCats);
+          try {
+            safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
+          } catch {}
+          saveCategoryToFirestore(updatedCat).catch(() => {});
+        }
+        if (adminCategoryFilter !== 'all' && adminCategoryFilter !== formCategory) {
+          setAdminCategoryFilter('all');
+        }
+        if (adminStockFilter !== 'all') {
+          setAdminStockFilter('all');
+        }
+      }
+
       setIsAddingNew(false);
       setEditingProduct(null);
       showAdminToast(`Đang lưu và đồng bộ "${updatedItem.name}" lên Firebase...`);
@@ -1262,6 +1348,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
         maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
         omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
+        enableKhoenSelection: formEnableKhoenSelection,
+        khoenTitle: formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined,
+        khoenSelectionRequired: formEnableKhoenSelection && formKhoenSelectionRequired,
+        khoenOptions: formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : [],
         enableSizeSelection: formEnableSizeSelection,
         availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
         stock: stockNumber,
@@ -1285,6 +1375,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       } catch (e) {
         console.warn("Lỗi lưu localStorage:", e);
       }
+
+      // If saving as visible, ensure its category is not hidden and filters don't hide it
+      if (!formIsHidden && formCategory) {
+        const catObj = localCategories.find((c) => c.id === formCategory);
+        if (catObj && (catObj.isHidden === true || String(catObj.isHidden) === 'true')) {
+          const updatedCat = { ...catObj, isHidden: false };
+          const updatedCats = localCategories.map((c) => (c.id === catObj.id ? updatedCat : c));
+          setLocalCategories(updatedCats);
+          onUpdateCategories?.(updatedCats);
+          try {
+            safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
+          } catch {}
+          saveCategoryToFirestore(updatedCat).catch(() => {});
+        }
+        if (adminCategoryFilter !== 'all' && adminCategoryFilter !== formCategory) {
+          setAdminCategoryFilter('all');
+        }
+        if (adminStockFilter !== 'all') {
+          setAdminStockFilter('all');
+        }
+      }
+
       setIsAddingNew(false);
       showAdminToast(`Đang tạo và đồng bộ "${newItem.name}" lên Firebase...`);
 
@@ -1317,6 +1429,34 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setTimeout(() => {
       setAdminToast(null);
     }, 3500);
+  };
+
+  // Duplicate product with subtle compact button
+  const handleDuplicateProduct = async (prod: Product) => {
+    const newId = `prod-${Date.now().toString().slice(-6)}`;
+    const duplicatedProduct: Product = {
+      ...prod,
+      id: newId,
+      name: `${prod.name} (Bản sao)`,
+      updatedAt: new Date().toISOString(),
+      soldCount: 0,
+    };
+    const prodIndex = products.findIndex((p) => p.id === prod.id);
+    const updatedList = [...products];
+    if (prodIndex >= 0) {
+      updatedList.splice(prodIndex + 1, 0, duplicatedProduct);
+    } else {
+      updatedList.unshift(duplicatedProduct);
+    }
+    pushHistoryAction(`Nhân bản sản phẩm "${prod.name}"`, 'products', products, updatedList);
+    onUpdateProducts(updatedList);
+    try {
+      safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
+      await saveProductToFirestore(duplicatedProduct);
+    } catch (err) {
+      console.warn('Firestore duplicate product error:', err);
+    }
+    showAdminToast(`Đã nhân bản sản phẩm "${prod.name}" thành công.`);
   };
 
   // Delete product with custom UI modal
@@ -1367,10 +1507,46 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   };
 
   // Quick toggle product visibility (Hide / Unhide)
-  const handleToggleProductVisibility = async (prod: Product) => {
-    const nextHiddenState = !prod.isHidden;
-    const updatedProd = { ...prod, isHidden: nextHiddenState, updatedAt: new Date().toISOString() };
+  const handleToggleProductVisibility = async (prod: Product, explicitVisible?: boolean) => {
+    const isDirectlyHidden = prod.isHidden === true || String(prod.isHidden) === 'true';
+    const catObj = prod.category ? localCategories.find((c) => c.id === prod.category) : null;
+    const isCatHidden = Boolean(catObj && (catObj.isHidden === true || String(catObj.isHidden) === 'true'));
+    const isCurrentlyHidden = isDirectlyHidden || isCatHidden;
+
+    const nextHiddenState = explicitVisible !== undefined ? !explicitVisible : (isCurrentlyHidden ? false : true);
+    const updatedProd: Product = { ...prod, isHidden: nextHiddenState, updatedAt: new Date().toISOString() };
     const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+
+    // CRITICAL: If unhiding this product (nextHiddenState === false), and its category is currently hidden:
+    // We MUST also unhide the category so that the product becomes visible on the website and enters the active table!
+    let unhiddenCategoryName = '';
+    if (!nextHiddenState && isCatHidden && catObj) {
+      unhiddenCategoryName = catObj.label || catObj.id;
+      const updatedCat: CategoryItem = { ...catObj, isHidden: false };
+      const updatedCats = localCategories.map((c) => (c.id === catObj.id ? updatedCat : c));
+      setLocalCategories(updatedCats);
+      onUpdateCategories?.(updatedCats);
+      try {
+        safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
+      } catch {}
+      saveCategoryToFirestore(updatedCat).catch((e) =>
+        console.warn('Firestore unhide category error:', e)
+      );
+    }
+
+    // Reset filters if unhidden product doesn't match active filters so the user sees it immediately in the active table
+    if (!nextHiddenState) {
+      if (adminCategoryFilter !== 'all' && adminCategoryFilter !== prod.category) {
+        setAdminCategoryFilter('all');
+      }
+      if (adminStockFilter !== 'all') {
+        setAdminStockFilter('all');
+      }
+      if (adminSearch.trim() && !prod.name.toLowerCase().includes(adminSearch.toLowerCase()) && !prod.id.toLowerCase().includes(adminSearch.toLowerCase())) {
+        setAdminSearch('');
+      }
+    }
+
     pushHistoryAction(
       nextHiddenState ? `Ẩn sản phẩm "${prod.name}"` : `Hiện lại sản phẩm "${prod.name}"`,
       'products',
@@ -1382,11 +1558,55 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
     } catch {}
     saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore product visibility toggle:', e));
-    showAdminToast(
-      nextHiddenState
-        ? `Đã ẩn sản phẩm "${prod.name}" (chuyển sang Hộp sản phẩm đã ẩn).`
-        : `Đã hiện lại sản phẩm "${prod.name}" trên website.`
-    );
+
+    if (nextHiddenState) {
+      showAdminToast(`Đã ẩn sản phẩm "${prod.name}" (chuyển sang Hộp sản phẩm đã ẩn).`);
+    } else {
+      if (unhiddenCategoryName) {
+        showAdminToast(`Đã hiện lại "${prod.name}" và tự động mở hiển thị danh mục "${unhiddenCategoryName}" trên website!`);
+      } else {
+        showAdminToast(`Đã hiện lại sản phẩm "${prod.name}" trên website & bảng sản phẩm đang bán.`);
+      }
+    }
+  };
+
+  const handleUnhideAllProducts = async () => {
+    const hiddenProds = products.filter((p) => {
+      const isDirect = p.isHidden === true || String(p.isHidden) === 'true';
+      const isCat = p.category ? localCategories.some((c) => c.id === p.category && (c.isHidden === true || String(c.isHidden) === 'true')) : false;
+      return isDirect || isCat;
+    });
+
+    if (hiddenProds.length === 0) {
+      showAdminToast('Không có sản phẩm nào đang bị ẩn.');
+      return;
+    }
+
+    const updatedList = products.map((p) => ({
+      ...p,
+      isHidden: false,
+      updatedAt: new Date().toISOString()
+    }));
+
+    // Also unhide all categories
+    const updatedCats = localCategories.map((c) => ({ ...c, isHidden: false }));
+    setLocalCategories(updatedCats);
+    onUpdateCategories?.(updatedCats);
+    try {
+      safeStorageSetItem('nak_categories', JSON.stringify(updatedCats));
+    } catch {}
+    Promise.all(updatedCats.map((c) => saveCategoryToFirestore(c))).catch(() => {});
+
+    onUpdateProducts(updatedList);
+    try {
+      safeStorageSetItem('nak_custom_products', JSON.stringify(updatedList));
+    } catch {}
+    pushAndSyncProductsToFirestore(updatedList, false).catch(() => {});
+
+    setAdminCategoryFilter('all');
+    setAdminStockFilter('all');
+    setAdminSearch('');
+    showAdminToast(`Đã bật hiển thị lại toàn bộ ${hiddenProds.length} sản phẩm và danh mục lên website!`);
   };
 
   // ==========================================
@@ -1986,12 +2206,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Set of category IDs that are marked as hidden
   const hiddenCategoryIds = useMemo(() => {
-    return new Set(localCategories.filter((c) => c.isHidden).map((c) => c.id));
+    return new Set(
+      localCategories
+        .filter((c) => c.isHidden === true || String(c.isHidden) === 'true')
+        .map((c) => c.id)
+    );
   }, [localCategories]);
 
   // A product is considered hidden if it is explicitly hidden OR belongs to a hidden category
   const isProductHidden = (p: Product) => {
-    return Boolean(p.isHidden) || Boolean(hiddenCategoryIds.has(p.category));
+    const isDirectlyHidden = p.isHidden === true || String(p.isHidden) === 'true';
+    const isCatHidden = Boolean(p.category && hiddenCategoryIds.has(p.category));
+    return isDirectlyHidden || isCatHidden;
   };
 
   // Separate active (visible) products from hidden products
@@ -4203,6 +4429,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       )}
                     </div>
 
+                    {/* SECTION 4: KHOEN / KEYRINGS / CLASPS */}
+                    <AdminProductKhoenSection
+                      formEnableKhoenSelection={formEnableKhoenSelection}
+                      setFormEnableKhoenSelection={setFormEnableKhoenSelection}
+                      formKhoenTitle={formKhoenTitle}
+                      setFormKhoenTitle={setFormKhoenTitle}
+                      formKhoenSelectionRequired={formKhoenSelectionRequired}
+                      setFormKhoenSelectionRequired={setFormKhoenSelectionRequired}
+                      formKhoenOptions={formKhoenOptions}
+                      setFormKhoenOptions={setFormKhoenOptions}
+                      handleBulkKhoenUpload={handleBulkKhoenUpload}
+                      handleMoveKhoen={handleMoveKhoen}
+                      processOptionImageFile={processOptionImageFile}
+                      showAdminToast={showAdminToast}
+                    />
+
                   </div>
 
                   {/* Form Submit Button */}
@@ -4348,30 +4590,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-slate-100">
                           <button
                             type="button"
                             onClick={() => handleToggleProductVisibility(p)}
-                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 rounded-xl text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
-                            title="Ẩn sản phẩm khỏi website (chuyển vào Hộp sản phẩm đã ẩn)"
+                            className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
+                            title="Ẩn sản phẩm khỏi website"
                           >
                             <EyeOff className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Ẩn</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateProduct(p)}
+                            className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
+                            title="Nhân bản sản phẩm (tạo bản sao)"
+                          >
+                            <Copy className="w-3.5 h-3.5 text-slate-500" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEditForm(p)}
-                            className="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors border border-amber-200 text-center cursor-pointer"
+                            className="flex-1 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-bold transition-colors border border-amber-200 text-center cursor-pointer"
                           >
-                            Sửa sản phẩm
+                            Sửa
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteProduct(p.id, p.name)}
-                            className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                            className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                             title="Xóa sản phẩm"
                           >
-                            Xóa
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -4499,29 +4748,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               </td>
 
                               <td className="p-4 text-right whitespace-nowrap">
-                                <div className="flex items-center justify-end gap-1.5">
+                                <div className="flex items-center justify-end gap-1">
                                   <button
                                     type="button"
                                     onClick={() => handleToggleProductVisibility(p)}
-                                    className="px-2 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center gap-1 cursor-pointer"
-                                    title="Ẩn sản phẩm khỏi website (chuyển vào Hộp sản phẩm đã ẩn)"
+                                    className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center cursor-pointer"
+                                    title="Ẩn sản phẩm khỏi website"
                                   >
                                     <EyeOff className="w-3.5 h-3.5 text-slate-500" />
-                                    <span>Ẩn</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDuplicateProduct(p)}
+                                    className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-800 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 flex items-center cursor-pointer"
+                                    title="Nhân bản sản phẩm (tạo bản sao)"
+                                  >
+                                    <Copy className="w-3.5 h-3.5 text-slate-500" />
                                   </button>
                                   <button
                                     onClick={() => handleOpenEditForm(p)}
-                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-amber-700 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                    className="px-2 py-1.5 bg-slate-100 hover:bg-amber-50 text-amber-700 hover:border-amber-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                     title="Chỉnh sửa sản phẩm"
                                   >
                                     Sửa
                                   </button>
                                   <button
                                     onClick={() => handleDeleteProduct(p.id, p.name)}
-                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 hover:border-rose-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                    className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 hover:border-rose-300 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                     title="Xóa sản phẩm"
                                   >
-                                    Xóa
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </td>
@@ -4557,14 +4813,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setIsExpandedHiddenBox((prev) => !prev)}
-                  className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <span>{isExpandedHiddenBox ? 'Thu gọn' : 'Mở rộng xem danh sách'}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandedHiddenBox ? 'rotate-180' : ''}`} />
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {allHiddenProducts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleUnhideAllProducts}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      title="Hiện lại toàn bộ sản phẩm và danh mục lên website"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Hiện lại tất cả ({allHiddenProducts.length})</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsExpandedHiddenBox((prev) => !prev)}
+                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-bold text-xs border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <span>{isExpandedHiddenBox ? 'Thu gọn' : 'Mở rộng xem danh sách'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpandedHiddenBox ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
               </div>
 
               {isExpandedHiddenBox && (
@@ -4580,7 +4849,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       {filteredHiddenProducts.map((p) => {
                         const catObj = localCategories.find((c) => c.id === p.category);
                         const isCatHidden = hiddenCategoryIds.has(p.category);
-                        const isDirectlyHidden = Boolean(p.isHidden);
+                        const isDirectlyHidden = p.isHidden === true || String(p.isHidden) === 'true';
                         const sold = (productSoldMap[p.id] || 0) + (p.soldCount || 0);
                         const revenue = sold * p.price;
 
@@ -4640,18 +4909,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
                               <button
                                 type="button"
-                                onClick={() => handleToggleProductVisibility(p)}
-                                className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-colors border border-emerald-200 flex items-center justify-center gap-1 cursor-pointer"
-                                title="Hiện lại sản phẩm này trên website"
+                                onClick={() => handleToggleProductVisibility(p, true)}
+                                className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+                                title="Hiện lại sản phẩm này trên website & bảng sản phẩm đang bán"
                               >
-                                <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                                <span>{isDirectlyHidden ? 'Hiện lại' : 'Bật hiển thị'}</span>
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>{isCatHidden ? 'Hiện lại (Mở cả DM)' : 'Bật hiển thị'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicateProduct(p)}
+                                className="p-1.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                title="Nhân bản sản phẩm"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditForm(p)}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                className="px-2 py-1.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-800 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                 title="Chỉnh sửa sản phẩm"
                               >
                                 Sửa
@@ -4660,7 +4938,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleDeleteProduct(p.id, p.name)}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-xl text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
+                                className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
                                 title="Xóa vĩnh viễn"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

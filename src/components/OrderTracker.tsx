@@ -109,6 +109,8 @@ const generatePrintHtml = (order: StoredOrder, hotline: string, brandName: strin
           it.selectedSize ? `Size: ${it.selectedSize}` : '',
           it.selectedColor ? `Màu: ${it.selectedColor}` : '',
           it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
+          it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map(o => o.name).join(', ')}` : '',
+          it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
         ].filter(Boolean).join(' | ');
         const customNote = it.customNote ? `<div style="font-size:11px;color:#b45309;font-style:italic;margin-top:2px;">* Ghi chú xưởng: ${it.customNote}</div>` : '';
 
@@ -615,6 +617,8 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
           it.selectedSize ? `Size: ${it.selectedSize}` : '',
           it.selectedColor ? `Màu: ${it.selectedColor}` : '',
           it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
+          it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map(o => o.name).join(', ')}` : '',
+          it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
         ].filter(Boolean).join(' | ');
         const note = it.customNote ? `\n  - Ghi chú: ${it.customNote}` : '';
         return `${idx + 1}. ${it.productName} (x${it.quantity || 1}) - ${sub}đ\n  ${specs}${note}`;
@@ -1261,6 +1265,16 @@ Cam kết bảo hành chốt khóa trọn đời!
                                       Charm: {it.selectedCharm}
                                     </span>
                                   )}
+                                  {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
+                                    <span className="bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                      Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}
+                                    </span>
+                                  )}
+                                  {it.selectedKhoen && (
+                                    <span className="bg-sky-50 text-sky-900 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                      Khoen: {it.selectedKhoen}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {it.customNote && (
@@ -1644,6 +1658,8 @@ Cam kết bảo hành chốt khóa trọn đời!
                                     {it.selectedSize && <span>Size: {it.selectedSize}</span>}
                                     {it.selectedColor && <span>• Màu: {it.selectedColor}</span>}
                                     {it.selectedCharm && <span>• Charm: {it.selectedCharm}</span>}
+                                    {it.selectedOmamoris && it.selectedOmamoris.length > 0 && <span>• Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}</span>}
+                                    {it.selectedKhoen && <span>• Khoen: {it.selectedKhoen}</span>}
                                   </div>
                                   {it.customNote && (
                                     <div className="text-[10px] text-amber-800 italic mt-0.5">

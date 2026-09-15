@@ -86,8 +86,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
 
   const [isCustomAnnouncementLink, setIsCustomAnnouncementLink] = useState(false);
 
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'hero_mobile' | 'collection_products' | 'faq' | 'footer'>('general');
-  const [mobileStudioMode, setMobileStudioMode] = useState<'cards' | 'studio'>('cards');
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'collection_products' | 'faq' | 'footer'>('general');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [dimensionNotice, setDimensionNotice] = useState<{ id: string; text: string } | null>(null);
@@ -118,7 +117,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
 
   // Product is considered hidden if either explicitly hidden or category is hidden
   const isProductHidden = (p: Product) => {
-    return Boolean(p.isHidden) || String(p.isHidden) === 'true' || Boolean(hiddenCategoryIds.has(p.category));
+    const isExplicit = p.isHidden === true || String(p.isHidden) === 'true';
+    return isExplicit || Boolean(p.category && hiddenCategoryIds.has(p.category));
   };
 
   const currentSectionIndex = Math.min(Math.max(0, selectedSectionIdx), Math.max(0, landingSections.length - 1));
@@ -306,10 +306,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
 
   // Drag & drop state for hero slide upload
   const [dragOverSlideId, setDragOverSlideId] = useState<string | null>(null);
-  const [dragOverMobileSlideId, setDragOverMobileSlideId] = useState<string | null>(null);
   const [dragOverLogo, setDragOverLogo] = useState<boolean>(false);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
-  const mobileFileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const logoInputRef = useRef<HTMLInputElement | null>(null);
 
   const processLogoImageUpload = (file: File) => {
@@ -505,54 +503,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const processHeroMobileImageUpload = (file: File, slideId: string) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP).');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 2048;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, width, height);
-          let compressed = '';
-          try {
-            compressed = canvas.toDataURL('image/webp', 0.94);
-            if (!compressed || !compressed.startsWith('data:image/webp')) {
-              compressed = canvas.toDataURL('image/jpeg', 0.92);
-            }
-          } catch {
-            compressed = canvas.toDataURL('image/jpeg', 0.92);
-          }
-          handleUpdateHeroSlide(slideId, 'bgImageMobile', compressed);
-        } else {
-          handleUpdateHeroSlide(slideId, 'bgImageMobile', e.target?.result as string);
-        }
-      };
-      img.src = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleAddFaq = () => {
     const newFaq: FaqItem = {
       id: 'faq-' + Date.now(),
@@ -642,26 +592,11 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             activeSubTab === 'hero' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <span>🖥️ Billboard Máy Tính (PC)</span>
+          <span>Billboard Banner (PC & Mobile)</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
             activeSubTab === 'hero' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
           }`}>
             {config.heroSlides?.length || 0}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('hero_mobile')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-            activeSubTab === 'hero_mobile' ? 'bg-amber-500 text-slate-950 shadow-xs font-black' : 'text-slate-700 hover:text-slate-900 hover:bg-amber-50'
-          }`}
-        >
-          <Smartphone className="w-3.5 h-3.5 text-amber-600" />
-          <span>📱 Billboard Điện Thoại (Smartphone)</span>
-          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-            activeSubTab === 'hero_mobile' ? 'bg-slate-950 text-amber-300' : 'bg-amber-100 text-amber-900'
-          }`}>
-            {config.heroSlides?.filter(s => !!s.bgImageMobile).length || 0}/{config.heroSlides?.length || 0}
           </span>
         </button>
 
@@ -1078,648 +1013,39 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
       )}
 
       {/* ----------------------------------------------------
-          TAB 2: HERO BILLBOARD SLIDES (Canva / PowerPoint Slide Deck Studio for PC)
+          TAB 2: HERO BILLBOARD SLIDES (Unified Canva Studio for PC & Mobile)
          ---------------------------------------------------- */}
       {activeSubTab === 'hero' && (
         <CanvaSlideStudio
           slides={config.heroSlides || []}
-          onChangeSlides={(newSlides) => setConfig((prev) => ({ ...prev, heroSlides: newSlides }))}
+          onChangeSlides={(newSlides) => {
+            const sanitized = newSlides.map((s) => {
+              const { bgImageMobile, ...rest } = s as any;
+              return rest;
+            });
+            setConfig((prev) => ({ ...prev, heroSlides: sanitized }));
+          }}
+          onSave={async (newSlides) => {
+            const sanitized = newSlides.map((s) => {
+              const { bgImageMobile, ...rest } = s as any;
+              return rest;
+            });
+            const updatedConfig = { ...config, heroSlides: sanitized };
+            setConfig(updatedConfig);
+            localStorage.setItem('nak_site_content', JSON.stringify(updatedConfig));
+            onSaveConfig(updatedConfig);
+            await saveSiteContentToFirestore(updatedConfig);
+            setSaveStatus('success');
+            setStatusMsg('Đã lưu Billboard thành công và cập nhật lên website!');
+            setTimeout(() => setStatusMsg(''), 4000);
+          }}
           brandName={config.brandName}
-          initialDevice="desktop"
           categories={categories}
           collections={collections}
         />
       )}
 
-      {/* ----------------------------------------------------
-          TAB 2B: DEDICATED SMARTPHONE BILLBOARD SECTION
-         ---------------------------------------------------- */}
-      {activeSubTab === 'hero_mobile' && (
-        <div className="space-y-6">
-          {/* Header Banner */}
-          <div className="bg-gradient-to-r from-amber-50 via-white to-amber-50 p-5 sm:p-6 rounded-2xl border border-amber-200/80 shadow-xs space-y-4">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-amber-500 text-slate-950 font-black shadow-xs">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-900">
-                    Billboard Dành Riêng Cho Điện Thoại (Smartphone)
-                  </h2>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 font-bold uppercase tracking-wider">
-                    Độc Lập Với PC
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
-                  Tải lên và tùy chỉnh ảnh banner dọc riêng biệt cho khách hàng lướt web trên điện thoại di động (tỷ lệ chuẩn 9:16 hoặc 4:5). Ảnh trên máy tính (PC) và điện thoại hoàn toàn độc lập, đảm bảo ảnh không bị cắt xén, méo hình hay thu nhỏ quá mức trên smartphone.
-                </p>
-              </div>
 
-              {/* Toggle Mode: Cards Quick Edit vs Full Canvas Studio */}
-              <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setMobileStudioMode('cards')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    mobileStudioMode === 'cards'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <span>📋 Tải Ảnh & Cấu Hình Nhanh</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileStudioMode('studio')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    mobileStudioMode === 'studio'
-                      ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>🎨 Studio Canvas Điện Thoại</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Tips */}
-            <div className="p-3 bg-amber-100/50 rounded-xl border border-amber-200/60 text-xs text-amber-950 flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="leading-relaxed">
-                <strong>Gợi ý tỷ lệ vàng cho Smartphone:</strong> Kích thước khuyến nghị cho ảnh dọc là <strong>1080 × 1920 px (tỷ lệ 9:16)</strong> hoặc <strong>1080 × 1350 px (tỷ lệ 4:5)</strong>. Nếu một slide chưa có ảnh riêng cho điện thoại, hệ thống sẽ tự động dùng ảnh PC với cơ chế hiển thị vừa vặn và tạo nền mờ thông minh, không làm vỡ bố cục.
-              </div>
-            </div>
-          </div>
-
-          {/* MODE A: FULL CANVAS STUDIO (FOCUSED ON SMARTPHONE) */}
-          {mobileStudioMode === 'studio' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-bold text-slate-600">
-                  Đang mở chế độ Canvas Studio mô phỏng điện thoại di động
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setMobileStudioMode('cards')}
-                  className="text-xs font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
-                >
-                  ← Quay lại danh sách quản lý ảnh nhanh
-                </button>
-              </div>
-              <CanvaSlideStudio
-                slides={config.heroSlides || []}
-                onChangeSlides={(newSlides) => setConfig((prev) => ({ ...prev, heroSlides: newSlides }))}
-                brandName={config.brandName}
-                initialDevice="mobile"
-                categories={categories}
-                collections={collections}
-              />
-            </div>
-          )}
-
-          {/* MODE B: SLIDE-BY-SLIDE DEDICATED SMARTPHONE CARDS */}
-          {mobileStudioMode === 'cards' && (
-            <div className="space-y-6">
-              {(config.heroSlides || []).map((slide, sIdx) => {
-                const hasMobileImg = Boolean(slide.bgImageMobile);
-                const activeMobileImg = slide.bgImageMobile || slide.bgImage || '/assets/hero-bg.png';
-                const currentRatio = slide.aspectRatioMobile || '9:16';
-                const currentFit = slide.bgFitMobile || (hasMobileImg ? 'cover' : 'contain');
-                const posX = slide.bgPositionXMobile ?? (hasMobileImg ? 50 : slide.bgPositionX ?? 50);
-                const posY = slide.bgPositionYMobile ?? (hasMobileImg ? 50 : slide.bgPositionY ?? 50);
-                const zoom = slide.bgZoomMobile ?? (hasMobileImg ? 100 : slide.bgZoom ?? 100);
-
-                return (
-                  <div
-                    key={slide.id || sIdx}
-                    id={`mobile-billboard-card-${slide.id}`}
-                    className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-5"
-                  >
-                    {/* Slide Title & Status Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-6 h-6 rounded-full bg-slate-900 text-white font-black text-xs flex items-center justify-center">
-                          {sIdx + 1}
-                        </span>
-                        <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                          {slide.title || `Slide Billboard #${sIdx + 1}`}
-                        </h3>
-                        {slide.tag && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">
-                            {slide.tag}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {hasMobileImg ? (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Đã có ảnh riêng cho Smartphone</span>
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                            <span>Đang dùng ảnh PC (chưa tải ảnh riêng)</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Main Content Grid: Preview on Left, Controls on Right */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                      
-                      {/* Left: Device Visual Comparison (PC vs Smartphone) */}
-                      <div className="lg:col-span-5 space-y-4">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                          <span>Mô phỏng hiển thị trên Smartphone</span>
-                          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-mono text-[11px] font-bold">
-                            {currentRatio === '1:1' ? '⏹️ 1080 × 1080 px (1:1)' :
-                             currentRatio === '4:5' ? '📸 1080 × 1350 px (4:5)' :
-                             currentRatio === '9:16' ? '📱 1080 × 1920 px (9:16)' :
-                             currentRatio === '16:9' ? '🎬 1920 × 1080 px (16:9)' :
-                             currentRatio === 'auto' ? '⚡ Tự Động Khớp Ảnh' :
-                             currentRatio === 'custom' ? `📏 Chiều cao ${slide.customHeightMobile || 400}px` :
-                             '📲 Toàn Màn Hình'}
-                          </span>
-                        </div>
-
-                        {/* Smartphone Mockup Container (Dimensions dynamically adjust to selected ratio) */}
-                        <div
-                          className={`relative mx-auto transition-all duration-300 ${
-                            currentRatio === '1:1'
-                              ? 'w-52 sm:w-60 aspect-square'
-                              : currentRatio === '4:5'
-                              ? 'w-48 sm:w-56 aspect-[4/5]'
-                              : currentRatio === '16:9'
-                              ? 'w-64 sm:w-72 aspect-[16/9]'
-                              : currentRatio === 'custom'
-                              ? 'w-52 sm:w-60'
-                              : 'w-48 sm:w-56 aspect-[9/16]'
-                          } rounded-3xl p-2.5 bg-slate-950 shadow-2xl border-4 border-slate-800 flex flex-col justify-between overflow-hidden`}
-                          style={currentRatio === 'custom' ? { height: `${Math.min(500, Math.max(220, (slide.customHeightMobile || 400) * 0.75))}px` } : undefined}
-                        >
-                          {/* Top Speaker / Dynamic Island Notch */}
-                          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-4 bg-slate-900 rounded-full z-30 border border-slate-800/80 flex items-center justify-center">
-                            <div className="w-2 h-2 rounded-full bg-slate-950 mr-2" />
-                            <div className="w-2.5 h-1 rounded-full bg-slate-800" />
-                          </div>
-
-                          {/* Inner Screen Area */}
-                          <div className="relative w-full h-full rounded-2xl overflow-hidden bg-slate-900 flex items-center justify-center">
-                            {/* Blur ambient background for contain fit */}
-                            {currentFit === 'contain' && (
-                              <img
-                                src={activeMobileImg}
-                                alt=""
-                                aria-hidden="true"
-                                className="absolute inset-0 w-full h-full object-cover blur-xl opacity-50 scale-125 pointer-events-none"
-                              />
-                            )}
-
-                            {/* Main Display Image */}
-                            <img
-                              src={activeMobileImg}
-                              alt="Mobile Preview"
-                              className={`w-full h-full ${
-                                currentFit === 'contain'
-                                  ? 'object-contain relative z-10'
-                                  : currentFit === 'fill'
-                                  ? 'object-fill'
-                                  : 'object-cover'
-                              }`}
-                              style={{
-                                objectPosition: `${posX}% ${posY}%`,
-                                transform: `scale(${zoom / 100})`,
-                                transformOrigin: `${posX}% ${posY}%`
-                              }}
-                            />
-
-                            {/* Overlay Gradient & Sample Slide Typography */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent z-20 flex flex-col justify-end p-3.5 space-y-1 text-center pointer-events-none">
-                              {slide.tag && (
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-300 drop-shadow">
-                                  {slide.tag}
-                                </span>
-                              )}
-                              <h4 className="text-xs font-black text-white leading-tight drop-shadow">
-                                {slide.title || 'Tiêu Đề Slide'}
-                              </h4>
-                              {slide.subtitle && (
-                                <p className="text-[9px] text-slate-200 line-clamp-1 drop-shadow">
-                                  {slide.subtitle}
-                                </p>
-                              )}
-                              {slide.buttonText && slide.showButton !== false && (
-                                <div className="pt-1">
-                                  <span className="inline-block px-3 py-1 rounded-full text-[9px] font-bold bg-amber-400 text-slate-950 shadow-sm">
-                                    {slide.buttonText}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* PC Thumbnail Reference */}
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3">
-                          <div className="w-16 h-10 rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-slate-300 relative">
-                            <img
-                              src={slide.bgImage || '/assets/hero-bg.png'}
-                              alt="PC Version"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[11px] font-bold text-slate-800 truncate">
-                              🖥️ Ảnh gốc hiển thị trên Máy Tính (PC)
-                            </div>
-                            <div className="text-[10px] text-slate-500">
-                              {slide.aspectRatio || '16:9'} • Khách vào bằng PC sẽ thấy ảnh này
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right: Dedicated Smartphone Controls & Upload */}
-                      <div className="lg:col-span-7 space-y-4">
-                        {/* 1. Upload File & Drag/Drop Area */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-                            <span>Tải Lên Ảnh Riêng Cho Smartphone</span>
-                            <span className="text-[10px] text-slate-500 font-normal">
-                              JPG, PNG, WebP (Tỷ lệ dọc 9:16 hoặc 4:5 khuyên dùng)
-                            </span>
-                          </label>
-
-                          <input
-                            type="file"
-                            ref={(el) => (mobileFileInputRefs.current[slide.id] = el)}
-                            accept="image/jpeg,image/png,image/webp"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) processHeroMobileImageUpload(file, slide.id);
-                            }}
-                          />
-
-                          <div
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              setDragOverMobileSlideId(slide.id);
-                            }}
-                            onDragLeave={() => setDragOverMobileSlideId(null)}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              setDragOverMobileSlideId(null);
-                              const file = e.dataTransfer.files?.[0];
-                              if (file) processHeroMobileImageUpload(file, slide.id);
-                            }}
-                            onClick={() => mobileFileInputRefs.current[slide.id]?.click()}
-                            className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
-                              dragOverMobileSlideId === slide.id
-                                ? 'border-amber-500 bg-amber-50'
-                                : 'border-slate-300 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/30'
-                            }`}
-                          >
-                            <div className="p-2.5 rounded-full bg-white shadow-xs border border-slate-200 text-amber-600">
-                              <Upload className="w-5 h-5" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-slate-900 block">
-                                Nhấp để chọn ảnh dọc từ thiết bị hoặc kéo thả ảnh vào đây
-                              </span>
-                              <span className="text-[11px] text-slate-500">
-                                Hệ thống sẽ tự động tối ưu hóa và nén hình ảnh chuẩn mobile tốc độ cao
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 2. Direct Image URL Input */}
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-slate-700">
-                            Hoặc Nhập Đường Dẫn Link Ảnh Trực Tiếp
-                          </label>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={slide.bgImageMobile || ''}
-                              onChange={(e) => handleUpdateHeroSlide(slide.id, 'bgImageMobile', e.target.value)}
-                              placeholder="https://images.unsplash.com/... hoặc để trống nếu dùng chung ảnh PC"
-                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white focus:border-amber-400 font-mono"
-                            />
-                            {hasMobileImg && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgImageMobile', '')}
-                                className="px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer"
-                                title="Xóa ảnh riêng điện thoại, quay lại dùng chung ảnh PC"
-                              >
-                                Xóa ảnh riêng
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Notification for Dimension auto detect */}
-                        {dimensionNotice && dimensionNotice.id === slide.id && (
-                          <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-800 flex items-center gap-2 animate-fadeIn">
-                            <span>{dimensionNotice.text}</span>
-                          </div>
-                        )}
-
-                        {/* 3. Smartphone Dimension Selector & Auto Detect */}
-                        <div className="space-y-2.5 pt-1">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                              <span>📐 Chọn Dimension Kích Thước Smartphone</span>
-                            </label>
-
-                            {/* One-Click Auto Detect Button */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const targetUrl = slide.bgImageMobile || slide.bgImage;
-                                if (!targetUrl) return;
-                                const img = new Image();
-                                img.crossOrigin = 'anonymous';
-                                img.src = targetUrl;
-                                img.onload = () => {
-                                  const w = img.naturalWidth;
-                                  const h = img.naturalHeight;
-                                  const ratio = w / h;
-                                  let chosenRatio: any = '1:1';
-                                  let ratioName = '';
-
-                                  if (ratio >= 0.85 && ratio <= 1.15) {
-                                    chosenRatio = '1:1';
-                                    ratioName = 'Vuông 1:1 (1080 × 1080 px)';
-                                  } else if (ratio >= 0.68 && ratio < 0.85) {
-                                    chosenRatio = '4:5';
-                                    ratioName = 'Dọc Gọn 4:5 (1080 × 1350 px)';
-                                  } else if (ratio < 0.68) {
-                                    chosenRatio = '9:16';
-                                    ratioName = 'Dọc 9:16 (1080 × 1920 px)';
-                                  } else if (ratio > 1.3) {
-                                    chosenRatio = '16:9';
-                                    ratioName = 'Ngang 16:9 (1920 × 1080 px)';
-                                  } else {
-                                    chosenRatio = 'auto';
-                                    ratioName = `Tự động (${w}×${h} px)`;
-                                  }
-
-                                  handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', chosenRatio);
-                                  handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'cover');
-                                  setDimensionNotice({
-                                    id: slide.id,
-                                    text: `✅ Đã chọn Dimension chuẩn cho ảnh: ${ratioName} - Vừa khít, không bị viền đen!`
-                                  });
-                                  setTimeout(() => setDimensionNotice(null), 4500);
-                                };
-                              }}
-                              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <Sparkles className="w-3.5 h-3.5" />
-                              <span>⚡ Tự động căn Dimension theo ảnh</span>
-                            </button>
-                          </div>
-
-                          {/* Dimension Choice Grid */}
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '1:1')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === '1:1'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>⏹️ Vuông 1:1</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1080 px</div>
-                              <div className="text-[9px] text-amber-800 font-medium mt-1">Đẹp nhất cho vòng tay / charm</div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '4:5')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === '4:5'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>📸 Dọc Gọn 4:5</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1350 px</div>
-                              <div className="text-[9px] text-slate-500 mt-1">Chuẩn Instagram Feed</div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '9:16')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === '9:16'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>📱 Dọc 9:16</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1080 × 1920 px</div>
-                              <div className="text-[9px] text-slate-500 mt-1">TikTok / Story / Reels</div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', '16:9')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === '16:9'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>🎬 Ngang 16:9</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">1920 × 1080 px</div>
-                              <div className="text-[9px] text-slate-500 mt-1">Banner ngang truyền thống</div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', 'auto')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === 'auto'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>⚡ Tự Động (Auto)</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Theo kích cỡ ảnh</div>
-                              <div className="text-[9px] text-slate-500 mt-1">Khớp 100% tỷ lệ gốc</div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateHeroSlide(slide.id, 'aspectRatioMobile', 'custom')}
-                              className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                                slide.aspectRatioMobile === 'custom'
-                                  ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
-                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <div className="font-bold text-xs flex items-center gap-1">
-                                <span>📏 Chiều Cao px</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{slide.customHeightMobile || 380} px</div>
-                              <div className="text-[9px] text-slate-500 mt-1">Nhập số px tùy ý</div>
-                            </button>
-                          </div>
-
-                          {/* Custom Height Input if 'custom' selected */}
-                          {slide.aspectRatioMobile === 'custom' && (
-                            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 flex items-center gap-3">
-                              <span className="text-xs font-bold text-slate-800 shrink-0">Chiều cao banner trên mobile:</span>
-                              <input
-                                type="number"
-                                min="180"
-                                max="850"
-                                step="10"
-                                value={slide.customHeightMobile || 380}
-                                onChange={(e) => handleUpdateHeroSlide(slide.id, 'customHeightMobile', Number(e.target.value))}
-                                className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
-                              />
-                              <span className="text-xs text-slate-500">pixels (px)</span>
-                            </div>
-                          )}
-
-                          {/* Fit Mode Selector */}
-                          <div className="pt-2">
-                            <label className="text-xs font-bold text-slate-800 block mb-1">
-                              Chế Độ Khớp Khung Hình (Fit Mode)
-                            </label>
-                            <div className="grid grid-cols-3 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'cover')}
-                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
-                                  slide.bgFitMobile === 'cover' || !slide.bgFitMobile
-                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                }`}
-                              >
-                                Phủ kín viền (Cover)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'contain')}
-                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
-                                  slide.bgFitMobile === 'contain'
-                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                }`}
-                              >
-                                Trọn vẹn 100% (Contain)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'fill')}
-                                className={`p-2 rounded-xl text-xs font-semibold text-center border transition-all cursor-pointer ${
-                                  slide.bgFitMobile === 'fill'
-                                    ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs font-bold'
-                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                                }`}
-                              >
-                                Kéo giãn (Fill)
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 4. Focal Point Alignment on Mobile */}
-                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-800">
-                              Trọng Tâm Hiển Thị Ảnh Trên Điện Thoại
-                            </span>
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              X: {posX}% • Y: {posY}%
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-slate-500 font-semibold block">
-                                Trục Ngang (Trái ↔ Phải)
-                              </span>
-                              <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={posX}
-                                onChange={(e) => handleUpdateHeroSlide(slide.id, 'bgPositionXMobile', Number(e.target.value))}
-                                className="w-full accent-amber-500 cursor-pointer"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <span className="text-[10px] text-slate-500 font-semibold block">
-                                Trục Dọc (Trên ↕ Dưới)
-                              </span>
-                              <input
-                                type="range"
-                                min="0"
-                                max="100"
-                                value={posY}
-                                onChange={(e) => handleUpdateHeroSlide(slide.id, 'bgPositionYMobile', Number(e.target.value))}
-                                className="w-full accent-amber-500 cursor-pointer"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 5. Direct Action to Open Studio */}
-                        <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => setMobileStudioMode('studio')}
-                            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          >
-                            <Smartphone className="w-3.5 h-3.5" />
-                            <span>Mở Studio Canvas để căn chỉnh chữ, nút & hiệu ứng trên Smartphone</span>
-                          </button>
-
-                          {hasMobileImg && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleUpdateHeroSlide(slide.id, 'bgImageMobile', '');
-                                handleUpdateHeroSlide(slide.id, 'bgFitMobile', 'contain');
-                              }}
-                              className="text-xs text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                            >
-                              Khôi phục dùng chung ảnh PC
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ----------------------------------------------------
           TAB: THE COLLECTION (SẢN PHẨM LANDING PAGE - HỖ TRỢ NHIỀU MỤC)

@@ -388,6 +388,9 @@ export interface StoredOrder {
     selectedCharm?: string;
     selectedCharmImage?: string;
     selectedCharmPrice?: number;
+    selectedKhoen?: string;
+    selectedKhoenImage?: string;
+    selectedKhoenPrice?: number;
     selectedSize?: string;
     customNote?: string;
   }[];
@@ -471,9 +474,14 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         charmSelectionRequired: !!data.charmSelectionRequired,
         maxCharmsAllowed: typeof data.maxCharmsAllowed === 'number' ? data.maxCharmsAllowed : undefined,
         enableOmamoriSelection: !!data.enableOmamoriSelection,
+        omamoriTitle: data.omamoriTitle || undefined,
         omamoriOptions: Array.isArray(data.omamoriOptions) ? data.omamoriOptions : undefined,
         omamoriSelectionRequired: !!data.omamoriSelectionRequired,
         maxOmamoriAllowed: typeof data.maxOmamoriAllowed === 'number' ? data.maxOmamoriAllowed : undefined,
+        enableKhoenSelection: !!data.enableKhoenSelection,
+        khoenTitle: data.khoenTitle || undefined,
+        khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
+        khoenSelectionRequired: !!data.khoenSelectionRequired,
         enableSizeSelection: !!data.enableSizeSelection,
         stock: rawStock,
         inStock: computedInStock,
@@ -484,7 +492,7 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         isNew: !!data.isNew,
         rating: data.rating || 5.0,
         reviewsCount: data.reviewsCount || 12,
-        isHidden: !!data.isHidden,
+        isHidden: data.isHidden === true || String(data.isHidden) === 'true',
         updatedAt: data.updatedAt || undefined
       } as Product);
       recordOperation('read');
@@ -537,9 +545,14 @@ export const subscribeToProductsFromFirestore = (
             charmSelectionRequired: !!data.charmSelectionRequired,
             maxCharmsAllowed: typeof data.maxCharmsAllowed === 'number' ? data.maxCharmsAllowed : undefined,
             enableOmamoriSelection: !!data.enableOmamoriSelection,
+            omamoriTitle: data.omamoriTitle || undefined,
             omamoriOptions: Array.isArray(data.omamoriOptions) ? data.omamoriOptions : undefined,
             omamoriSelectionRequired: !!data.omamoriSelectionRequired,
             maxOmamoriAllowed: typeof data.maxOmamoriAllowed === 'number' ? data.maxOmamoriAllowed : undefined,
+            enableKhoenSelection: !!data.enableKhoenSelection,
+            khoenTitle: data.khoenTitle || undefined,
+            khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
+            khoenSelectionRequired: !!data.khoenSelectionRequired,
             enableSizeSelection: !!data.enableSizeSelection,
             stock: rawStock,
             inStock: computedInStock,
@@ -550,7 +563,7 @@ export const subscribeToProductsFromFirestore = (
             isNew: !!data.isNew,
             rating: data.rating || 5.0,
             reviewsCount: data.reviewsCount || 12,
-            isHidden: !!data.isHidden,
+            isHidden: data.isHidden === true || String(data.isHidden) === 'true',
             updatedAt: data.updatedAt || undefined
           } as Product);
         });
@@ -593,8 +606,11 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
       );
     }
 
+    const isProdHidden = prod.isHidden === true || String(prod.isHidden) === 'true';
+
     let payload = cleanFirestoreData({
       ...prod,
+      isHidden: isProdHidden,
       image: optimizedImage || prod.image || '/assets/hero-bg.png',
       images: optimizedImages || (optimizedImage ? [optimizedImage] : ['/assets/hero-bg.png']),
       stock: stockVal,
@@ -623,6 +639,7 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
       }
       payload = cleanFirestoreData({
         ...prod,
+        isHidden: isProdHidden,
         image: optimizedImage || '/assets/hero-bg.png',
         images: optimizedImages || [optimizedImage || '/assets/hero-bg.png'],
         stock: stockVal,
@@ -1015,7 +1032,7 @@ export const fetchCategoriesFromFirestore = async (forceRefresh = false): Promis
         highlightColor: data.highlightColor,
         badge: data.badge,
         isEvent: !!data.isEvent,
-        isHidden: !!data.isHidden
+        isHidden: data.isHidden === true || String(data.isHidden) === 'true'
       });
     });
 
@@ -1051,7 +1068,7 @@ export const subscribeToCategoriesFromFirestore = (
             highlightColor: data.highlightColor,
             badge: data.badge,
             isEvent: !!data.isEvent,
-            isHidden: !!data.isHidden
+            isHidden: data.isHidden === true || String(data.isHidden) === 'true'
           });
         });
         callback(results);
@@ -1071,8 +1088,10 @@ export const subscribeToCategoriesFromFirestore = (
 export const saveCategoryToFirestore = async (category: CategoryItem): Promise<void> => {
   try {
     const docRef = doc(db, 'categories', category.id);
+    const isCatHidden = category.isHidden === true || String(category.isHidden) === 'true';
     const payload = cleanFirestoreData({
       ...category,
+      isHidden: isCatHidden,
       updatedAt: new Date().toISOString()
     });
     const catSize = JSON.stringify(payload).length;
@@ -1127,7 +1146,7 @@ export const fetchCollectionsFromFirestore = async (): Promise<CollectionInfo[]>
         order: typeof data.order === 'number' ? data.order : 0,
         buttonText: data.buttonText || '',
         themeStyle: data.themeStyle || 'light',
-        isHidden: !!data.isHidden
+        isHidden: data.isHidden === true || String(data.isHidden) === 'true'
       });
     });
     if (results.length > 0) {
@@ -1176,7 +1195,7 @@ export const subscribeToCollectionsFromFirestore = (
             order: typeof data.order === 'number' ? data.order : 0,
             buttonText: data.buttonText || '',
             themeStyle: data.themeStyle || 'light',
-            isHidden: !!data.isHidden
+            isHidden: data.isHidden === true || String(data.isHidden) === 'true'
           });
         });
         results.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1218,8 +1237,10 @@ export const saveCollectionToFirestore = async (collectionItem: CollectionInfo):
       productPageBanner = await compressBase64Image(productPageBanner, 1200, 800, 0.80);
     }
 
+    const isColHidden = collectionItem.isHidden === true || String(collectionItem.isHidden) === 'true';
     const payload = cleanFirestoreData({
       ...collectionItem,
+      isHidden: isColHidden,
       bgImage,
       bannerImage,
       horizontalImage,
@@ -1303,9 +1324,13 @@ export const fetchSiteContentFromFirestore = async (): Promise<SiteContentConfig
   try {
     recordOperation('read');
     const docRef = doc(db, 'site_content', 'main_config');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data() as SiteContentConfig;
+    }
     const snap = await getDocs(query(collection(db, 'site_content')));
     if (!snap.empty) {
-      const found = snap.docs.find(d => d.id === 'main_config');
+      const found = snap.docs.find(d => d.id === 'main_config') || snap.docs[0];
       if (found && found.exists()) {
         return found.data() as SiteContentConfig;
       }
@@ -1349,20 +1374,21 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
   try {
     const docRef = doc(db, 'site_content', 'main_config');
 
-    // Compress hero slides images if any Base64 strings exist
+    // Compress hero slides images if any Base64 strings exist & remove legacy separate mobile images
     let heroSlides = config.heroSlides;
     if (Array.isArray(heroSlides) && heroSlides.length > 0) {
       heroSlides = await Promise.all(
         heroSlides.map(async (slide) => {
           let bgImg = slide.bgImage;
           if (bgImg && bgImg.startsWith('data:image/')) {
-            bgImg = await compressBase64Image(bgImg, 1200, 800, 0.80);
+            try {
+              bgImg = await compressBase64Image(bgImg, 1920, 1080, 0.85);
+            } catch (compErr) {
+              console.warn('Lỗi nén ảnh slide:', compErr);
+            }
           }
-          let bgImgMobile = slide.bgImageMobile;
-          if (bgImgMobile && bgImgMobile.startsWith('data:image/')) {
-            bgImgMobile = await compressBase64Image(bgImgMobile, 900, 1600, 0.82);
-          }
-          return { ...slide, bgImage: bgImg, bgImageMobile: bgImgMobile };
+          const { bgImageMobile, ...restSlide } = slide as any;
+          return { ...restSlide, bgImage: bgImg };
         })
       );
     }
@@ -1372,11 +1398,25 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
       heroSlides,
       updatedAt: new Date().toISOString()
     });
+
+    // Also update local storage cache immediately
+    try {
+      localStorage.setItem('nak_site_content', JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+
     const dataSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
     recordOperation('write', dataSize);
   } catch (err) {
     console.error('Lỗi lưu cấu hình website vào Firestore:', err);
+    // Ensure local storage is updated anyway
+    try {
+      localStorage.setItem('nak_site_content', JSON.stringify(config));
+    } catch {
+      // ignore
+    }
     throw err;
   }
 };

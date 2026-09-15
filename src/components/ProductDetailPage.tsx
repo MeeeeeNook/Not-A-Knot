@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption, CollectionInfo } from '../types';
+import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, CollectionInfo } from '../types';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
+import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
+import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
+import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,11 +19,13 @@ import {
   AlertCircle,
   ShieldCheck,
   PackageCheck,
+  Package,
   Truck,
   RotateCcw,
   Sparkles,
   Award,
-  MessageCircle
+  MessageCircle,
+  ZoomIn
 } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
 import { useProductSEO } from '../utils/seo';
@@ -46,7 +51,10 @@ interface ProductDetailPageProps {
     selectedCharmPrice?: number,
     selectedCharms?: ProductCharmOption[],
     selectedOmamoris?: ProductOmamoriOption[],
-    selectedOmamoriPrice?: number
+    selectedOmamoriPrice?: number,
+    selectedKhoen?: string,
+    selectedKhoenImage?: string,
+    selectedKhoenPrice?: number
   ) => void;
   onBuyNow: (
     product: Product,
@@ -60,7 +68,10 @@ interface ProductDetailPageProps {
     selectedCharmPrice?: number,
     selectedCharms?: ProductCharmOption[],
     selectedOmamoris?: ProductOmamoriOption[],
-    selectedOmamoriPrice?: number
+    selectedOmamoriPrice?: number,
+    selectedKhoen?: string,
+    selectedKhoenImage?: string,
+    selectedKhoenPrice?: number
   ) => void;
 }
 
@@ -100,6 +111,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [charmError, setCharmError] = useState<string | null>(null);
   const [selectedOmamoris, setSelectedOmamoris] = useState<ProductOmamoriOption[]>([]);
   const [omamoriError, setOmamoriError] = useState<string | null>(null);
+  const [selectedKhoen, setSelectedKhoen] = useState<ProductKhoenOption | null>(null);
+  const [khoenError, setKhoenError] = useState<string | null>(null);
 
   const totalCharmPrice = useMemo(() => {
     return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
@@ -109,11 +122,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     return selectedOmamoris.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
   }, [selectedOmamoris]);
 
+  const totalKhoenPrice = selectedKhoen?.priceDelta || 0;
+
   const totalCartCount = useMemo(() => {
     return cartItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
   }, [cartItems]);
 
-  const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice;
+  const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice;
 
   const selectedCharmNames = useMemo(() => {
     return selectedCharms.map((c) => c.name).join(', ');
@@ -122,7 +137,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [isAdded, setIsAdded] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'warranty'>('details');
+  const [activeTab, setActiveTab] = useState<'return_warranty' | 'shipping'>('return_warranty');
 
   // Floating hovering purchase dock visibility observer
   const mainCtaRef = useRef<HTMLDivElement>(null);
@@ -134,10 +149,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     if (stockNoticeTimerRef.current) clearTimeout(stockNoticeTimerRef.current);
     const msg = customMsg || (
       isOutOfStock 
-        ? '⚠️ Sản phẩm này hiện đã hết hàng.'
+        ? 'Sản phẩm này hiện đã hết hàng.'
         : isCartFullForProduct 
-        ? `⚠️ Bạn đã thêm đủ toàn bộ tồn kho (${availableStock} chiếc) vào giỏ hàng!` 
-        : `⚠️ Kho chỉ còn ${availableStock} chiếc (bạn đã chọn ${quantity} chiếc).`
+        ? `Bạn đã thêm đủ toàn bộ tồn kho (${availableStock} chiếc) vào giỏ hàng!` 
+        : `Kho chỉ còn ${availableStock} chiếc (bạn đã chọn ${quantity} chiếc).`
     );
     setStockNotice(msg);
     stockNoticeTimerRef.current = setTimeout(() => {
@@ -179,6 +194,22 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     return list.length > 0 ? list : ['/assets/bracelet.jpg'];
   }, [product]);
 
+  const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);
+
+  const productCompareItems: CompareItem[] = useMemo(() => {
+    return images.map((img, i) => {
+      const matchingColor = product.colorOptions?.find((c) => c.image === img);
+      return {
+        id: `prod-img-${i}`,
+        title: matchingColor ? `${product.name} (${matchingColor.name})` : `${product.name} - Ảnh ${i + 1}`,
+        image: img,
+        subtitle: matchingColor ? `Phân loại: ${matchingColor.name}` : undefined,
+        type: 'product',
+        originalData: matchingColor,
+      };
+    });
+  }, [images, product]);
+
   // Reset state when product changes
   useEffect(() => {
     const initCol = product.colorOptions?.[0]?.name || product.availableColors?.[0];
@@ -190,8 +221,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setSelectedColorImage(initImg);
     setSelectedCharms([]);
     setSelectedOmamoris([]);
+    setSelectedKhoen(null);
     setCharmError(null);
     setOmamoriError(null);
+    setKhoenError(null);
     setIsAdded(false);
     setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -285,6 +318,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Keyboard navigation for image gallery
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (productCompareModalOpen) return;
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea') return;
+
       if (e.key === 'ArrowLeft') {
         prevImage();
       } else if (e.key === 'ArrowRight') {
@@ -293,7 +330,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prevImage, nextImage]);
+  }, [prevImage, nextImage, productCompareModalOpen]);
 
   // Color selection with automatic image link preview
   const handleSelectColor = (colorOpt: ProductColorOption) => {
@@ -335,6 +372,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return;
     }
 
+    const khoenTitleLabel = product.khoenTitle?.trim() || 'Khoen';
+    if (product.enableKhoenSelection && product.khoenSelectionRequired && !selectedKhoen) {
+      setKhoenError(`Vui lòng chọn 1 tùy chọn trong "${khoenTitleLabel}" trước khi thêm vào giỏ hàng.`);
+      return;
+    }
+
     const addQty = Math.min(quantity, remainingAddableStock);
 
     for (const ch of selectedCharms) {
@@ -363,6 +406,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       }
     }
 
+    if (selectedKhoen && typeof selectedKhoen.stock === 'number') {
+      if (selectedKhoen.stock <= 0) {
+        setKhoenError(`Mục "${selectedKhoen.name}" hiện đã hết hàng. Vui lòng chọn mục khác.`);
+        return;
+      }
+      if (selectedKhoen.stock < addQty) {
+        setKhoenError(`Mục "${selectedKhoen.name}" chỉ còn ${selectedKhoen.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+        return;
+      }
+    }
+
     onAddToCart(
       product,
       addQty,
@@ -375,7 +429,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       totalCharmPrice,
       selectedCharms,
       selectedOmamoris,
-      totalOmamoriPrice
+      totalOmamoriPrice,
+      selectedKhoen?.name || undefined,
+      selectedKhoen?.image || undefined,
+      totalKhoenPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -393,6 +450,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
     if (product.enableOmamoriSelection && product.omamoriSelectionRequired && selectedOmamoris.length === 0) {
       setOmamoriError('Vui lòng chọn ít nhất 1 bùa Omamori trước khi mua hàng.');
+      return;
+    }
+
+    const khoenTitleLabel = product.khoenTitle?.trim() || 'Khoen';
+    if (product.enableKhoenSelection && product.khoenSelectionRequired && !selectedKhoen) {
+      setKhoenError(`Vui lòng chọn 1 tùy chọn trong "${khoenTitleLabel}" trước khi mua hàng.`);
       return;
     }
 
@@ -424,6 +487,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       }
     }
 
+    if (selectedKhoen && typeof selectedKhoen.stock === 'number') {
+      if (selectedKhoen.stock <= 0) {
+        setKhoenError(`Mục "${selectedKhoen.name}" hiện đã hết hàng. Vui lòng chọn mục khác.`);
+        return;
+      }
+      if (selectedKhoen.stock < addQty) {
+        setKhoenError(`Mục "${selectedKhoen.name}" chỉ còn ${selectedKhoen.stock} cái trong kho, không đủ số lượng ${addQty}.`);
+        return;
+      }
+    }
+
     onBuyNow(
       product,
       addQty,
@@ -436,7 +510,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       totalCharmPrice,
       selectedCharms,
       selectedOmamoris,
-      totalOmamoriPrice
+      totalOmamoriPrice,
+      selectedKhoen?.name || undefined,
+      selectedKhoen?.image || undefined,
+      totalKhoenPrice
     );
   };
 
@@ -463,13 +540,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Set of category IDs that are marked as hidden
   const hiddenCategoryIds = useMemo(() => {
-    return new Set(categories.filter((c) => c.isHidden).map((c) => c.id));
+    return new Set(
+      categories
+        .filter((c) => c.isHidden === true || String(c.isHidden) === 'true')
+        .map((c) => c.id)
+    );
   }, [categories]);
 
   // Robust check: Is this product hidden (explicitly or via its category)
   const isProductVisible = useCallback(
     (p: Product) => {
-      if (Boolean(p.isHidden)) return false;
+      if (p.isHidden === true || String(p.isHidden) === 'true') return false;
       if (p.category && hiddenCategoryIds.has(p.category)) return false;
       return true;
     },
@@ -525,12 +606,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Automatically update page title, meta description, keywords, Open Graph, Twitter cards, and JSON-LD schema for this product
   useProductSEO(product, categoryName);
 
-  if (product.isHidden) {
+  if (product.isHidden === true || String(product.isHidden) === 'true') {
     return (
       <div id="product-hidden-page" className="min-h-[70vh] bg-[#FAF8F5] flex flex-col items-center justify-center p-6 text-center">
         <div className="max-w-md space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-900 border border-amber-200 flex items-center justify-center mx-auto text-3xl shadow-xs">
-            🙈
+          <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-900 border border-amber-200 flex items-center justify-center mx-auto shadow-xs">
+            <AlertCircle className="w-8 h-8 text-amber-800" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Sản Phẩm Đang Tạm Ẩn</h2>
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
@@ -596,7 +677,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           {/* LEFT: Compact Interactive High-Res Gallery (Shopee Mobile-optimized) */}
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
-              className="relative aspect-square max-h-[320px] sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto"
+              onClick={() => setProductCompareModalOpen(true)}
+              className="relative aspect-square max-h-[320px] sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto cursor-zoom-in"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
@@ -608,6 +690,21 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <span className="truncate">{product.discountBadge}</span>
                 </div>
               )}
+
+              {/* Zoom & Compare Overlay Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setProductCompareModalOpen(true);
+                }}
+                className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 bg-black/60 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
+                title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
+              >
+                <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Phóng to & So sánh</span>
+                <span className="sm:hidden">Phóng to</span>
+              </button>
 
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
@@ -813,7 +910,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     />
                     {charmError && (
                       <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                        ⚠️ {charmError}
+                        {charmError}
                       </p>
                     )}
                   </div>
@@ -836,7 +933,32 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   />
                   {omamoriError && (
                     <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                      ⚠️ {omamoriError}
+                      {omamoriError}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Khoen Selection (if enabled) */}
+              {product.enableKhoenSelection && (
+                <div className="space-y-1">
+                  <ProductKhoenSelector
+                    title={product.khoenTitle}
+                    khoenOptions={
+                      product.khoenOptions && product.khoenOptions.length > 0
+                        ? product.khoenOptions
+                        : DEFAULT_KHOEN_PRESETS
+                    }
+                    selectedKhoen={selectedKhoen}
+                    onSelectKhoen={(khoen) => {
+                      setKhoenError(null);
+                      setSelectedKhoen(khoen);
+                    }}
+                    isRequired={product.khoenSelectionRequired}
+                  />
+                  {khoenError && (
+                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                      {khoenError}
                     </p>
                   )}
                 </div>
@@ -994,22 +1116,22 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 {/* Service Guarantees */}
                 <div className="pt-4 border-t border-neutral-100 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-neutral-700">
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
-                    <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                      <Truck className="w-3.5 h-3.5" />
+                    <div className="w-6 h-6 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                      <Package className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium truncate">Freeship từ 300k</span>
+                    <span className="font-medium truncate">Đóng gói hộp giấy</span>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
-                    <div className="w-6 h-6 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
                       <ShieldCheck className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium truncate">Bảo hành trọn đời</span>
+                    <span className="font-medium truncate">Bảo hành chi tiết</span>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
                     <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <Truck className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium truncate">Đổi trả 7 ngày</span>
+                    <span className="font-medium truncate">Phí ship minh bạch</span>
                   </div>
                 </div>
               </div>
@@ -1018,27 +1140,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
         </div>
 
-        {/* INTERACTIVE SPECIFICATION & SERVICE TABS */}
-        <section id="product-tabs-section" className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-sm space-y-6">
+        {/* INTERACTIVE POLICY & SHIPPING TABS */}
+        <section id="product-tabs-section" className="bg-white rounded-3xl p-6 sm:p-8 border border-neutral-200 shadow-xs space-y-6">
           {/* Tabs Navigation */}
           <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 overflow-x-auto scrollbar-none">
             <button
               type="button"
-              onClick={() => setActiveTab('details')}
+              onClick={() => setActiveTab('return_warranty')}
               className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-                activeTab === 'details'
-                  ? 'bg-neutral-950 text-white shadow-xs'
-                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-              }`}
-            >
-              <Award className="w-4 h-4 text-amber-400" />
-              <span>Chi tiết chế tác & Chất liệu</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('warranty')}
-              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
-                activeTab === 'warranty'
+                activeTab === 'return_warranty'
                   ? 'bg-neutral-950 text-white shadow-xs'
                   : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
               }`}
@@ -1046,84 +1156,110 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <ShieldCheck className="w-4 h-4 text-amber-400" />
               <span>Chính sách đổi trả & Bảo hành</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('shipping')}
+              className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+                activeTab === 'shipping'
+                  ? 'bg-neutral-950 text-white shadow-xs'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              }`}
+            >
+              <Truck className="w-4 h-4 text-amber-400" />
+              <span>Chính sách Phí vận chuyển</span>
+            </button>
           </div>
 
-          {/* Tab 1: Chi tiết chế tác */}
-          {activeTab === 'details' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {product.details && product.details.length > 0 ? (
-                  product.details.map((detail, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 flex items-start gap-3 text-xs sm:text-sm text-neutral-700"
-                    >
-                      <span className="w-2 h-2 rounded-full bg-amber-600 mt-1.5 flex-shrink-0" />
-                      <span className="leading-relaxed">{detail}</span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 text-xs sm:text-sm text-neutral-600">
-                    Sản phẩm được đan tay 100% thủ công từ dây Paracord 550 nhập khẩu cao cấp, chốt khóa hợp kim chống gỉ sáng bóng.
+          {/* Tab 1: Chính sách đổi trả & Bảo hành */}
+          {activeTab === 'return_warranty' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>Quy cách sản phẩm: Không có size</span>
                   </div>
-                )}
-              </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Sản phẩm của chúng tôi bán không có phân chia size số. Thiết kế dạng freesize linh hoạt, dễ dàng điều chỉnh độ vừa vặn phù hợp cho mọi kích thước cổ tay.
+                  </p>
+                </div>
 
-              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-amber-200/60 text-xs text-amber-950 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold">Quy chuẩn chất lượng xưởng NOT A KNOT</p>
-                  <p className="text-neutral-700 leading-relaxed">
-                    Mỗi chiếc vòng được nghệ nhân bện tay từng gút thắt tỉ mỉ, xử lý giấu mối nhiệt thẩm mỹ cao, đảm bảo không cộm rát khi đeo thường nhật hay hoạt động thể thao ngoài trời.
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <ShieldCheck className="w-4 h-4 text-amber-700" />
+                    <span>Bảo hành chi tiết từng phụ kiện</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Có chính sách bảo hành chi tiết đối với từng thành phần: khoen, charm, bùa, phụ kiện hoặc dây khi có vấn đề trong quá trình sử dụng.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <Package className="w-4 h-4 text-sky-600" />
+                    <span>Đóng gói trong hộp giấy</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Mỗi sản phẩm đều được đóng gói cẩn thận trong hộp giấy cứng cáp, bảo vệ sản phẩm toàn diện khi giao hàng và lịch sự khi làm quà tặng.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <RotateCcw className="w-4 h-4 text-rose-600" />
+                    <span>Quy định đổi trả & Xử lý lỗi</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Hỗ trợ tiếp nhận đổi trả hoặc bảo hành đối với các trường hợp lỗi linh kiện (khoen, charm, bùa, phụ kiện, hoặc dây) hoặc sản phẩm bị ảnh hưởng trong khâu giao nhận.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab 2: Chính sách đổi trả & bảo hành */}
-          {activeTab === 'warranty' && (
+          {/* Tab 2: Chính sách Phí vận chuyển */}
+          {activeTab === 'shipping' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
-                    <RotateCcw className="w-4 h-4 text-amber-700" />
-                    <span>Đổi size trong 7 ngày</span>
+                    <Truck className="w-4 h-4 text-emerald-600" />
+                    <span>Quận Hai Bà Trưng</span>
                   </div>
+                  <div className="text-base font-black text-emerald-600 font-mono">0đ (Miễn phí ship)</div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Nếu nhận hàng đeo không vừa, xưởng sẵn sàng hỗ trợ đan lại size mới hoặc tinh chỉnh theo đúng số đo của bạn hoàn toàn miễn phí.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
-                    <PackageCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Đồng kiểm khi nhận hàng</span>
-                  </div>
-                  <p className="text-neutral-600 leading-relaxed">
-                    Quý khách được quyền mở hộp kiểm tra màu sắc, mẫu charm, thử vòng trước khi thanh toán cho nhân viên giao hàng.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
-                    <ShieldCheck className="w-4 h-4 text-sky-600" />
-                    <span>Bảo hành độ bền sợi</span>
-                  </div>
-                  <p className="text-neutral-600 leading-relaxed">
-                    Bảo hành trọn đời lỗi bung gút đan tự nhiên. Dây Paracord 550 chính hãng có khả năng chịu lực 250kg và không bị mục sợi khi ngâm nước.
+                    Miễn phí giao hàng cho tất cả đơn hàng tại địa chỉ quận Hai Bà Trưng, Hà Nội.
                   </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
                     <Truck className="w-4 h-4 text-amber-700" />
-                    <span>Đóng gói quà tặng Vintage</span>
+                    <span>Các quận huyện Hà Nội</span>
                   </div>
+                  <div className="text-base font-black text-amber-700 font-mono">5.000đ</div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Mỗi đơn hàng được đóng gói trong hộp kraft vintage phong cách xưởng, có túi chống ẩm và thiệp thông điệp thích hợp làm quà tặng.
+                    Áp dụng mức phí 5.000đ cho tất cả các quận, huyện còn lại thuộc khu vực Hà Nội.
                   </p>
                 </div>
+
+                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    <span>Toàn quốc (Tỉnh khác)</span>
+                  </div>
+                  <div className="text-base font-black text-blue-600 font-mono">20.000đ</div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Áp dụng mức phí đồng giá 20.000đ cho mọi tỉnh, thành phố khác trên toàn quốc.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 text-xs text-neutral-600 flex items-start gap-2.5">
+                <PackageCheck className="w-4 h-4 text-neutral-700 flex-shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  Thời gian giao hàng: Nội thành Hà Nội từ 1 - 2 ngày làm việc, các tỉnh thành khác từ 2 - 4 ngày làm việc. Khách hàng được quyền kiểm tra hàng khi nhận.
+                </p>
               </div>
             </div>
           )}
@@ -1563,6 +1699,29 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Fullscreen Product Images Zoom & Compare Lightbox */}
+      <ProductImageCompareModal
+        isOpen={productCompareModalOpen}
+        onClose={() => setProductCompareModalOpen(false)}
+        items={productCompareItems}
+        initialIndex={activeImageIdx}
+        title={`Ảnh chi tiết: ${product.name}`}
+        onSelectItem={(item) => {
+          if (item.originalData) {
+            handleSelectColor(item.originalData);
+          } else {
+            const idx = images.indexOf(item.image);
+            if (idx !== -1) setActiveImageIdx(idx);
+          }
+        }}
+        isItemSelected={(item) => {
+          if (item.originalData) {
+            return selectedColor === item.originalData.name;
+          }
+          return images[activeImageIdx] === item.image;
+        }}
+      />
     </motion.div>
   );
 };

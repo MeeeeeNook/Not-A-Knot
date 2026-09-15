@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ProductOmamoriOption } from '../types';
-import { Check, Flame, X } from 'lucide-react';
+import { Check, Flame, X, ZoomIn } from 'lucide-react';
+import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 
 interface ProductOmamoriSelectorProps {
   omamoris: ProductOmamoriOption[];
@@ -26,6 +27,20 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   if (!omamoris || omamoris.length === 0) return null;
 
   const displayTitle = title?.trim() || 'Chọn Bùa Omamori';
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [activeCompareIdx, setActiveCompareIdx] = useState(0);
+
+  const compareItems: CompareItem[] = useMemo(() => {
+    return omamoris.map((o, i) => ({
+      id: o.id || `omamori-${i}`,
+      title: o.name,
+      image: o.image || '',
+      priceDelta: o.priceDelta,
+      stock: o.stock,
+      type: 'omamori',
+      originalData: o,
+    }));
+  }, [omamoris]);
 
   // Resolve current active selection array
   const currentSelection: ProductOmamoriOption[] = React.useMemo(() => {
@@ -116,6 +131,19 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveCompareIdx(0);
+              setCompareModalOpen(true);
+            }}
+            className="text-[11px] font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+            title="Bấm để phóng to và so sánh các mẫu bùa Omamori"
+          >
+            <ZoomIn className="w-3 h-3" />
+            <span>So sánh ({omamoris.length})</span>
+          </button>
+
           {totalExtraPrice > 0 && (
             <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/70">
               +{totalExtraPrice.toLocaleString('vi-VN')}đ
@@ -152,7 +180,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                 if (isOutOfStock) return;
                 handleToggleOmamori(omamori);
               }}
-              className={`relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
+              className={`group relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
                 isOutOfStock
                   ? 'opacity-50 grayscale bg-slate-50 border-slate-200 cursor-not-allowed select-none'
                   : isSelected
@@ -167,8 +195,33 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                 </div>
               )}
 
-              {/* Omamori Image */}
-              <div className="w-full aspect-[4/5] rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative">
+              {/* Omamori Image - Click image to zoom & compare */}
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveCompareIdx(idx);
+                  setCompareModalOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    setActiveCompareIdx(idx);
+                    setCompareModalOpen(true);
+                  }
+                }}
+                className="w-full aspect-[4/5] rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative cursor-zoom-in group/img"
+                title="Bấm vào ảnh để phóng to & so sánh chi tiết"
+              >
+                {/* Zoom / Compare Button */}
+                <span
+                  className="absolute top-1 left-1 z-10 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all opacity-85 sm:opacity-0 group-hover:opacity-100 hover:scale-110 shadow-xs pointer-events-none"
+                  aria-label="Phóng to"
+                >
+                  <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                </span>
+
                 {omamori.image && omamori.image.trim() ? (
                   <img
                     src={omamori.image}
@@ -182,9 +235,17 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                   </div>
                 )}
 
+                {/* Hover zoom pill overlay */}
+                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <span className="px-2 py-0.5 rounded-full bg-black/80 text-white text-[10px] font-bold flex items-center gap-1 shadow-md">
+                    <ZoomIn className="w-3 h-3 text-rose-300" />
+                    <span>Phóng to</span>
+                  </span>
+                </div>
+
                 {/* Extra price badge */}
                 {omamori.priceDelta && omamori.priceDelta > 0 ? (
-                  <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/80 text-white font-medium px-1.5 py-0.5 rounded shadow-xs backdrop-blur-[1px]">
+                  <span className="absolute bottom-1 right-1 text-[9px] bg-slate-900/80 text-white font-medium px-1.5 py-0.5 rounded shadow-xs backdrop-blur-[1px] z-10">
                     +{omamori.priceDelta.toLocaleString('vi-VN')}đ
                   </span>
                 ) : null}
@@ -224,7 +285,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
       {/* Limit Notice Toast - Rendered below grid so grid never jumps */}
       {limitNotice && (
         <div className="px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-xs font-medium flex items-center justify-between gap-2 animate-fadeIn">
-          <span>⚠️ {limitNotice}</span>
+          <span>{limitNotice}</span>
           <button
             type="button"
             onClick={() => setLimitNotice(null)}
@@ -266,6 +327,27 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
           ))}
         </div>
       )}
+
+      {/* Fullscreen Zoom & Compare Modal */}
+      <ProductImageCompareModal
+        isOpen={compareModalOpen}
+        onClose={() => setCompareModalOpen(false)}
+        items={compareItems}
+        initialIndex={activeCompareIdx}
+        title={`So sánh mẫu ${displayTitle}`}
+        onSelectItem={(item) => {
+          if (item.originalData) {
+            handleToggleOmamori(item.originalData);
+          }
+        }}
+        isItemSelected={(item) => {
+          return currentSelection.some(
+            (o) =>
+              (o.id && o.id === item.id) ||
+              o.name.trim().toLowerCase() === item.title.trim().toLowerCase()
+          );
+        }}
+      />
     </div>
   );
 };

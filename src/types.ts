@@ -33,6 +33,14 @@ export interface ProductOmamoriOption {
   stock?: number; // Inventory quantity for this specific amulet (undefined = unlimited, 0 = out of stock)
 }
 
+export interface ProductKhoenOption {
+  id?: string;
+  name: string; // e.g. "Khoen Tròn Inox", "Khoen Càng Cua Bạc", "Khoen Trái Tim", "Khoen Giọt Nước", "Khoen Vintage Đồng"
+  image?: string; // thumbnail / photo of the clasp/keyring
+  priceDelta?: number; // optional extra price (e.g. +5.000đ), default 0
+  stock?: number; // Inventory quantity for this specific khoen (undefined = unlimited, 0 = out of stock)
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -67,6 +75,11 @@ export interface Product {
   omamoriOptions?: ProductOmamoriOption[];
   omamoriSelectionRequired?: boolean;
   maxOmamoriAllowed?: number; // Maximum selectable Omamori amulets (default: 1)
+  // Khoen / Keyring / Clasp selection settings
+  enableKhoenSelection?: boolean;
+  khoenTitle?: string; // Tên hiển thị nhóm tùy chọn khoen (mặc định: "Chọn Khoen", có thể tùy biến thành "Chọn Móc Khóa", "Chọn Khoen Cài"...)
+  khoenOptions?: ProductKhoenOption[];
+  khoenSelectionRequired?: boolean;
   enableSizeSelection?: boolean;
   inStock: boolean;
   stock?: number;
@@ -101,6 +114,9 @@ export interface CartItem {
   selectedCharms?: ProductCharmOption[];
   selectedOmamoris?: ProductOmamoriOption[];
   selectedOmamoriPrice?: number;
+  selectedKhoen?: string;
+  selectedKhoenImage?: string;
+  selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
 }
@@ -124,6 +140,9 @@ export interface OrderItemDetail {
   selectedCharms?: ProductCharmOption[];
   selectedOmamoris?: ProductOmamoriOption[];
   selectedOmamoriPrice?: number;
+  selectedKhoen?: string;
+  selectedKhoenImage?: string;
+  selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
 }
@@ -252,26 +271,33 @@ export interface CustomElementBlock {
 export interface BillboardTextBox {
   id: string;
   text: string;
-  x: number;
-  y: number;
-  width: number;
+  x: number; // 0 to 100%
+  y: number; // 0 to 100%
+  width?: number; // width in % or auto
   fontFamily: 'sans' | 'serif' | 'mono' | 'display';
   fontSize: number;
   fontWeight: number;
   color: string;
   align: 'left' | 'center' | 'right';
   visible: boolean;
+  link?: string; // Internal category ID, anchor #id, or external https:// url
+  isButton?: boolean; // Rendered as clickable button
+  buttonStyle?: 'pill' | 'rounded' | 'square' | 'outline' | 'glass';
+  bgColor?: string; // Background color for button or text badge
+  isItalic?: boolean;
+  isUppercase?: boolean;
+  textShadow?: boolean;
 }
 
 export interface SiteHeroSlide {
   id: string;
-  tag: string;
-  title: string;
-  highlight: string;
-  subtitle: string;
+  tag?: string;
+  title?: string;
+  highlight?: string;
+  subtitle?: string;
   bgImage: string;
-  buttonText: string;
-  categoryLink: string;
+  buttonText?: string;
+  categoryLink?: string;
   order: number;
   isActive: boolean;
   textAlign?: 'left' | 'center' | 'right';
@@ -292,7 +318,7 @@ export interface SiteHeroSlide {
   subtitleColor?: string;
   buttonBgColor?: string;
   buttonTextColor?: string;
-  buttonStyle?: 'pill' | 'rounded' | 'square';
+  buttonStyle?: 'pill' | 'rounded' | 'square' | 'outline' | 'glass';
   textShadow?: boolean;
   letterSpacing?: 'tight' | 'normal' | 'wide';
   bgPositionX?: number; // 0 to 100% (default 50)
@@ -302,17 +328,8 @@ export interface SiteHeroSlide {
   showText?: boolean;
   hideOverlay?: boolean;
   bgFit?: 'cover' | 'contain' | 'fill';
-  aspectRatio?: 'fullscreen' | '16:9' | 'cinematic' | 'contain' | 'auto';
+  aspectRatio?: '16:7' | '16:9' | 'cinematic' | 'fullscreen' | 'contain' | 'auto';
   originalBgImage?: string;
-  // Dedicated Mobile / Smartphone Billboard Settings
-  bgImageMobile?: string;
-  originalBgImageMobile?: string;
-  bgPositionXMobile?: number; // 0 to 100% (default 50)
-  bgPositionYMobile?: number; // 0 to 100% (default 50)
-  bgZoomMobile?: number; // 100 to 250% (default 100)
-  bgFitMobile?: 'cover' | 'contain' | 'fill';
-  aspectRatioMobile?: 'fullscreen' | '9:16' | '4:5' | '1:1' | '16:9' | 'auto' | 'custom';
-  customHeightMobile?: number; // Custom height in pixels on mobile (e.g. 380, 420)
   bgColor?: string; // Optional custom background color for letterbox / margins
   textBoxes?: BillboardTextBox[];
 }

@@ -89,7 +89,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   // Automatic bottom-region luminance detection & natural image ratio calculation
   useEffect(() => {
     const s = currentSlide as SiteHeroSlide;
-    const activeImgSrc = s?.bgImageMobile || currentSlide?.bgImage;
+    const activeImgSrc = currentSlide?.bgImage;
     if (!activeImgSrc) {
       setIsBrightBg(false);
       setImageNaturalRatio(null);
@@ -164,7 +164,6 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     };
   }, [
     currentSlide?.bgImage,
-    (currentSlide as SiteHeroSlide)?.bgImageMobile,
     (currentSlide as SiteHeroSlide)?.overlayOpacity,
     (currentSlide as SiteHeroSlide)?.hideOverlay
   ]);
@@ -250,74 +249,34 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     })
   };
 
+  const handleNavigateLink = (link?: string) => {
+    if (!link || !link.trim()) return;
+    const cleanLink = link.trim();
+    if (cleanLink.startsWith('http://') || cleanLink.startsWith('https://')) {
+      window.open(cleanLink, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (cleanLink.startsWith('#')) {
+      const el = document.getElementById(cleanLink.slice(1));
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
+    if (cleanLink === 'event_0209') {
+      handleNavEvent();
+      return;
+    }
+    handleSelectCat(cleanLink);
+  };
+
   const s = currentSlide as SiteHeroSlide;
-
-  // Calculate dynamic mobile aspect ratio
-  const mobileAspectRatioClass = (() => {
-    if (s.aspectRatioMobile === '1:1') {
-      return 'max-sm:aspect-square max-sm:w-full';
-    }
-    if (s.aspectRatioMobile === '4:5') {
-      return 'max-sm:aspect-[4/5] max-sm:w-full';
-    }
-    if (s.aspectRatioMobile === '9:16') {
-      return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
-    }
-    if (s.aspectRatioMobile === '16:9') {
-      return 'max-sm:aspect-[16/9] max-sm:w-full';
-    }
-    if (s.aspectRatioMobile === 'fullscreen') {
-      return 'max-sm:h-[calc(100svh-3.5rem)] max-sm:min-h-[480px] max-sm:max-h-[820px] max-sm:w-full';
-    }
-    if (s.aspectRatioMobile === 'custom' && s.customHeightMobile) {
-      return 'max-sm:w-full';
-    }
-
-    // Auto / Smart detection if image ratio is known
-    if (imageNaturalRatio) {
-      // Near square (0.85 - 1.15) e.g. 1024x1024 bracelet image
-      if (imageNaturalRatio >= 0.85 && imageNaturalRatio <= 1.15) {
-        return 'max-sm:aspect-square max-sm:w-full';
-      }
-      // Instagram portrait (4:5 or 3:4)
-      if (imageNaturalRatio >= 0.68 && imageNaturalRatio < 0.85) {
-        return 'max-sm:aspect-[4/5] max-sm:w-full';
-      }
-      // Reels / TikTok portrait (9:16)
-      if (imageNaturalRatio < 0.68) {
-        return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
-      }
-      // Landscape (16:9)
-      if (imageNaturalRatio > 1.3) {
-        return 'max-sm:aspect-[16/9] max-sm:w-full';
-      }
-    }
-
-    // Fallback if not detected yet
-    if (s.bgImageMobile) {
-      return 'max-sm:aspect-[9/16] max-sm:w-full max-sm:max-h-[85svh]';
-    }
-    return 'max-sm:aspect-square max-sm:w-full';
-  })();
-
-  const mobileCustomStyle: React.CSSProperties | undefined = 
-    s.aspectRatioMobile === 'custom' && s.customHeightMobile
-      ? { height: `${s.customHeightMobile}px` }
-      : undefined;
 
   return (
     <section id="hero-banner-section" className={`relative ${isBrightBg ? 'bg-white text-slate-900' : 'bg-slate-950 text-white'} overflow-hidden overflow-x-clip w-full max-w-full select-none transition-colors duration-300`}>
-      {/* Main Cinematic Hero Billboard (Device-optimized for PC and Smartphone) */}
+      {/* Unified Hero Billboard (PC and Mobile share 100% identical image & ratio) */}
       <div
-        style={mobileCustomStyle}
-        className={`relative w-full max-w-full overflow-hidden overflow-x-clip select-none ${isBrightBg ? 'bg-white' : 'bg-slate-950'} transition-all ${
-          // Desktop aspect ratio
-          s.aspectRatio === '16:9'
-            ? 'sm:aspect-[16/9] sm:min-h-[520px] sm:max-h-[800px]'
-            : s.aspectRatio === 'cinematic'
-            ? 'sm:aspect-[21/9] sm:min-h-[460px] sm:max-h-[700px]'
-            : 'sm:h-[calc(100vh-3.5rem)] sm:min-h-[560px]'
-        } ${mobileAspectRatioClass}`}
+        className={`relative w-full max-w-full overflow-hidden overflow-x-clip select-none aspect-[16/7] ${isBrightBg ? 'bg-white' : 'bg-slate-950'} transition-all`}
         onMouseEnter={() => setIsAutoPlay(false)}
         onMouseLeave={() => setIsAutoPlay(true)}
       >
@@ -352,11 +311,10 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
               const isRight = align === 'right';
               const buttonShape = s.buttonStyle || 'pill';
 
-              const hasVisibleButton = s.showButton !== false && !!s.buttonText && s.buttonText.trim() !== '';
-              const hasVisibleText = s.showText !== false && (!!s.title?.trim() || !!s.subtitle?.trim() || !!s.tag?.trim() || !!s.highlight?.trim());
-              const hasOverlay = s.hideOverlay !== true && (s.overlayOpacity ?? 50) > 0;
+              const hasCustomBoxes = Array.isArray(s.textBoxes) && s.textBoxes.some(b => b.visible !== false && !!b.text?.trim());
+              const hasOverlay = s.hideOverlay !== true && (s.overlayOpacity ?? 0) > 0;
 
-              // Helper to render image with specific focal point, zoom, and fit mode
+              // Helper to render image layer
               const renderImageLayer = (
                 imgSrc: string | undefined,
                 posX: number,
@@ -417,147 +375,117 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
 
               return (
                 <div 
-                  className={`absolute inset-0 w-full h-full flex items-center justify-center ${!hasVisibleButton && s.categoryLink ? 'cursor-pointer' : ''}`}
+                  className={`absolute inset-0 w-full h-full flex items-center justify-center ${!hasCustomBoxes && s.categoryLink ? 'cursor-pointer' : ''}`}
                   onClick={() => {
-                    if (!hasVisibleButton && s.categoryLink) {
+                    if (!hasCustomBoxes && s.categoryLink) {
                       handleCta(s);
                     }
                   }}
                 >
-                  {/* Smartphone Viewport (< 640px): Dedicated Mobile Billboard */}
-                  <div className="block sm:hidden absolute inset-0 w-full h-full">
-                    {renderImageLayer(
-                      s.bgImageMobile || s.bgImage,
-                      s.bgPositionXMobile ?? (s.bgImageMobile ? 50 : s.bgPositionX ?? 50),
-                      s.bgPositionYMobile ?? (s.bgImageMobile ? 50 : s.bgPositionY ?? 50),
-                      s.bgZoomMobile ?? (s.bgImageMobile ? 100 : s.bgZoom ?? 100),
-                      s.bgFitMobile || (s.bgImageMobile ? (s.bgFit || 'cover') : 'contain'),
-                      s.title || 'NOT A KNOT Mobile Banner'
-                    )}
-                  </div>
-
-                  {/* Desktop Viewport (>= 640px): Dedicated Desktop Billboard */}
-                  <div className="hidden sm:block absolute inset-0 w-full h-full">
+                  {/* Single Unified Image Layer (Identical on PC and Mobile) */}
+                  <div className="absolute inset-0 w-full h-full">
                     {renderImageLayer(
                       s.bgImage,
                       s.bgPositionX ?? 50,
                       s.bgPositionY ?? 50,
                       s.bgZoom ?? 100,
-                      s.bgFit || (s.aspectRatio === 'contain' ? 'contain' : 'cover'),
+                      s.bgFit || 'cover',
                       s.title || 'NOT A KNOT Banner'
                     )}
                   </div>
 
-                  {/* Configurable Overlay Opacity (Hidden if in pure image mode or opacity = 0) */}
+                  {/* Configurable Overlay Opacity - Exactly matches Canva Studio */}
                   {hasOverlay && (
-                    <>
-                      <div
-                        className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
-                        style={{ opacity: (s.overlayOpacity ?? 50) / 100 }}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10 pointer-events-none" />
-                    </>
+                    <div
+                      className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-300"
+                      style={{ opacity: (s.overlayOpacity ?? 0) / 100 }}
+                    />
                   )}
 
-                  {/* Slide Content Box */}
-                  {(hasVisibleText || hasVisibleButton) && (
-                    <div className={`relative z-20 w-full h-full max-w-6xl mx-auto px-6 sm:px-12 pt-6 sm:pt-10 pb-16 sm:pb-24 flex flex-col ${getPositionClasses(pos)} pointer-events-none`}>
-                      <div 
-                        className={`space-y-4 flex flex-col pointer-events-auto ${s.titleTextAlign === 'center' ? 'items-center text-center mx-auto' : s.titleTextAlign === 'right' ? 'items-end text-right ml-auto' : s.titleTextAlign === 'left' ? 'items-start text-left mr-auto' : isCenter ? 'items-center text-center mx-auto' : isRight ? 'items-end text-right ml-auto' : 'items-start text-left mr-auto'}`}
-                        style={{ width: '100%', maxWidth: (s as any).contentMaxWidth ? `${(s as any).contentMaxWidth}%` : '48rem' }}
-                      >
-                        {/* Eyebrow Tag */}
-                        {s.tag && hasVisibleText && (
-                          <motion.p
-                            initial={(s as any).disableAnimation ? false : { y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.15 }}
-                            className={`text-xs sm:text-sm font-black uppercase tracking-widest inline-block px-3 py-1 rounded-full bg-black/40 backdrop-blur-xs border border-white/20 ${isCenter ? 'mx-auto text-center' : isRight ? 'ml-auto text-right' : 'mr-auto text-left'}`}
-                            style={{ color: s.highlightColor || '#F59E0B' }}
-                          >
-                            {s.tag}
-                          </motion.p>
-                        )}
-                        {/* Main Headline */}
-                        {(s.title || s.highlight) && hasVisibleText && (
-                          <motion.h1
-                            initial={(s as any).disableAnimation ? false : { y: 25, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.25 }}
-                            className={`leading-tight w-full ${getFontFamilyClass(s.titleFontFamily || s.fontFamily)} ${getLetterSpacingClass(s.letterSpacing)} ${s.titleTextAlign === 'center' ? 'text-center' : s.titleTextAlign === 'right' ? 'text-right' : s.titleTextAlign === 'left' ? 'text-left' : isCenter ? 'text-center' : isRight ? 'text-right' : 'text-left'}`}
+                  {/* CUSTOM TEXT BOXES & BUTTONS (Rendered strictly from Studio design) */}
+                  {hasCustomBoxes && (
+                    <div className="absolute inset-0 w-full h-full pointer-events-none z-20">
+                      {s.textBoxes?.map((box) => {
+                        if (box.visible === false || !box.text?.trim()) return null;
+                        const isBtn = box.isButton || !!box.link;
+                        const btnStyle = box.buttonStyle || 'pill';
+
+                        const fontFamilyCSS = 
+                          box.fontFamily === 'serif'
+                            ? 'Georgia, "Playfair Display", "Times New Roman", serif'
+                            : box.fontFamily === 'mono'
+                            ? 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+                            : box.fontFamily === 'display'
+                            ? '"Montserrat", "Plus Jakarta Sans", sans-serif'
+                            : 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+                        const innerElement = (
+                          <div
+                            className={`transition-all select-none ${
+                              box.isButton
+                                ? `px-3 sm:px-6 py-1.5 sm:py-2.5 font-bold shadow-xl flex items-center justify-center gap-1.5 ${
+                                    btnStyle === 'rounded'
+                                      ? 'rounded-xl'
+                                      : btnStyle === 'square'
+                                      ? 'rounded-xs'
+                                      : btnStyle === 'outline'
+                                      ? 'rounded-full border-2 border-current bg-black/40 backdrop-blur-xs'
+                                      : btnStyle === 'glass'
+                                      ? 'rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white'
+                                      : 'rounded-full'
+                                  }`
+                                : ''
+                            } ${box.isUppercase ? 'uppercase tracking-wider' : ''} ${box.isItalic ? 'italic' : ''}`}
                             style={{
-                              color: s.titleColor || '#FFFFFF',
-                              textShadow: s.textShadow !== false ? '0 2px 10px rgba(0,0,0,0.85)' : 'none'
+                              color: box.color || '#ffffff',
+                              backgroundColor: box.isButton && btnStyle !== 'outline' && btnStyle !== 'glass' ? (box.bgColor || '#09090b') : undefined,
+                              fontFamily: fontFamilyCSS,
+                              fontSize: `clamp(11px, ${(box.fontSize || 18) * 0.08}vw, ${box.fontSize || 18}px)`,
+                              fontWeight: box.fontWeight || 600,
+                              textAlign: box.align || 'left',
+                              textShadow: box.textShadow !== false && !box.isButton ? '0 2px 10px rgba(0,0,0,0.9)' : 'none',
                             }}
                           >
-                            {s.title && (
-                              <span
-                                className="block font-black tracking-tight"
-                                style={{
-                                  fontSize: s.titleFontSize ? `clamp(22px, 4vw, ${s.titleFontSize}px)` : 'clamp(24px, 4.5vw, 44px)'
-                                }}
-                              >
-                                {s.title}
-                              </span>
-                            )}
-                            {s.highlight && (
-                              <span
-                                className="block font-light mt-1 tracking-normal"
-                                style={{
-                                  color: s.highlightColor || '#F59E0B',
-                                  fontSize: s.titleFontSize ? `clamp(16px, 3vw, ${Math.round(s.titleFontSize * 0.75)}px)` : 'clamp(18px, 3.2vw, 32px)'
-                                }}
-                              >
-                                {s.highlight}
-                              </span>
-                            )}
-                          </motion.h1>
-                        )}
-                        {/* Subtitle */}
-                        {s.subtitle && hasVisibleText && (
-                          <motion.p
-                            initial={(s as any).disableAnimation ? false : { y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.35 }}
-                            className={`font-normal leading-relaxed w-full line-clamp-3 ${getFontFamilyClass(s.subtitleFontFamily || s.fontFamily)} ${s.subtitleTextAlign === 'center' ? 'mx-auto text-center' : s.subtitleTextAlign === 'right' ? 'ml-auto text-right' : s.subtitleTextAlign === 'left' ? 'mr-auto text-left' : isCenter ? 'mx-auto text-center' : isRight ? 'ml-auto text-right' : 'mr-auto text-left'}`}
-                            style={{
-                              color: s.subtitleColor || '#E2E8F0',
-                              fontSize: s.subtitleFontSize ? `clamp(13px, 1.8vw, ${s.subtitleFontSize}px)` : 'clamp(14px, 2vw, 16px)',
-                              textShadow: s.textShadow !== false ? '0 1px 6px rgba(0,0,0,0.8)' : 'none'
-                            }}
-                          >
-                            {s.subtitle}
-                          </motion.p>
-                        )}
-                        {/* Primary CTA Button (Rendered ONLY if showButton !== false and buttonText is non-empty) */}
-                        {hasVisibleButton && (
-                          <motion.div
-                            initial={(s as any).disableAnimation ? false : { y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.45 }}
-                            className={`pt-2 flex items-center gap-4 w-full ${s.titleTextAlign === 'center' ? 'justify-center mx-auto' : s.titleTextAlign === 'right' ? 'justify-end ml-auto' : s.titleTextAlign === 'left' ? 'justify-start mr-auto' : isCenter ? 'justify-center mx-auto' : isRight ? 'justify-end ml-auto' : 'justify-start mr-auto'}`}
-                          >
+                            <span>{box.text}</span>
+                            {box.isButton && <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />}
+                          </div>
+                        );
+
+                        if (box.link) {
+                          return (
                             <button
-                              id={`hero-cta-btn-${s.id}`}
+                              key={box.id}
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleCta(s);
+                                handleNavigateLink(box.link);
                               }}
-                              className={`px-8 py-3.5 font-bold transition-all shadow-xl hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${
-                                buttonShape === 'rounded' ? 'rounded-xl' : buttonShape === 'square' ? 'rounded-xs' : 'rounded-full'
-                              }`}
+                              className="absolute pointer-events-auto cursor-pointer hover:scale-105 active:scale-95 transition-transform"
                               style={{
-                                backgroundColor: s.buttonBgColor || '#FFFFFF',
-                                color: s.buttonTextColor || '#0F172A',
-                                fontSize: s.buttonFontSize ? `${s.buttonFontSize}px` : '14px'
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: box.width ? `${box.width}%` : 'auto',
                               }}
                             >
-                              <span>{s.buttonText}</span>
-                              <ArrowRight className="w-4 h-4" />
+                              {innerElement}
                             </button>
-                          </motion.div>
-                        )}
-                      </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={box.id}
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: box.width ? `${box.width}%` : 'auto',
+                            }}
+                          >
+                            {innerElement}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
