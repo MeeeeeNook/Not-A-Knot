@@ -1060,13 +1060,20 @@ export default function App() {
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   const landingProductSections = useMemo(() => {
+    let sections: typeof DEFAULT_SITE_CONTENT.landingProductSections = [];
     if (siteContent?.landingProductSections && siteContent.landingProductSections.length > 0) {
-      return siteContent.landingProductSections;
+      sections = siteContent.landingProductSections;
+    } else if (siteContent?.landingProducts) {
+      sections = [siteContent.landingProducts];
+    } else {
+      sections = DEFAULT_SITE_CONTENT.landingProductSections || [];
     }
-    if (siteContent?.landingProducts) {
-      return [siteContent.landingProducts];
+
+    const hasActive = sections.some((s) => s.isActive !== false);
+    if (!hasActive && sections.length > 0) {
+      return sections.map((s, idx) => (idx === 0 ? { ...s, isActive: true } : s));
     }
-    return DEFAULT_SITE_CONTENT.landingProductSections || [];
+    return sections;
   }, [siteContent]);
 
   const handleAnnouncementClick = () => {
@@ -1191,12 +1198,12 @@ export default function App() {
               onOpenAbout={handleOpenAbout}
             />
 
-            {/* The Collection(s) - Landing Page Direct Products Grid(s) */}
+            {/* The Collection(s) - Landing Page Direct Products Grid(s) (e.g. BACK TO SCHOOL / THE COLLECTION) */}
             {landingProductSections.map((secConfig, idx) => (
               <LandingProductsCollection
                 key={secConfig.id || `landing-sec-${idx}`}
                 config={secConfig}
-                products={visibleProducts}
+                products={products.filter((p) => !p.isHidden)}
                 categories={categories}
                 collections={collections}
                 sectionIndex={idx}

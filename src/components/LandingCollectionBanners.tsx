@@ -89,6 +89,12 @@ export const LandingCollectionBanners: React.FC<LandingCollectionBannersProps> =
                       {banner.subtitle}
                     </p>
                   )}
+
+                  {/* Explore Collection Action */}
+                  <div className={`pt-2 flex items-center gap-1.5 text-xs font-bold text-amber-400 group-hover:text-amber-300 transition-colors ${isEven ? 'md:justify-end' : ''}`}>
+                    <span className="underline underline-offset-4">Khám phá bộ sưu tập</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
                 </div>
               </div>
             );

@@ -103,7 +103,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
     if (config?.selectedProductIds && config.selectedProductIds.length > 0) {
       const selected = config.selectedProductIds
         .map((id) => products.find((p) => String(p.id) === String(id)))
-        .filter((p): p is Product => Boolean(p && !p.isHidden && String(p.isHidden) !== 'true'));
+        .filter((p): p is Product => Boolean(p));
       if (selected.length > 0) {
         return displayLimit > 0 ? selected.slice(0, displayLimit) : selected;
       }
@@ -112,7 +112,15 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
     // 2. Filter by category if specified
     let filtered = products.filter((p) => !p.isHidden && String(p.isHidden) !== 'true');
     if (config?.filterCategory && config.filterCategory !== 'all') {
-      filtered = filtered.filter((p) => p.category === config.filterCategory);
+      const catFiltered = filtered.filter((p) => p.category === config.filterCategory);
+      if (catFiltered.length > 0) {
+        filtered = catFiltered;
+      }
+    }
+
+    // Fallback: If filtered is empty, take all available products so the section never disappears
+    if (filtered.length === 0 && products.length > 0) {
+      filtered = products;
     }
 
     // 3. Take products according to limit

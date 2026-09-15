@@ -507,6 +507,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // UI Layout & Drag-Drop states
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const [isImageDragging, setIsImageDragging] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2788,7 +2789,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               Hình ảnh sản phẩm & Thứ tự hiển thị *
                             </label>
                             <p className="text-[11px] text-slate-500 mt-0.5">
-                              Ảnh đầu tiên (#1) là <span className="font-bold text-amber-700">ảnh mặc định</span>. Có thể tải nhiều ảnh hoặc nhập link và sắp xếp thứ tự.
+                              Tải ảnh trực tiếp từ máy tính hoặc kéo thả ảnh vào khung. Ảnh đầu tiên (#1) là <span className="font-bold text-amber-700">ảnh đại diện</span>.
                             </p>
                           </div>
                           {formImages.length > 0 && (
@@ -2805,104 +2806,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           )}
                         </div>
 
-                        {/* Images list with reordering */}
-                        {formImages.length > 0 && (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                            {formImages.map((imgSrc, idx) => (
-                              <div
-                                key={idx}
-                                className={`relative rounded-xl overflow-hidden border p-1.5 transition-all ${
-                                  idx === 0
-                                    ? 'bg-amber-50/70 border-amber-400 ring-1 ring-amber-400/40'
-                                    : 'bg-white border-slate-200'
-                                }`}
-                              >
-                                <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
-                                  <img
-                                    src={imgSrc || '/assets/bracelet.jpg'}
-                                    alt={`Ảnh ${idx + 1}`}
-                                    className="w-full h-full object-cover"
-                                  />
-                                  <div className="absolute top-1.5 left-1.5">
-                                    {idx === 0 ? (
-                                      <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow-xs">
-                                        ★ Mặc định (#1)
-                                      </span>
-                                    ) : (
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900/80 text-white">
-                                        #{idx + 1}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Reorder & Action buttons */}
-                                <div className="flex items-center justify-between gap-1 mt-1.5 pt-1 border-t border-slate-100">
-                                  <div className="flex items-center gap-0.5">
-                                    <button
-                                      type="button"
-                                      disabled={idx === 0}
-                                      onClick={() => handleMoveImage(idx, idx - 1)}
-                                      className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
-                                      title="Dời lên trước"
-                                    >
-                                      ←
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={idx === formImages.length - 1}
-                                      onClick={() => handleMoveImage(idx, idx + 1)}
-                                      className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
-                                      title="Dời xuống sau"
-                                    >
-                                      →
-                                    </button>
-                                  </div>
-
-                                  {idx !== 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSetDefaultImage(idx)}
-                                      className="text-[10px] font-bold text-amber-800 hover:underline px-1"
-                                      title="Đặt ảnh này làm ảnh mặc định"
-                                    >
-                                      Làm ảnh chính
-                                    </button>
-                                  )}
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveImage(idx)}
-                                    className="p-1 text-slate-400 hover:text-rose-600 rounded text-[10px] font-bold"
-                                    title="Xóa ảnh này"
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Add image by URL or file */}
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newImageUrlInput}
-                            onChange={(e) => setNewImageUrlInput(e.target.value)}
-                            placeholder="Hoặc dán URL ảnh trực tiếp (https://...)"
-                            className="flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddImageUrl}
-                            disabled={!newImageUrlInput.trim()}
-                            className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 disabled:opacity-40 text-slate-800 rounded-xl text-xs font-bold shrink-0 transition-colors"
-                          >
-                            + Thêm Link
-                          </button>
-                        </div>
-
                         {/* Drag and Drop Zone for multiple files */}
                         <div
                           onDragOver={(e) => {
@@ -2912,10 +2815,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           onDragLeave={() => setIsImageDragging(false)}
                           onDrop={handleImageDrop}
                           onClick={() => fileInputRef.current?.click()}
-                          className={`relative border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all duration-200 ${
+                          className={`relative border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group ${
                             isImageDragging
-                              ? 'border-amber-500 bg-amber-50/80 scale-[1.01]'
-                              : 'border-slate-300 bg-slate-50/70 hover:border-amber-400 hover:bg-amber-50/30'
+                              ? 'border-amber-500 bg-amber-100/90 scale-[1.01] ring-4 ring-amber-400/30'
+                              : 'border-amber-300/80 bg-amber-50/50 hover:border-amber-500 hover:bg-amber-50/90'
                           }`}
                         >
                           <input
@@ -2926,14 +2829,141 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             onChange={handleImageFileChange}
                             className="hidden"
                           />
-                          <div className="py-2 space-y-1">
-                            <div className="text-xs font-bold text-slate-800">
-                              + Tải thêm ảnh từ máy tính (Có thể chọn nhiều ảnh cùng lúc)
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                              <Upload className="w-6 h-6 text-amber-700" />
                             </div>
-                            <div className="text-[11px] text-slate-500">
-                              Kéo thả file ảnh hoặc <span className="text-amber-700 font-bold underline">nhấp vào đây</span> (PNG, JPG, WEBP)
+                            <div>
+                              <div className="text-sm font-black text-slate-900">
+                                Kéo thả ảnh vào đây hoặc <span className="text-amber-700 underline underline-offset-2">Bấm để tải từ máy</span>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                Hỗ trợ PNG, JPG, JPEG, WEBP • Có thể chọn & kéo thả nhiều ảnh cùng lúc
+                              </div>
                             </div>
                           </div>
+                        </div>
+
+                        {/* Images list with reordering */}
+                        {formImages.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <div className="text-[11px] font-bold text-slate-700">
+                              Danh sách ảnh đã tải ({formImages.length} ảnh) — dùng ← → để đổi thứ tự:
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                              {formImages.map((imgSrc, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`relative rounded-xl overflow-hidden border p-1.5 transition-all ${
+                                    idx === 0
+                                      ? 'bg-amber-50/70 border-amber-400 ring-1 ring-amber-400/40'
+                                      : 'bg-white border-slate-200'
+                                  }`}
+                                >
+                                  <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
+                                    <img
+                                      src={imgSrc || '/assets/bracelet.jpg'}
+                                      alt={`Ảnh ${idx + 1}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute top-1.5 left-1.5">
+                                      {idx === 0 ? (
+                                        <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow-xs">
+                                          ★ Đại diện (#1)
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900/80 text-white">
+                                          #{idx + 1}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Reorder & Action buttons */}
+                                  <div className="flex items-center justify-between gap-1 mt-1.5 pt-1 border-t border-slate-100">
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleMoveImage(idx, idx - 1)}
+                                        className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
+                                        title="Dời lên trước"
+                                      >
+                                        ←
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === formImages.length - 1}
+                                        onClick={() => handleMoveImage(idx, idx + 1)}
+                                        className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
+                                        title="Dời xuống sau"
+                                      >
+                                        →
+                                      </button>
+                                    </div>
+
+                                    {idx !== 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetDefaultImage(idx)}
+                                        className="text-[10px] font-bold text-amber-800 hover:underline px-1"
+                                        title="Đặt ảnh này làm ảnh mặc định"
+                                      >
+                                        Làm ảnh chính
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveImage(idx)}
+                                      className="p-1 text-slate-400 hover:text-rose-600 rounded text-[10px] font-bold"
+                                      title="Xóa ảnh này"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Collapsible secondary URL option */}
+                        <div className="pt-0.5">
+                          {!showUrlInput ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowUrlInput(true)}
+                              className="text-[11px] text-slate-400 hover:text-amber-700 font-medium transition-colors"
+                            >
+                              + Dán link URL ảnh nếu có
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                              <input
+                                type="text"
+                                value={newImageUrlInput}
+                                onChange={(e) => setNewImageUrlInput(e.target.value)}
+                                placeholder="Dán URL ảnh trực tiếp (https://...)"
+                                className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddImageUrl}
+                                disabled={!newImageUrlInput.trim()}
+                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white rounded-lg text-xs font-bold shrink-0 transition-colors"
+                              >
+                                + Thêm Link
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowUrlInput(false)}
+                                className="px-2 py-1.5 text-slate-400 hover:text-slate-600 text-xs font-semibold"
+                              >
+                                Đóng
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -3111,21 +3141,75 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     </button>
                                   </div>
 
-                                  {/* Linked Photo for this color */}
-                                  <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                                    <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
+                                  {/* Linked Photo for this color with file upload & drop */}
+                                  <div
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      const file = e.dataTransfer.files?.[0];
+                                      if (file) {
+                                        processOptionImageFile(file, (dataUrl) => {
+                                          setFormColorOptions((prev) =>
+                                            prev.map((c, i) => (i === cIdx ? { ...c, image: dataUrl } : c))
+                                          );
+                                        }, 800);
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 pt-1 border-t border-slate-100"
+                                  >
+                                    <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 group">
                                       {col.image && col.image.trim() ? (
-                                        <img
-                                          src={col.image}
-                                          alt={col.name}
-                                          className="w-full h-full object-cover"
-                                        />
+                                        <>
+                                          <img
+                                            src={col.image}
+                                            alt={col.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormColorOptions((prev) =>
+                                                prev.map((c, i) => (i === cIdx ? { ...c, image: '' } : c))
+                                              );
+                                            }}
+                                            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
+                                            title="Gỡ ảnh màu"
+                                          >
+                                            ✕
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center text-[9px] text-slate-400">
                                           Không ảnh
                                         </div>
                                       )}
                                     </div>
+                                    <input
+                                      id={`color-file-${cIdx}`}
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          processOptionImageFile(file, (dataUrl) => {
+                                            setFormColorOptions((prev) =>
+                                              prev.map((c, i) => (i === cIdx ? { ...c, image: dataUrl } : c))
+                                            );
+                                          }, 800);
+                                        }
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => document.getElementById(`color-file-${cIdx}`)?.click()}
+                                      className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                                      title="Tải ảnh riêng cho màu này từ máy"
+                                    >
+                                      <Upload className="w-3 h-3 text-amber-700" />
+                                      <span>{col.image ? 'Đổi ảnh' : 'Tải ảnh máy'}</span>
+                                    </button>
                                     <div className="flex-1 min-w-0">
                                       <input
                                         type="text"
