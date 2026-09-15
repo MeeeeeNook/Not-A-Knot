@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Product, SellerUser, OrderItemDetail } from '../types';
+import { Product, SellerUser, OrderItemDetail, ProductOmamoriOption } from '../types';
 import { StoredOrder, saveOrderToFirestore } from '../firebase';
 import { 
   formatOrderDateWithoutSeconds, 
@@ -43,7 +43,15 @@ interface EditableOrderItem {
   quantity: number;
   selectedSize?: string;
   selectedColor?: string;
+  selectedColorImage?: string;
   selectedCharm?: string;
+  selectedCharmImage?: string;
+  selectedCharmPrice?: number;
+  selectedKhoen?: string;
+  selectedKhoenImage?: string;
+  selectedKhoenPrice?: number;
+  selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriPrice?: number;
   customNote?: string;
 }
 
@@ -125,7 +133,15 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         quantity: it.quantity || 1,
         selectedSize: it.selectedSize || '',
         selectedColor: it.selectedColor || '',
-        selectedCharm: it.selectedCharm || '',
+        selectedColorImage: it.selectedColorImage,
+        selectedCharm: typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : (it.selectedCharm || ''),
+        selectedCharmImage: it.selectedCharmImage,
+        selectedCharmPrice: it.selectedCharmPrice,
+        selectedKhoen: it.selectedKhoen || '',
+        selectedKhoenImage: it.selectedKhoenImage,
+        selectedKhoenPrice: it.selectedKhoenPrice,
+        selectedOmamoris: it.selectedOmamoris,
+        selectedOmamoriPrice: it.selectedOmamoriPrice,
         customNote: it.customNote || ''
       }));
     }
@@ -144,6 +160,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           selectedSize: '',
           selectedColor: '',
           selectedCharm: '',
+          selectedKhoen: '',
           customNote: ''
         }));
       }
@@ -157,6 +174,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         selectedSize: '16cm',
         selectedColor: 'Đỏ son & Vàng kim',
         selectedCharm: 'Charm Hào Khí',
+        selectedKhoen: '',
         customNote: ''
       }
     ];
@@ -413,11 +431,25 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           quantity: Number(it.quantity) || 1,
           selectedSize: it.selectedSize || undefined,
           selectedColor: it.selectedColor || undefined,
+          selectedColorImage: it.selectedColorImage || undefined,
           selectedCharm: it.selectedCharm || undefined,
+          selectedCharmImage: it.selectedCharmImage || undefined,
+          selectedCharmPrice: it.selectedCharmPrice || undefined,
+          selectedKhoen: it.selectedKhoen || undefined,
+          selectedKhoenImage: it.selectedKhoenImage || undefined,
+          selectedKhoenPrice: it.selectedKhoenPrice || undefined,
+          selectedOmamoris: it.selectedOmamoris || undefined,
+          selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
           customNote: it.customNote || undefined
         })),
         items: items.map((it) => {
-          const specs = [it.selectedSize, it.selectedColor, it.selectedCharm].filter(Boolean).join(', ');
+          const specs = [
+            it.selectedSize ? `Size: ${it.selectedSize}` : '',
+            it.selectedColor ? `Màu: ${it.selectedColor}` : '',
+            it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
+            it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
+            it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}` : ''
+          ].filter(Boolean).join(', ');
           return `${it.productName}${specs ? ` (${specs})` : ''} x${it.quantity}`;
         })
       };
@@ -840,8 +872,8 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Custom Attributes: Color, Charm, Custom Note */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* Custom Attributes: Color, Charm, Khoen, Custom Note */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Màu sắc:</label>
                           <input
@@ -865,7 +897,18 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Ghi chú xưởng cho món này:</label>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Khoen đính kèm:</label>
+                          <input
+                            type="text"
+                            value={it.selectedKhoen || ''}
+                            onChange={(e) => handleUpdateItemField(idx, 'selectedKhoen', e.target.value)}
+                            placeholder="VD: Khoen D-Ring Titan"
+                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Ghi chú xưởng:</label>
                           <input
                             type="text"
                             value={it.customNote || ''}

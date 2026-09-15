@@ -22,9 +22,12 @@ export const generateOrderSlipHtml = (
   const cleanNote = getCleanOrderNote(order.note);
   const craftingNote = order.craftingStageNote ? order.craftingStageNote.trim() : '';
   const items = order.itemDetails && order.itemDetails.length > 0 ? order.itemDetails : [];
+  const itemsSubtotal = items.reduce((sum, it) => sum + Number(it.price || (it as any).unitPrice || 0) * Number(it.quantity || 1), 0);
   const total = Number(order.totalPrice || order.totalAmount || 0);
-  const shippingFee = Number(order.shippingFee || 0);
   const discount = Number(order.discountAmount || 0);
+  const shippingFee = order.shippingFee !== undefined && order.shippingFee !== null
+    ? Number(order.shippingFee)
+    : (items.length > 0 && total > itemsSubtotal ? Math.max(0, total - itemsSubtotal + discount) : 0);
   const carrier = order.shippingCarrier
     ? `${order.shippingCarrier}${order.shippingCode ? ` (${order.shippingCode})` : ''}`
     : (order.shippingCode ? `Mã vận đơn: ${order.shippingCode}` : '');
@@ -48,7 +51,9 @@ export const generateOrderSlipHtml = (
             const details = [
               it.selectedSize ? `Size: ${it.selectedSize}` : '',
               it.selectedColor ? `Màu: ${it.selectedColor}` : '',
-              it.selectedCharm ? `Charm: ${it.selectedCharm}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}` : ''
+              it.selectedCharm ? `Charm: ${typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+              it.selectedKhoen ? `Khoen: ${it.selectedKhoen}${it.selectedKhoenPrice ? ` (+${it.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+              it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}` : ''
             ]
               .filter(Boolean)
               .join(' | ');
@@ -336,6 +341,10 @@ export const generateOrderSlipHtml = (
         <strong style="color:#0f172a;">${carrier}</strong>
       </div>` : ''}
       <div class="summary-row">
+        <span>Tạm tính tiền hàng:</span>
+        <strong style="color:#0f172a;">${itemsSubtotal.toLocaleString('vi-VN')}đ</strong>
+      </div>
+      <div class="summary-row">
         <span>Phí vận chuyển:</span>
         <strong style="color:${shippingFee > 0 ? '#0f172a' : '#15803d'};">${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí (Freeship)'}</strong>
       </div>
@@ -386,9 +395,12 @@ export const generateOrderSlipPlainText = (
   const address = order.address || 'Nhận trực tiếp tại xưởng / Thống nhất qua tin nhắn';
   const cleanNote = getCleanOrderNote(order.note);
   const items = order.itemDetails && order.itemDetails.length > 0 ? order.itemDetails : [];
+  const itemsSubtotal = items.reduce((sum, it) => sum + Number(it.price || (it as any).unitPrice || 0) * Number(it.quantity || 1), 0);
   const total = Number(order.totalPrice || order.totalAmount || 0);
-  const shippingFee = Number(order.shippingFee || 0);
   const discount = Number(order.discountAmount || 0);
+  const shippingFee = order.shippingFee !== undefined && order.shippingFee !== null
+    ? Number(order.shippingFee)
+    : (items.length > 0 && total > itemsSubtotal ? Math.max(0, total - itemsSubtotal + discount) : 0);
 
   const itemsList =
     items.length > 0
@@ -399,7 +411,9 @@ export const generateOrderSlipPlainText = (
             const details = [
               it.selectedSize ? `Size: ${it.selectedSize}` : '',
               it.selectedColor ? `Màu: ${it.selectedColor}` : '',
-              it.selectedCharm ? `Charm: ${it.selectedCharm}` : ''
+              it.selectedCharm ? `Charm: ${typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+              it.selectedKhoen ? `Khoen: ${it.selectedKhoen}${it.selectedKhoenPrice ? ` (+${it.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+              it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}` : ''
             ]
               .filter(Boolean)
               .join(', ');
@@ -428,7 +442,8 @@ CHI TIẾT SẢN PHẨM:
 ${itemsList}
 
 THANH TOÁN:
-Tạm tính / Phí ship: ${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí'}
+Tạm tính tiền hàng: ${itemsSubtotal.toLocaleString('vi-VN')}đ
+Phí vận chuyển: ${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí (0đ)'}
 ${discount > 0 ? `Giảm giá: -${discount.toLocaleString('vi-VN')}đ\n` : ''}TỔNG THANH TOÁN: ${total.toLocaleString('vi-VN')}đ
 Hình thức: ${order.paymentMethod === 'bank_transfer' ? 'Chuyển khoản VietQR' : order.paymentMethod === 'cash' ? 'Tiền mặt tại xưởng' : 'Thu tiền khi nhận hàng (COD)'}
 Trạng thái: ${order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu COD'}

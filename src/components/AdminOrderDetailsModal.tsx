@@ -86,6 +86,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
   const srcConfig = getSourceBadgeConfig(order.source);
   const totalAmount = order.totalPrice || order.totalAmount || 0;
+  const itemsSubtotal = (order.itemDetails && order.itemDetails.length > 0)
+    ? order.itemDetails.reduce((sum, it) => sum + (it.unitPrice || it.price || 0) * (it.quantity || 1), 0)
+    : (order.subtotal || (totalAmount - (order.shippingFee || 0) + (order.discountAmount || 0)));
+  const discountAmount = Number(order.discountAmount || 0);
+  const shippingFee = order.shippingFee !== undefined && order.shippingFee !== null
+    ? Number(order.shippingFee)
+    : (totalAmount > itemsSubtotal ? Math.max(0, totalAmount - itemsSubtotal + discountAmount) : 0);
   const paidAmount = order.paidAmount ?? (order.paymentStatus === 'paid' ? totalAmount : 0);
   const remainingAmount = Math.max(0, totalAmount - paidAmount);
   const formattedDate = formatOrderDateWithoutSeconds(order.date || order.createdAt);
@@ -188,12 +195,25 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             </div>
 
             <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Địa Chỉ Giao Hàng
-              </span>
-              <p className="text-slate-800 leading-relaxed">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Địa Chỉ & Giao Hàng
+                </span>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                  shippingFee > 0 ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                }`}>
+                  {shippingFee > 0 ? `Ship: ${shippingFee.toLocaleString('vi-VN')}đ` : 'Freeship (0đ)'}
+                </span>
+              </div>
+              <p className="text-slate-800 leading-relaxed font-medium">
                 {order.address || 'Nhận trực tiếp tại xưởng / Thống nhất qua tin nhắn'}
               </p>
+              {order.shippingCarrier && (
+                <div className="text-[11px] text-slate-600 pt-0.5">
+                  Đơn vị vận chuyển: <strong className="text-slate-900">{order.shippingCarrier}</strong>
+                  {order.shippingCode && <span> (Mã: <code className="text-amber-800 font-bold">{order.shippingCode}</code>)</span>}
+                </div>
+              )}
               {getCleanOrderNote(order.note) && (
                 <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-900 text-xs">
                   <strong>Ghi chú:</strong> {getCleanOrderNote(order.note)}
@@ -220,15 +240,21 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
               <div>
                 <span className="text-slate-500 text-[11px] block">Hình thức:</span>
                 <span className="font-bold text-slate-900 text-xs">
                   {order.paymentMethod === 'bank_transfer' ? 'Chuyển khoản (VietQR)' : order.paymentMethod === 'cash' ? 'Tiền mặt tại xưởng' : 'Thu tiền khi nhận'}
                 </span>
                 {order.bankTransferRef && (
-                  <span className="text-[10px] text-slate-500 block font-mono">Mã GD: {order.bankTransferRef}</span>
+                  <span className="text-[10px] text-slate-500 block font-mono truncate">Mã GD: {order.bankTransferRef}</span>
                 )}
+              </div>
+              <div>
+                <span className="text-slate-500 text-[11px] block">Phí vận chuyển:</span>
+                <span className={`font-bold text-xs ${shippingFee > 0 ? 'text-slate-900' : 'text-emerald-700'}`}>
+                  {shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí'}
+                </span>
               </div>
               <div>
                 <span className="text-slate-500 text-[11px] block">Số tiền đã thu:</span>
@@ -238,7 +264,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               </div>
               <div>
                 <span className="text-slate-500 text-[11px] block">Còn phải thu:</span>
-                <span className="font-bold text-slate-900 text-sm">
+                <span className="font-bold text-amber-900 text-sm">
                   {remainingAmount.toLocaleString('vi-VN')}đ
                 </span>
               </div>
@@ -315,13 +341,45 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                             {it.selectedCharmImage && it.selectedCharmImage.trim() ? (
                               <img
                                 src={it.selectedCharmImage}
-                                alt={it.selectedCharm}
+                                alt={typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}
                                 className="w-6 h-6 rounded-md object-cover border border-amber-300 shrink-0"
                               />
                             ) : null}
-                            <span>Charm: <strong>{it.selectedCharm}</strong></span>
+                            <span>Charm: <strong>{typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}</strong></span>
                             {it.selectedCharmPrice ? (
                               <span className="text-[10px] text-amber-700 font-mono">(+{it.selectedCharmPrice.toLocaleString('vi-VN')}đ)</span>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {it.selectedKhoen && (
+                          <div className="inline-flex items-center gap-1.5 bg-sky-50/90 border border-sky-300 px-2 py-1 rounded-lg text-[11px] font-bold text-sky-950 shadow-2xs">
+                            {it.selectedKhoenImage && it.selectedKhoenImage.trim() ? (
+                              <img
+                                src={it.selectedKhoenImage}
+                                alt={it.selectedKhoen}
+                                className="w-6 h-6 rounded-md object-cover border border-sky-300 shrink-0"
+                              />
+                            ) : null}
+                            <span>Khoen: <strong>{it.selectedKhoen}</strong></span>
+                            {it.selectedKhoenPrice ? (
+                              <span className="text-[10px] text-sky-700 font-mono">(+{it.selectedKhoenPrice.toLocaleString('vi-VN')}đ)</span>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
+                          <div className="inline-flex items-center gap-1.5 bg-rose-50/90 border border-rose-300 px-2 py-1 rounded-lg text-[11px] font-bold text-rose-950 shadow-2xs">
+                            {it.selectedOmamoris[0]?.image ? (
+                              <img
+                                src={it.selectedOmamoris[0].image}
+                                alt="Bùa Omamori"
+                                className="w-6 h-6 rounded-md object-cover border border-rose-300 shrink-0"
+                              />
+                            ) : null}
+                            <span>Bùa: <strong>{it.selectedOmamoris.map((o) => o.name).join(', ')}</strong></span>
+                            {it.selectedOmamoriPrice ? (
+                              <span className="text-[10px] text-rose-700 font-mono">(+{it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)</span>
                             ) : null}
                           </div>
                         )}
@@ -354,11 +412,32 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             </div>
 
             {/* Total Breakdown */}
-            <div className="pt-3 border-t border-slate-200 flex justify-between items-baseline">
-              <span className="font-bold text-xs text-slate-500 uppercase">Tổng Cộng Đơn Hàng:</span>
-              <span className="text-base font-bold text-slate-900">
-                {totalAmount.toLocaleString('vi-VN')}đ
-              </span>
+            <div className="pt-3 border-t border-slate-200 space-y-1.5">
+              <div className="flex justify-between items-center text-xs text-slate-600">
+                <span>Tạm tính tiền hàng:</span>
+                <span className="font-semibold text-slate-900">{itemsSubtotal.toLocaleString('vi-VN')}đ</span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs text-slate-600">
+                <span>Phí vận chuyển:</span>
+                <span className={`font-semibold ${shippingFee > 0 ? 'text-slate-900' : 'text-emerald-700'}`}>
+                  {shippingFee > 0 ? `+${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí (0đ)'}
+                </span>
+              </div>
+
+              {discountAmount > 0 && (
+                <div className="flex justify-between items-center text-xs text-emerald-700">
+                  <span>Giảm giá / Ưu đãi:</span>
+                  <span className="font-semibold">-{discountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
+                <span className="font-bold text-xs sm:text-sm text-slate-900 uppercase">Tổng Cộng Đơn Hàng:</span>
+                <span className="text-base sm:text-lg font-black text-amber-800">
+                  {totalAmount.toLocaleString('vi-VN')}đ
+                </span>
+              </div>
             </div>
           </div>
 
@@ -513,7 +592,9 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                               {[
                                 it.selectedSize ? `Size: ${it.selectedSize}` : '',
                                 it.selectedColor ? `Màu: ${it.selectedColor}` : '',
-                                it.selectedCharm ? `Charm: ${it.selectedCharm}` : ''
+                                it.selectedCharm ? `Charm: ${typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+                                it.selectedKhoen ? `Khoen: ${it.selectedKhoen}${it.selectedKhoenPrice ? ` (+${it.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}` : '',
+                                it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}` : ''
                               ].filter(Boolean).join(' | ')}
                             </div>
                             {it.customNote && (
@@ -564,14 +645,26 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                     {order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu tiền / COD'}
                   </strong>
                 </div>
-                {order.shippingFee ? (
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Phí giao hàng:</span>
-                    <span className="font-bold text-slate-900">
-                      {Number(order.shippingFee).toLocaleString('vi-VN')}đ
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Tạm tính tiền hàng:</span>
+                  <span className="font-bold text-slate-900">
+                    {itemsSubtotal.toLocaleString('vi-VN')}đ
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Phí giao hàng:</span>
+                  <span className={`font-bold ${shippingFee > 0 ? 'text-slate-900' : 'text-emerald-700'}`}>
+                    {shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí'}
+                  </span>
+                </div>
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Giảm giá / Ưu đãi:</span>
+                    <span className="font-bold">
+                      -{discountAmount.toLocaleString('vi-VN')}đ
                     </span>
                   </div>
-                ) : null}
+                )}
                 <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 font-bold text-sm">
                   <span className="text-slate-900">TỔNG TIỀN:</span>
                   <span className="font-mono text-amber-700 text-base">

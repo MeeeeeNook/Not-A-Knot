@@ -5873,7 +5873,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <span className="truncate pr-2 font-medium">• {item.name || item.productName || 'Sản phẩm'}</span>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
-                                    {(item.selectedColor || item.selectedCharm || item.selectedSize) && (
+                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) && (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded">
@@ -5883,6 +5883,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         {item.selectedCharm && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-purple-50 text-purple-900 border border-purple-200 rounded">
                                             ✨ {typeof item.selectedCharm === 'object' ? item.selectedCharm.name : item.selectedCharm}
+                                          </span>
+                                        )}
+                                        {item.selectedKhoen && (
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-sky-50 text-sky-900 border border-sky-200 rounded">
+                                            🔗 {item.selectedKhoen}
+                                          </span>
+                                        )}
+                                        {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-rose-50 text-rose-900 border border-rose-200 rounded">
+                                            🧧 {item.selectedOmamoris.map((o) => o.name).join(', ')}
                                           </span>
                                         )}
                                         {item.selectedSize && (
@@ -6275,7 +6285,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </span>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
-                                      {(it.selectedColor || it.selectedCharm || it.selectedSize) && (
+                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0) || it.selectedSize) && (
                                         <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                                           {it.selectedColor && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
@@ -6285,6 +6295,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           {it.selectedCharm && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-purple-50 text-purple-900 border border-purple-200 rounded font-medium">
                                               ✨ {typeof it.selectedCharm === 'object' ? it.selectedCharm.name : it.selectedCharm}
+                                            </span>
+                                          )}
+                                          {it.selectedKhoen && (
+                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-sky-50 text-sky-900 border border-sky-200 rounded font-medium">
+                                              🔗 {it.selectedKhoen}
+                                            </span>
+                                          )}
+                                          {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
+                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
+                                              🧧 {it.selectedOmamoris.map((o) => o.name).join(', ')}
                                             </span>
                                           )}
                                           {it.selectedSize && (
