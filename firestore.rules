@@ -7,6 +7,12 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Product image assets collection (uncompressed high-res images & options)
+    match /product_assets/{assetId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Orders collection: public create/write, read for management
     match /orders/{orderId} {
       allow read: if true;

@@ -13,6 +13,16 @@ const EVICTABLE_KEYS = [
   'nak_products', // Legacy duplicate of nak_custom_products
 ];
 
+const PROTECTED_KEYS = new Set([
+  'nak_custom_products',
+  'nak_categories',
+  'nak_collections',
+  'nak_site_content',
+  'nak_cart',
+  'nak_admin_session',
+  'nak_orders'
+]);
+
 /**
  * Free up storage space by removing disposable or oversized cache items
  */
@@ -23,13 +33,13 @@ export function evictDisposableStorageSpace(): void {
       localStorage.removeItem(key);
     }
 
-    // Inspect all keys to remove any rogue oversized blob > 300KB
+    // Inspect non-protected keys to remove any disposable bloated cache > 300KB
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('nak_') && key !== 'nak_cart' && key !== 'nak_admin_session') {
+      if (key && !PROTECTED_KEYS.has(key) && key.startsWith('nak_')) {
         const val = localStorage.getItem(key);
         if (val && val.length > 300000) {
-          console.warn(`[StorageHelper] Purging oversized storage key: ${key} (${Math.round(val.length / 1024)} KB)`);
+          console.warn(`[StorageHelper] Purging oversized non-essential storage key: ${key} (${Math.round(val.length / 1024)} KB)`);
           localStorage.removeItem(key);
         }
       }
@@ -247,3 +257,196 @@ export function deserializeCartItems(
     return [];
   }
 }
+
+// ====================================================
+// INDEXEDDB ENGINE FOR UNLIMITED & ZERO-COMPRESSION STORAGE
+// ====================================================
+
+const IDB_NAME = 'notaknot_main_idb';
+const IDB_VERSION = 1;
+const IDB_PRODUCTS_STORE = 'products';
+const IDB_ASSETS_STORE = 'assets';
+
+let idbInstancePromise: Promise<IDBDatabase | null> | null = null;
+
+function getIDBInstance(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !window.indexedDB) {
+    return Promise.resolve(null);
+  }
+  if (!idbInstancePromise) {
+    idbInstancePromise = new Promise((resolve) => {
+      try {
+        const req = window.indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_PRODUCTS_STORE)) {
+            db.createObjectStore(IDB_PRODUCTS_STORE, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(IDB_ASSETS_STORE)) {
+            db.createObjectStore(IDB_ASSETS_STORE, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => {
+          console.warn('[IDB] Failed to open IndexedDB:', req.error);
+          resolve(null);
+        };
+      } catch (e) {
+        console.warn('[IDB] Exception opening IndexedDB:', e);
+        resolve(null);
+      }
+    });
+  }
+  return idbInstancePromise;
+}
+
+/**
+ * Save full product (with all uncompressed images) to IndexedDB
+ */
+export async function saveProductToIDB(product: Product): Promise<void> {
+  const db = await getIDBInstance();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_PRODUCTS_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_PRODUCTS_STORE);
+      store.put(product);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Save all products to IndexedDB
+ */
+export async function saveProductsToIDB(products: Product[]): Promise<void> {
+  const db = await getIDBInstance();
+  if (!db || !Array.isArray(products)) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_PRODUCTS_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_PRODUCTS_STORE);
+      store.clear();
+      for (const p of products) {
+        store.put(p);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Get all products from IndexedDB
+ */
+export async function getProductsFromIDB(): Promise<Product[] | null> {
+  const db = await getIDBInstance();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_PRODUCTS_STORE, 'readonly');
+      const store = tx.objectStore(IDB_PRODUCTS_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const results = req.result;
+        if (Array.isArray(results) && results.length > 0) {
+          resolve(results as Product[]);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Save an individual full-resolution image/asset to IndexedDB
+ */
+export async function saveAssetToIDB(assetId: string, data: string): Promise<void> {
+  const db = await getIDBInstance();
+  if (!db || !assetId || !data) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_ASSETS_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_ASSETS_STORE);
+      store.put({ id: assetId, data, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/**
+ * Retrieve an asset from IndexedDB
+ */
+export async function getAssetFromIDB(assetId: string): Promise<string | null> {
+  const db = await getIDBInstance();
+  if (!db || !assetId) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_ASSETS_STORE, 'readonly');
+      const store = tx.objectStore(IDB_ASSETS_STORE);
+      const req = store.get(assetId);
+      req.onsuccess = () => {
+        if (req.result && req.result.data) {
+          resolve(req.result.data);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Batch retrieve multiple assets from IndexedDB
+ */
+export async function getMultipleAssetsFromIDB(assetIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!assetIds || assetIds.length === 0) return map;
+  const db = await getIDBInstance();
+  if (!db) return map;
+
+  await Promise.all(
+    assetIds.map(async (id) => {
+      const data = await getAssetFromIDB(id);
+      if (data) {
+        map.set(id, data);
+      }
+    })
+  );
+  return map;
+}
+
+/**
+ * Delete a product from IndexedDB
+ */
+export async function deleteProductFromIDB(productId: string): Promise<void> {
+  const db = await getIDBInstance();
+  if (!db || !productId) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_PRODUCTS_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_PRODUCTS_STORE);
+      store.delete(productId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+

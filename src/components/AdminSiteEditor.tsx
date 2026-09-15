@@ -1912,7 +1912,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
               <label className="text-xs font-bold text-slate-700">Tiêu đề khối FAQ</label>
               <input
                 type="text"
-                value={config.faqTitle || 'Câu Hỏi Thường Gặp'}
+                value={config.faqTitle ?? ''}
                 onChange={(e) => setConfig({ ...config, faqTitle: e.target.value })}
                 placeholder="VD: Câu Hỏi Thường Gặp"
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-500 font-semibold"
@@ -1922,9 +1922,9 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
               <label className="text-xs font-bold text-slate-700">Mô tả phụ ngắn</label>
               <input
                 type="text"
-                value={config.faqSubtitle || 'Những thắc mắc phổ biến khi mua phụ kiện và vòng tay Paracord thủ công'}
+                value={config.faqSubtitle ?? ''}
                 onChange={(e) => setConfig({ ...config, faqSubtitle: e.target.value })}
-                placeholder="VD: Những thắc mắc phổ biến..."
+                placeholder="VD: Những thắc mắc phổ biến... (để trống nếu không muốn hiển thị)"
                 className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-amber-500"
               />
             </div>

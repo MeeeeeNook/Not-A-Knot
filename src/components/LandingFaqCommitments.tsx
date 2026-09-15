@@ -49,10 +49,15 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
         
         {/* Header */}
-        <div className="text-center max-w-2xl mx-auto">
+        <div className="text-center max-w-2xl mx-auto space-y-1.5">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
             {title}
           </h2>
+          {siteContent?.faqSubtitle && siteContent.faqSubtitle.trim().length > 0 && (
+            <p className="text-xs sm:text-sm text-slate-500 font-medium">
+              {siteContent.faqSubtitle}
+            </p>
+          )}
         </div>
 
         {/* FAQ Accordion List */}

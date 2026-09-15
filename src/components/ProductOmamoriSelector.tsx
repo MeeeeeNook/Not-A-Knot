@@ -78,12 +78,17 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
       );
       setLimitNotice(null);
     } else {
-      if (currentSelection.length >= maxAllowed) {
+      if (maxAllowed === 1) {
+        // Single option selection: immediately switch/replace to the new choice
+        nextSelection = [omamori];
+        setLimitNotice(null);
+      } else if (currentSelection.length >= maxAllowed) {
         setLimitNotice(`Đã đạt tối đa ${maxAllowed} mục đã chọn. Hãy bỏ chọn bớt trước khi thêm.`);
         return;
+      } else {
+        setLimitNotice(null);
+        nextSelection = [...currentSelection, omamori];
       }
-      setLimitNotice(null);
-      nextSelection = [...currentSelection, omamori];
     }
 
     if (onSelectOmamoris) {

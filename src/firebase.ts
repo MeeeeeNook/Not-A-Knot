@@ -13,12 +13,22 @@ import {
   updateDoc,
   query,
   orderBy,
+  where,
   limit,
   writeBatch,
   onSnapshot
 } from 'firebase/firestore';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
+import {
+  saveProductToIDB,
+  saveProductsToIDB,
+  getProductsFromIDB,
+  saveAssetToIDB,
+  getAssetFromIDB,
+  getMultipleAssetsFromIDB,
+  deleteProductFromIDB
+} from './utils/storageHelper';
 
 // Load client configuration from firebase-applet-config.json
 import firebaseAppletConfig from '../firebase-applet-config.json';
@@ -435,6 +445,219 @@ export const clearFirestoreMemoryCache = () => {
 };
 
 // ----------------------------------------------------
+// ZERO-COMPRESSION ASSET & PRODUCT STORAGE ENGINE
+// ----------------------------------------------------
+
+/**
+ * In-memory LRU-style cache for hydrated product assets
+ */
+const inMemoryAssetCache = new Map<string, string>();
+
+/**
+ * Extract heavy Base64 image assets from a Product into standalone asset records
+ */
+function extractProductAssets(prod: Product): {
+  cleanProd: Product;
+  assetDocs: Array<{ id: string; productId: string; data: string }>;
+} {
+  const assetDocs: Array<{ id: string; productId: string; data: string }> = [];
+  const prodId = prod.id;
+
+  const processImageField = (imgVal?: string, prefix: string = 'img'): string | undefined => {
+    if (!imgVal || typeof imgVal !== 'string') return imgVal;
+    // If it's a heavy Base64 string (> 2000 chars), extract into dedicated asset
+    if (imgVal.startsWith('data:image/') || imgVal.length > 2000) {
+      const assetId = `${prodId}_${prefix}`;
+      assetDocs.push({ id: assetId, productId: prodId, data: imgVal });
+      inMemoryAssetCache.set(assetId, imgVal);
+      return `asset:${assetId}`;
+    }
+    return imgVal;
+  };
+
+  const cleanMainImage = processImageField(prod.image, 'main') || '/assets/bracelet.jpg';
+
+  const cleanImages = Array.isArray(prod.images)
+    ? prod.images.map((img, idx) => processImageField(img, `gal_${idx}`) || img)
+    : [cleanMainImage];
+
+  const cleanColorOptions = Array.isArray(prod.colorOptions)
+    ? prod.colorOptions.map((opt, idx) => ({
+        ...opt,
+        image: processImageField(opt.image, `col_${idx}`) || opt.image
+      }))
+    : undefined;
+
+  const cleanCharmOptions = Array.isArray(prod.charmOptions)
+    ? prod.charmOptions.map((opt, idx) => ({
+        ...opt,
+        image: processImageField(opt.image, `chm_${opt.id || idx}`) || opt.image
+      }))
+    : undefined;
+
+  const cleanOmamoriOptions = Array.isArray(prod.omamoriOptions)
+    ? prod.omamoriOptions.map((opt, idx) => ({
+        ...opt,
+        image: processImageField(opt.image, `oma_${opt.id || idx}`) || opt.image
+      }))
+    : undefined;
+
+  const cleanKhoenOptions = Array.isArray(prod.khoenOptions)
+    ? prod.khoenOptions.map((opt, idx) => ({
+        ...opt,
+        image: processImageField(opt.image, `khn_${opt.id || idx}`) || opt.image
+      }))
+    : undefined;
+
+  const stockVal = typeof prod.stock === 'number' ? prod.stock : 15;
+  const inStockVal = prod.inStock !== false && stockVal > 0;
+  const isProdHidden = prod.isHidden === true || String(prod.isHidden) === 'true';
+
+  const cleanProd: Product = {
+    ...prod,
+    image: cleanMainImage,
+    images: cleanImages,
+    colorOptions: cleanColorOptions,
+    charmOptions: cleanCharmOptions,
+    omamoriOptions: cleanOmamoriOptions,
+    khoenOptions: cleanKhoenOptions,
+    stock: stockVal,
+    inStock: inStockVal,
+    isHidden: isProdHidden,
+    updatedAt: new Date().toISOString()
+  };
+
+  return { cleanProd, assetDocs };
+}
+
+/**
+ * Hydrates asset tokens ('asset:...') in a list of Products back to original full-resolution Base64 images
+ */
+async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Product[]> {
+  if (!rawProducts || rawProducts.length === 0) return [];
+
+  // 1. Gather all needed asset tokens
+  const neededAssetIds = new Set<string>();
+  const scanToken = (val?: string) => {
+    if (val && typeof val === 'string' && val.startsWith('asset:')) {
+      neededAssetIds.add(val.replace('asset:', ''));
+    }
+  };
+
+  rawProducts.forEach((p) => {
+    scanToken(p.image);
+    p.images?.forEach(scanToken);
+    p.colorOptions?.forEach((o) => scanToken(o.image));
+    p.charmOptions?.forEach((o) => scanToken(o.image));
+    p.omamoriOptions?.forEach((o) => scanToken(o.image));
+    p.khoenOptions?.forEach((o) => scanToken(o.image));
+  });
+
+  if (neededAssetIds.size === 0) {
+    return rawProducts;
+  }
+
+  // 2. Fetch from In-Memory Cache and IndexedDB first
+  const assetMap = new Map<string, string>();
+  const missingFromLocal: string[] = [];
+
+  for (const id of neededAssetIds) {
+    if (inMemoryAssetCache.has(id)) {
+      assetMap.set(id, inMemoryAssetCache.get(id)!);
+    } else {
+      missingFromLocal.push(id);
+    }
+  }
+
+  if (missingFromLocal.length > 0) {
+    const fromIDB = await getMultipleAssetsFromIDB(missingFromLocal);
+    for (const [id, data] of fromIDB.entries()) {
+      assetMap.set(id, data);
+      inMemoryAssetCache.set(id, data);
+    }
+  }
+
+  // 3. For any remaining missing assets (e.g., opened on a new device or cleared cache), fetch from Firestore `product_assets`
+  const stillMissing = Array.from(neededAssetIds).filter((id) => !assetMap.has(id));
+  if (stillMissing.length > 0) {
+    try {
+      recordOperation('read', Math.min(stillMissing.length, 30));
+      const fetchPromises = stillMissing.map(async (assetId) => {
+        try {
+          const docRef = doc(db, 'product_assets', assetId);
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data?.data && typeof data.data === 'string') {
+              assetMap.set(assetId, data.data);
+              inMemoryAssetCache.set(assetId, data.data);
+              await saveAssetToIDB(assetId, data.data);
+            }
+          }
+        } catch (e) {
+          // ignore individual missing asset
+        }
+      });
+      await Promise.all(fetchPromises);
+    } catch (e) {
+      console.warn('Lỗi tải tài nguyên ảnh từ Firestore:', e);
+    }
+  }
+
+  // 4. Reconstitute products with original image strings
+  const replaceToken = (val?: string): string | undefined => {
+    if (!val || typeof val !== 'string') return val;
+    if (val.startsWith('asset:')) {
+      const assetId = val.replace('asset:', '');
+      return assetMap.get(assetId) || val;
+    }
+    return val;
+  };
+
+  const hydrated = rawProducts.map((p) => {
+    const hydMain = replaceToken(p.image) || '/assets/bracelet.jpg';
+    const hydImages = Array.isArray(p.images)
+      ? p.images.map((img) => replaceToken(img) || img)
+      : [hydMain];
+
+    const hydColor = p.colorOptions?.map((opt) => ({
+      ...opt,
+      image: replaceToken(opt.image) || opt.image
+    }));
+
+    const hydCharm = p.charmOptions?.map((opt) => ({
+      ...opt,
+      image: replaceToken(opt.image) || opt.image
+    }));
+
+    const hydOmamori = p.omamoriOptions?.map((opt) => ({
+      ...opt,
+      image: replaceToken(opt.image) || opt.image
+    }));
+
+    const hydKhoen = p.khoenOptions?.map((opt) => ({
+      ...opt,
+      image: replaceToken(opt.image) || opt.image
+    }));
+
+    return {
+      ...p,
+      image: hydMain,
+      images: hydImages,
+      colorOptions: hydColor,
+      charmOptions: hydCharm,
+      omamoriOptions: hydOmamori,
+      khoenOptions: hydKhoen
+    };
+  });
+
+  // Also save complete hydrated products to IndexedDB
+  saveProductsToIDB(hydrated).catch(() => {});
+
+  return hydrated;
+}
+
+// ----------------------------------------------------
 // Firestore Products CRUD
 // ----------------------------------------------------
 export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<Product[]> => {
@@ -447,12 +670,12 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
     recordOperation('read');
     const colRef = collection(db, 'products');
     const snap = await getDocs(colRef);
-    const results: Product[] = [];
+    const rawResults: Product[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();
       const rawStock = typeof data.stock === 'number' ? data.stock : 15;
       const computedInStock = data.inStock !== false && rawStock > 0;
-      results.push({
+      rawResults.push({
         id: docSnap.id,
         name: data.name || '',
         category: data.category || 'bracelets',
@@ -498,16 +721,20 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
       recordOperation('read');
     });
 
-    productsMemoryCache = { data: results, expiresAt: now + 30000 };
-    return results;
+    const hydratedResults = await hydrateProductsWithAssets(rawResults);
+    productsMemoryCache = { data: hydratedResults, expiresAt: now + 30000 };
+    return hydratedResults;
   } catch (err) {
     console.error('Lỗi tải sản phẩm từ Firestore:', err);
+    // Try to fallback to IndexedDB if network fails
+    const idbProds = await getProductsFromIDB();
+    if (idbProds && idbProds.length > 0) return idbProds;
     return productsMemoryCache ? productsMemoryCache.data : [];
   }
 };
 
 /**
- * Real-time subscription to products collection for instant auto-sync across all clients
+ * Real-time subscription to products collection with automatic zero-compression asset hydration
  */
 export const subscribeToProductsFromFirestore = (
   callback: (products: Product[]) => void,
@@ -517,13 +744,13 @@ export const subscribeToProductsFromFirestore = (
     const colRef = collection(db, 'products');
     const unsubscribe = onSnapshot(
       colRef,
-      (snapshot) => {
-        const results: Product[] = [];
+      async (snapshot) => {
+        const rawResults: Product[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           const rawStock = typeof data.stock === 'number' ? data.stock : 15;
           const computedInStock = data.inStock !== false && rawStock > 0;
-          results.push({
+          rawResults.push({
             id: docSnap.id,
             name: data.name || '',
             category: data.category || 'bracelets',
@@ -567,7 +794,10 @@ export const subscribeToProductsFromFirestore = (
             updatedAt: data.updatedAt || undefined
           } as Product);
         });
-        callback(results);
+
+        // Hydrate all image assets without loss
+        const hydratedResults = await hydrateProductsWithAssets(rawResults);
+        callback(hydratedResults);
       },
       (error) => {
         console.warn('Real-time products snapshot error:', error);
@@ -581,80 +811,55 @@ export const subscribeToProductsFromFirestore = (
   }
 };
 
+/**
+ * Save product with full-resolution images without compression:
+ * - Saves uncompressed original product to IndexedDB
+ * - Splits heavy images into individual asset docs in `product_assets`
+ * - Saves lightweight product manifest in `products` (well under 1MB)
+ */
 export const saveProductToFirestore = async (prod: Product): Promise<void> => {
   try {
-    const docRef = doc(db, 'products', prod.id);
-    const stockVal = typeof prod.stock === 'number' ? prod.stock : 15;
-    const inStockVal = prod.inStock !== false && stockVal > 0;
+    // 1. Immediately save complete product with 100% original images to IndexedDB
+    await saveProductToIDB(prod);
 
-    // 1. Optimize and compress main image only if large Base64 string (> 180KB)
-    let optimizedImage = prod.image;
-    if (optimizedImage && optimizedImage.startsWith('data:image/') && optimizedImage.length > 180 * 1024) {
-      optimizedImage = await compressBase64Image(optimizedImage, 1400, 1400, 0.88);
-    }
+    // 2. Extract heavy image assets
+    const { cleanProd, assetDocs } = extractProductAssets(prod);
 
-    // 2. Optimize and compress gallery images only if large Base64 (> 180KB)
-    let optimizedImages = prod.images;
-    if (Array.isArray(optimizedImages) && optimizedImages.length > 0) {
-      optimizedImages = await Promise.all(
-        optimizedImages.map(async (img) => {
-          if (img && img.startsWith('data:image/') && img.length > 180 * 1024) {
-            return await compressBase64Image(img, 1200, 1200, 0.86);
-          }
-          return img;
-        })
-      );
-    }
+    // 3. Save all individual image assets to IndexedDB and Firestore in parallel
+    if (assetDocs.length > 0) {
+      const assetUploads = assetDocs.map(async (asset) => {
+        // Save to IndexedDB
+        await saveAssetToIDB(asset.id, asset.data);
 
-    const isProdHidden = prod.isHidden === true || String(prod.isHidden) === 'true';
-
-    let payload = cleanFirestoreData({
-      ...prod,
-      isHidden: isProdHidden,
-      image: optimizedImage || prod.image || '/assets/hero-bg.png',
-      images: optimizedImages || (optimizedImage ? [optimizedImage] : ['/assets/hero-bg.png']),
-      stock: stockVal,
-      inStock: inStockVal,
-      updatedAt: new Date().toISOString()
-    });
-
-    let prodSize = JSON.stringify(payload).length;
-
-    // 3. Fallback defensive pass: Only if total payload is > 750KB (approaching 1MB limit)
-    // Downscale gently to 1000px at 0.82 quality instead of crushing to 600px/0.65
-    if (prodSize > 750000) {
-      if (optimizedImage && optimizedImage.startsWith('data:image/')) {
-        optimizedImage = await compressBase64Image(optimizedImage, 1000, 1000, 0.82);
-      }
-      if (Array.isArray(optimizedImages)) {
-        const topImages = optimizedImages.slice(0, 5); // Limit gallery to top 5 images
-        optimizedImages = await Promise.all(
-          topImages.map(async (img) => {
-            if (img && img.startsWith('data:image/')) {
-              return await compressBase64Image(img, 1000, 1000, 0.80);
-            }
-            return img;
-          })
-        );
-      }
-      payload = cleanFirestoreData({
-        ...prod,
-        isHidden: isProdHidden,
-        image: optimizedImage || '/assets/hero-bg.png',
-        images: optimizedImages || [optimizedImage || '/assets/hero-bg.png'],
-        stock: stockVal,
-        inStock: inStockVal,
-        updatedAt: new Date().toISOString()
+        // Save to Firestore `product_assets` collection (each doc holds exactly 1 asset, easily under 1MB)
+        try {
+          const assetRef = doc(db, 'product_assets', asset.id);
+          await setDoc(assetRef, {
+            id: asset.id,
+            productId: asset.productId,
+            data: asset.data,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+          recordOperation('write', 1, asset.data.length);
+        } catch (assetErr) {
+          console.warn(`[Firestore Assets] Warning uploading asset ${asset.id}:`, assetErr);
+        }
       });
-      prodSize = JSON.stringify(payload).length;
+
+      await Promise.all(assetUploads);
     }
+
+    // 4. Save lightweight product document to `products` collection
+    const docRef = doc(db, 'products', prod.id);
+    const payload = cleanFirestoreData(cleanProd);
+    const prodSize = JSON.stringify(payload).length;
 
     await setDoc(docRef, payload, { merge: true });
     productsMemoryCache = null;
     recordOperation('write', 1, prodSize);
   } catch (err) {
     if (isQuotaExhaustedError(err)) {
-      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ cục bộ:', err);
+      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ an toàn trong IndexedDB:', err);
       return;
     }
     console.error('Lỗi lưu sản phẩm lên Firestore:', err);
@@ -664,8 +869,24 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
 
 export const deleteProductFromFirestore = async (productId: string): Promise<void> => {
   try {
+    // 1. Delete from IndexedDB
+    await deleteProductFromIDB(productId);
+
+    // 2. Delete product document from Firestore
     const docRef = doc(db, 'products', productId);
     await deleteDoc(docRef);
+
+    // 3. Clean up associated assets in `product_assets`
+    try {
+      const colRef = collection(db, 'product_assets');
+      const q = query(colRef, where('productId', '==', productId));
+      const snap = await getDocs(q);
+      const deleteOps = snap.docs.map((d) => deleteDoc(d.ref));
+      await Promise.all(deleteOps);
+    } catch {
+      // ignore
+    }
+
     productsMemoryCache = null;
     recordOperation('delete', 1, -1500);
   } catch (err) {

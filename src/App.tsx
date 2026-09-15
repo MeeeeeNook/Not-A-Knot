@@ -60,6 +60,7 @@ import {
   serializeCartItems,
   deserializeCartItems,
   evictDisposableStorageSpace,
+  getProductsFromIDB
 } from './utils/storageHelper';
 
 export default function App() {
@@ -421,6 +422,14 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
+    // 0. Instant offline/cached load from IndexedDB (preserves all full-res original photos)
+    getProductsFromIDB().then((idbProducts) => {
+      if (isMounted && idbProducts && idbProducts.length > 0) {
+        setProducts(idbProducts);
+        setIsProductsLoading(false);
+      }
+    });
+
     // A. Initial direct load from Firestore in parallel with real-time listeners for instant fresh data
     const loadInitialCloudData = async () => {
       try {
@@ -469,13 +478,19 @@ export default function App() {
       if (!isMounted) return;
       setIsProductsLoading(false);
       if (realtimeProducts && realtimeProducts.length > 0) {
-        setProducts(realtimeProducts);
+        // Safely preserve any freshly created local products that are still completing their cloud upload
+        const cloudIds = new Set(realtimeProducts.map((p) => p.id));
+        const pendingLocal = (productsRef.current || []).filter(
+          (p) => !cloudIds.has(p.id) && p.id.startsWith('nak-prod-')
+        );
+        const mergedList = [...pendingLocal, ...realtimeProducts];
+        setProducts(mergedList);
         setSelectedProduct((curr) => {
           if (!curr) return null;
-          const matched = realtimeProducts.find((p) => p.id === curr.id);
+          const matched = mergedList.find((p) => p.id === curr.id);
           return matched || curr;
         });
-        safeStorageSetItem('nak_custom_products', JSON.stringify(realtimeProducts));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(mergedList));
       }
     });
 
@@ -601,10 +616,6 @@ export default function App() {
     setProducts(newProducts);
     broadcastStoreChange('products', newProducts);
     safeStorageSetItem('nak_custom_products', JSON.stringify(newProducts));
-    // Tự động sao lưu và đồng bộ danh sách sản phẩm lên Firestore Cloud (xóa các item thừa để luôn khớp 100%)
-    pushAndSyncProductsToFirestore(newProducts, true).catch((err) =>
-      console.warn('Lỗi tự động sao lưu sản phẩm lên Firestore:', err)
-    );
     if (selectedProduct) {
       const updatedCurr = newProducts.find((p) => p.id === selectedProduct.id);
       if (updatedCurr) {
