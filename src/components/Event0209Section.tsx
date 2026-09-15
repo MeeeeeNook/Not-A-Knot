@@ -61,10 +61,10 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
     setCreatedTrackingCode(trackingNumber);
 
     const orderData = {
-      id: `ord-0209-${Date.now()}`,
+      id: trackingNumber,
       trackingNumber,
       date: new Date().toLocaleString('vi-VN'),
-      createdAt: new Date().toLocaleString('vi-VN'),
+      createdAt: new Date().toISOString(),
       name,
       customerName: name,
       phone,
@@ -73,18 +73,22 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
       items: orderItems,
       totalPrice,
       totalAmount: totalPrice,
+      source: 'website' as const,
       type: 'preorder_0209' as const,
-      status: 'pending'
+      status: 'Chờ xác nhận' as const
     };
 
     try {
       await saveOrderToFirestore(orderData);
-    } catch (err) {
-      console.warn('Firestore fallback local:', err);
+    } catch (err: any) {
+      console.error('Firestore save error:', err);
+      alert(`Không thể kết nối máy chủ để ghi nhận đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);
+      setIsSubmitting(false);
+      return;
     }
 
     const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-    local.push(orderData);
+    local.unshift(orderData);
     localStorage.setItem('nak_preorders', JSON.stringify(local));
 
     onPreorderSuccess(orderData);

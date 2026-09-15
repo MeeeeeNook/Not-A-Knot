@@ -679,29 +679,121 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     checkConn();
   }, [currentSeller]);
 
-  // Fetch orders from Firestore or localStorage
-  const loadOrders = async () => {
-    setLoadingOrders(true);
-    try {
-      const dbOrders = await fetchOrdersFromFirestore();
-      if (dbOrders && dbOrders.length > 0) {
-        setOrders(dbOrders);
-        safeStorageSetItem('nak_preorders', JSON.stringify(dbOrders));
+  const normalizeOrderKey = (str?: string): string => {
+    if (!str) return '';
+    return str.replace(/^#/, '').trim().toUpperCase();
+  };
+
+  const mergeOrderLists = (primary: StoredOrder[], secondary: StoredOrder[]): StoredOrder[] => {
+    const map = new Map<string, StoredOrder>();
+
+    const insertOrMerge = (ord: StoredOrder) => {
+      if (!ord) return;
+      const k1 = normalizeOrderKey(ord.id);
+      const k2 = normalizeOrderKey(ord.trackingNumber);
+      const k3 = normalizeOrderKey((ord as any).orderCode);
+      const primaryKey = k1 || k2 || k3;
+      if (!primaryKey) return;
+
+      let existingKey = '';
+      if (k1 && map.has(k1)) existingKey = k1;
+      else if (k2 && map.has(k2)) existingKey = k2;
+      else if (k3 && map.has(k3)) existingKey = k3;
+
+      if (existingKey) {
+        const existing = map.get(existingKey)!;
+        const merged: StoredOrder = {
+          ...existing,
+          ...ord,
+          id: ord.id || existing.id,
+          trackingNumber: ord.trackingNumber || existing.trackingNumber || ord.id || existing.id,
+          name: ord.name || ord.customerName || existing.name || existing.customerName || '',
+          customerName: ord.customerName || ord.name || existing.customerName || existing.name || '',
+          phone: ord.phone || existing.phone || '',
+          address: ord.address || existing.address || '',
+          items: (ord.items && ord.items.length > 0) ? ord.items : (existing.items || []),
+          itemDetails: (ord.itemDetails && ord.itemDetails.length > 0) ? ord.itemDetails : (existing.itemDetails || []),
+          totalPrice: ord.totalPrice !== undefined ? ord.totalPrice : (existing.totalPrice !== undefined ? existing.totalPrice : 0),
+          totalAmount: ord.totalAmount !== undefined ? ord.totalAmount : (existing.totalAmount !== undefined ? existing.totalAmount : 0),
+          status: ord.status || existing.status || 'Chờ xác nhận',
+          paymentStatus: ord.paymentStatus || existing.paymentStatus || 'unpaid',
+          bankReceiptImage: ord.bankReceiptImage || existing.bankReceiptImage,
+          source: ord.source || existing.source || 'website'
+        };
+        map.set(existingKey, merged);
       } else {
+        map.set(primaryKey, ord);
+      }
+    };
+
+    // First process secondary (local), then primary (Firestore) so newer / server data takes precedence
+    for (const ord of secondary) insertOrMerge(ord);
+    for (const ord of primary) insertOrMerge(ord);
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.date || 0).getTime();
+      const timeB = new Date(b.createdAt || b.date || 0).getTime();
+      return timeB - timeA;
+    });
+    return merged;
+  };
+
+  // Fetch orders from Firestore and localStorage (merged for 100% data integrity)
+  const loadOrders = async (isManualReload = false) => {
+    setLoadingOrders(true);
+    if (isManualReload) {
+      showAdminToast('🔄 Đang đồng bộ và tải lại danh sách đơn hàng...');
+    }
+    try {
+      let localOrders: StoredOrder[] = [];
+      try {
         const local = localStorage.getItem('nak_preorders');
-        if (local) {
-          setOrders(JSON.parse(local));
-        } else {
-          setOrders([]);
+        if (local) localOrders = JSON.parse(local);
+      } catch {
+        // ignore
+      }
+
+      const dbOrders = await fetchOrdersFromFirestore();
+      const merged = mergeOrderLists(dbOrders || [], localOrders);
+      setOrders(merged);
+      if (merged.length > 0) {
+        safeStorageSetItem('nak_preorders', JSON.stringify(merged));
+      }
+
+      // Auto-sync any unsynced local-only orders up to Firestore in background
+      if (dbOrders && localOrders.length > 0) {
+        const dbIdSet = new Set(dbOrders.map((o) => normalizeOrderKey(o.id || o.trackingNumber)));
+        const unsynced = localOrders.filter((o) => {
+          const k = normalizeOrderKey(o.id || o.trackingNumber);
+          return k && !dbIdSet.has(k);
+        });
+        if (unsynced.length > 0) {
+          saveOrdersToFirestore(unsynced).catch(() => {});
         }
+      }
+
+      if (isManualReload) {
+        showAdminToast(`✓ Đã tải lại thành công! Tổng cộng ${merged.length} đơn hàng.`);
       }
     } catch (e) {
       console.warn('Lỗi khi tải đơn hàng:', e);
-      const local = localStorage.getItem('nak_preorders');
-      if (local) setOrders(JSON.parse(local));
+      try {
+        const local = localStorage.getItem('nak_preorders');
+        if (local) setOrders(JSON.parse(local));
+      } catch {
+        // ignore
+      }
+      if (isManualReload) {
+        showAdminToast('Đã tải lại dữ liệu đơn hàng từ bộ nhớ cục bộ.');
+      }
     } finally {
       setLoadingOrders(false);
     }
+  };
+
+  const handleReloadOrders = () => {
+    loadOrders(true);
   };
 
   // Fetch unread messages count & messages list from Firestore / Local cache
@@ -733,12 +825,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     if (!currentSeller) return;
     loadOrders();
     loadMessagesCount();
+
     const unsubscribeOrders = subscribeToOrdersFromFirestore((realtimeOrders) => {
       if (realtimeOrders && realtimeOrders.length > 0) {
-        setOrders(realtimeOrders);
-        safeStorageSetItem('nak_preorders', JSON.stringify(realtimeOrders));
+        let localOrders: StoredOrder[] = [];
+        try {
+          const local = localStorage.getItem('nak_preorders');
+          if (local) localOrders = JSON.parse(local);
+        } catch {
+          // ignore
+        }
+        const merged = mergeOrderLists(realtimeOrders, localOrders);
+        setOrders(merged);
+        safeStorageSetItem('nak_preorders', JSON.stringify(merged));
       }
     });
+
     const unsubscribeMessages = subscribeToContactMessagesFromFirestore((realtimeMessages) => {
       if (realtimeMessages) {
         setContactMessages(realtimeMessages);
@@ -750,9 +852,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         }
       }
     });
+
+    // Listen for locally placed customer orders in real-time
+    const handleOrderCreated = (e: Event) => {
+      const customEvt = e as CustomEvent<StoredOrder>;
+      if (customEvt.detail) {
+        setOrders((prev) => mergeOrderLists([customEvt.detail], prev));
+      } else {
+        loadOrders();
+      }
+    };
+    window.addEventListener('nak_order_created', handleOrderCreated);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'nak_preorders') {
+        loadOrders();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Periodic background auto-poll every 15s for 100% data sync guarantee across devices
+    const autoSyncInterval = setInterval(() => {
+      loadOrders();
+      loadMessagesCount();
+    }, 15000);
+
     return () => {
+      clearInterval(autoSyncInterval);
       unsubscribeOrders();
       unsubscribeMessages();
+      window.removeEventListener('nak_order_created', handleOrderCreated);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [currentSeller]);
 
@@ -2400,15 +2530,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
 
     const list = orders.filter((o) => {
-      const q = orderSearchQuery.toLowerCase().trim();
+      const q = orderSearchQuery.toLowerCase().trim().replace(/^#/, '');
       const matchSearch =
         !q ||
         (o.id && o.id.toLowerCase().includes(q)) ||
         (o.name && o.name.toLowerCase().includes(q)) ||
         (o.customerName && o.customerName.toLowerCase().includes(q)) ||
-        (o.phone && o.phone.toLowerCase().includes(q)) ||
+        (o.phone && o.phone.replace(/\s+/g, '').includes(q.replace(/\s+/g, ''))) ||
         (o.address && o.address.toLowerCase().includes(q)) ||
         ((Array.isArray(o.items) && o.items.some((i) => typeof i === 'string' && i.toLowerCase().includes(q))) || (typeof o.items === 'string' && (o.items as string).toLowerCase().includes(q))) ||
+        (Array.isArray(o.itemDetails) && o.itemDetails.some((it: any) => 
+          (it.productName && it.productName.toLowerCase().includes(q)) || 
+          (it.name && it.name.toLowerCase().includes(q)) ||
+          (it.selectedColor && it.selectedColor.toLowerCase().includes(q)) ||
+          (it.customNote && it.customNote.toLowerCase().includes(q))
+        )) ||
         (o.note && o.note.toLowerCase().includes(q)) ||
         (o.trackingNumber && o.trackingNumber.toLowerCase().includes(q)) ||
         (o.shippingCode && o.shippingCode.toLowerCase().includes(q)) ||
@@ -2449,7 +2585,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       const matchSeller = (() => {
         if (orderSellerFilter === 'all') return true;
-        const isLockedSource = o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee';
+        const isLockedSource = (o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee') && !o.sellerId;
         const sName = (o.sellerName || '').trim().toLowerCase();
         if (orderSellerFilter === 'website') {
           return o.source === 'website' || (!o.sellerId && (!sName || sName === 'website'));
@@ -2460,8 +2596,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         if (orderSellerFilter === 'unassigned') {
           return isLockedSource || (!o.sellerId && (!sName || sName === 'website' || sName === 'mạng xã hội'));
         }
-        // Specific seller selected - locked sources are never assigned to individual salespeople
-        if (isLockedSource) return false;
+        // Specific seller selected
         return (
           o.sellerId === orderSellerFilter ||
           (o.sellerName && o.sellerName.toLowerCase() === orderSellerFilter.toLowerCase())
@@ -5562,8 +5697,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 ))}
               </div>
 
-              {/* Right Button: "Tạo Đơn" */}
+              {/* Right Action Group: Reload Orders & Tạo Đơn */}
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleReloadOrders}
+                  disabled={loadingOrders}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
+                  title="Tải lại và đồng bộ danh sách đơn hàng mới nhất từ cơ sở dữ liệu"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
+                  <span>{loadingOrders ? 'Đang tải lại...' : 'Tải lại đơn'}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleSwitchTab('manual_order')}
@@ -5576,8 +5721,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
             {/* Filter & Controls Bar */}
             <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-              {/* Left group: View Modes, Multi-Select, Export Excel, Table Zoom */}
+              {/* Left group: View Modes, Multi-Select, Export Excel, Reload, Table Zoom */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* Reload Button */}
+                <button
+                  type="button"
+                  onClick={handleReloadOrders}
+                  disabled={loadingOrders}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer shadow-2xs disabled:opacity-60"
+                  title="Tải lại và đồng bộ danh sách đơn hàng mới nhất"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
+                  <span>{loadingOrders ? 'Đang tải...' : 'Tải lại'}</span>
+                </button>
                 {/* View Mode Toggle: Cards vs Table */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                   <button
@@ -7091,7 +7247,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Card 1: Firestore Quota & Usage */}
               <a
-                href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage"
+                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/firestore/usage`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group bg-gradient-to-br from-amber-500/10 via-white to-white p-5 rounded-2xl border border-amber-200/80 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
@@ -7122,7 +7278,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
               {/* Card 2: Firestore Database Explorer */}
               <a
-                href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/databases"
+                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/firestore/databases`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group bg-gradient-to-br from-sky-500/10 via-white to-white p-5 rounded-2xl border border-sky-200/80 hover:border-sky-400 hover:shadow-md transition-all flex flex-col justify-between"
@@ -7152,7 +7308,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
               {/* Card 3: Project Billing & Spark Plan Limits */}
               <a
-                href="https://console.firebase.google.com/project/jittery-study-nzp2g/usage"
+                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/usage`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group bg-gradient-to-br from-emerald-500/10 via-white to-white p-5 rounded-2xl border border-emerald-200/80 hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between"

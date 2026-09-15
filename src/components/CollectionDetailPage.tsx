@@ -467,8 +467,10 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
       quantity: selectedPreItems[p.id]?.qty || 1
     }));
 
+    const trackingCode = `NAK-0209-${Date.now().toString().slice(-6)}`;
     const orderRecord = {
-      id: `ord-pre-${Date.now()}`,
+      id: trackingCode,
+      trackingNumber: trackingCode,
       date: new Date().toLocaleString('vi-VN'),
       createdAt: new Date().toISOString(),
       name: preName,
@@ -482,17 +484,20 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
       totalAmount: preTotalAmount,
       source: 'website' as const,
       type: 'preorder_0209' as const,
-      status: 'pending'
+      status: 'Chờ xác nhận' as const
     };
 
     try {
       await saveOrderToFirestore(orderRecord);
-    } catch (err) {
-      console.warn('Firestore fallback:', err);
+    } catch (err: any) {
+      console.error('Lỗi lưu đơn hàng preorder lên Firebase:', err);
+      alert(`Không thể kết nối máy chủ để ghi nhận đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);
+      setIsPreSubmitting(false);
+      return;
     }
 
     const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-    local.push(orderRecord);
+    local.unshift(orderRecord);
     localStorage.setItem('nak_preorders', JSON.stringify(local));
 
     onPreorderSuccess(orderRecord);

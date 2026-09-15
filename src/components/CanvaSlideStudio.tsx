@@ -146,7 +146,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     commitSlides(updated);
   };
 
-  const handleMoveSlide = (fromIndex: number, direction: 'up' | 'down') => {
+  const handleMoveSlide = async (fromIndex: number, direction: 'up' | 'down') => {
     const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
     if (toIndex < 0 || toIndex >= normalizedSlides.length) return;
     const copy = [...normalizedSlides];
@@ -154,6 +154,13 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     copy.splice(toIndex, 0, moved);
     const reordered = copy.map((item, idx) => ({ ...item, order: idx + 1 }));
     commitSlides(reordered);
+    if (onSave) {
+      try {
+        await onSave(reordered);
+      } catch (err) {
+        console.warn('Lỗi tự động lưu thứ tự billboard:', err);
+      }
+    }
   };
 
   const handleAddSlide = () => {
@@ -188,7 +195,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     setActiveSlideId(newId);
   };
 
-  const handleDeleteSlide = (slideId: string) => {
+  const handleDeleteSlide = async (slideId: string) => {
     if (normalizedSlides.length <= 1) {
       alert('Phải giữ ít nhất 1 billboard.');
       return;
@@ -199,13 +206,32 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     if (activeSlideId === slideId) {
       setActiveSlideId(reordered[0]?.id || '');
     }
+    // Auto-save and sync immediately to website and cloud so deleted slide disappears immediately
+    if (onSave) {
+      try {
+        await onSave(reordered);
+        setSaveSuccessMsg('Đã xóa billboard và đồng bộ lên website thành công!');
+        setTimeout(() => setSaveSuccessMsg(null), 3500);
+      } catch (err) {
+        console.warn('Lỗi tự động lưu khi xóa billboard:', err);
+      }
+    }
   };
 
-  const handleToggleSlideActive = (slideId: string) => {
+  const handleToggleSlideActive = async (slideId: string) => {
     const updated = normalizedSlides.map((s) =>
       s.id === slideId ? { ...s, isActive: !s.isActive } : s
     );
     commitSlides(updated);
+    if (onSave) {
+      try {
+        await onSave(updated);
+        setSaveSuccessMsg('Đã cập nhật trạng thái hiển thị billboard!');
+        setTimeout(() => setSaveSuccessMsg(null), 3000);
+      } catch (err) {
+        console.warn('Lỗi tự động lưu trạng thái billboard:', err);
+      }
+    }
   };
 
   const processImageFile = (file: File) => {
@@ -218,7 +244,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 2048;
+        const maxDim = 1600;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -229,13 +255,25 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             height = maxDim;
           }
         }
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.9);
-          updateActiveSlide({ bgImage: compressed });
+          let compressed = '';
+          try {
+            compressed = canvas.toDataURL('image/webp', 0.82);
+            if (!compressed || !compressed.startsWith('data:image/webp')) {
+              compressed = canvas.toDataURL('image/jpeg', 0.82);
+            }
+          } catch {
+            compressed = canvas.toDataURL('image/jpeg', 0.82);
+          }
+          updateActiveSlide({ bgImage: compressed || (e.target?.result as string) });
         } else {
           updateActiveSlide({ bgImage: e.target?.result as string });
         }
@@ -485,8 +523,14 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                   {/* Slide Thumbnail */}
                   <div className="relative w-full aspect-[16/7] rounded-lg overflow-hidden bg-neutral-950 border border-neutral-200/40">
                     <img
-                      src={slide.bgImage || '/assets/hero-bg.png'}
+                      src={slide.bgImage || '/assets/hero-bg.jpg'}
                       alt=""
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.includes('/assets/hero-bg.jpg')) {
+                          target.src = '/assets/hero-bg.jpg';
+                        }
+                      }}
                       className="w-full h-full object-cover"
                       style={{
                         objectPosition: `${slide.bgPositionX ?? 50}% ${slide.bgPositionY ?? 50}%`,
@@ -596,8 +640,14 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             >
               {/* Background Image Layer */}
               <img
-                src={activeSlide.bgImage || '/assets/hero-bg.png'}
+                src={activeSlide.bgImage || '/assets/hero-bg.jpg'}
                 alt=""
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.includes('/assets/hero-bg.jpg')) {
+                    target.src = '/assets/hero-bg.jpg';
+                  }
+                }}
                 className="absolute inset-0 w-full h-full pointer-events-none transition-transform duration-100 ease-out"
                 style={{
                   objectFit: activeSlide.bgFit || 'cover',
@@ -787,14 +837,43 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
 
               {/* Image URL direct */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-neutral-700 block">Link ảnh URL trực tiếp</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-neutral-700 block">Link ảnh URL trực tiếp</label>
+                  {activeSlide.bgImage && (
+                    <button
+                      type="button"
+                      onClick={() => updateActiveSlide({ bgImage: '/assets/hero-bg.jpg' })}
+                      className="text-[10px] text-amber-700 hover:underline cursor-pointer"
+                    >
+                      Dùng ảnh gốc
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={activeSlide.bgImage || ''}
                   onChange={(e) => updateActiveSlide({ bgImage: e.target.value })}
-                  placeholder="https://..."
+                  placeholder="https://... hoặc /assets/hero-bg.jpg"
                   className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 text-xs text-neutral-900 outline-none focus:bg-white focus:border-neutral-900 font-mono"
                 />
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className="text-[10px] text-neutral-500">Ảnh gợi ý:</span>
+                  {[
+                    { label: 'Hero Gốc', url: '/assets/hero-bg.jpg' },
+                    { label: 'Vòng Tay', url: '/assets/bracelet.jpg' },
+                    { label: 'EDC', url: '/assets/img_3.jpg' },
+                    { label: 'Not A Knot', url: '/assets/img_4_NOT_A_KNOT.jpg' }
+                  ].map((preset) => (
+                    <button
+                      key={preset.url}
+                      type="button"
+                      onClick={() => updateActiveSlide({ bgImage: preset.url })}
+                      className="text-[10px] px-2 py-0.5 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium cursor-pointer transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

@@ -24,7 +24,9 @@ import {
   AlertTriangle,
   AlertCircle,
   Building2,
-  Gift
+  Gift,
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
@@ -92,6 +94,8 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [note, setNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionStep, setSubmissionStep] = useState<'idle' | 'preparing' | 'syncing' | 'confirmed' | 'error'>('idle');
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Placed Order Details for Success Screen (persists even after onClearCart)
@@ -258,6 +262,8 @@ export const CartPage: React.FC<CartPageProps> = ({
     }
 
     setIsSubmitting(true);
+    setSubmissionStep('preparing');
+    setSubmissionError(null);
 
     const fullAddress = `${cleanDetail}, ${cleanDistrict}, ${cleanProvince}`;
     const trackingCode = generateTrackingNumber();
@@ -309,36 +315,44 @@ export const CartPage: React.FC<CartPageProps> = ({
       paymentStatus: 'unpaid' as const
     };
 
+    setSubmissionStep('syncing');
+
     try {
       await saveOrderToFirestore(orderData);
-    } catch (err) {
-      console.warn('Fallback saving order to local storage:', err);
+      setSubmissionStep('confirmed');
+
+      // Save to local storage for instant offline access
+      try {
+        const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
+        local.unshift(orderData);
+        localStorage.setItem('nak_preorders', JSON.stringify(local));
+      } catch {
+        // ignore localstorage errors
+      }
+
+      // Retain state for success view BEFORE clearing cart
+      setPlacedOrder(orderData);
+      setPlacedTotal(currentOrderTotal);
+      onOrderPlaced(orderData);
+      trackGA4Purchase(
+        orderData.id || trackingCode,
+        currentOrderTotal,
+        orderData.itemDetails,
+        paymentMethod === 'vietqr' ? 'VietQR_Banking' : 'COD_System'
+      );
+
+      // Brief delay to let the customer see the confirmation checkmark
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setStep('success');
+        onClearCart();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 700);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn hàng lên Firestore:', err);
+      setSubmissionStep('error');
+      setSubmissionError(err?.message || 'Không thể lưu đơn hàng vào hệ thống máy chủ. Quý khách vui lòng thử lại.');
     }
-
-    // Save to local storage
-    try {
-      const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-      local.unshift(orderData);
-      localStorage.setItem('nak_preorders', JSON.stringify(local));
-    } catch {
-      // ignore localstorage errors
-    }
-
-    // Retain state for success view BEFORE clearing cart
-    setPlacedOrder(orderData);
-    setPlacedTotal(currentOrderTotal);
-    onOrderPlaced(orderData);
-    trackGA4Purchase(
-      orderData.id || trackingCode,
-      currentOrderTotal,
-      orderData.itemDetails,
-      paymentMethod === 'vietqr' ? 'VietQR_Banking' : 'COD_System'
-    );
-
-    setIsSubmitting(false);
-    setStep('success');
-    onClearCart();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Build VietQR Image URL and Memo
@@ -1144,6 +1158,88 @@ export const CartPage: React.FC<CartPageProps> = ({
               </a>
             </div>
 
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* SUBMISSION PROCESSING OVERLAY (MANDATORY WAIT)               */}
+        {/* ============================================================ */}
+        {isSubmitting && (
+          <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-200 text-center animate-scaleUp">
+              {submissionStep !== 'error' ? (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 flex items-center justify-center mx-auto mb-4">
+                    <RefreshCw className="w-8 h-8 animate-spin" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 font-display">
+                    Đang Xử Lý & Lưu Đơn Hàng...
+                  </h3>
+                  
+                  {/* Critical Wait Banner */}
+                  <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs sm:text-sm font-bold mb-5 flex items-start gap-2.5 text-left">
+                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong className="text-amber-950 block mb-0.5">LƯU Ý QUAN TRỌNG:</strong>
+                      Quý khách vui lòng <strong>chờ ở trang này trong giây lát</strong> và <strong>không tắt trình duyệt / không tải lại trang</strong> cho đến khi đơn hàng được xác nhận đặt thành công!
+                    </span>
+                  </div>
+
+                  {/* Progress Stages */}
+                  <div className="space-y-2 text-left text-xs">
+                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 font-medium ${submissionStep === 'preparing' ? 'bg-amber-50 border-amber-200 text-amber-800 font-bold' : 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold'}`}>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>1. Chuẩn bị và kiểm tra thông tin đơn hàng</span>
+                    </div>
+                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 font-medium ${submissionStep === 'syncing' ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold animate-pulse' : submissionStep === 'confirmed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                      {submissionStep === 'confirmed' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                      )}
+                      <span>2. Ghi nhận tức thì vào hệ thống quản lý Not A Knot</span>
+                    </div>
+                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 font-medium ${submissionStep === 'confirmed' ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                      {submissionStep === 'confirmed' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                      )}
+                      <span>3. Xác nhận đặt hàng thành công & tạo mã vận đơn</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 font-display">
+                    Chưa Thể Lưu Đơn Hàng
+                  </h3>
+                  <p className="text-xs text-rose-700 bg-rose-50 p-3.5 rounded-xl border border-rose-200 mb-5 text-left font-medium">
+                    {submissionError || 'Kết nối máy chủ bị gián đoạn. Đơn hàng chưa được lưu vào hệ thống Not A Knot.'}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsSubmitting(false)}
+                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      Kiểm tra lại thông tin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCheckoutSubmit}
+                      className="flex-1 py-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Thử lưu lại ngay</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         )}
 

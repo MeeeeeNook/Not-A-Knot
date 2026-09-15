@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { SiteContentConfig, CustomElementBlock, SiteHeroSlide, CategoryItem, CollectionInfo, FaqItem, Product, LandingCollectionProductsConfig } from '../types';
 import { DEFAULT_SITE_CONTENT } from '../data/siteContent';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { saveSiteContentToFirestore } from '../firebase';
+import { safeStorageSetItem } from '../utils/storageHelper';
 import { 
   Sparkles, 
   ArrowRight, 
@@ -85,6 +86,28 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
   });
 
   const [isCustomAnnouncementLink, setIsCustomAnnouncementLink] = useState(false);
+
+  // Keep internal config synchronized if parent or cloud siteContent changes
+  useEffect(() => {
+    if (initialConfig) {
+      setConfig((prev) => {
+        const prevHeroStr = JSON.stringify(prev.heroSlides || []);
+        const nextHeroStr = JSON.stringify(initialConfig.heroSlides || []);
+        if (prevHeroStr !== nextHeroStr || prev.brandName !== initialConfig.brandName) {
+          let sections = initialConfig.landingProductSections;
+          if (!sections || sections.length === 0) {
+            sections = initialConfig.landingProducts ? [initialConfig.landingProducts] : (DEFAULT_SITE_CONTENT.landingProductSections || []);
+          }
+          return {
+            ...initialConfig,
+            landingProductSections: sections,
+            landingProducts: sections[0] || initialConfig.landingProducts
+          };
+        }
+        return prev;
+      });
+    }
+  }, [initialConfig]);
 
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'collection_products' | 'faq' | 'footer'>('general');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -282,7 +305,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     setSelectedSectionIdx(Math.max(0, idx - 1));
     setDeleteSectionModalIdx(null);
     try {
-      localStorage.setItem('nak_site_content', JSON.stringify(newConfig));
+      safeStorageSetItem('nak_site_content', JSON.stringify(newConfig));
       onSaveConfig(newConfig);
       await saveSiteContentToFirestore(newConfig);
     } catch {
@@ -356,7 +379,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     setStatusMsg('Đang lưu và đồng bộ lên Firebase Cloud...');
     try {
       // 1. Immediately persist locally & notify parent for instant UI update
-      localStorage.setItem('nak_site_content', JSON.stringify(config));
+      safeStorageSetItem('nak_site_content', JSON.stringify(config));
       onSaveConfig(config);
 
       // 2. Sync to Firestore
@@ -380,7 +403,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
   const handleConfirmReset = () => {
     setConfig(DEFAULT_SITE_CONTENT);
     onSaveConfig(DEFAULT_SITE_CONTENT);
-    localStorage.setItem('nak_site_content', JSON.stringify(DEFAULT_SITE_CONTENT));
+    safeStorageSetItem('nak_site_content', JSON.stringify(DEFAULT_SITE_CONTENT));
     setSaveStatus('success');
     setStatusMsg('Đã khôi phục nội dung mặc định gốc!');
     setTimeout(() => setSaveStatus('idle'), 2500);
@@ -1023,7 +1046,12 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
               const { bgImageMobile, ...rest } = s as any;
               return rest;
             });
-            setConfig((prev) => ({ ...prev, heroSlides: sanitized }));
+            setConfig((prev) => {
+              const updatedConfig = { ...prev, heroSlides: sanitized };
+              safeStorageSetItem('nak_site_content', JSON.stringify(updatedConfig));
+              onSaveConfig(updatedConfig);
+              return updatedConfig;
+            });
           }}
           onSave={async (newSlides) => {
             const sanitized = newSlides.map((s) => {
@@ -1032,9 +1060,13 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             });
             const updatedConfig = { ...config, heroSlides: sanitized };
             setConfig(updatedConfig);
-            localStorage.setItem('nak_site_content', JSON.stringify(updatedConfig));
+            safeStorageSetItem('nak_site_content', JSON.stringify(updatedConfig));
             onSaveConfig(updatedConfig);
-            await saveSiteContentToFirestore(updatedConfig);
+            try {
+              await saveSiteContentToFirestore(updatedConfig);
+            } catch (err) {
+              console.warn('Lỗi đồng bộ Firebase cho hero slides:', err);
+            }
             setSaveStatus('success');
             setStatusMsg('Đã lưu Billboard thành công và cập nhật lên website!');
             setTimeout(() => setStatusMsg(''), 4000);

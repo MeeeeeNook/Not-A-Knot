@@ -21,7 +21,8 @@ import {
   Check,
   Building2,
   MapPin,
-  Gift
+  Gift,
+  RefreshCw
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
@@ -325,12 +326,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     try {
       await saveOrderToFirestore(orderData);
-    } catch (err) {
-      console.warn('Fallback to local storage for cart order:', err);
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn hàng lên Firebase:', err);
+      alert(`Không thể kết nối máy chủ để lưu đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);
+      setIsSubmitting(false);
+      return;
     }
 
     const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-    local.push(orderData);
+    local.unshift(orderData);
     localStorage.setItem('nak_preorders', JSON.stringify(local));
 
     onOrderPlaced(orderData);
@@ -352,16 +356,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     // 2. Log purchase event / record
     const orderData = createOrderPayload('facebook');
+    setIsSubmitting(true);
     try {
       await saveOrderToFirestore(orderData);
     } catch (err) {
       console.warn('Fallback saving for messenger order:', err);
     }
     const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-    local.push(orderData);
+    local.unshift(orderData);
     localStorage.setItem('nak_preorders', JSON.stringify(local));
 
     trackGA4Purchase(orderData.id, subtotal, orderData.itemDetails, 'Messenger');
+    setIsSubmitting(false);
 
     // 3. Open Messenger link immediately in new tab
     const targetUrl = messengerUrl || facebookUrl;
@@ -1250,6 +1256,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 >
                   ← Chọn cách đặt hàng khác
                 </button>
+              </div>
+            )}
+            {/* Submission Processing Wait Overlay */}
+            {isSubmitting && (
+              <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-6 text-center">
+                <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 flex items-center justify-center mx-auto mb-3.5">
+                    <RefreshCw className="w-7 h-7 animate-spin" />
+                  </div>
+                  <h4 className="text-base font-black text-slate-900 mb-1.5">
+                    Đang Lưu Đơn Hàng...
+                  </h4>
+                  <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs font-bold leading-relaxed mb-3 text-left">
+                    ⚠️ Quý khách vui lòng <strong>chờ ở trang này</strong> trong giây lát cho đến khi đơn hàng được xác nhận đặt thành công!
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Hệ thống đang ghi nhận đơn hàng lên máy chủ Not A Knot...
+                  </p>
+                </div>
               </div>
             )}
           </motion.div>

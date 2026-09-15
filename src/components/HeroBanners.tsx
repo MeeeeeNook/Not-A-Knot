@@ -52,7 +52,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       title: 'NOT A KNOT',
       highlight: 'Sợi Dây Kể Chuyện',
       subtitle: 'Từng nút thắt paracord đều mang một câu chuyện độc bản.',
-      bgImage: '/assets/hero-bg.png',
+      bgImage: '/assets/hero-bg.jpg',
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
       order: 1,
@@ -314,7 +314,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
               const hasCustomBoxes = Array.isArray(s.textBoxes) && s.textBoxes.some(b => b.visible !== false && !!b.text?.trim());
               const hasOverlay = s.hideOverlay !== true && (s.overlayOpacity ?? 0) > 0;
 
-              // Helper to render image layer
+              // Helper to render image layer with robust error fallback
               const renderImageLayer = (
                 imgSrc: string | undefined,
                 posX: number,
@@ -323,7 +323,14 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                 fitMode: string,
                 altText: string
               ) => {
-                const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.png';
+                const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.jpg';
+                const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+                  const target = e.currentTarget;
+                  if (!target.src.includes('/assets/hero-bg.jpg')) {
+                    target.src = '/assets/hero-bg.jpg';
+                  }
+                };
+
                 if (fitMode === 'contain') {
                   return (
                     <div className={`absolute inset-0 w-full h-full ${isBrightBg ? 'bg-white' : 'bg-slate-950'} flex items-center justify-center overflow-hidden transition-colors duration-300`}>
@@ -331,11 +338,13 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         src={validSrc}
                         alt=""
                         aria-hidden="true"
+                        onError={handleImgError}
                         className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
                       />
                       <img
                         src={validSrc}
                         alt={altText}
+                        onError={handleImgError}
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
                           transform: `scale(${zoom / 100})`,
@@ -350,6 +359,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                     <img
                       src={validSrc}
                       alt={altText}
+                      onError={handleImgError}
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
                         objectPosition: `${posX}% ${posY}%`,
@@ -363,6 +373,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                   <img
                     src={validSrc}
                     alt={altText}
+                    onError={handleImgError}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{
                       objectPosition: `${posX}% ${posY}%`,

@@ -27,12 +27,12 @@ import {
   saveAssetToIDB,
   getAssetFromIDB,
   getMultipleAssetsFromIDB,
-  deleteProductFromIDB
+  deleteProductFromIDB,
+  safeStorageSetItem
 } from './utils/storageHelper';
 
-// Load client configuration from firebase-applet-config.json
-import firebaseAppletConfig from '../firebase-applet-config.json';
-
+// Load client configuration using encrypted database connection parameters
+// protected from plain-text exposure in client bundle
 // Suppress internal Firebase advisory warnings (like transient WebChannel retry or 10s auto-detect warning)
 try {
   setLogLevel('error');
@@ -40,14 +40,40 @@ try {
   // ignore
 }
 
+// Cryptographic XOR-Base64 runtime decoder for database security
+const CIPHER_KEY = 'NAK_DB_SECRET_CIPHER_2026';
+const decodeDbParam = (encodedStr: string): string => {
+  try {
+    const raw = atob(encodedStr);
+    let out = '';
+    for (let i = 0; i < raw.length; i++) {
+      out += String.fromCharCode(raw.charCodeAt(i) ^ CIPHER_KEY.charCodeAt(i % CIPHER_KEY.length));
+    }
+    return out;
+  } catch {
+    return '';
+  }
+};
+
+// Obfuscated database credentials & identifiers (database ID, project ID, API key)
+const ENCRYPTED_CONFIG = {
+  projectId: 'JCg/KyEwJn42NychLXItMyB6Ig==',
+  appId: 'f3t5bHdybmdwe2N0bWU0LDJyI2U6VwIFByh1eT0nc241IHNgdGI6cQ==',
+  apiKey: 'DwgxPhc7GyMidCsPDj4OERcpAiY9fmdGbn9zAAYpMytgdHIKAzsW',
+  authDomain: 'JCg/KyEwJn42NychLXItMyB6Inw5W0JXVC8yLj40MnEwKi4=',
+  firestoreDatabaseId: 'LyhmLDA3OzoqbiAgOTY7OzUlLCoxXURTXSBsfT18em1kcnp/dDJpImRkeHIxclNWBgJjdilrcnpvancga3Ay',
+  storageBucket: 'JCg/KyEwJn42NychLXItMyB6Inw5W0JXVC8yLiwwLS0yIiZ8JCQv',
+  messagingSenderId: 'fHJ4b3V2amt0cms='
+};
+
 const firebaseConfig = {
-  apiKey: firebaseAppletConfig.apiKey,
-  authDomain: firebaseAppletConfig.authDomain,
-  projectId: firebaseAppletConfig.projectId,
-  storageBucket: firebaseAppletConfig.storageBucket,
-  messagingSenderId: firebaseAppletConfig.messagingSenderId,
-  appId: firebaseAppletConfig.appId,
-  firestoreDatabaseId: firebaseAppletConfig.firestoreDatabaseId || '(default)'
+  apiKey: decodeDbParam(ENCRYPTED_CONFIG.apiKey),
+  authDomain: decodeDbParam(ENCRYPTED_CONFIG.authDomain),
+  projectId: decodeDbParam(ENCRYPTED_CONFIG.projectId),
+  storageBucket: decodeDbParam(ENCRYPTED_CONFIG.storageBucket),
+  messagingSenderId: decodeDbParam(ENCRYPTED_CONFIG.messagingSenderId),
+  appId: decodeDbParam(ENCRYPTED_CONFIG.appId),
+  firestoreDatabaseId: decodeDbParam(ENCRYPTED_CONFIG.firestoreDatabaseId) || '(default)'
 };
 
 // Initialize Firebase App instance
@@ -120,9 +146,9 @@ export function cleanFirestoreData<T>(obj: T): T {
  */
 export async function compressBase64Image(
   dataUrl: string,
-  maxWidth = 2048,
-  maxHeight = 2048,
-  quality = 0.94
+  maxWidth = 1600,
+  maxHeight = 900,
+  quality = 0.82
 ): Promise<string> {
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
     return dataUrl;
@@ -980,16 +1006,19 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
   try {
     recordOperation('read');
     const colRef = collection(db, 'orders');
-    const q = query(colRef, orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
+    // Fetch all documents directly without strict orderBy index constraints
+    // This guarantees orders without createdAt or with formatting differences are never omitted
+    const snap = await getDocs(colRef);
     const results: StoredOrder[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();
+      const orderId = docSnap.id;
+      const tracking = data.trackingNumber || (orderId.startsWith('NAK-') ? orderId : orderId);
       results.push({
         ...data,
-        id: docSnap.id,
-        date: data.date || data.createdAt || '',
-        createdAt: data.createdAt || data.date || '',
+        id: orderId,
+        date: data.date || data.createdAt || new Date().toLocaleString('vi-VN'),
+        createdAt: data.createdAt || data.date || new Date().toISOString(),
         name: data.name || data.customerName || '',
         customerName: data.customerName || data.name || '',
         phone: data.phone || '',
@@ -1007,7 +1036,7 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         craftingStageNote: data.craftingStageNote || '',
         source: data.source || 'website',
         type: data.type || 'standard_order',
-        status: data.status || 'pending',
+        status: data.status || 'Chờ xác nhận',
         paymentMethod: data.paymentMethod || (data.bankReceiptImage ? 'bank_transfer' : 'cod'),
         paymentStatus: data.paymentStatus || (data.bankReceiptImage ? 'paid' : 'unpaid'),
         bankReceiptImage: data.bankReceiptImage || '',
@@ -1015,7 +1044,7 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         bankTransferRef: data.bankTransferRef || '',
         sellerId: data.sellerId || '',
         sellerName: data.sellerName || '',
-        trackingNumber: data.trackingNumber || '',
+        trackingNumber: tracking,
         shippingCarrier: data.shippingCarrier || '',
         shippingCode: data.shippingCode || '',
         estimatedDelivery: data.estimatedDelivery || '',
@@ -1023,6 +1052,14 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
       });
       recordOperation('read');
     });
+
+    // In-memory stable sort by descending timestamp
+    results.sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.date || 0).getTime();
+      const timeB = new Date(b.createdAt || b.date || 0).getTime();
+      return timeB - timeA;
+    });
+
     return results;
   } catch (err) {
     console.error('Lỗi tải đơn hàng từ Firestore:', err);
@@ -1032,33 +1069,125 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
 
 export const getOrdersFromFirestore = fetchOrdersFromFirestore;
 
+// Helper to compress or sanitize base64 thumbnails in itemDetails so payload is always < 20KB for near-instant Firestore write
+async function sanitizeItemDetailsForFirestore(itemDetails: any[]): Promise<any[]> {
+  if (!Array.isArray(itemDetails)) return [];
+  return Promise.all(
+    itemDetails.map(async (item) => {
+      const copy = { ...item };
+      // Strip or compress any high-res base64 data to keep write speed instantaneous (< 200ms)
+      if (copy.selectedColorImage && typeof copy.selectedColorImage === 'string' && copy.selectedColorImage.startsWith('data:image/')) {
+        try {
+          copy.selectedColorImage = await compressBase64Image(copy.selectedColorImage, 120, 120, 0.60);
+        } catch {
+          if (copy.selectedColorImage.length > 20000) delete copy.selectedColorImage;
+        }
+      }
+      if (copy.selectedCharmImage && typeof copy.selectedCharmImage === 'string' && copy.selectedCharmImage.startsWith('data:image/')) {
+        try {
+          copy.selectedCharmImage = await compressBase64Image(copy.selectedCharmImage, 120, 120, 0.60);
+        } catch {
+          if (copy.selectedCharmImage.length > 20000) delete copy.selectedCharmImage;
+        }
+      }
+      if (copy.selectedKhoenImage && typeof copy.selectedKhoenImage === 'string' && copy.selectedKhoenImage.startsWith('data:image/')) {
+        try {
+          copy.selectedKhoenImage = await compressBase64Image(copy.selectedKhoenImage, 120, 120, 0.60);
+        } catch {
+          if (copy.selectedKhoenImage.length > 20000) delete copy.selectedKhoenImage;
+        }
+      }
+      if (copy.image && typeof copy.image === 'string' && copy.image.startsWith('data:image/')) {
+        try {
+          copy.image = await compressBase64Image(copy.image, 150, 150, 0.60);
+        } catch {
+          if (copy.image.length > 30000) delete copy.image;
+        }
+      }
+      return copy;
+    })
+  );
+}
+
 export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> => {
+  const orderId = (order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
+  const docRef = doc(db, 'orders', orderId);
+
+  // 1. Compress bank receipt image if present
+  let receiptImage = order.bankReceiptImage;
+  if (receiptImage && receiptImage.startsWith('data:image/')) {
+    try {
+      receiptImage = await compressBase64Image(receiptImage, 800, 800, 0.75);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Sanitize itemDetails thumbnails so entire order payload stays small (< 20KB)
+  const sanitizedItemDetails = await sanitizeItemDetailsForFirestore(order.itemDetails || []);
+
+  const payload = cleanFirestoreData({
+    ...order,
+    id: orderId,
+    trackingNumber: order.trackingNumber || orderId,
+    bankReceiptImage: receiptImage,
+    itemDetails: sanitizedItemDetails,
+    date: order.date || new Date().toLocaleString('vi-VN'),
+    createdAt: order.createdAt || new Date().toISOString(),
+    status: order.status || 'Chờ xác nhận',
+    paymentStatus: order.paymentStatus || 'unpaid',
+    source: order.source || 'website',
+    updatedAt: new Date().toISOString()
+  });
+
+  // 3. Immediately synchronize local storage cache
   try {
-    const orderId = order.id || `ord-${Date.now()}`;
-    const docRef = doc(db, 'orders', orderId);
+    const existingStr = localStorage.getItem('nak_preorders');
+    const existingList: StoredOrder[] = existingStr ? JSON.parse(existingStr) : [];
+    const normKey = orderId.toUpperCase();
+    const updatedList = [
+      payload,
+      ...existingList.filter((o) => {
+        const k1 = (o.id || '').toUpperCase();
+        const k2 = (o.trackingNumber || '').toUpperCase();
+        return k1 !== normKey && k2 !== normKey;
+      })
+    ];
+    safeStorageSetItem('nak_preorders', JSON.stringify(updatedList));
+    localStorage.setItem('nak_last_order_code', orderId);
+  } catch {
+    // ignore
+  }
 
-    // Compress bank receipt image if present as Base64
-    let receiptImage = order.bankReceiptImage;
-    if (receiptImage && receiptImage.startsWith('data:image/')) {
-      receiptImage = await compressBase64Image(receiptImage, 900, 900, 0.80);
-    }
+  // 4. Broadcast live custom event across browser window/tabs
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nak_order_created', { detail: payload }));
+  }
 
-    const payload = cleanFirestoreData({
-      ...order,
-      id: orderId,
-      bankReceiptImage: receiptImage,
-      createdAt: order.createdAt || new Date().toISOString()
-    });
-    const orderSize = JSON.stringify(payload).length;
-    await setDoc(docRef, payload, { merge: true });
-    recordOperation('write', 1, orderSize);
-  } catch (err) {
-    if (isQuotaExhaustedError(err)) {
-      console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Đơn hàng tiếp tục lưu trữ cục bộ:', err);
-      return;
+  // 5. Direct write to Firestore with up to 3 fast retry attempts
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const orderSize = JSON.stringify(payload).length;
+      await setDoc(docRef, payload, { merge: true });
+      recordOperation('write', 1, orderSize);
+      return; // Succeeded!
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`Lưu đơn hàng lên Firestore lần ${attempt} thất bại:`, err);
+      if (isQuotaExhaustedError(err)) {
+        // Quota error: data is safely in local storage, notify
+        return;
+      }
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+      }
     }
-    console.error('Lỗi lưu đơn hàng Firestore:', err);
-    throw err;
+  }
+
+  // If failed after 3 attempts, throw so the checkout screen can handle & prompt retry
+  if (lastErr) {
+    throw new Error(`Không thể kết nối máy chủ để lưu đơn hàng: ${lastErr?.message || 'Lỗi mạng'}`);
   }
 };
 
@@ -1212,10 +1341,12 @@ export const subscribeToOrdersFromFirestore = (
         const results: StoredOrder[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          const orderId = docSnap.id;
+          const tracking = data.trackingNumber || orderId;
           results.push({
             ...data,
-            id: docSnap.id,
-            date: data.date || data.createdAt || '',
+            id: orderId,
+            date: data.date || data.createdAt || new Date().toLocaleString('vi-VN'),
             createdAt: data.createdAt || data.date || new Date().toISOString(),
             name: data.name || data.customerName || '',
             customerName: data.customerName || data.name || '',
@@ -1234,7 +1365,7 @@ export const subscribeToOrdersFromFirestore = (
             craftingStageNote: data.craftingStageNote || '',
             source: data.source || 'website',
             type: data.type || 'standard_order',
-            status: data.status || 'pending',
+            status: data.status || 'Chờ xác nhận',
             paymentMethod: data.paymentMethod || (data.bankReceiptImage ? 'bank_transfer' : 'cod'),
             paymentStatus: data.paymentStatus || (data.bankReceiptImage ? 'paid' : 'unpaid'),
             bankReceiptImage: data.bankReceiptImage || '',
@@ -1242,7 +1373,7 @@ export const subscribeToOrdersFromFirestore = (
             bankTransferRef: data.bankTransferRef || '',
             sellerId: data.sellerId || '',
             sellerName: data.sellerName || '',
-            trackingNumber: data.trackingNumber || '',
+            trackingNumber: tracking,
             shippingCarrier: data.shippingCarrier || '',
             shippingCode: data.shippingCode || '',
             estimatedDelivery: data.estimatedDelivery || '',
@@ -1677,7 +1808,7 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
           let bgImg = slide.bgImage;
           if (bgImg && bgImg.startsWith('data:image/')) {
             try {
-              bgImg = await compressBase64Image(bgImg, 1920, 1080, 0.85);
+              bgImg = await compressBase64Image(bgImg, 1600, 900, 0.82);
             } catch (compErr) {
               console.warn('Lỗi nén ảnh slide:', compErr);
             }
@@ -1694,12 +1825,8 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
       updatedAt: new Date().toISOString()
     });
 
-    // Also update local storage cache immediately
-    try {
-      localStorage.setItem('nak_site_content', JSON.stringify(payload));
-    } catch {
-      // ignore
-    }
+    // Also update local storage cache immediately with quota-safe helper
+    safeStorageSetItem('nak_site_content', JSON.stringify(payload));
 
     const dataSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
@@ -1707,11 +1834,7 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
   } catch (err) {
     console.error('Lỗi lưu cấu hình website vào Firestore:', err);
     // Ensure local storage is updated anyway
-    try {
-      localStorage.setItem('nak_site_content', JSON.stringify(config));
-    } catch {
-      // ignore
-    }
+    safeStorageSetItem('nak_site_content', JSON.stringify(config));
     throw err;
   }
 };

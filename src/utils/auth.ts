@@ -58,8 +58,7 @@ export const encodeSecret = (text: string, key = 0x5a): string => {
 };
 
 // Initial Root Admin Salt & Hash (SHA-256 with cryptographic salt & pepper)
-// Stored in encrypted format, decrypted only in memory at runtime
-export const ROOT_ADMIN_USERNAME = decodeSecret('NzoyNT0qDzQ8');
+export const ROOT_ADMIN_USERNAME = 'manhcuong';
 export const ROOT_ADMIN_SALT = 'nak_root_salt_mc2026';
 export const ROOT_ADMIN_HASH = 'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd';
 
@@ -98,7 +97,7 @@ export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
   if (user.isRootAdmin || user.role === 'root_admin') return true;
   const u = (user.username || '').trim().toLowerCase();
-  if (u && (u === ROOT_ADMIN_USERNAME || u === decodeSecret('NzoyNT0qDzQ8'))) return true;
+  if (u && u === ROOT_ADMIN_USERNAME) return true;
   if (user.usernameHash && user.usernameHash === ROOT_ADMIN_USERNAME_HASH) return true;
   return false;
 };
@@ -106,7 +105,7 @@ export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
 export const COMMON_MEMBER_SALT = 'nak_team_member_salt_2026';
 export const DEFAULT_MEMBER_HASH = '9e9528e8f45193607092ef67fd42d9056ee549256543942c4313c114f76ce0ad';
 
-// Generates the initial 9 default team members with encrypted username storage
+// Generates the initial 9 default team members with natural usernames
 export const createDefaultSellers = async (): Promise<SellerUser[]> => {
   const rootHash = ROOT_ADMIN_HASH;
   const commonSalt = COMMON_MEMBER_SALT;
@@ -132,8 +131,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0901234567'
     },
     {
-      id: `seller-${decodeSecret('LjMpKSw+Dj0=')}`,
-      username: decodeSecret('LjMpKSw+Dj0='),
+      id: 'seller-thutrang',
+      username: 'thutrang',
       name: 'Thu Trang',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -145,8 +144,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0902345678'
     },
     {
-      id: `seller-${decodeSecret('MjQ9MzkxATc=')}`,
-      username: decodeSecret('MjQ9MzkxATc='),
+      id: 'seller-hoangnam',
+      username: 'hoangnam',
       name: 'Hoàng Nam',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -158,8 +157,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0903456789'
     },
     {
-      id: `seller-${decodeSecret('NzIyNT8xCA==')}`,
-      username: decodeSecret('NzIyNT8xCA=='),
+      id: 'seller-minhanh',
+      username: 'minhanh',
       name: 'Minh Anh',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -171,8 +170,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0904567890'
     },
     {
-      id: `seller-${decodeSecret('MTM9MzYzCTQz')}`,
-      username: decodeSecret('MTM9MzYzCTQz'),
+      id: 'seller-khanhlinh',
+      username: 'khanhlinh',
       name: 'Khánh Linh',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -184,8 +183,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0905678901'
     },
     {
-      id: `seller-${decodeSecret('LDI5KT8xCA==')}`,
-      username: decodeSecret('LDI5KT8xCA=='),
+      id: 'seller-vietanh',
+      username: 'vietanh',
       name: 'Việt Anh',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -197,8 +196,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0906789012'
     },
     {
-      id: `seller-${decodeSecret('LjM9MzY3FTU1Ow==')}`,
-      username: decodeSecret('LjM9MzY3FTU1Ow=='),
+      id: 'seller-thanhhuong',
+      username: 'thanhhuong',
       name: 'Thanh Hương',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -210,8 +209,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0907890123'
     },
     {
-      id: `seller-${decodeSecret('Ky49Mzk3FSM=')}`,
-      username: decodeSecret('Ky49Mzk3FSM='),
+      id: 'seller-quanghuy',
+      username: 'quanghuy',
       name: 'Quang Huy',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,
@@ -223,8 +222,8 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       phone: '0908901234'
     },
     {
-      id: `seller-${decodeSecret('NDwzPjM+CQ==')}`,
-      username: decodeSecret('NDwzPjM+CQ=='),
+      id: 'seller-ngocmai',
+      username: 'ngocmai',
       name: 'Ngọc Mai',
       passwordHash: defaultMemberHash,
       passwordSalt: commonSalt,

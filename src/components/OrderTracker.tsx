@@ -34,7 +34,7 @@ import {
   getSourceBadgeConfig,
   removeVietnameseTones
 } from '../utils/orderFormatters';
-import { getOrdersFromFirestore } from '../firebase';
+import { getOrdersFromFirestore, subscribeToOrdersFromFirestore } from '../firebase';
 import { printOrderSlipDirectly } from '../utils/printOrderSlip';
 
 interface OrderTrackerProps {
@@ -562,26 +562,103 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     }
   }, [matchOrders, refreshOrdersData]);
 
-  // Initial load: fetch once on mount and check initial code without infinite re-render
+  // Initial load: fetch on mount, auto-search target code or recent order, and subscribe to real-time updates
   useEffect(() => {
     let isMounted = true;
+    const targetCode =
+      (initialTrackingCode && initialTrackingCode.trim()) ||
+      localStorage.getItem('nak_last_order_code') ||
+      '';
+
+    if (targetCode) {
+      setSearchQuery(targetCode);
+    }
+
     refreshOrdersData().then((merged) => {
       if (!isMounted) return;
-      if (initialTrackingCode && initialTrackingCode.trim()) {
-        const q = initialTrackingCode.trim();
-        const matches = matchOrders(q, merged);
+      if (targetCode) {
+        const matches = matchOrders(targetCode, merged);
         setHasSearched(true);
         setMatchedOrders(matches);
         if (matches.length === 1) {
           setActiveOrder(matches[0]);
         }
+      } else {
+        const recent = getRecentLocalOrders();
+        if (recent.length > 0) {
+          const latest = recent[0];
+          const latestKey = getCanonicalOrderKey(latest) || latest.trackingNumber || latest.id || '';
+          if (latestKey) {
+            setSearchQuery(latestKey);
+            const matches = matchOrders(latestKey, merged);
+            setHasSearched(true);
+            setMatchedOrders(matches);
+            if (matches.length === 1) {
+              setActiveOrder(matches[0]);
+            }
+          }
+        }
       }
     });
 
+    const unsubscribe = subscribeToOrdersFromFirestore((realtimeOrders) => {
+      if (!isMounted) return;
+      if (realtimeOrders && realtimeOrders.length > 0) {
+        const local = getRecentLocalOrders();
+        const orderMap = new Map<string, StoredOrder>();
+        [...local, ...realtimeOrders].forEach((ord) => {
+          if (!ord) return;
+          const canonKey = getCanonicalOrderKey(ord) || ord.id || '';
+          const key = normalizeCodeKey(canonKey);
+          if (!key) return;
+          if (orderMap.has(key)) {
+            const existing = orderMap.get(key)!;
+            orderMap.set(key, mergeOrderRecords(existing, ord));
+          } else {
+            orderMap.set(key, ord);
+          }
+        });
+        const merged = Array.from(orderMap.values());
+        setLiveOrders(merged);
+        liveOrdersRef.current = merged;
+
+        // Keep active order up to date in real-time
+        setActiveOrder((curr) => {
+          if (!curr) return null;
+          const currKey = normalizeCodeKey(getCanonicalOrderKey(curr) || curr.id || '');
+          const found = merged.find((o) => normalizeCodeKey(getCanonicalOrderKey(o) || o.id || '') === currKey);
+          return found || curr;
+        });
+      }
+    });
+
+    const handleOrderCreated = (e: Event) => {
+      if (!isMounted) return;
+      const customEvt = e as CustomEvent<StoredOrder>;
+      if (customEvt.detail) {
+        const newOrd = customEvt.detail;
+        const target = newOrd.trackingNumber || newOrd.id || '';
+        if (target) {
+          setSearchQuery(target);
+          refreshOrdersData().then((merged) => {
+            const matches = matchOrders(target, merged);
+            setHasSearched(true);
+            setMatchedOrders(matches);
+            if (matches.length === 1) {
+              setActiveOrder(matches[0]);
+            }
+          });
+        }
+      }
+    };
+    window.addEventListener('nak_order_created', handleOrderCreated);
+
     return () => {
       isMounted = false;
+      unsubscribe();
+      window.removeEventListener('nak_order_created', handleOrderCreated);
     };
-  }, [initialTrackingCode, matchOrders, refreshOrdersData]);
+  }, [initialTrackingCode, matchOrders, refreshOrdersData, getRecentLocalOrders]);
 
   // Recent local orders for quick suggestions (deduplicated by canonical tracking code)
   const recentSuggestedOrders = useMemo(() => {
