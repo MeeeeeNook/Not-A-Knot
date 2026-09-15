@@ -139,9 +139,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'return_warranty' | 'shipping'>('return_warranty');
 
-  // Floating hovering purchase dock visibility observer
+  // Floating hovering purchase dock visibility: only show when above the original CTA and it is obscured below viewport
   const mainCtaRef = useRef<HTMLDivElement>(null);
-  const [isMainCtaInView, setIsMainCtaInView] = useState<boolean>(true);
+  const [showFloatingBar, setShowFloatingBar] = useState<boolean>(false);
   const [stockNotice, setStockNotice] = useState<string | null>(null);
   const stockNoticeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -161,38 +161,33 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   };
 
   useEffect(() => {
-    const target = mainCtaRef.current;
-    if (!target) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsMainCtaInView(entry.isIntersecting);
-      },
-      {
-        threshold: 0.15,
-        rootMargin: '0px 0px -20px 0px'
+    const updateVisibility = () => {
+      if (!mainCtaRef.current) {
+        setShowFloatingBar(false);
+        return;
       }
-    );
+      const rect = mainCtaRef.current.getBoundingClientRect();
+      // Only show if the user is above the original CTA button and the button is hidden below the viewport
+      const isAboveAndObscured = rect.top > window.innerHeight;
+      setShowFloatingBar(isAboveAndObscured);
+    };
 
-    observer.observe(target);
+    updateVisibility();
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    window.addEventListener('resize', updateVisibility, { passive: true });
+
     return () => {
-      observer.disconnect();
+      window.removeEventListener('scroll', updateVisibility);
+      window.removeEventListener('resize', updateVisibility);
     };
   }, [product?.id]);
 
-  // Stable gallery images (including all product images and color variant images)
+  // Gallery images strictly reflecting the product's uploaded images
   const images = useMemo(() => {
     const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
-    const set = new Set<string>();
-    rawList.forEach((img) => {
-      if (typeof img === 'string' && img.trim().length > 0) set.add(img.trim());
-    });
-    product.colorOptions?.forEach((opt) => {
-      if (opt.image && opt.image.trim().length > 0) set.add(opt.image.trim());
-    });
-    const list = Array.from(set);
-    return list.length > 0 ? list : ['/assets/bracelet.jpg'];
-  }, [product]);
+    const filtered = rawList.filter((img) => typeof img === 'string' && img.trim().length > 0);
+    return filtered.length > 0 ? filtered : ['/assets/bracelet.jpg'];
+  }, [product.images, product.image]);
 
   const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);
 
@@ -1412,7 +1407,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
       {/* UNIVERSAL FLOATING PERSISTENT PURCHASE DOCK (Desktop & Mobile) */}
       <AnimatePresence>
-        {!isMainCtaInView && (
+        {showFloatingBar && (
           <motion.div
             key="floating-product-dock"
             id="floating-product-dock"

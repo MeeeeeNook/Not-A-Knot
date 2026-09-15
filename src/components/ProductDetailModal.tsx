@@ -105,17 +105,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     const validBase = rawList.filter(
       (img) => typeof img === 'string' && img.trim().length > 0
     );
-    const base = validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
-    if (
-      selectedColorImage &&
-      typeof selectedColorImage === 'string' &&
-      selectedColorImage.trim().length > 0 &&
-      !base.includes(selectedColorImage)
-    ) {
-      return [selectedColorImage, ...base];
-    }
-    return base;
-  }, [product, selectedColorImage]);
+    return validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
+  }, [product.images, product.image]);
 
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
