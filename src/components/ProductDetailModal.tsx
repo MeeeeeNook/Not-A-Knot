@@ -392,7 +392,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {product.category === 'event_0209'
                   ? 'Sự kiện Quốc khánh 02.09'
                   : product.category === 'event_2010'
-                  ? 'BST 20/10 — Quà Tặng Nàng'
+                  ? '20/10 — Quà Tặng Nàng'
                   : product.category === 'charm_bracelet'
                   ? 'Vòng Charm Biểu Tượng'
                   : product.category === 'everyday'

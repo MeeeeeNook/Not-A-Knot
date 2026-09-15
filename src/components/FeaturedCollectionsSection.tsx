@@ -45,7 +45,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                 Phiên Bản Quà Tặng Nàng
               </span>
               <h3 className="text-xl sm:text-2xl font-bold text-neutral-950 mb-2">
-                BST 20/10 Yêu Thương
+                20/10 Yêu Thương
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed mb-6">
                 Những nút thắt Paracord kết hợp charm bạc và ngọc nữ tính, đi kèm hộp quà nắp nam châm và thiệp viết tay trang trọng.
@@ -76,7 +76,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                 onClick={() => onNavigateToCatalog('event_2010')}
                 className="w-full py-3 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
               >
-                <span>Xem BST 20/10</span>
+                <span>Khám phá 20/10</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import { ShoppingBag, ChevronDown, Menu, X, ArrowRight, ShieldCheck, Package } from 'lucide-react';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../types';
+import { stripBstPrefix } from '../utils/orderFormatters';
 
 interface NavbarProps {
   cartCount: number;
@@ -120,57 +121,65 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${dropdownOpen ? 'rotate-180 text-amber-400' : 'text-neutral-400'}`} />
               </button>
 
-              {/* Mega-Menu Dropdown */}
+              {/* Mega-Menu Dropdown in Light Mode */}
               {dropdownOpen && (
                 <div
                   id="nav-categories-dropdown-menu"
-                  className="absolute top-full left-1/2 -translate-x-1/4 sm:-translate-x-1/3 lg:-translate-x-1/2 mt-2 w-[92vw] max-w-[860px] bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl p-5 z-50 animate-fadeIn text-white"
+                  className={`absolute top-full mt-2 bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-4 z-50 animate-fadeIn text-slate-900 ${
+                    visibleCollections.length === 1
+                      ? 'left-0 w-[290px] sm:w-[320px]'
+                      : visibleCollections.length === 2
+                      ? 'left-1/2 -translate-x-1/3 sm:-translate-x-1/2 w-[92vw] sm:w-[580px] max-w-[620px]'
+                      : 'left-1/2 -translate-x-1/4 sm:-translate-x-1/3 lg:-translate-x-1/2 w-[92vw] max-w-[860px]'
+                  }`}
                 >
-                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-neutral-800 text-xs font-bold">
+                  <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100 text-xs font-bold">
                     <div className="flex items-center gap-2">
-                      <span className="uppercase tracking-wider text-white">Bộ Sưu Tập {brandName}</span>
+                      <span className="uppercase tracking-wider text-slate-800 text-[11px] font-extrabold">
+                        Bộ Sưu Tập {brandName}
+                      </span>
                     </div>
-                    <button
-                      onClick={() => handleNavClick(onNavigateLanding)}
-                      className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-bold transition-colors cursor-pointer"
-                    >
-                      <span>Xem tất cả</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
                   </div>
 
                   {/* Horizontal Grid of Collection Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[440px] overflow-y-auto sm:overflow-visible">
+                  <div className={`grid gap-3.5 max-h-[440px] overflow-y-auto sm:overflow-visible ${
+                    visibleCollections.length === 1
+                      ? 'grid-cols-1'
+                      : visibleCollections.length === 2
+                      ? 'grid-cols-1 sm:grid-cols-2'
+                      : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+                  }`}>
                     {visibleCollections.map((col) => {
                       const colImg = col.horizontalImage || col.bannerImage || col.bgImage || '/assets/hero-bg.png';
                       const isSelected = currentView === 'collection' && activeCollectionId === col.id;
+                      const cleanTitle = stripBstPrefix(col.title);
 
                       return (
                         <div
                           key={col.id}
                           id={`nav-megamenu-col-${col.id}`}
                           onClick={() => handleNavClick(() => onSelectCollection(col.id))}
-                          className={`group relative rounded-2xl overflow-hidden border cursor-pointer transition-all duration-300 flex flex-col bg-neutral-950/80 hover:bg-neutral-950 ${
+                          className={`group relative rounded-xl overflow-hidden border cursor-pointer transition-all duration-300 flex flex-col bg-slate-50/80 hover:bg-white ${
                             isSelected
-                              ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-950/20'
-                              : 'border-neutral-800 hover:border-amber-400/60 hover:shadow-lg'
+                              ? 'border-amber-500 ring-2 ring-amber-400/40 bg-amber-50/40 shadow-sm'
+                              : 'border-slate-200 hover:border-amber-400 hover:shadow-md'
                           }`}
                         >
                           {/* Horizontal Photo Thumbnail */}
-                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-neutral-900">
+                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-100">
                             <img
                               src={colImg}
-                              alt={col.title}
+                              alt={cleanTitle}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                               loading="lazy"
                               decoding="async"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-transparent" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
                             
                             {/* Badges / Preorder tag */}
                             <div className="absolute top-2 left-2 flex items-center gap-1">
                               {col.badge && (
-                                <span className="px-2 py-0.5 rounded-full bg-black/80 backdrop-blur-md text-amber-300 text-[9px] font-black uppercase tracking-wider border border-amber-400/20">
+                                <span className="px-2 py-0.5 rounded-full bg-slate-900/80 backdrop-blur-md text-amber-300 text-[9px] font-black uppercase tracking-wider border border-amber-400/20">
                                   {col.badge}
                                 </span>
                               )}
@@ -185,17 +194,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {/* Collection Title & Subtitle */}
                           <div className="p-3 flex flex-col justify-between flex-grow">
                             <div>
-                              <h4 className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-1">
-                                {col.title}
+                              <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-1">
+                                {cleanTitle}
                               </h4>
                               {col.subtitle && (
-                                <p className="text-[11px] text-neutral-400 line-clamp-1 mt-0.5 font-normal">
+                                <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5 font-normal">
                                   {col.subtitle}
                                 </p>
                               )}
                             </div>
 
-                            <div className="mt-2.5 flex items-center text-[10px] font-bold text-amber-400 group-hover:text-amber-300 transition-colors gap-1">
+                            <div className="mt-2.5 flex items-center text-[10px] font-bold text-amber-700 group-hover:text-amber-800 transition-colors gap-1">
                               <span>Khám phá ngay</span>
                               <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                             </div>
@@ -374,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   : 'text-neutral-300 hover:bg-neutral-900'
               }`}
             >
-              <span>{col.title}</span>
+              <span>{stripBstPrefix(col.title)}</span>
               {col.isPreorder && (
                 <span className="text-[9px] font-bold text-rose-300 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-800">
                   Đặt trước

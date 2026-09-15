@@ -467,7 +467,13 @@ function extractProductAssets(prod: Product): {
     if (!imgVal || typeof imgVal !== 'string') return imgVal;
     // If it's a heavy Base64 string (> 2000 chars), extract into dedicated asset
     if (imgVal.startsWith('data:image/') || imgVal.length > 2000) {
-      const assetId = `${prodId}_${prefix}`;
+      // Calculate content hash to create unique immutable assetId per image version
+      let hash = 0;
+      for (let i = 0; i < Math.min(imgVal.length, 300); i++) {
+        hash = ((hash << 5) - hash) + imgVal.charCodeAt(i);
+        hash |= 0;
+      }
+      const assetId = `${prodId}_${prefix}_${Math.abs(hash).toString(36)}_${imgVal.length}`;
       assetDocs.push({ id: assetId, productId: prodId, data: imgVal });
       inMemoryAssetCache.set(assetId, imgVal);
       return `asset:${assetId}`;
@@ -588,7 +594,21 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
           const snap = await getDoc(docRef);
           if (snap.exists()) {
             const data = snap.data();
-            if (data?.data && typeof data.data === 'string') {
+            if (data?.isChunked && typeof data.totalChunks === 'number' && data.totalChunks > 0) {
+              // Reassemble chunked asset (>1MB) from product_asset_chunks
+              const chunkPromises = [];
+              for (let i = 0; i < data.totalChunks; i++) {
+                const chkRef = doc(db, 'product_asset_chunks', `${assetId}_chk_${i}`);
+                chunkPromises.push(getDoc(chkRef));
+              }
+              const chunkSnaps = await Promise.all(chunkPromises);
+              const assembled = chunkSnaps.map((s) => (s.exists() ? (s.data()?.data || '') : '')).join('');
+              if (assembled) {
+                assetMap.set(assetId, assembled);
+                inMemoryAssetCache.set(assetId, assembled);
+                await saveAssetToIDB(assetId, assembled);
+              }
+            } else if (data?.data && typeof data.data === 'string') {
               assetMap.set(assetId, data.data);
               inMemoryAssetCache.set(assetId, data.data);
               await saveAssetToIDB(assetId, data.data);
@@ -609,7 +629,9 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
     if (!val || typeof val !== 'string') return val;
     if (val.startsWith('asset:')) {
       const assetId = val.replace('asset:', '');
-      return assetMap.get(assetId) || val;
+      const resolved = assetMap.get(assetId);
+      if (resolved) return resolved;
+      return '/assets/bracelet.jpg';
     }
     return val;
   };
@@ -831,16 +853,54 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
         // Save to IndexedDB
         await saveAssetToIDB(asset.id, asset.data);
 
-        // Save to Firestore `product_assets` collection (each doc holds exactly 1 asset, easily under 1MB)
+        // Save to Firestore `product_assets` collection (auto-chunks if > 600KB to guarantee 100% cloud sync for any file size)
         try {
-          const assetRef = doc(db, 'product_assets', asset.id);
-          await setDoc(assetRef, {
-            id: asset.id,
-            productId: asset.productId,
-            data: asset.data,
-            updatedAt: new Date().toISOString()
-          }, { merge: true });
-          recordOperation('write', 1, asset.data.length);
+          const uploadData = asset.data;
+          const CHUNK_SIZE = 600000; // ~450KB per chunk, well within Firestore 1MB limit
+
+          if (uploadData.length > CHUNK_SIZE) {
+            const chunks: string[] = [];
+            for (let i = 0; i < uploadData.length; i += CHUNK_SIZE) {
+              chunks.push(uploadData.slice(i, i + CHUNK_SIZE));
+            }
+
+            // Save chunk manifest document
+            const assetRef = doc(db, 'product_assets', asset.id);
+            await setDoc(assetRef, {
+              id: asset.id,
+              productId: asset.productId,
+              isChunked: true,
+              totalChunks: chunks.length,
+              totalLength: uploadData.length,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            // Save chunk documents in parallel
+            await Promise.all(
+              chunks.map((chkStr, idx) => {
+                const chunkDocRef = doc(db, 'product_asset_chunks', `${asset.id}_chk_${idx}`);
+                return setDoc(chunkDocRef, {
+                  assetId: asset.id,
+                  chunkIndex: idx,
+                  data: chkStr,
+                  updatedAt: new Date().toISOString()
+                }, { merge: true });
+              })
+            );
+
+            recordOperation('write', chunks.length + 1, uploadData.length);
+          } else {
+            // Single document
+            const assetRef = doc(db, 'product_assets', asset.id);
+            await setDoc(assetRef, {
+              id: asset.id,
+              productId: asset.productId,
+              isChunked: false,
+              data: uploadData,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            recordOperation('write', 1, uploadData.length);
+          }
         } catch (assetErr) {
           console.warn(`[Firestore Assets] Warning uploading asset ${asset.id}:`, assetErr);
         }

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { saveOrderToFirestore, saveCollectionToFirestore, deleteCollectionFromFirestore } from '../firebase';
 import { ProductCard } from './ProductCard';
+import { stripBstPrefix } from '../utils/orderFormatters';
 
 interface CollectionDetailPageProps {
   collectionId: string;
@@ -820,7 +821,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
             <span className={`text-xs font-bold truncate max-w-[150px] sm:max-w-xs hidden sm:inline-block ${
               isDark ? 'text-neutral-300' : 'text-neutral-700'
             }`}>
-              {currentCollection.title}
+              {stripBstPrefix(currentCollection.title)}
             </span>
           </div>
 
@@ -934,7 +935,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 }`}
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                <span>{isEditing ? 'Đóng' : 'Sửa BST'}</span>
+                <span>{isEditing ? 'Đóng' : 'Chỉnh sửa'}</span>
               </button>
 
               {/* Delete Collection Button */}
@@ -949,7 +950,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 title="Xóa bộ sưu tập này"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Xóa BST</span>
+                <span>Xóa</span>
               </button>
             </div>
           )}
@@ -985,7 +986,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
             <h1 className={`text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight uppercase ${
               isDark ? 'text-white drop-shadow-md' : 'text-slate-900'
             }`}>
-              {currentCollection.title}
+              {stripBstPrefix(currentCollection.title)}
             </h1>
 
             {currentCollection.subtitle && (

@@ -588,12 +588,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
     const match = categories.find((c) => c.id === product.category);
     if (match) return match.label;
-    if (product.category === 'event_0209') return 'BST Quốc Khánh 02.09';
-    if (product.category === 'event_2010') return 'BST Phụ Nữ 20.10';
+    if (product.category === 'event_0209') return 'Quốc Khánh 02.09';
+    if (product.category === 'event_2010') return 'Phụ Nữ 20.10';
     if (product.category === 'bracelets') return 'Bản Đan Paracord EDC';
-    if (product.category === 'back_to_school') return 'BST Back 2 School';
+    if (product.category === 'back_to_school') return 'Back 2 School';
     if (product.category && product.category.trim().length > 0) {
-      return product.category.startsWith('BST') ? product.category : `BST ${product.category}`;
+      return product.category.replace(/^(BST|Bộ\s+sưu\s+tập)\s+/i, '').trim();
     }
     return 'Bộ Sưu Tập NOT A KNOT';
   }, [categories, collections, product.category]);

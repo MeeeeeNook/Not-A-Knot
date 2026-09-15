@@ -70,6 +70,7 @@ import {
   testFirebaseConnection,
   saveCollectionsToFirestore,
   saveSiteContentToFirestore,
+  clearFirestoreMemoryCache,
   StoredOrder
 } from '../firebase';
 import { safeStorageSetItem, safeStorageGetItem } from '../utils/storageHelper';
@@ -757,9 +758,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setIsCloudSyncing(true);
     setCloudSyncMessage('🔄 Đang đồng bộ / kéo dữ liệu mới nhất từ Firebase Firestore về máy...');
     try {
+      clearFirestoreMemoryCache();
       const [cloudProds, cloudCats] = await Promise.all([
-        fetchProductsFromFirestore(),
-        fetchCategoriesFromFirestore()
+        fetchProductsFromFirestore(true),
+        fetchCategoriesFromFirestore(true)
       ]);
 
       if (cloudProds && cloudProds.length > 0) {
@@ -1009,7 +1011,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         const img = new Image();
         img.onload = () => {
           try {
-            const maxDim = 2048;
+            const maxDim = 1280;
             let width = img.width || 800;
             let height = img.height || 800;
             if (width > maxDim || height > maxDim) {
@@ -1034,12 +1036,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               
               let compressed = '';
               try {
-                compressed = canvas.toDataURL('image/webp', 0.95);
+                compressed = canvas.toDataURL('image/webp', 0.88);
                 if (!compressed || !compressed.startsWith('data:image/webp')) {
-                  compressed = canvas.toDataURL('image/jpeg', 0.94);
+                  compressed = canvas.toDataURL('image/jpeg', 0.86);
                 }
               } catch {
-                compressed = canvas.toDataURL('image/jpeg', 0.94);
+                compressed = canvas.toDataURL('image/jpeg', 0.86);
               }
 
               setFormImages((prev) => {

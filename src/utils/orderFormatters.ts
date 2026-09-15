@@ -321,4 +321,15 @@ export const removeVietnameseTones = (str: string): string => {
     .replace(/Đ/g, 'D');
 };
 
+/**
+ * Strip "BST" or "Bộ Sưu Tập" prefix from collection names
+ * e.g. "BST Back To School" -> "Back To School"
+ * "BST 20/10" -> "20/10"
+ * "Bộ sưu tập Hào Khí" -> "Hào Khí"
+ */
+export const stripBstPrefix = (title?: string): string => {
+  if (!title) return '';
+  return title.replace(/^(BST|Bộ\s+sưu\s+tập|Bộ\s+Sưu\s+Tập|bộ\s+sưu\s+tập)\s*[-:–—]?\s*/i, '').trim();
+};
+
 
