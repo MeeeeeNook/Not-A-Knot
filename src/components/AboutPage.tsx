@@ -66,14 +66,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             <img
               src="/assets/about-story.jpg"
               alt="Hình ảnh câu chuyện Not A Knot"
-              className="w-full h-full object-cover object-center opacity-85"
+              className="w-full h-full object-cover object-[center_20%] opacity-95 max-sm:opacity-25"
             />
-            {/* Gradient hòa vào nền bên trái để text luôn sắc nét */}
-            <div className="absolute inset-0 bg-gradient-to-r from-stone-100 via-stone-100/85 to-transparent" />
-            {/* Gradient fade bên phải theo yêu cầu */}
-            <div className="absolute inset-0 bg-gradient-to-l from-stone-100 via-transparent to-transparent" />
-            {/* Subtle edge blend */}
-            <div className="absolute inset-0 bg-gradient-to-b from-stone-100/40 via-transparent to-stone-100/40" />
+            {/* Gradient nhẹ nhàng ở mép trái để chuyển tiếp vào nền chữ sắc nét */}
+            <div className="absolute inset-0 bg-gradient-to-r from-stone-100 via-stone-100/35 to-transparent max-sm:bg-stone-100/75" />
           </div>
 
           {/* Text chiếm khoảng 2/3 bề ngang, căn đều (justify) */}
