@@ -15,6 +15,7 @@ export type AdminTabType =
   | 'products'
   | 'categories'
   | 'version_history'
+  | 'logs'
   | 'backup'
   | 'firebase';
 
@@ -360,6 +361,26 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>Lịch sử phiên bản</span>
+              </button>
+
+              <button
+                onClick={() => onSwitchTab('logs')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'logs'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>System Log</span>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                    activeTab === 'logs'
+                      ? 'bg-black/10 text-slate-950 border-black/15'
+                      : 'bg-rose-50 text-rose-700 border-rose-200/60'
+                  }`}
+                >
+                  Logs
+                </span>
               </button>
 
               {isRootAdmin && (

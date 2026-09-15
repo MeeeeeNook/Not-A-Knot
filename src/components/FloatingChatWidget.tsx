@@ -42,6 +42,13 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   const cleanPhone = hotline.replace(/[^0-9]/g, '');
   const zaloUrl = siteContent?.socialLinks?.zalo || `https://zalo.me/${cleanPhone || '0342938174'}`;
 
+  // Listen for global open chat event
+  useEffect(() => {
+    const handleOpenChat = () => setIsOpen(true);
+    window.addEventListener('open-chat-widget', handleOpenChat);
+    return () => window.removeEventListener('open-chat-widget', handleOpenChat);
+  }, []);
+
   // Close on outside click when open
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -199,19 +206,6 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
                       <span>Xem trang Facebook</span>
                     </a>
 
-                    {/* Option 3: Nhắn tin qua Zalo */}
-                    <a
-                      href={zaloUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-blue-50/50 active:scale-98 text-blue-700 font-bold text-sm border border-blue-200 hover:border-blue-300 flex items-center justify-center gap-2.5 transition-all cursor-pointer"
-                    >
-                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-black">
-                        Z
-                      </span>
-                      <span>Nhắn tin qua Zalo</span>
-                    </a>
-
                     {/* Quick Switch to message form */}
                     <button
                       type="button"
@@ -237,7 +231,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
                         </div>
                         <h4 className="font-bold text-sm text-slate-900">Đã gửi tin nhắn đến shop!</h4>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                          Tụi mình sẽ phản hồi sớm nhất qua Zalo hoặc SĐT của bạn nhé.
+                          Tụi mình sẽ phản hồi sớm nhất qua SĐT của bạn nhé.
                         </p>
                         <button
                           type="button"
@@ -266,7 +260,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
                             required
                             value={contactInfo}
                             onChange={(e) => setContactInfo(e.target.value)}
-                            placeholder="Số điện thoại / Zalo..."
+                            placeholder="Số điện thoại liên hệ..."
                             className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-slate-900"
                           />
                         </div>

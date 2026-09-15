@@ -121,6 +121,16 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     );
   }, [collections, selectedCategory]);
 
+  // Strip redundant 'BST' or 'Bộ sưu tập' prefix when 'BỘ SƯU TẬP' tag is already displayed
+  const displayBannerTitle = useMemo(() => {
+    const raw = activeCollection?.title || activeCategoryObj.label || '';
+    const cleaned = raw
+      .replace(/^BST\s*[-–:]?\s*/i, '')
+      .replace(/^Bộ\s*sưu\s*tập\s*[-–:]?\s*/i, '')
+      .trim();
+    return cleaned || raw;
+  }, [activeCollection, activeCategoryObj]);
+
   const collectionBannerImg = activeCollection?.productPageBanner || activeCollection?.bannerImage || activeCollection?.bgImage || (activeCategoryObj as CategoryItem)?.bannerImage;
   const collectionIntro = activeCollection?.subtitle || (activeCategoryObj as CategoryItem)?.introText || activeCategoryObj?.description;
 
@@ -194,27 +204,33 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         {/* Collection Banner */}
         {selectedCategory !== 'all' && collectionBannerImg && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative w-full rounded-3xl overflow-hidden shadow-sm border border-neutral-200/80 bg-neutral-950 text-white min-h-[200px] sm:min-h-[260px] flex items-end p-6 sm:p-8 group"
+            className="relative w-full rounded-3xl overflow-hidden shadow-xs border border-neutral-200/80 bg-neutral-900 text-white aspect-[2.6/1] sm:aspect-[3.4/1] md:aspect-[4/1] lg:aspect-[4.2/1] min-h-[160px] max-h-[320px] flex items-end p-5 sm:p-7 md:p-8 group"
           >
             <img
               src={collectionBannerImg}
-              alt={activeCategoryObj.label}
-              className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-700 opacity-75"
+              alt={displayBannerTitle}
+              className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-[1.02] transition-all duration-700 opacity-95 group-hover:opacity-100"
               loading="lazy"
               decoding="async"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
+              }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-            <div className="relative z-10 max-w-2xl space-y-1.5">
-              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-widest block">
+            {/* Subtle scrim overlay to ensure text readability without obscuring banner graphics */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent pointer-events-none max-w-xl" />
+
+            <div className="relative z-10 max-w-xl space-y-1 sm:space-y-1.5">
+              <span className="text-[10px] sm:text-[11px] font-bold text-amber-400 uppercase tracking-widest block drop-shadow-sm">
                 {activeCollection?.tag || 'Bộ Sưu Tập'}
               </span>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-                {activeCollection?.title || activeCategoryObj.label}
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight drop-shadow-md">
+                {displayBannerTitle}
               </h1>
               {collectionIntro && (
-                <p className="text-xs sm:text-sm text-neutral-200 line-clamp-2 leading-relaxed">
+                <p className="text-xs sm:text-sm text-neutral-200 line-clamp-2 leading-relaxed drop-shadow-sm max-w-md">
                   {collectionIntro}
                 </p>
               )}

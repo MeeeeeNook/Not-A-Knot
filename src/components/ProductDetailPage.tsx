@@ -1447,8 +1447,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const zaloLink = 'https://zalo.me';
-                    window.open(zaloLink, '_blank', 'noopener,noreferrer');
+                    window.dispatchEvent(new CustomEvent('open-chat-widget'));
                   }}
                   className="flex flex-col items-center justify-center w-12 py-1 text-neutral-600 hover:text-amber-700 active:scale-90 transition-transform cursor-pointer"
                   title="Chat tư vấn ngay"

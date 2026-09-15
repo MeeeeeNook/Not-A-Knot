@@ -255,6 +255,12 @@ img[src*="data:image/"],
   image-rendering: -webkit-optimize-contrast;
 }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Print optimizations for order slips and invoices */
 @media print {
   body * {

@@ -68,19 +68,6 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCompareIdx(0);
-              setCompareModalOpen(true);
-            }}
-            className="text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-            title="Bấm để phóng to và so sánh các mẫu khoen"
-          >
-            <ZoomIn className="w-3 h-3" />
-            <span>So sánh ({khoenOptions.length})</span>
-          </button>
-
           {selectedKhoen && selectedKhoen.priceDelta && selectedKhoen.priceDelta > 0 ? (
             <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70">
               +{selectedKhoen.priceDelta.toLocaleString('vi-VN')}đ

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles, MapPin, Globe } from 'lucide-react';
 import { SellerUser } from '../types';
 import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH } from '../utils/auth';
+import { getClientGeoLocation, GeoLocationInfo } from '../utils/ipGeo';
+import { logAdminLogin } from '../utils/logger';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -26,6 +28,13 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [clientGeo, setClientGeo] = useState<GeoLocationInfo | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      getClientGeoLocation().then(setClientGeo).catch(() => {});
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -49,6 +58,26 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
+      // 1. Fetch and verify IP Geolocation
+      const geo = await getClientGeoLocation();
+      setClientGeo(geo);
+
+      // Security check: Only allow logins originating from Vietnam (countryCode === 'VN')
+      if (!geo.isVietnam) {
+        await logAdminLogin({
+          username: cleanUsername,
+          status: 'blocked_geo',
+          customGeo: geo,
+          reason: `Truy cập từ ${geo.country} (${geo.countryCode} - IP: ${geo.ip}) bị chặn do không thuộc lãnh thổ Việt Nam`
+        });
+
+        setErrorMessage(
+          `Đăng nhập bị từ chối: Phát hiện IP từ ${geo.country} (${geo.countryCode}). Để đảm bảo an toàn, hệ thống chỉ cho phép truy cập quản trị trong phạm vi Việt Nam.`
+        );
+        setIsLoading(false);
+        return;
+      }
+
       // Find seller in list
       const matchedSeller = sellers.find(
         (s) => s.username.toLowerCase() === cleanUsername
@@ -71,20 +100,52 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             avatarColor: '#B41C1A'
           };
 
+          await logAdminLogin({
+            username: ROOT_ADMIN_USERNAME,
+            name: 'Mạnh Cường',
+            isRoot: true,
+            status: 'success',
+            customGeo: geo
+          });
+
           saveAdminSession(rootUser, rememberMe);
           setIsLoading(false);
           onLoginSuccess(rootUser);
+          return;
+        } else {
+          await logAdminLogin({
+            username: cleanUsername,
+            name: 'Mạnh Cường',
+            isRoot: true,
+            status: 'failed_password',
+            customGeo: geo
+          });
+          setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
+          setIsLoading(false);
           return;
         }
       }
 
       if (!matchedSeller) {
+        await logAdminLogin({
+          username: cleanUsername,
+          status: 'failed_password',
+          customGeo: geo,
+          reason: `Tài khoản ${cleanUsername} không tồn tại`
+        });
         setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
         setIsLoading(false);
         return;
       }
 
       if (!matchedSeller.isActive) {
+        await logAdminLogin({
+          username: cleanUsername,
+          name: matchedSeller.name,
+          status: 'failed_password',
+          customGeo: geo,
+          reason: `Tài khoản ${cleanUsername} đang bị tạm khóa`
+        });
         setErrorMessage('Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.');
         setIsLoading(false);
         return;
@@ -98,10 +159,24 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       );
 
       if (isValid) {
+        await logAdminLogin({
+          username: matchedSeller.username,
+          name: matchedSeller.name,
+          isRoot: Boolean(matchedSeller.isRootAdmin),
+          status: 'success',
+          customGeo: geo
+        });
+
         saveAdminSession(matchedSeller, rememberMe);
         setIsLoading(false);
         onLoginSuccess(matchedSeller);
       } else {
+        await logAdminLogin({
+          username: matchedSeller.username,
+          name: matchedSeller.name,
+          status: 'failed_password',
+          customGeo: geo
+        });
         setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
         setIsLoading(false);
       }
@@ -227,8 +302,29 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           </button>
         </form>
 
+        {/* Geolocation Security Badge */}
+        <div className="mt-4 p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 truncate">
+            <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="truncate">
+              {clientGeo
+                ? `${clientGeo.ip} (${clientGeo.city ? clientGeo.city + ', ' : ''}${clientGeo.country})`
+                : 'Đang xác thực vị trí IP...'}
+            </span>
+          </div>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 border ${
+            clientGeo?.isVietnam
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : clientGeo
+              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+              : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+          }`}>
+            {clientGeo?.isVietnam ? '🇻🇳 VN Hợp lệ' : clientGeo ? '⛔ Ngoài VN' : 'Kiểm tra...'}
+          </span>
+        </div>
+
         {/* Footer info & Cancel */}
-        <div className="mt-6 pt-4 border-t border-neutral-800 text-center flex items-center justify-between text-xs text-neutral-400">
+        <div className="mt-4 pt-4 border-t border-neutral-800 text-center flex items-center justify-between text-xs text-neutral-400">
           <button
             type="button"
             onClick={onClose}
@@ -237,7 +333,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             ← Trở về trang chủ
           </button>
           <span className="text-[11px] text-neutral-400 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật & mã hóa nội bộ
+            <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật VN-Only
           </span>
         </div>
       </div>

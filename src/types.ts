@@ -462,3 +462,34 @@ export interface BackupScheduleConfig {
   intervalHours: number; // e.g. 1, 6, 12, 24
   lastBackupAt?: string;
 }
+
+export type LogLevel = 'error' | 'warning' | 'info' | 'success';
+export type LogType = 'client_error' | 'checkout_error' | 'admin_login' | 'system_activity' | 'api_error';
+
+export interface SystemLogItem {
+  id: string;
+  timestamp: string; // ISO string
+  formattedDate?: string;
+  type: LogType;
+  level: LogLevel;
+  title: string;
+  message: string;
+  stack?: string;
+  source?: string; // e.g. "CartPage", "ProductDetailPage", "Checkout", "AdminLoginModal", "WindowError"
+  url?: string;
+  userAgent?: string;
+  browser?: string;
+  os?: string;
+  ip?: string;
+  country?: string;
+  countryCode?: string;
+  city?: string;
+  region?: string;
+  isp?: string;
+  userId?: string;
+  userName?: string;
+  orderId?: string;
+  status?: string; // e.g. "success", "blocked_geo", "failed_password"
+  metadata?: Record<string, any>;
+  isResolved?: boolean;
+}

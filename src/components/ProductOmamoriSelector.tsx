@@ -136,19 +136,6 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveCompareIdx(0);
-              setCompareModalOpen(true);
-            }}
-            className="text-[11px] font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 px-2 py-0.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-            title="Bấm để phóng to và so sánh các mẫu bùa Omamori"
-          >
-            <ZoomIn className="w-3 h-3" />
-            <span>So sánh ({omamoris.length})</span>
-          </button>
-
           {totalExtraPrice > 0 && (
             <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200/70">
               +{totalExtraPrice.toLocaleString('vi-VN')}đ

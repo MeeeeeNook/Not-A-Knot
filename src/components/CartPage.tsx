@@ -22,10 +22,11 @@ import {
   ChevronRight,
   Sparkles,
   AlertTriangle,
+  AlertCircle,
   Building2,
   Gift
 } from 'lucide-react';
-import { CartItem, SiteContentConfig } from '../types';
+import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
@@ -33,6 +34,7 @@ import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from 
 
 interface CartPageProps {
   cartItems: CartItem[];
+  products?: Product[];
   siteContent?: SiteContentConfig;
   facebookUrl?: string;
   messengerUrl?: string;
@@ -46,6 +48,7 @@ interface CartPageProps {
 
 export const CartPage: React.FC<CartPageProps> = ({
   cartItems,
+  products = [],
   siteContent,
   facebookUrl = 'https://www.facebook.com/profile.php?id=61593591390851',
   messengerUrl = 'https://m.me/61593591390851',
@@ -58,6 +61,27 @@ export const CartPage: React.FC<CartPageProps> = ({
 }) => {
   // Page Steps: 'checkout' (Cart & Form) | 'success' (Order Placed & VietQR)
   const [step, setStep] = useState<'checkout' | 'success'>('checkout');
+
+  // Check product existence and active status
+  const isProductItemAvailable = (item: CartItem): boolean => {
+    if (!products || products.length === 0) return true;
+    const match = products.find(p => p.id === item.product.id);
+    if (!match) return false;
+    if (match.isHidden === true || String(match.isHidden) === 'true') return false;
+    return true;
+  };
+
+  const availableCartItems = cartItems.filter(item => isProductItemAvailable(item));
+  const unavailableCartItems = cartItems.filter(item => !isProductItemAvailable(item));
+  const hasUnavailableItems = unavailableCartItems.length > 0;
+
+  const handleRemoveAllUnavailable = () => {
+    for (let i = cartItems.length - 1; i >= 0; i--) {
+      if (!isProductItemAvailable(cartItems[i])) {
+        onRemoveItem(i);
+      }
+    }
+  };
 
   // Form Fields
   const [name, setName] = useState('');
@@ -100,8 +124,8 @@ export const CartPage: React.FC<CartPageProps> = ({
     setDistrict('');
   };
 
-  // Calculate Subtotal & Total
-  const subtotal = cartItems.reduce(
+  // Calculate Subtotal & Total (only for available products)
+  const subtotal = availableCartItems.reduce(
     (acc, item) =>
       acc +
       (item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0)) *
@@ -113,10 +137,10 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   // Track Begin Checkout on mount if items exist
   useEffect(() => {
-    if (cartItems.length > 0 && step === 'checkout') {
-      trackGA4BeginCheckout(cartItems, subtotal);
+    if (availableCartItems.length > 0 && step === 'checkout') {
+      trackGA4BeginCheckout(availableCartItems, subtotal);
     }
-  }, [cartItems, step, subtotal]);
+  }, [availableCartItems, step, subtotal]);
 
   // Copy helper
   const copyToClipboard = async (text: string, fieldKey: string) => {
@@ -224,6 +248,14 @@ export const CartPage: React.FC<CartPageProps> = ({
       setFormError('Giỏ hàng của bạn đang trống.');
       return;
     }
+    if (availableCartItems.length === 0) {
+      setFormError('Giỏ hàng chỉ chứa sản phẩm không tồn tại. Vui lòng chọn sản phẩm khác.');
+      return;
+    }
+    if (hasUnavailableItems) {
+      setFormError('Giỏ hàng có sản phẩm không còn kinh doanh. Vui lòng xóa các sản phẩm đó trước khi đặt hàng.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -231,7 +263,7 @@ export const CartPage: React.FC<CartPageProps> = ({
     const trackingCode = generateTrackingNumber();
     const currentOrderTotal = grandTotal;
 
-    const itemDetails = cartItems.map((item) => ({
+    const itemDetails = availableCartItems.map((item) => ({
       productId: item.product.id,
       productName: item.product.name,
       category: item.product.category,
@@ -332,25 +364,14 @@ export const CartPage: React.FC<CartPageProps> = ({
         
         {/* Navigation Breadcrumbs & Header */}
         <div className="mb-6 sm:mb-8">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200/80">
             <button
               onClick={onContinueShopping}
-              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-amber-700 transition-colors cursor-pointer group"
+              className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-amber-800 transition-colors cursor-pointer group"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform text-slate-500 group-hover:text-amber-700" />
               <span>Tiếp tục chọn phụ kiện</span>
             </button>
-
-            {/* Stepper Pill Indicator */}
-            <div className="flex items-center gap-2 text-xs font-bold">
-              <span className={`px-3 py-1 rounded-full ${step === 'checkout' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                1. Giỏ hàng & Thanh toán
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              <span className={`px-3 py-1 rounded-full ${step === 'success' ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                2. Hoàn tất & Chuyển khoản
-              </span>
-            </div>
           </div>
         </div>
 
@@ -389,7 +410,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       <div className="flex items-center gap-2.5">
                         <ShoppingBag className="w-5 h-5 text-amber-600" />
                         <h2 className="text-base sm:text-lg font-black text-slate-900">
-                          Sản phẩm trong giỏ ({cartItems.reduce((s, i) => s + i.quantity, 0)})
+                          Sản phẩm trong giỏ ({availableCartItems.reduce((s, i) => s + i.quantity, 0)})
                         </h2>
                       </div>
 
@@ -430,6 +451,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                     {/* Cart Items List */}
                     <div className="divide-y divide-slate-100">
                       {cartItems.map((item, index) => {
+                        const isAvailable = isProductItemAvailable(item);
                         const unitPrice =
                           item.product.price +
                           (item.selectedCharmPrice || 0) +
@@ -439,24 +461,44 @@ export const CartPage: React.FC<CartPageProps> = ({
                         const itemImage = item.selectedColorImage || item.product.image;
 
                         return (
-                          <div key={index} className="py-4 sm:py-5 first:pt-0 last:pb-0 flex gap-4 sm:gap-5">
+                          <div 
+                            key={index} 
+                            className={`py-4 sm:py-5 first:pt-0 last:pb-0 flex gap-4 sm:gap-5 ${
+                              !isAvailable ? 'opacity-65' : ''
+                            }`}
+                          >
                             {/* Product Thumbnail */}
-                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 border border-slate-200/80 overflow-hidden flex-shrink-0 relative">
+                            <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 border border-slate-200/80 overflow-hidden flex-shrink-0 relative ${!isAvailable ? 'grayscale-[50%]' : ''}`}>
                               <img
                                 src={itemImage}
                                 alt={item.product.name}
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
                               />
+                              {!isAvailable && (
+                                <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center p-1 text-center">
+                                  <span className="text-[10px] font-bold text-white bg-rose-700/90 px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                                    Không tồn tại
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Details */}
                             <div className="flex-1 min-w-0 flex flex-col justify-between">
                               <div>
                                 <div className="flex items-start justify-between gap-2">
-                                  <h3 className="text-sm sm:text-base font-black text-slate-900 leading-snug">
-                                    {item.product.name}
-                                  </h3>
+                                  <div>
+                                    <h3 className={`text-sm sm:text-base font-black leading-snug ${!isAvailable ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                                      {item.product.name}
+                                    </h3>
+                                    {!isAvailable && (
+                                      <div className="inline-flex items-center gap-1.5 mt-1 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200/70 text-rose-700 text-[11px] font-bold">
+                                        <AlertCircle className="w-3 h-3 text-rose-600 flex-shrink-0" />
+                                        <span>Sản phẩm không tồn tại</span>
+                                      </div>
+                                    )}
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => onRemoveItem(index)}
@@ -514,28 +556,34 @@ export const CartPage: React.FC<CartPageProps> = ({
 
                               {/* Price and Quantity Adjuster */}
                               <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100">
-                                <div className="flex items-center border border-slate-200 rounded-xl bg-slate-50 overflow-hidden">
-                                  <button
-                                    type="button"
-                                    onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                                    className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm cursor-pointer"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="w-10 text-center text-xs font-black text-slate-900 font-mono">
-                                    {item.quantity}
+                                {isAvailable ? (
+                                  <div className="flex items-center border border-slate-200 rounded-xl bg-slate-50 overflow-hidden">
+                                    <button
+                                      type="button"
+                                      onClick={() => onUpdateQuantity(index, item.quantity - 1)}
+                                      className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm cursor-pointer"
+                                    >
+                                      -
+                                    </button>
+                                    <span className="w-10 text-center text-xs font-black text-slate-900 font-mono">
+                                      {item.quantity}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => onUpdateQuantity(index, item.quantity + 1)}
+                                      className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-medium">
+                                    Số lượng: {item.quantity}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                                    className="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-200 transition-colors font-bold text-sm cursor-pointer"
-                                  >
-                                    +
-                                  </button>
-                                </div>
+                                )}
 
                                 <div className="text-right">
-                                  <span className="text-sm sm:text-base font-black text-slate-900 font-mono">
+                                  <span className={`text-sm sm:text-base font-black font-mono ${!isAvailable ? 'line-through text-slate-400' : 'text-slate-900'}`}>
                                     {lineSubtotal.toLocaleString('vi-VN')}đ
                                   </span>
                                   {item.quantity > 1 && (
@@ -778,9 +826,9 @@ export const CartPage: React.FC<CartPageProps> = ({
                     {/* Submit CTA */}
                     <button
                       type="button"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || (cartItems.length > 0 && availableCartItems.length === 0)}
                       onClick={handleCheckoutSubmit}
-                      className="w-full mt-6 py-4 px-6 bg-slate-900 hover:bg-slate-800 text-white font-black text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full mt-6 py-4 px-6 bg-slate-900 hover:bg-slate-800 text-white font-black text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:bg-slate-200"
                     >
                       {isSubmitting ? (
                         <>

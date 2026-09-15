@@ -571,24 +571,6 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
               ))}
             </div>
           )}
-
-          {/* Automatic Adaptive Minimalist Scroll-Down CTA - Faint by default, highlights smoothly on hover */}
-          <button
-            id="hero-scroll-explore-btn"
-            onClick={() => {
-              const el = document.getElementById('landing-collections-showcase') || document.getElementById('landing-apple-banners-section') || document.getElementById('products-section');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className={`flex text-[11px] sm:text-xs font-medium items-center gap-1 tracking-wider uppercase transition-all duration-300 cursor-pointer pointer-events-auto opacity-40 hover:opacity-100 hover:scale-105 active:scale-95 group/scroll ${
-              isBrightBg
-                ? 'text-neutral-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]'
-                : 'text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]'
-            }`}
-            aria-label="Cuộn xuống khám phá"
-          >
-            <span className="group-hover/scroll:underline underline-offset-4 decoration-amber-500/60 transition-all">Cuộn để khám phá</span>
-            <span className="text-xs transition-transform duration-300 group-hover/scroll:translate-y-1">↓</span>
-          </button>
         </div>
       </div>
     </section>

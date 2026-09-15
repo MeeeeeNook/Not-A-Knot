@@ -22,6 +22,7 @@ import { AdminHeader } from './admin/AdminHeader';
 import { AdminSidebar } from './admin/AdminSidebar';
 import { AdminBankAccountPage } from './admin/AdminBankAccountPage';
 import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
+import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportOrdersWithImageOption } from '../utils/excelImageExporter';
@@ -110,6 +111,7 @@ export type AdminTabType =
   | 'products'
   | 'categories'
   | 'version_history'
+  | 'logs'
   | 'backup'
   | 'firebase';
 
@@ -2477,6 +2479,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Sao lưu & Phục hồi';
       case 'sellers':
         return 'Quản trị viên';
+      case 'logs':
+        return 'System Log';
       case 'firebase':
         return 'Dung lượng Firebase';
       default:
@@ -7121,6 +7125,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             onNotify={showAdminToast}
             onUpdateUnreadCount={(cnt) => setUnreadMessagesCount(cnt)}
           />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: SYSTEM & ERROR LOGS, ADMIN LOGIN TRACKING */}
+        {/* ======================================================== */}
+        {activeTab === 'logs' && (
+          <AdminLogsPage isRootAdmin={isRootAdmin} />
         )}
 
           </>

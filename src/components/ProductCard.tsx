@@ -182,6 +182,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   const stockCount = typeof product.stock === 'number' ? product.stock : 15;
   const isSoldOut = !product.inStock || stockCount <= 0;
+  const hasMandatoryOptions = Boolean(
+    (product.enableCharmSelection && product.charmSelectionRequired) ||
+    (product.enableOmamoriSelection && product.omamoriSelectionRequired) ||
+    (product.enableKhoenSelection && product.khoenSelectionRequired)
+  );
   const collectionLabel = useMemo(() => {
     return getCategoryLabel(product.category, categories, collections);
   }, [product.category, categories, collections]);
@@ -207,9 +212,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Placeholder skeleton while image is offscreen or downloading */}
         {!isLoaded && (
           <div
-            className="absolute inset-0 bg-neutral-200/60 animate-pulse flex items-center justify-center pointer-events-none z-0"
+            className="absolute inset-0 bg-neutral-200 animate-pulse flex items-center justify-center pointer-events-none z-0 overflow-hidden"
             aria-hidden="true"
-          />
+          >
+            <div className="w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.4s_infinite]" />
+          </div>
         )}
 
         <div className="w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out">
@@ -230,6 +237,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     opacity: { duration: 0.35 }
                   }}
                   onLoad={() => setIsLoaded(true)}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
+                    setIsLoaded(true);
+                  }}
                   className={`w-full h-full object-cover transition-opacity duration-300 ${
                     isLoaded ? 'opacity-100' : 'opacity-0'
                   } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
@@ -243,6 +254,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 src={images[0] || product.image || '/assets/bracelet.jpg'}
                 alt={product.name}
                 onLoad={() => setIsLoaded(true)}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
+                  setIsLoaded(true);
+                }}
                 className={`w-full h-full object-cover transition-opacity duration-300 ${
                   isLoaded ? 'opacity-100' : 'opacity-0'
                 } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
@@ -322,11 +337,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
             <button
               type="button"
-              disabled={isSoldOut || !onAddToCart}
+              disabled={isSoldOut}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!isSoldOut && onAddToCart) {
+                if (isSoldOut) return;
+                if (hasMandatoryOptions) {
+                  onOpenDetail(product);
+                } else if (onAddToCart) {
                   onAddToCart(product);
+                } else {
+                  onOpenDetail(product);
                 }
               }}
               className={`p-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center shrink-0 ${
@@ -334,7 +354,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
                   : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer'
               }`}
-              title={isSoldOut ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'}
+              title={
+                isSoldOut
+                  ? 'Sản phẩm đã hết hàng'
+                  : hasMandatoryOptions
+                  ? 'Sản phẩm có tùy chọn bắt buộc - Xem chi tiết để chọn'
+                  : 'Thêm vào giỏ hàng'
+              }
             >
               <ShoppingBag className="w-3.5 h-3.5" />
             </button>

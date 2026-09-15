@@ -24,6 +24,7 @@ import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
+import { initGlobalErrorLogging, logClientError } from './utils/logger';
 
 // Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
 const AdminPage = React.lazy(() =>
@@ -313,8 +314,9 @@ export default function App() {
     }
   }, []);
 
-  // Initialize anti-inspection and DevTools protection (redirects non-admin visitors on F12 / inspect)
+  // Initialize anti-inspection, DevTools protection, and global client error telemetry
   useEffect(() => {
+    initGlobalErrorLogging();
     const cleanupProtection = initDevToolsProtection();
     return () => {
       cleanupProtection();
@@ -660,6 +662,29 @@ export default function App() {
   ) => {
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`);
+      return;
+    }
+
+    // Check mandatory option selections (Charms, Omamori, Khoen)
+    const hasRequiredCharm = Boolean(product.enableCharmSelection && product.charmSelectionRequired);
+    const hasRequiredOmamori = Boolean(product.enableOmamoriSelection && product.omamoriSelectionRequired);
+    const hasRequiredKhoen = Boolean(product.enableKhoenSelection && product.khoenSelectionRequired);
+
+    if (hasRequiredCharm && (!selectedCharms || selectedCharms.length === 0) && !selectedCharm) {
+      setSelectedProduct(product);
+      showToast(`Vui lòng chọn ${product.charmTitle?.trim() || 'charm'} trước khi thêm vào giỏ hàng.`);
+      return;
+    }
+
+    if (hasRequiredOmamori && (!selectedOmamoris || selectedOmamoris.length === 0)) {
+      setSelectedProduct(product);
+      showToast(`Vui lòng chọn ${product.omamoriTitle?.trim() || 'bùa Omamori'} trước khi thêm vào giỏ hàng.`);
+      return;
+    }
+
+    if (hasRequiredKhoen && !selectedKhoen) {
+      setSelectedProduct(product);
+      showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`);
       return;
     }
 
@@ -1413,6 +1438,7 @@ export default function App() {
         {currentView === 'cart' && (
           <CartPage
             cartItems={cartItems}
+            products={products}
             siteContent={siteContent}
             facebookUrl={siteContent?.socialLinks?.facebook}
             messengerUrl={siteContent?.socialLinks?.messenger || 'https://m.me/61593591390851'}
