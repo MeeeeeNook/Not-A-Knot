@@ -700,6 +700,26 @@ export default function App() {
       return;
     }
 
+    // Check color stock if color selected
+    const selectedColorOpt = selectedColor && product.colorOptions
+      ? product.colorOptions.find((c) => c.name.trim().toLowerCase() === selectedColor.trim().toLowerCase())
+      : undefined;
+
+    if (selectedColorOpt && typeof selectedColorOpt.stock === 'number') {
+      if (selectedColorOpt.stock <= 0) {
+        showToast(`Màu "${selectedColorOpt.name}" hiện đã hết hàng trong kho!`);
+        return;
+      }
+      const inCartForThisColor = cartItems
+        .filter((item) => item.product.id === product.id && item.selectedColor === selectedColor)
+        .reduce((sum, item) => sum + item.quantity, 0);
+      const availableForColor = selectedColorOpt.stock - inCartForThisColor;
+      if (availableForColor <= 0) {
+        showToast(`Bạn đã có đủ toàn bộ số lượng màu "${selectedColorOpt.name}" (${selectedColorOpt.stock} cái) trong giỏ!`);
+        return;
+      }
+    }
+
     // Check charm stock if charm selected
     if (selectedCharms && selectedCharms.length > 0) {
       for (const ch of selectedCharms) {
@@ -871,6 +891,16 @@ export default function App() {
         }
       }
 
+      // Check color stock if color selected
+      if (targetItem.selectedColor && targetItem.product.colorOptions) {
+        const colorOpt = targetItem.product.colorOptions.find(
+          (c) => c.name.trim().toLowerCase() === (targetItem.selectedColor || '').trim().toLowerCase()
+        );
+        if (colorOpt && typeof colorOpt.stock === 'number') {
+          maxStock = Math.min(maxStock, colorOpt.stock);
+        }
+      }
+
       const otherItemsQty = prev
         .filter((item, i) => i !== index && item.product.id === targetItem.product.id)
         .reduce((sum, item) => sum + item.quantity, 0);
@@ -910,6 +940,7 @@ export default function App() {
         hasChanges = true;
         let totalDeduct = 0;
         let updatedCharmOptions = p.charmOptions ? [...p.charmOptions] : undefined;
+        let updatedColorOptions = p.colorOptions ? [...p.colorOptions] : undefined;
 
         for (const it of matchingItems) {
           totalDeduct += it.quantity;
@@ -926,16 +957,44 @@ export default function App() {
               return charm;
             });
           }
+
+          if (it.selectedColor && updatedColorOptions) {
+            updatedColorOptions = updatedColorOptions.map((col) => {
+              if (col.name.trim().toLowerCase() === (it.selectedColor || '').trim().toLowerCase()) {
+                if (typeof col.stock === 'number') {
+                  return {
+                    ...col,
+                    stock: Math.max(0, col.stock - it.quantity)
+                  };
+                }
+              }
+              return col;
+            });
+          }
         }
 
-        const currentStock = typeof p.stock === 'number' ? p.stock : 15;
-        const newStock = Math.max(0, currentStock - totalDeduct);
+        // Aggregate stock: Total product stock is the sum of colors' stock when color options have stock
+        const hasColorStocks = Boolean(
+          p.enableColorSelection !== false &&
+          updatedColorOptions &&
+          updatedColorOptions.length > 0 &&
+          updatedColorOptions.some((c) => typeof c.stock === 'number')
+        );
+
+        let newStock: number;
+        if (hasColorStocks && updatedColorOptions) {
+          newStock = updatedColorOptions.reduce((sum, c) => sum + (typeof c.stock === 'number' ? c.stock : 0), 0);
+        } else {
+          const currentStock = typeof p.stock === 'number' ? p.stock : 15;
+          newStock = Math.max(0, currentStock - totalDeduct);
+        }
 
         const updatedProd: Product = {
           ...p,
           stock: newStock,
           inStock: newStock > 0,
-          charmOptions: updatedCharmOptions
+          charmOptions: updatedCharmOptions,
+          colorOptions: updatedColorOptions
         };
 
         saveProductToFirestore(updatedProd).catch((err) => {

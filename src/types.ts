@@ -14,6 +14,7 @@ export interface ProductColorOption {
   name: string;
   image?: string; // photo linked to this color (when clicked, swaps main product image)
   colorCode?: string; // optional hex for swatch dot, e.g. #FF0000
+  stock?: number; // Inventory quantity for this specific color (undefined = unlimited, 0 = out of stock)
 }
 
 export interface ProductCharmOption {
@@ -150,6 +151,7 @@ export interface OrderItemDetail {
 export interface SellerUser {
   id: string;
   username: string;
+  usernameHash?: string;
   name: string;
   passwordHash: string;
   passwordSalt: string;

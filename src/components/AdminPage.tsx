@@ -35,7 +35,7 @@ import {
   normalizeOrderStatus,
   NormalizedOrderStatus
 } from '../utils/orderFormatters';
-import { createDefaultSellers, deduplicateSellers } from '../utils/auth';
+import { createDefaultSellers, deduplicateSellers, isRootAdminUser } from '../utils/auth';
 import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
@@ -141,7 +141,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     return 'table';
   });
 
-  const isRootAdmin = Boolean(currentSeller && (currentSeller.isRootAdmin || currentSeller.username === 'manhcuong'));
+  const isRootAdmin = Boolean(isRootAdminUser(currentSeller));
 
   // Switch tab with simulated enterprise loading transition
   const handleSwitchTab = (tab: AdminTabType) => {
@@ -399,6 +399,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [dragOverOmamoriFileIdx, setDragOverOmamoriFileIdx] = useState<number | null>(null);
   const [isBulkCharmDragOver, setIsBulkCharmDragOver] = useState(false);
   const [isBulkOmamoriDragOver, setIsBulkOmamoriDragOver] = useState(false);
+
+  // Auto-sync formStock with the sum of color options stock when color selection is enabled
+  useEffect(() => {
+    if (formEnableColorSelection && formColorOptions.length > 0) {
+      const sum = formColorOptions.reduce(
+        (acc, c) => acc + (typeof c.stock === 'number' ? c.stock : 0),
+        0
+      );
+      setFormStock(sum);
+      setFormInStock(sum > 0);
+    }
+  }, [formEnableColorSelection, formColorOptions]);
 
   const cleanNameFromFileName = (fileName: string) => {
     const withoutExt = fileName.replace(/\.[^/.]+$/, '');
@@ -962,9 +974,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormCustomUrl(prod.customUrl || '');
     // Variations loading
     setFormEnableColorSelection(Boolean(prod.enableColorSelection));
-    const loadedColors: ProductColorOption[] = (prod.colorOptions && prod.colorOptions.length > 0)
+    const rawColors: ProductColorOption[] = (prod.colorOptions && prod.colorOptions.length > 0)
       ? prod.colorOptions
       : (prod.availableColors || []).map((c) => ({ name: c }));
+    const defaultColorStock = Math.max(0, Math.floor((prod.stock ?? 15) / Math.max(1, rawColors.length)));
+    const loadedColors: ProductColorOption[] = rawColors.map((c) => ({
+      ...c,
+      stock: typeof c.stock === 'number' ? c.stock : defaultColorStock
+    }));
     setFormColorOptions(loadedColors);
     setFormEnableCharmSelection(Boolean(prod.enableCharmSelection));
     setFormCharmTitle(prod.charmTitle || '');
@@ -1233,7 +1250,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    const stockNumber = Math.max(0, Number(formStock) || 0);
+    // If color options are enabled and defined, total product stock is the sum of all colors
+    const hasColorStocks = Boolean(
+      formEnableColorSelection &&
+      formColorOptions.length > 0 &&
+      formColorOptions.some((c) => typeof c.stock === 'number')
+    );
+
+    const totalColorStock = hasColorStocks
+      ? formColorOptions.reduce((sum, c) => sum + (typeof c.stock === 'number' ? c.stock : 0), 0)
+      : null;
+
+    const stockNumber = totalColorStock !== null ? totalColorStock : Math.max(0, Number(formStock) || 0);
     const calculatedInStock = stockNumber > 0 && formInStock;
 
     const finalImages = formImages.length > 0 ? formImages : (formImage ? [formImage] : ['/assets/hero-bg.png']);
@@ -1488,6 +1516,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Quick adjust stock count (+ / -)
   const handleQuickAdjustStock = (prod: Product, delta: number) => {
+    let updatedColorOptions = prod.colorOptions ? [...prod.colorOptions] : undefined;
+    if (prod.enableColorSelection && updatedColorOptions && updatedColorOptions.length > 0) {
+      if (delta > 0) {
+        updatedColorOptions[0] = {
+          ...updatedColorOptions[0],
+          stock: (updatedColorOptions[0].stock ?? 0) + delta
+        };
+      } else if (delta < 0) {
+        const targetIdx = updatedColorOptions.findIndex((c) => (c.stock ?? 0) > 0);
+        if (targetIdx !== -1) {
+          updatedColorOptions[targetIdx] = {
+            ...updatedColorOptions[targetIdx],
+            stock: Math.max(0, (updatedColorOptions[targetIdx].stock ?? 0) + delta)
+          };
+        }
+      }
+      const aggregatedStock = updatedColorOptions.reduce((sum, c) => sum + (c.stock ?? 0), 0);
+      const updatedProd = {
+        ...prod,
+        stock: aggregatedStock,
+        inStock: aggregatedStock > 0,
+        colorOptions: updatedColorOptions
+      };
+      const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+      pushHistoryAction(`Điều chỉnh tồn kho "${prod.name}": ${aggregatedStock}`, 'products', products, updatedList);
+      onUpdateProducts(updatedList);
+      saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore quick stock adjustment:', e));
+      return;
+    }
+
     const currentStock = prod.stock ?? (prod.inStock === false ? 0 : 15);
     const newStock = Math.max(0, currentStock + delta);
     const newInStock = newStock > 0;
@@ -1502,6 +1560,34 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleToggleStock = (prod: Product) => {
     const currentStock = prod.stock ?? (prod.inStock === false ? 0 : 15);
     const newStockState = prod.inStock === false || currentStock <= 0;
+
+    let updatedColorOptions = prod.colorOptions ? [...prod.colorOptions] : undefined;
+    if (prod.enableColorSelection && updatedColorOptions && updatedColorOptions.length > 0) {
+      if (newStockState) {
+        updatedColorOptions = updatedColorOptions.map((c) => ({
+          ...c,
+          stock: (c.stock && c.stock > 0) ? c.stock : 5
+        }));
+      } else {
+        updatedColorOptions = updatedColorOptions.map((c) => ({
+          ...c,
+          stock: 0
+        }));
+      }
+      const aggregatedStock = updatedColorOptions.reduce((sum, c) => sum + (c.stock ?? 0), 0);
+      const updatedProd = {
+        ...prod,
+        stock: aggregatedStock,
+        inStock: newStockState,
+        colorOptions: updatedColorOptions
+      };
+      const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
+      pushHistoryAction(`Đổi trạng thái kho "${prod.name}": ${newStockState ? 'Còn hàng' : 'Hết hàng'}`, 'products', products, updatedList);
+      onUpdateProducts(updatedList);
+      saveProductToFirestore(updatedProd).catch((e) => console.warn('Firestore stock toggle:', e));
+      return;
+    }
+
     const nextStock = newStockState ? Math.max(10, currentStock) : 0;
     const updatedProd = { ...prod, stock: nextStock, inStock: newStockState };
     const updatedList = products.map((p) => (p.id === prod.id ? updatedProd : p));
@@ -1826,6 +1912,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     const productQuantityMap = new Map<string, number>();
     const charmQuantityMap = new Map<string, number>();
+    const colorQuantityMap = new Map<string, number>();
     let totalRestoredUnits = 0;
 
     for (const ord of ordersToRestore) {
@@ -1839,6 +1926,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           if (item.selectedCharm) {
             const charmKey = `${item.productId}:::${item.selectedCharm.trim().toLowerCase()}`;
             charmQuantityMap.set(charmKey, (charmQuantityMap.get(charmKey) || 0) + qty);
+          }
+
+          if (item.selectedColor) {
+            const colorKey = `${item.productId}:::${item.selectedColor.trim().toLowerCase()}`;
+            colorQuantityMap.set(colorKey, (colorQuantityMap.get(colorKey) || 0) + qty);
           }
         }
       } else if (ord.items && ord.items.length > 0) {
@@ -1865,7 +1957,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       updatedCount++;
       const currentStock = typeof prod.stock === 'number' ? prod.stock : 0;
-      const newStock = currentStock + qtyToAdd;
 
       let updatedCharms = prod.charmOptions ? [...prod.charmOptions] : undefined;
       if (updatedCharms) {
@@ -1882,11 +1973,38 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         });
       }
 
+      let updatedColors = prod.colorOptions ? [...prod.colorOptions] : undefined;
+      if (updatedColors) {
+        updatedColors = updatedColors.map((col) => {
+          const colorKey = `${prod.id}:::${col.name.trim().toLowerCase()}`;
+          const colorQtyToAdd = colorQuantityMap.get(colorKey);
+          if (colorQtyToAdd && typeof col.stock === 'number') {
+            return {
+              ...col,
+              stock: col.stock + colorQtyToAdd
+            };
+          }
+          return col;
+        });
+      }
+
+      const hasColorStocks = Boolean(
+        prod.enableColorSelection !== false &&
+        updatedColors &&
+        updatedColors.length > 0 &&
+        updatedColors.some((c) => typeof c.stock === 'number')
+      );
+
+      const newStock = hasColorStocks && updatedColors
+        ? updatedColors.reduce((sum, c) => sum + (typeof c.stock === 'number' ? c.stock : 0), 0)
+        : currentStock + qtyToAdd;
+
       const updatedProd: Product = {
         ...prod,
         stock: newStock,
         inStock: newStock > 0,
-        charmOptions: updatedCharms
+        charmOptions: updatedCharms,
+        colorOptions: updatedColors
       };
 
       // Sync updated stock to Firestore
@@ -2890,21 +3008,43 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-amber-800 mb-1.5">
-                            Số lượng tồn kho *
-                          </label>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="block text-xs font-bold text-amber-800">
+                              Số lượng tồn kho *
+                            </label>
+                            {formEnableColorSelection && formColorOptions.length > 0 && (
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                                Tổng {formColorOptions.length} màu
+                              </span>
+                            )}
+                          </div>
                           <input
                             type="number"
                             required
                             min="0"
+                            readOnly={formEnableColorSelection && formColorOptions.length > 0}
                             value={formStock}
                             onChange={(e) => {
                               const val = Math.max(0, Number(e.target.value));
                               setFormStock(val);
                               setFormInStock(val > 0);
                             }}
-                            className="w-full px-3.5 py-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs font-black text-amber-900 focus:outline-none focus:border-amber-500"
+                            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-black focus:outline-none transition-colors ${
+                              formEnableColorSelection && formColorOptions.length > 0
+                                ? 'bg-amber-100/70 border border-amber-300 text-amber-950 cursor-not-allowed select-none'
+                                : 'bg-amber-50 border border-amber-300 text-amber-900 focus:border-amber-500'
+                            }`}
+                            title={
+                              formEnableColorSelection && formColorOptions.length > 0
+                                ? 'Tồn kho tổng tự động tính từ tổng số lượng tồn của các phân loại màu bên dưới'
+                                : undefined
+                            }
                           />
+                          {formEnableColorSelection && formColorOptions.length > 0 && (
+                            <span className="text-[10px] text-amber-800 block mt-1 font-medium">
+                              ✨ Tự động tính từ tổng tồn kho của {formColorOptions.length} màu bên dưới ({formStock} chiếc).
+                            </span>
+                          )}
                         </div>
 
                         <div>
@@ -3269,9 +3409,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               const checked = e.target.checked;
                               setFormEnableColorSelection(checked);
                               if (checked && formColorOptions.length === 0) {
+                                const halfStock = Math.max(5, Math.floor(formStock / 2));
                                 setFormColorOptions([
-                                  { name: 'Đỏ Hào Khí', colorCode: '#B41C1A', image: formImages[0] || '' },
-                                  { name: 'Đen Tactical', colorCode: '#1E293B', image: formImages[1] || formImages[0] || '' }
+                                  { name: 'Đỏ Hào Khí', colorCode: '#B41C1A', image: formImages[0] || '', stock: halfStock },
+                                  { name: 'Đen Tactical', colorCode: '#1E293B', image: formImages[1] || formImages[0] || '', stock: halfStock }
                                 ]);
                               }
                             }}
@@ -3279,25 +3420,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900">
-                              🎨 Bật tùy chọn Màu sắc (Color Options)
+                              🎨 Bật tùy chọn Màu sắc (Color Options & Stock)
                             </span>
                             <span className="block text-[11px] text-slate-500">
-                              Cho phép khách hàng chọn màu sắc với ảnh liên kết tương ứng
+                              Quản lý màu sắc, ảnh liên kết và số lượng tồn kho theo từng màu (Tổng tồn kho sản phẩm = Tổng kho các màu)
                             </span>
                           </div>
                         </label>
 
                         {formEnableColorSelection && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
                               onClick={() => {
+                                const defaultEach = Math.max(5, Math.floor(formStock / 5));
                                 setFormColorOptions([
-                                  { name: 'Đỏ Hào Khí', colorCode: '#B41C1A', image: formImages[0] || '' },
-                                  { name: 'Đen Tactical', colorCode: '#1E293B', image: formImages[1] || '' },
-                                  { name: 'Xanh Rêu EDC', colorCode: '#3F6212', image: formImages[2] || '' },
-                                  { name: 'Xanh Navy', colorCode: '#1E3A8A', image: formImages[3] || '' },
-                                  { name: 'Cát Sa Mạc', colorCode: '#D97706', image: formImages[4] || '' }
+                                  { name: 'Đỏ Hào Khí', colorCode: '#B41C1A', image: formImages[0] || '', stock: defaultEach },
+                                  { name: 'Đen Tactical', colorCode: '#1E293B', image: formImages[1] || '', stock: defaultEach },
+                                  { name: 'Xanh Rêu EDC', colorCode: '#3F6212', image: formImages[2] || '', stock: defaultEach },
+                                  { name: 'Xanh Navy', colorCode: '#1E3A8A', image: formImages[3] || '', stock: defaultEach },
+                                  { name: 'Cát Sa Mạc', colorCode: '#D97706', image: formImages[4] || '', stock: defaultEach }
                                 ]);
                               }}
                               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
@@ -3309,7 +3451,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               onClick={() => {
                                 setFormColorOptions((prev) => [
                                   ...prev,
-                                  { name: `Màu ${prev.length + 1}`, colorCode: '#B41C1A', image: '' }
+                                  { name: `Màu ${prev.length + 1}`, colorCode: '#B41C1A', image: '', stock: 10 }
                                 ]);
                               }}
                               className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
@@ -3322,7 +3464,45 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </div>
 
                       {formEnableColorSelection && (
-                        <div className="space-y-2 pt-2 border-t border-slate-200">
+                        <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                          {formColorOptions.length > 0 && (
+                            <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 bg-amber-50/90 border border-amber-200 rounded-xl text-xs">
+                              <div className="flex items-center gap-2 font-bold text-amber-950 flex-wrap">
+                                <span>📦 Tổng tồn kho các màu:</span>
+                                <span className="font-mono text-sm px-2.5 py-0.5 bg-amber-200 text-amber-950 rounded-lg font-black">
+                                  {formColorOptions.reduce((s, c) => s + (typeof c.stock === 'number' ? c.stock : 0), 0)} chiếc
+                                </span>
+                                <span className="text-amber-800 text-[11px] font-normal">
+                                  ({formColorOptions.length} màu) — Sẽ là số lượng kho của sản phẩm này
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (formColorOptions.length === 0) return;
+                                    const avg = Math.max(1, Math.floor(formStock / formColorOptions.length));
+                                    setFormColorOptions((prev) => prev.map((c) => ({ ...c, stock: avg })));
+                                  }}
+                                  className="px-2 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
+                                  title="Chia đều số lượng kho cho từng màu"
+                                >
+                                  ⚡ Chia đều kho ({formColorOptions.length > 0 ? Math.floor(formStock / formColorOptions.length) : 0}/màu)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormColorOptions((prev) => prev.map((c) => ({ ...c, stock: (c.stock ?? 0) + 5 })));
+                                  }}
+                                  className="px-2 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
+                                  title="Thêm 5 cái cho tất cả các màu"
+                                >
+                                  +5 tất cả
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {formColorOptions.length === 0 ? (
                             <p className="text-xs text-slate-400 italic py-2 text-center">
                               Chưa có màu nào. Bấm "+ Thêm Màu" hoặc "Nạp 5 màu mẫu" ở trên.
@@ -3334,7 +3514,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   key={cIdx}
                                   className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col gap-2 shadow-2xs"
                                 >
-                                  <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
                                     <div className="flex items-center gap-2">
                                       <input
                                         type="color"
@@ -3345,7 +3525,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             prev.map((c, i) => (i === cIdx ? { ...c, colorCode: val } : c))
                                           );
                                         }}
-                                        className="w-7 h-7 rounded-lg border border-slate-300 p-0.5 cursor-pointer bg-transparent"
+                                        className="w-7 h-7 rounded-lg border border-slate-300 p-0.5 cursor-pointer bg-transparent shrink-0"
                                         title="Chọn mã màu hiển thị"
                                       />
                                       <input
@@ -3358,15 +3538,45 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           );
                                         }}
                                         placeholder="Tên màu (vd: Đỏ Hào Khí)"
-                                        className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 w-36"
+                                        className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 w-32"
                                       />
                                     </div>
+
+                                    {/* Stock input for this specific color option */}
+                                    <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 shrink-0">
+                                      <span className="text-[10px] text-slate-600 font-bold whitespace-nowrap">Kho:</span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={col.stock ?? ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0);
+                                          setFormColorOptions((prev) =>
+                                            prev.map((c, i) => (i === cIdx ? { ...c, stock: val } : c))
+                                          );
+                                        }}
+                                        placeholder="0"
+                                        title="Tồn kho riêng của màu này (0 = Hết hàng)"
+                                        className={`w-14 px-1.5 py-0.5 border rounded text-xs font-mono font-bold text-center focus:outline-none ${
+                                          (col.stock ?? 0) <= 0
+                                            ? 'bg-rose-50 border-rose-300 text-rose-700'
+                                            : 'bg-white border-slate-300 text-slate-900 focus:border-amber-500'
+                                        }`}
+                                      />
+                                      <span className="text-[10px] text-slate-400 font-medium">cái</span>
+                                      {(col.stock ?? 0) <= 0 && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700">
+                                          Hết
+                                        </span>
+                                      )}
+                                    </div>
+
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setFormColorOptions((prev) => prev.filter((_, i) => i !== cIdx));
                                       }}
-                                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg text-xs"
+                                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg text-xs transition-colors shrink-0"
                                       title="Xóa màu này"
                                     >
                                       ✕
@@ -4560,39 +4770,66 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         </div>
 
                         {/* Stock Controls & Quick Stock Toggle */}
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-600 mr-1">SL:</span>
+                        <div className="pt-1 border-t border-slate-100 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-600 mr-1">SL:</span>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickAdjustStock(p, -1)}
+                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition-colors cursor-pointer"
+                                title="Giảm 1 cái"
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center font-black text-xs text-slate-900">{stockCount}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickAdjustStock(p, +1)}
+                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition-colors cursor-pointer"
+                                title="Tăng 1 cái"
+                              >
+                                +
+                              </button>
+                            </div>
+
                             <button
                               type="button"
-                              onClick={() => handleQuickAdjustStock(p, -1)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition-colors cursor-pointer"
-                              title="Giảm 1 cái"
+                              onClick={() => handleToggleStock(p)}
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                                isAvailable
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                              }`}
                             >
-                              -
-                            </button>
-                            <span className="w-8 text-center font-black text-xs text-slate-900">{stockCount}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleQuickAdjustStock(p, +1)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center transition-colors cursor-pointer"
-                              title="Tăng 1 cái"
-                            >
-                              +
+                              {isAvailable ? 'Còn Hàng' : 'Hết Hàng'}
                             </button>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStock(p)}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
-                              isAvailable
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-rose-50 text-rose-700 border-rose-200'
-                            }`}
-                          >
-                            {isAvailable ? 'Còn Hàng' : 'Hết Hàng'}
-                          </button>
+                          {p.enableColorSelection && p.colorOptions && p.colorOptions.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                              <span className="font-bold text-amber-800">Kho màu:</span>
+                              {p.colorOptions.map((c, i) => (
+                                <span
+                                  key={i}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono font-semibold ${
+                                    (c.stock ?? 0) <= 0
+                                      ? 'bg-rose-100 text-rose-700'
+                                      : 'bg-white text-slate-700 border border-slate-200'
+                                  }`}
+                                  title={`${c.name}: ${c.stock ?? 0} chiếc`}
+                                >
+                                  {c.colorCode && (
+                                    <span
+                                      className="w-2 h-2 rounded-full inline-block border border-black/20 shrink-0"
+                                      style={{ backgroundColor: c.colorCode }}
+                                    />
+                                  )}
+                                  <span>{c.name}: {c.stock ?? 0}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {/* Actions */}
@@ -4730,6 +4967,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     +
                                   </button>
                                 </div>
+                                {p.enableColorSelection && p.colorOptions && p.colorOptions.length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500 mt-1 max-w-[220px]">
+                                    {p.colorOptions.map((c, i) => (
+                                      <span
+                                        key={i}
+                                        className={`inline-flex items-center gap-1 px-1 py-0.2 rounded font-mono ${
+                                          (c.stock ?? 0) <= 0
+                                            ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200'
+                                            : 'bg-slate-100 text-slate-700'
+                                        }`}
+                                        title={`${c.name}: ${c.stock ?? 0} chiếc`}
+                                      >
+                                        {c.colorCode && (
+                                          <span
+                                            className="w-1.5 h-1.5 rounded-full inline-block border border-black/20"
+                                            style={{ backgroundColor: c.colorCode }}
+                                          />
+                                        )}
+                                        <span>{c.name}: {c.stock ?? 0}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </td>
 
                               {/* Đã bán */}

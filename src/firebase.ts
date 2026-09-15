@@ -490,6 +490,7 @@ function extractProductAssets(prod: Product): {
   const cleanColorOptions = Array.isArray(prod.colorOptions)
     ? prod.colorOptions.map((opt, idx) => ({
         ...opt,
+        stock: typeof opt.stock === 'number' ? Math.max(0, opt.stock) : (opt.stock !== undefined ? Math.max(0, Number(opt.stock) || 0) : undefined),
         image: processImageField(opt.image, `col_${idx}`) || opt.image
       }))
     : undefined;
@@ -515,7 +516,20 @@ function extractProductAssets(prod: Product): {
       }))
     : undefined;
 
-  const stockVal = typeof prod.stock === 'number' ? prod.stock : 15;
+  // If color selection is enabled and color options have stocks, aggregate color stocks into total product stock
+  const hasColorStock = Boolean(
+    prod.enableColorSelection !== false &&
+    cleanColorOptions &&
+    cleanColorOptions.length > 0 &&
+    cleanColorOptions.some((c) => typeof c.stock === 'number')
+  );
+  const colorStockSum = cleanColorOptions && cleanColorOptions.length > 0
+    ? cleanColorOptions.reduce((sum, c) => sum + (typeof c.stock === 'number' ? c.stock : 0), 0)
+    : 0;
+
+  const stockVal = hasColorStock
+    ? colorStockSum
+    : (typeof prod.stock === 'number' ? prod.stock : 15);
   const inStockVal = prod.inStock !== false && stockVal > 0;
   const isProdHidden = prod.isHidden === true || String(prod.isHidden) === 'true';
 

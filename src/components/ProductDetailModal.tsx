@@ -86,8 +86,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   useEffect(() => {
     setActiveImageIdx(0);
     setQuantity(1);
-    setSelectedColor(product?.colorOptions?.[0]?.name || product?.availableColors?.[0]);
-    setSelectedColorImage(product?.colorOptions?.[0]?.image);
+    const inStockColor = product?.colorOptions?.find((c) => c.stock === undefined || c.stock > 0);
+    setSelectedColor(inStockColor ? inStockColor.name : (product?.colorOptions?.[0]?.name || product?.availableColors?.[0]));
+    setSelectedColorImage(inStockColor ? inStockColor.image : product?.colorOptions?.[0]?.image);
     setSelectedCharms([]);
     setSelectedOmamoris([]);
     setSelectedKhoen(null);
@@ -124,8 +125,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     });
   }, [images, product]);
 
-  const availableStock = typeof product.stock === 'number' && product.stock > 1 ? product.stock : 99;
-  const isOutOfStock = product.inStock === false;
+  const selectedColorOption = useMemo(() => {
+    if (!selectedColor || !product?.colorOptions) return undefined;
+    return product.colorOptions.find(
+      (c) => c.name.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+    );
+  }, [product?.colorOptions, selectedColor]);
+
+  const currentColorStock = typeof selectedColorOption?.stock === 'number'
+    ? selectedColorOption.stock
+    : undefined;
+
+  const availableStock = currentColorStock !== undefined
+    ? currentColorStock
+    : (typeof product?.stock === 'number' && product.stock > 0 ? product.stock : 99);
+  const isOutOfStock = product?.inStock === false || availableStock <= 0;
 
   const paginate = useCallback((newDirection: number) => {
     setActiveImageIdx((curr) => {
@@ -183,6 +197,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     if (product.enableKhoenSelection && product.khoenSelectionRequired && !selectedKhoen) {
       setKhoenError(`Vui lòng chọn 1 tùy chọn trong "${khoenTitleLabel}" trước khi thêm.`);
       return;
+    }
+
+    if (selectedColorOption && typeof selectedColorOption.stock === 'number') {
+      if (selectedColorOption.stock <= 0) {
+        alert(`Màu "${selectedColorOption.name}" hiện đã hết hàng. Vui lòng chọn màu khác.`);
+        return;
+      }
+      if (selectedColorOption.stock < quantity) {
+        alert(`Màu "${selectedColorOption.name}" chỉ còn ${selectedColorOption.stock} chiếc trong kho, không đủ số lượng ${quantity}.`);
+        return;
+      }
     }
 
     for (const ch of selectedCharms) {

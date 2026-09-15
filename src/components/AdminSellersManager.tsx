@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { SellerUser, SystemLogItem } from '../types';
 import { StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore } from '../firebase';
-import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers } from '../utils/auth';
+import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
 interface AdminSellersManagerProps {
@@ -63,7 +63,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState('');
 
-  const isRootAdmin = currentAdmin?.isRootAdmin || currentAdmin?.username === ROOT_ADMIN_USERNAME;
+  const isRootAdmin = isRootAdminUser(currentAdmin);
 
   // Calculate stats per seller from orders
   const sellerStatsMap = useMemo(() => {
@@ -211,6 +211,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       const newSeller: SellerUser = {
         id: `seller-${cleanUsername}`,
         username: cleanUsername,
+        usernameHash: await hashUsername(cleanUsername),
         name: cleanName,
         passwordHash: hash,
         passwordSalt: salt,
@@ -300,7 +301,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
   // Toggle Active/Inactive status
   const handleToggleStatus = async (seller: SellerUser) => {
-    if (seller.isRootAdmin || seller.username === ROOT_ADMIN_USERNAME) {
+    if (isRootAdminUser(seller)) {
       alert('Không thể khóa tài khoản Quản trị viên gốc.');
       return;
     }
@@ -319,7 +320,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
   // Confirm Delete Seller (Inline)
   const handleConfirmDelete = async (seller: SellerUser) => {
-    if (seller.isRootAdmin || seller.username === ROOT_ADMIN_USERNAME) {
+    if (isRootAdminUser(seller)) {
       alert('Không thể xóa tài khoản Quản trị viên gốc.');
       setDeletingSellerId(null);
       return;
@@ -503,7 +504,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                   required
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase() })}
-                  placeholder="thutrang"
+                  placeholder="vd: nguyenvana"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-mono"
                 />
                 <span className="text-[10px] text-slate-400 mt-1 block">Chữ thường, viết liền không dấu</span>
@@ -622,7 +623,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
             <tbody className="divide-y divide-slate-100">
               {deduplicateSellers(filteredSellers).map((seller, sIdx) => {
                 const stats = sellerStatsMap[seller.username.toLowerCase()] || { totalOrders: 0, totalRevenue: 0, completedOrders: 0 };
-                const isRoot = seller.isRootAdmin || seller.username === ROOT_ADMIN_USERNAME;
+                const isRoot = isRootAdminUser(seller);
                 const isEditing = editingSellerId === seller.id;
                 const isChangingPassword = passwordTargetSellerId === seller.id;
                 const isDeleting = deletingSellerId === seller.id;
@@ -993,7 +994,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     <h3 className="text-lg font-black text-slate-900 tracking-tight">
                       Lịch Sử Đăng Nhập: {selectedSellerForLogs.name}
                     </h3>
-                    {selectedSellerForLogs.isRootAdmin || selectedSellerForLogs.username === ROOT_ADMIN_USERNAME ? (
+                    {isRootAdminUser(selectedSellerForLogs) ? (
                       <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
                         Quản trị viên
                       </span>

@@ -470,11 +470,39 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
             });
           }
 
+          let updatedColorOptions = currentProd.colorOptions;
+          if (it.selectedColor && Array.isArray(updatedColorOptions)) {
+            updatedColorOptions = updatedColorOptions.map((col) => {
+              if (col.name.trim().toLowerCase() === (it.selectedColor || '').trim().toLowerCase()) {
+                if (typeof col.stock === 'number') {
+                  return {
+                    ...col,
+                    stock: Math.max(0, col.stock - it.quantity)
+                  };
+                }
+              }
+              return col;
+            });
+          }
+
+          // Total stock of colors is the stock of that product
+          const hasColorStocks = Boolean(
+            currentProd.enableColorSelection !== false &&
+            updatedColorOptions &&
+            updatedColorOptions.length > 0 &&
+            updatedColorOptions.some((c) => typeof c.stock === 'number')
+          );
+
+          const finalStock = hasColorStocks && updatedColorOptions
+            ? updatedColorOptions.reduce((sum, c) => sum + (typeof c.stock === 'number' ? c.stock : 0), 0)
+            : newStock;
+
           const updatedProd: Product = {
             ...currentProd,
-            stock: newStock,
-            inStock: newInStock,
-            charmOptions: updatedCharmOptions
+            stock: finalStock,
+            inStock: finalStock > 0,
+            charmOptions: updatedCharmOptions,
+            colorOptions: updatedColorOptions
           };
 
           updatedProducts[pIndex] = updatedProd;

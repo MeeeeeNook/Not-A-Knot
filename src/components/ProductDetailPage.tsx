@@ -93,14 +93,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Initial color setup
   const initialColor = useMemo(() => {
     if (product.colorOptions && product.colorOptions.length > 0) {
-      return product.colorOptions[0].name;
+      const inStockColor = product.colorOptions.find((c) => c.stock === undefined || c.stock > 0);
+      return inStockColor ? inStockColor.name : product.colorOptions[0].name;
     }
     return product.availableColors?.[0];
   }, [product]);
 
   const initialColorImage = useMemo(() => {
     if (product.colorOptions && product.colorOptions.length > 0) {
-      return product.colorOptions[0].image;
+      const inStockColor = product.colorOptions.find((c) => c.stock === undefined || c.stock > 0);
+      return (inStockColor || product.colorOptions[0]).image;
     }
     return undefined;
   }, [product]);
@@ -229,18 +231,33 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   }, [product?.id]);
 
-  const availableStock = typeof product.stock === 'number' 
-    ? product.stock 
-    : (product.inStock === false ? 0 : 99);
+  const selectedColorOption = useMemo(() => {
+    if (!selectedColor || !product.colorOptions) return undefined;
+    return product.colorOptions.find(
+      (c) => c.name.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+    );
+  }, [product.colorOptions, selectedColor]);
+
+  // If a specific color is selected and has its own stock, use that color's stock
+  const currentColorStock = typeof selectedColorOption?.stock === 'number'
+    ? selectedColorOption.stock
+    : undefined;
+
+  const availableStock = currentColorStock !== undefined
+    ? currentColorStock
+    : (typeof product.stock === 'number' 
+      ? product.stock 
+      : (product.inStock === false ? 0 : 99));
+
   const inCartQty = useMemo(() => {
     if (!cartItems || cartItems.length === 0) return 0;
     return cartItems
-      .filter((item) => item.product.id === product.id)
+      .filter((item) => item.product.id === product.id && (currentColorStock === undefined || item.selectedColor === selectedColor))
       .reduce((sum, item) => sum + item.quantity, 0);
-  }, [cartItems, product.id]);
+  }, [cartItems, product.id, currentColorStock, selectedColor]);
 
   const remainingAddableStock = Math.max(0, availableStock - inCartQty);
-  const isOutOfStock = product.inStock === false;
+  const isOutOfStock = product.inStock === false || availableStock <= 0;
   const isCartFullForProduct = !isOutOfStock && remainingAddableStock <= 0 && availableStock < 90;
 
   // Ensure selected quantity never exceeds remaining addable stock
@@ -375,6 +392,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
     const addQty = Math.min(quantity, remainingAddableStock);
 
+    if (selectedColorOption && typeof selectedColorOption.stock === 'number') {
+      if (selectedColorOption.stock <= 0) {
+        triggerStockNotice(`Màu "${selectedColorOption.name}" hiện đã hết hàng.`);
+        return;
+      }
+      if (selectedColorOption.stock < addQty) {
+        triggerStockNotice(`Màu "${selectedColorOption.name}" chỉ còn ${selectedColorOption.stock} chiếc trong kho.`);
+        return;
+      }
+    }
+
     for (const ch of selectedCharms) {
       if (typeof ch.stock === 'number') {
         if (ch.stock <= 0) {
@@ -455,6 +483,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
 
     const addQty = Math.min(quantity, remainingAddableStock);
+
+    if (selectedColorOption && typeof selectedColorOption.stock === 'number') {
+      if (selectedColorOption.stock <= 0) {
+        triggerStockNotice(`Màu "${selectedColorOption.name}" hiện đã hết hàng.`);
+        return;
+      }
+      if (selectedColorOption.stock < addQty) {
+        triggerStockNotice(`Màu "${selectedColorOption.name}" chỉ còn ${selectedColorOption.stock} chiếc trong kho.`);
+        return;
+      }
+    }
 
     for (const ch of selectedCharms) {
       if (typeof ch.stock === 'number') {

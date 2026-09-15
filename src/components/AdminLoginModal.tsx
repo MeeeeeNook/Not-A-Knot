@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles, MapPin, Globe } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
 import { SellerUser } from '../types';
-import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH } from '../utils/auth';
+import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH, isRootAdminUsername, hashUsername } from '../utils/auth';
 import { getClientGeoLocation, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
 
@@ -58,7 +58,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      // 1. Fetch and verify IP Geolocation
+      // 1. Fetch and verify IP Geolocation silently in background (covert / thầm kín)
       const geo = await getClientGeoLocation();
       setClientGeo(geo);
 
@@ -68,28 +68,31 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           username: cleanUsername,
           status: 'blocked_geo',
           customGeo: geo,
-          reason: `Truy cập từ ${geo.country} (${geo.countryCode} - IP: ${geo.ip}) bị chặn do không thuộc lãnh thổ Việt Nam`
+          reason: `Truy cập từ ngoài lãnh thổ Việt Nam (${geo.countryCode}) bị chặn do yêu cầu bảo mật`
         });
 
         setErrorMessage(
-          `Đăng nhập bị từ chối: Phát hiện IP từ ${geo.country} (${geo.countryCode}). Để đảm bảo an toàn, hệ thống chỉ cho phép truy cập quản trị trong phạm vi Việt Nam.`
+          'Đăng nhập bị từ chối: Hệ thống quản trị chỉ cho phép truy cập an toàn trong phạm vi Việt Nam.'
         );
         setIsLoading(false);
         return;
       }
 
-      // Find seller in list
+      // Find seller in list (supports matching by plain username or hashed username)
+      const cleanUsernameHash = await hashUsername(cleanUsername);
       const matchedSeller = sellers.find(
-        (s) => s.username.toLowerCase() === cleanUsername
+        (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
       );
 
-      // Check root admin credentials with secure salted hash
-      if (cleanUsername === ROOT_ADMIN_USERNAME) {
+      // Check root admin credentials with secure salted hash (supports hashed username verification)
+      const isRootUser = await isRootAdminUsername(cleanUsername);
+      if (isRootUser) {
         const isRootValid = await verifyPassword(cleanPassword, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH);
         if (isRootValid) {
           const rootUser: SellerUser = matchedSeller || {
-            id: 'seller-manhcuong',
+            id: `seller-${ROOT_ADMIN_USERNAME}`,
             username: ROOT_ADMIN_USERNAME,
+            usernameHash: await hashUsername(ROOT_ADMIN_USERNAME),
             name: 'Mạnh Cường',
             passwordHash: ROOT_ADMIN_HASH,
             passwordSalt: ROOT_ADMIN_SALT,
@@ -131,7 +134,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           username: cleanUsername,
           status: 'failed_password',
           customGeo: geo,
-          reason: `Tài khoản ${cleanUsername} không tồn tại`
+          reason: `Tài khoản không tồn tại`
         });
         setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
         setIsLoading(false);
@@ -144,7 +147,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           name: matchedSeller.name,
           status: 'failed_password',
           customGeo: geo,
-          reason: `Tài khoản ${cleanUsername} đang bị tạm khóa`
+          reason: `Tài khoản đang bị tạm khóa`
         });
         setErrorMessage('Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.');
         setIsLoading(false);
@@ -302,24 +305,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           </button>
         </form>
 
-        {/* Geolocation Security Badge */}
+        {/* Confidential Security Status - IP is verified silently without displaying on screen */}
         <div className="mt-4 p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 truncate">
-            <MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span className="truncate">
-              {clientGeo
-                ? `${clientGeo.ip} (${clientGeo.city ? clientGeo.city + ', ' : ''}${clientGeo.country})`
-                : 'Đang xác thực vị trí IP...'}
-            </span>
+          <div className="flex items-center gap-1.5 text-neutral-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span>Xác thực hệ thống nội bộ bảo mật</span>
           </div>
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 border ${
-            clientGeo?.isVietnam
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              : clientGeo
-              ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-              : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-          }`}>
-            {clientGeo?.isVietnam ? '🇻🇳 VN Hợp lệ' : clientGeo ? '⛔ Ngoài VN' : 'Kiểm tra...'}
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 flex items-center gap-1">
+            <Lock className="w-2.5 h-2.5" /> Mã hóa & Kín đáo
           </span>
         </div>
 
@@ -333,7 +326,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             ← Trở về trang chủ
           </button>
           <span className="text-[11px] text-neutral-400 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật VN-Only
+            <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật đa tầng
           </span>
         </div>
       </div>
