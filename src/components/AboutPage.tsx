@@ -64,8 +64,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({
           {/* Khung ảnh nền với gradient fade bên phải và bên trái */}
           <div className="absolute inset-y-0 right-0 w-full sm:w-3/5 lg:w-1/2 overflow-hidden pointer-events-none">
             <img
-              src="/assets/bracelet.jpg"
-              alt="Hình ảnh không gian Not A Knot"
+              src="/assets/about-story.jpg"
+              alt="Hình ảnh câu chuyện Not A Knot"
               className="w-full h-full object-cover object-center opacity-85"
             />
             {/* Gradient hòa vào nền bên trái để text luôn sắc nét */}
