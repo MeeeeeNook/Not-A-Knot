@@ -2861,6 +2861,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           <AdminBankAccountPage
             siteContent={siteContent}
             onUpdateSiteContent={onUpdateSiteContent}
+            onNotify={showAdminToast}
             onToast={showAdminToast}
           />
         )}

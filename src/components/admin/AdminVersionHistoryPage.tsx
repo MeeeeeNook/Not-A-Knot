@@ -44,7 +44,8 @@ interface AdminVersionHistoryPageProps {
   onUpdateCategories: (newCategories: CategoryItem[]) => void;
   onUpdateCollections: (newCollections: CollectionInfo[]) => void;
   onUpdateSiteContent: (newConfig: SiteContentConfig) => void;
-  onNotify: (msg: string) => void;
+  onNotify?: (msg: string) => void;
+  onToast?: (msg: string) => void;
   currentSellerName?: string;
 }
 
@@ -58,8 +59,16 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
   onUpdateCollections,
   onUpdateSiteContent,
   onNotify,
+  onToast,
   currentSellerName
 }) => {
+  const notify = (msg: string) => {
+    if (typeof onNotify === 'function') {
+      onNotify(msg);
+    } else if (typeof onToast === 'function') {
+      onToast(msg);
+    }
+  };
   const [backups, setBackups] = useState<VersionBackup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
@@ -101,7 +110,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       }
     } catch (err) {
       console.error('Lỗi nạp dữ liệu backup:', err);
-      onNotify('Lỗi tải danh sách bản sao lưu từ Cloud.');
+      notify('Lỗi tải danh sách bản sao lưu từ Cloud.');
     } finally {
       setIsLoading(false);
     }
@@ -119,16 +128,16 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
     try {
       const res = await syncLocalBackupsToFirestore();
       if (res.syncedCount > 0) {
-        onNotify(`Đã đồng bộ ${res.syncedCount} bản sao lưu lên Firebase Cloud thành công!`);
+        notify(`Đã đồng bộ ${res.syncedCount} bản sao lưu lên Firebase Cloud thành công!`);
         await loadBackupsAndSchedule();
       } else if (res.errors > 0) {
-        onNotify('Không thể đồng bộ một số bản sao lưu lên Firebase do vượt giới hạn dung lượng.');
+        notify('Không thể đồng bộ một số bản sao lưu lên Firebase do vượt giới hạn dung lượng.');
       } else {
-        onNotify('Tất cả các bản sao lưu đã được lưu trữ đồng bộ trên Firebase Cloud!');
+        notify('Tất cả các bản sao lưu đã được lưu trữ đồng bộ trên Firebase Cloud!');
       }
     } catch (e) {
       console.error('Lỗi đồng bộ lên cloud:', e);
-      onNotify('Lỗi đồng bộ bản sao lưu lên Firebase.');
+      notify('Lỗi đồng bộ bản sao lưu lên Firebase.');
     } finally {
       setIsSyncingCloud(false);
     }
@@ -204,7 +213,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       setSchedule(updatedSchedule);
       await saveBackupScheduleToFirestore(updatedSchedule);
 
-      onNotify(
+      notify(
         type === 'manual'
           ? 'Đã tạo bản sao lưu mới thành công trên Firebase (Tối đa 5 bản)!'
           : 'Hệ thống đã tự động sao lưu dữ liệu lên Firebase!'
@@ -213,7 +222,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       setShowNoteInput(false);
     } catch (err) {
       console.error('Lỗi thực hiện sao lưu:', err);
-      onNotify('Lỗi lưu bản sao lưu lên Firebase. Vui lòng thử lại!');
+      notify('Lỗi lưu bản sao lưu lên Firebase. Vui lòng thử lại!');
     } finally {
       setIsCreatingBackup(false);
     }
@@ -245,10 +254,10 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
     try {
       setSchedule(newSchedule);
       await saveBackupScheduleToFirestore(newSchedule);
-      onNotify('Đã cập nhật cấu hình sao lưu tự động thành công!');
+      notify('Đã cập nhật cấu hình sao lưu tự động thành công!');
     } catch (err) {
       console.error('Lỗi cập nhật lịch sao lưu:', err);
-      onNotify('Lỗi lưu cấu hình sao lưu tự động.');
+      notify('Lỗi lưu cấu hình sao lưu tự động.');
     } finally {
       setIsSavingSchedule(false);
     }
@@ -261,11 +270,11 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
     try {
       await deleteBackupFromFirestore(deleteCandidate.id);
       setBackups((prev) => prev.filter((b) => b.id !== deleteCandidate.id));
-      onNotify('Đã xóa bản sao lưu thành công.');
+      notify('Đã xóa bản sao lưu thành công.');
       setDeleteCandidate(null);
     } catch (err) {
       console.error('Lỗi xóa bản sao lưu:', err);
-      onNotify('Lỗi xóa bản sao lưu từ Cloud.');
+      notify('Lỗi xóa bản sao lưu từ Cloud.');
     } finally {
       setIsDeleting(false);
     }
@@ -302,11 +311,11 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
         await saveSiteContentToFirestore(data.siteContent);
       }
 
-      onNotify(`Khôi phục thành công hệ thống về phiên bản lúc ${restoreCandidate.formattedDate}!`);
+      notify(`Khôi phục thành công hệ thống về phiên bản lúc ${restoreCandidate.formattedDate}!`);
       setRestoreCandidate(null);
     } catch (err) {
       console.error('Lỗi khôi phục sao lưu:', err);
-      onNotify('Lỗi khôi phục dữ liệu từ bản sao lưu.');
+      notify('Lỗi khôi phục dữ liệu từ bản sao lưu.');
     } finally {
       setIsRestoring(false);
     }
@@ -324,7 +333,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    onNotify('Đã tải file sao lưu về máy tính.');
+    notify('Đã tải file sao lưu về máy tính.');
   };
 
   return (

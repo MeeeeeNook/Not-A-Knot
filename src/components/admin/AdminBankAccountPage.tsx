@@ -6,7 +6,8 @@ import { saveSiteContentToFirestore } from '../../firebase';
 interface AdminBankAccountPageProps {
   siteContent?: SiteContentConfig;
   onUpdateSiteContent: (config: SiteContentConfig) => void;
-  onNotify: (msg: string) => void;
+  onNotify?: (msg: string) => void;
+  onToast?: (msg: string) => void;
 }
 
 const POPULAR_BANKS = [
@@ -30,8 +31,17 @@ const POPULAR_BANKS = [
 export const AdminBankAccountPage: React.FC<AdminBankAccountPageProps> = ({
   siteContent,
   onUpdateSiteContent,
-  onNotify
+  onNotify,
+  onToast
 }) => {
+  const notify = (msg: string) => {
+    if (typeof onNotify === 'function') {
+      onNotify(msg);
+    } else if (typeof onToast === 'function') {
+      onToast(msg);
+    }
+  };
+
   const [bankAccount, setBankAccount] = useState<BankAccountConfig>(() => {
     return siteContent?.bankAccount || {
       bankId: 'VCB',
@@ -67,11 +77,11 @@ export const AdminBankAccountPage: React.FC<AdminBankAccountPageProps> = ({
       await saveSiteContentToFirestore(updatedConfig);
 
       setSaveSuccess(true);
-      onNotify('Đã lưu thông tin tài khoản ngân hàng & VietQR thành công!');
+      notify('Đã lưu thông tin tài khoản ngân hàng & VietQR thành công!');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error('Lỗi lưu tài khoản ngân hàng:', err);
-      onNotify('Lỗi lưu dữ liệu lên Cloud. Vui lòng kiểm tra lại kết nối!');
+      notify('Lỗi lưu dữ liệu lên Cloud. Vui lòng kiểm tra lại kết nối!');
     } finally {
       setIsSaving(false);
     }

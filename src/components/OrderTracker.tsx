@@ -1000,7 +1000,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                         <span className="font-mono font-black text-sm text-slate-950 tracking-wider group-hover:text-amber-600 transition-colors">
                           {code}
                         </span>
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap shrink-0">
                           {normStatus}
                         </span>
                       </div>
@@ -1131,8 +1131,8 @@ Cam kết bảo hành chốt khóa trọn đời!
                 </div>
 
                 {/* Status Badge & Actions */}
-                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
-                  <div className={`px-4 py-2.5 rounded-2xl border font-black text-xs sm:text-sm flex items-center gap-2 ${
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className={`px-4 py-2.5 rounded-2xl border font-black text-xs sm:text-sm flex items-center gap-2 whitespace-nowrap shrink-0 ${
                     normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                       : normalizeOrderStatus(activeOrder.status) === 'Đang giao hàng'
@@ -1142,37 +1142,25 @@ Cam kết bảo hành chốt khóa trọn đời!
                       : 'bg-amber-50 border-amber-300 text-amber-950'
                   }`}>
                     {normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công' ? (
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     ) : normalizeOrderStatus(activeOrder.status) === 'Đang giao hàng' ? (
-                      <Truck className="w-4 h-4 text-blue-600" />
+                      <Truck className="w-4 h-4 text-blue-600 shrink-0" />
                     ) : normalizeOrderStatus(activeOrder.status) === 'Knot đang được sản xuất' ? (
-                      <Hammer className="w-4 h-4 text-purple-600" />
+                      <Hammer className="w-4 h-4 text-purple-600 shrink-0" />
                     ) : (
-                      <Clock className="w-4 h-4 text-amber-600" />
+                      <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                     )}
-                    <span>{normalizeOrderStatus(activeOrder.status)}</span>
+                    <span className="whitespace-nowrap">{normalizeOrderStatus(activeOrder.status)}</span>
                   </div>
-
-                  {/* Contact Shop Button */}
-                  <a
-                    href={messengerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-xs hover:shadow-md"
-                    title="Nhắn tin trực tiếp cho shop về đơn hàng này"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span className="whitespace-nowrap">Nhắn tin cho Shop</span>
-                  </a>
 
                   {/* Print Button */}
                   <button
                     type="button"
                     onClick={() => handleTriggerPrint(activeOrder)}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-xs hover:shadow-md"
+                    className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-xs hover:shadow-md whitespace-nowrap shrink-0"
                     title="In phiếu giao nhận và hóa đơn đơn hàng"
                   >
-                    <Printer className="w-4 h-4 text-amber-400" />
+                    <Printer className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="whitespace-nowrap">In Phiếu Đơn</span>
                   </button>
                 </div>
@@ -1455,7 +1443,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                       <CreditCard className="w-4 h-4 text-slate-700" />
                       <span>Thanh toán & Hóa đơn</span>
                     </h3>
-                    <span className={`px-3 py-1 rounded-full text-xs font-black ${
+                    <span className={`px-3 py-1 rounded-full text-xs font-black whitespace-nowrap shrink-0 ${
                       activeOrder.paymentStatus === 'paid'
                         ? 'bg-emerald-100 text-emerald-950 border border-emerald-300'
                         : 'bg-amber-100 text-amber-950 border border-amber-300'

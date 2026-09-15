@@ -16,7 +16,8 @@ interface AdminBackupManagerProps {
   onUpdateCategories: (categories: CategoryItem[]) => void;
   onUpdateCollections: (collections: CollectionInfo[]) => void;
   onUpdateSiteContent: (config: SiteContentConfig) => void;
-  onNotify: (msg: string) => void;
+  onNotify?: (msg: string) => void;
+  onToast?: (msg: string) => void;
 }
 
 export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
@@ -30,8 +31,16 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   onUpdateCategories,
   onUpdateCollections,
   onUpdateSiteContent,
-  onNotify
+  onNotify,
+  onToast
 }) => {
+  const notify = (msg: string) => {
+    if (typeof onNotify === 'function') {
+      onNotify(msg);
+    } else if (typeof onToast === 'function') {
+      onToast(msg);
+    }
+  };
   // Selection checklist state
   const [selectedTypes, setSelectedTypes] = useState<{
     orders: boolean;
@@ -85,7 +94,7 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   // ----------------------------------------------------
   const handleExportJSON = () => {
     if (selectedCount === 0) {
-      onNotify('Vui lòng chọn ít nhất 1 loại dữ liệu cần xuất.');
+      notify('Vui lòng chọn ít nhất 1 loại dữ liệu cần xuất.');
       return;
     }
 
@@ -128,10 +137,10 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      onNotify(`Đã xuất file sao lưu JSON v2.0 thành công (${selectedCount} mục).`);
+      notify(`Đã xuất file sao lưu JSON v2.0 thành công (${selectedCount} mục).`);
     } catch (e: any) {
       console.error(e);
-      onNotify('Lỗi khi xuất file JSON: ' + (e.message || 'Thử lại sau'));
+      notify('Lỗi khi xuất file JSON: ' + (e.message || 'Thử lại sau'));
     } finally {
       setIsExporting(false);
     }
@@ -142,7 +151,7 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   // ----------------------------------------------------
   const handleExportExcel = () => {
     if (selectedCount === 0) {
-      onNotify('Vui lòng chọn ít nhất 1 loại dữ liệu cần xuất.');
+      notify('Vui lòng chọn ít nhất 1 loại dữ liệu cần xuất.');
       return;
     }
     setShowExcelPrompt(true);
@@ -159,7 +168,7 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
       includeImages,
       onProgress
     });
-    onNotify(includeImages ? 'Đã xuất file ZIP kèm toàn bộ hình ảnh thành công!' : 'Đã xuất file Excel đa sheet (.xlsx) thành công!');
+    notify(includeImages ? 'Đã xuất file ZIP kèm toàn bộ hình ảnh thành công!' : 'Đã xuất file Excel đa sheet (.xlsx) thành công!');
   };
 
   // ----------------------------------------------------
@@ -198,7 +207,7 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
           hasMessages: payload.messages ? payload.messages.length : 0,
           rawPayload: payload
         });
-        onNotify(`Đã tải file "${file.name}" thành công.`);
+        notify(`Đã tải file "${file.name}" thành công.`);
       } catch (err) {
         console.error(err);
         alert('Không thể đọc file JSON. Vui lòng kiểm tra lại tính toàn vẹn của file.');
@@ -287,11 +296,11 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
         localStorage.setItem('nak_contact_messages', JSON.stringify(payload.messages));
       }
 
-      onNotify('Khôi phục dữ liệu từ bản sao lưu thành công!');
+      notify('Khôi phục dữ liệu từ bản sao lưu thành công!');
       setRestorePreview(null);
     } catch (e: any) {
       console.error(e);
-      onNotify('Lỗi trong quá trình khôi phục: ' + (e.message || 'Thử lại'));
+      notify('Lỗi trong quá trình khôi phục: ' + (e.message || 'Thử lại'));
     } finally {
       setIsRestoring(false);
     }

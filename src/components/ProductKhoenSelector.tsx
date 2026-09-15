@@ -114,13 +114,20 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
           const isOutOfStock = typeof khoen.stock === 'number' && khoen.stock <= 0;
 
           return (
-            <button
+            <div
               key={khoen.id || idx}
-              type="button"
-              disabled={isOutOfStock}
+              role="button"
+              tabIndex={isOutOfStock ? -1 : 0}
+              aria-disabled={isOutOfStock}
               onClick={() => {
                 if (isOutOfStock) return;
                 handleToggle(khoen);
+              }}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isOutOfStock) {
+                  e.preventDefault();
+                  handleToggle(khoen);
+                }
               }}
               className={`group relative rounded-xl p-2 text-left border-2 transition-colors flex flex-col items-center justify-between ${
                 isOutOfStock
@@ -137,32 +144,24 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                 </div>
               )}
 
-              {/* Khoen Image - Click image to zoom & compare */}
+              {/* Khoen Image - Click image selects khoen, click zoom button at top corner to zoom */}
               <div
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveCompareIdx(idx);
-                  setCompareModalOpen(true);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                className="w-full aspect-square rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative group/img"
+              >
+                {/* Zoom / Compare Button at top corner */}
+                <button
+                  type="button"
+                  onClick={(e) => {
                     e.stopPropagation();
                     setActiveCompareIdx(idx);
                     setCompareModalOpen(true);
-                  }
-                }}
-                className="w-full aspect-square rounded-lg overflow-hidden bg-white mb-1.5 border border-slate-100 flex items-center justify-center relative cursor-zoom-in group/img"
-                title="Bấm vào ảnh để phóng to & so sánh chi tiết"
-              >
-                {/* Zoom / Compare Button */}
-                <span
-                  className="absolute top-1 left-1 z-10 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all opacity-85 sm:opacity-0 group-hover:opacity-100 hover:scale-110 shadow-xs pointer-events-none"
+                  }}
+                  className="absolute top-1 left-1 z-20 w-6 h-6 rounded-full bg-black/60 hover:bg-black/85 text-white flex items-center justify-center transition-all opacity-85 hover:opacity-100 hover:scale-110 shadow-xs cursor-pointer"
+                  title="Phóng to & so sánh chi tiết"
                   aria-label="Phóng to"
                 >
-                  <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                </span>
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
 
                 {khoen.image && khoen.image.trim() ? (
                   <img
@@ -176,14 +175,6 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                     Khoen
                   </div>
                 )}
-
-                {/* Hover zoom pill overlay */}
-                <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                  <span className="px-2 py-0.5 rounded-full bg-black/80 text-white text-[10px] font-bold flex items-center gap-1 shadow-md">
-                    <ZoomIn className="w-3 h-3 text-amber-300" />
-                    <span>Phóng to</span>
-                  </span>
-                </div>
 
                 {/* Extra price badge */}
                 {khoen.priceDelta && khoen.priceDelta > 0 ? (
@@ -219,7 +210,7 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                   )}
                 </span>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
