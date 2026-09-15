@@ -1069,51 +1069,33 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
 
 export const getOrdersFromFirestore = fetchOrdersFromFirestore;
 
-// Helper to compress or sanitize base64 thumbnails in itemDetails so payload is always < 20KB for near-instant Firestore write
-async function sanitizeItemDetailsForFirestore(itemDetails: any[]): Promise<any[]> {
+// Helper to sanitize itemDetails: strip all heavy base64 images completely so order payload contains purely clean text metadata (< 2KB)
+function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
   if (!Array.isArray(itemDetails)) return [];
-  return Promise.all(
-    itemDetails.map(async (item) => {
-      const copy = { ...item };
-      // Strip or compress any high-res base64 data to keep write speed instantaneous (< 200ms)
-      if (copy.selectedColorImage && typeof copy.selectedColorImage === 'string' && copy.selectedColorImage.startsWith('data:image/')) {
-        try {
-          copy.selectedColorImage = await compressBase64Image(copy.selectedColorImage, 120, 120, 0.60);
-        } catch {
-          if (copy.selectedColorImage.length > 20000) delete copy.selectedColorImage;
-        }
-      }
-      if (copy.selectedCharmImage && typeof copy.selectedCharmImage === 'string' && copy.selectedCharmImage.startsWith('data:image/')) {
-        try {
-          copy.selectedCharmImage = await compressBase64Image(copy.selectedCharmImage, 120, 120, 0.60);
-        } catch {
-          if (copy.selectedCharmImage.length > 20000) delete copy.selectedCharmImage;
-        }
-      }
-      if (copy.selectedKhoenImage && typeof copy.selectedKhoenImage === 'string' && copy.selectedKhoenImage.startsWith('data:image/')) {
-        try {
-          copy.selectedKhoenImage = await compressBase64Image(copy.selectedKhoenImage, 120, 120, 0.60);
-        } catch {
-          if (copy.selectedKhoenImage.length > 20000) delete copy.selectedKhoenImage;
-        }
-      }
-      if (copy.image && typeof copy.image === 'string' && copy.image.startsWith('data:image/')) {
-        try {
-          copy.image = await compressBase64Image(copy.image, 150, 150, 0.60);
-        } catch {
-          if (copy.image.length > 30000) delete copy.image;
-        }
-      }
-      return copy;
-    })
-  );
+  return itemDetails.map((item) => {
+    const copy = { ...item };
+    // Completely remove all heavy base64 strings
+    if (typeof copy.selectedColorImage === 'string' && copy.selectedColorImage.startsWith('data:image/')) {
+      delete copy.selectedColorImage;
+    }
+    if (typeof copy.selectedCharmImage === 'string' && copy.selectedCharmImage.startsWith('data:image/')) {
+      delete copy.selectedCharmImage;
+    }
+    if (typeof copy.selectedKhoenImage === 'string' && copy.selectedKhoenImage.startsWith('data:image/')) {
+      delete copy.selectedKhoenImage;
+    }
+    if (typeof copy.image === 'string' && copy.image.startsWith('data:image/')) {
+      delete copy.image;
+    }
+    return copy;
+  });
 }
 
 export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> => {
   const orderId = (order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
   const docRef = doc(db, 'orders', orderId);
 
-  // 1. Compress bank receipt image if present
+  // 1. Bank receipt image is only kept if explicitly uploaded as proof of payment
   let receiptImage = order.bankReceiptImage;
   if (receiptImage && receiptImage.startsWith('data:image/')) {
     try {
@@ -1123,8 +1105,8 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
     }
   }
 
-  // 2. Sanitize itemDetails thumbnails so entire order payload stays small (< 20KB)
-  const sanitizedItemDetails = await sanitizeItemDetailsForFirestore(order.itemDetails || []);
+  // 2. Sanitize itemDetails to strip all images so order payload is pure text (< 2KB)
+  const sanitizedItemDetails = sanitizeItemDetailsForFirestore(order.itemDetails || []);
 
   const payload = cleanFirestoreData({
     ...order,
