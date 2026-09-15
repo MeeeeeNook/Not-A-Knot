@@ -148,17 +148,20 @@ export const CartPage: React.FC<CartPageProps> = ({
         item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
+      const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
+      const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
         const names = item.selectedCharms.map((c) => c.name).join(', ');
         extras.push(
-          `Charm: ${names}${
+          `${charmLabel}: ${names}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       } else if (item.selectedCharm) {
         extras.push(
-          `Charm: ${item.selectedCharm}${
+          `${charmLabel}: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -166,7 +169,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
         const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
         extras.push(
-          `Bùa Omamori: ${omNames}${
+          `${omamoriLabel}: ${omNames}${
             item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -466,17 +469,17 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   )}
                                   {item.selectedCharms && item.selectedCharms.length > 0 ? (
                                     <span className="inline-flex flex-wrap items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
-                                      Charm: {item.selectedCharms.map((c) => c.name).join(', ')} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                      {item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm'}: {item.selectedCharms.map((c) => c.name).join(', ')} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>
                                   ) : item.selectedCharm ? (
                                     <span className="bg-amber-50 text-amber-800 border border-amber-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
-                                      Charm: {item.selectedCharm} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                      {item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm'}: {item.selectedCharm} {item.selectedCharmPrice ? `(+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>
                                   ) : null}
 
                                   {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
                                     <span className="inline-flex flex-wrap items-center gap-1 bg-rose-50 text-rose-800 border border-rose-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
-                                      Bùa Omamori: {item.selectedOmamoris.map((o) => o.name).join(', ')} {item.selectedOmamoriPrice ? `(+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}
+                                      {item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori'}: {item.selectedOmamoris.map((o) => o.name).join(', ')} {item.selectedOmamoriPrice ? `(+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>
                                   )}
                                 </div>

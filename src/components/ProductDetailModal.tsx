@@ -147,24 +147,27 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const handleAdd = () => {
     if (isOutOfStock) return;
 
+    const charmTitleLabel = product.charmTitle?.trim() || 'Charm';
+    const omamoriTitleLabel = product.omamoriTitle?.trim() || 'Bùa Omamori';
+
     if (product.enableCharmSelection && product.charmSelectionRequired && selectedCharms.length === 0) {
-      setCharmError('Vui lòng chọn ít nhất 1 mẫu charm trước khi thêm.');
+      setCharmError(`Vui lòng chọn ít nhất 1 tùy chọn trong "${charmTitleLabel}" trước khi thêm.`);
       return;
     }
 
     if (product.enableOmamoriSelection && product.omamoriSelectionRequired && selectedOmamoris.length === 0) {
-      setOmamoriError('Vui lòng chọn ít nhất 1 bùa Omamori trước khi thêm.');
+      setOmamoriError(`Vui lòng chọn ít nhất 1 tùy chọn trong "${omamoriTitleLabel}" trước khi thêm.`);
       return;
     }
 
     for (const ch of selectedCharms) {
       if (typeof ch.stock === 'number') {
         if (ch.stock <= 0) {
-          setCharmError(`Mẫu charm "${ch.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          setCharmError(`Mục "${ch.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
           return;
         }
         if (ch.stock < quantity) {
-          setCharmError(`Mẫu charm "${ch.name}" chỉ còn ${ch.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+          setCharmError(`Mục "${ch.name}" chỉ còn ${ch.stock} cái trong kho, không đủ số lượng ${quantity}.`);
           return;
         }
       }
@@ -173,11 +176,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     for (const om of selectedOmamoris) {
       if (typeof om.stock === 'number') {
         if (om.stock <= 0) {
-          setOmamoriError(`Bùa "${om.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
+          setOmamoriError(`Mục "${om.name}" hiện đã hết hàng. Vui lòng chọn mẫu khác.`);
           return;
         }
         if (om.stock < quantity) {
-          setOmamoriError(`Bùa "${om.name}" chỉ còn ${om.stock} cái trong kho, không đủ số lượng ${quantity}.`);
+          setOmamoriError(`Mục "${om.name}" chỉ còn ${om.stock} cái trong kho, không đủ số lượng ${quantity}.`);
           return;
         }
       }
@@ -412,6 +415,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 product.charmOptions.length > 0 && (
                   <div className="space-y-1">
                     <ProductCharmSelector
+                      title={product.charmTitle}
                       charms={product.charmOptions}
                       selectedCharms={selectedCharms}
                       onSelectCharms={handleSelectCharms}
@@ -430,6 +434,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {product.enableOmamoriSelection && (
                 <div className="space-y-1">
                   <ProductOmamoriSelector
+                    title={product.omamoriTitle}
                     omamoris={
                       product.omamoriOptions && product.omamoriOptions.length > 0
                         ? product.omamoriOptions

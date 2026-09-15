@@ -20,7 +20,9 @@
         "isBestSeller": { "type": "boolean", "description": "Sản phẩm bán chạy", "optional": true },
         "isNew": { "type": "boolean", "description": "Sản phẩm mới ra mắt", "optional": true },
         "rating": { "type": "number", "description": "Đánh giá sao trung bình", "optional": true },
-        "reviewsCount": { "type": "number", "description": "Số lượt đánh giá", "optional": true }
+        "reviewsCount": { "type": "number", "description": "Số lượt đánh giá", "optional": true },
+        "charmTitle": { "type": "string", "description": "Tên hiển thị nhóm tùy chọn phụ kiện 1", "optional": true },
+        "omamoriTitle": { "type": "string", "description": "Tên hiển thị nhóm tùy chọn phụ kiện 2", "optional": true }
       }
     },
     "Order": {

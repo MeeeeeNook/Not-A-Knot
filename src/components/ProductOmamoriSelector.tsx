@@ -4,6 +4,7 @@ import { Check, Flame, X } from 'lucide-react';
 
 interface ProductOmamoriSelectorProps {
   omamoris: ProductOmamoriOption[];
+  title?: string;
   selectedOmamori?: string;
   selectedOmamoris?: ProductOmamoriOption[];
   onSelectOmamori?: (omamori: ProductOmamoriOption | null) => void;
@@ -14,6 +15,7 @@ interface ProductOmamoriSelectorProps {
 
 export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   omamoris,
+  title,
   selectedOmamori,
   selectedOmamoris,
   onSelectOmamori,
@@ -22,6 +24,8 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   isRequired = false,
 }) => {
   if (!omamoris || omamoris.length === 0) return null;
+
+  const displayTitle = title?.trim() || 'Chọn Bùa Omamori';
 
   // Resolve current active selection array
   const currentSelection: ProductOmamoriOption[] = React.useMemo(() => {
@@ -60,7 +64,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
       setLimitNotice(null);
     } else {
       if (currentSelection.length >= maxAllowed) {
-        setLimitNotice(`Đã đạt tối đa ${maxAllowed} bùa. Hãy bỏ chọn bớt trước khi thêm.`);
+        setLimitNotice(`Đã đạt tối đa ${maxAllowed} mục đã chọn. Hãy bỏ chọn bớt trước khi thêm.`);
         return;
       }
       setLimitNotice(null);
@@ -99,7 +103,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 text-xs font-bold text-slate-800 tracking-wide">
             <Flame className="w-3.5 h-3.5 text-rose-500" />
-            <span>Chọn Bùa Omamori {isRequired && <span className="text-rose-500">*</span>}</span>
+            <span>{displayTitle} {isRequired && <span className="text-rose-500">*</span>}</span>
           </div>
 
           <span className="text-[11px] text-slate-500 font-medium">

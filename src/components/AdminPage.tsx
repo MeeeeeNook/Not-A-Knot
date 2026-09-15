@@ -369,13 +369,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Dynamic Product Variations (Colors with photos, Charms with photos, Omamori, Sizes)
   const [formEnableColorSelection, setFormEnableColorSelection] = useState(false);
   const [formColorOptions, setFormColorOptions] = useState<ProductColorOption[]>([]);
-  // Charm states
+  // Charm / Accessory 1 states
   const [formEnableCharmSelection, setFormEnableCharmSelection] = useState(false);
+  const [formCharmTitle, setFormCharmTitle] = useState('');
   const [formCharmSelectionRequired, setFormCharmSelectionRequired] = useState(false);
   const [formMaxCharmsAllowed, setFormMaxCharmsAllowed] = useState(1);
   const [formCharmOptions, setFormCharmOptions] = useState<ProductCharmOption[]>([]);
-  // Omamori amulet states
+  // Omamori / Accessory 2 states
   const [formEnableOmamoriSelection, setFormEnableOmamoriSelection] = useState(false);
+  const [formOmamoriTitle, setFormOmamoriTitle] = useState('');
   const [formOmamoriSelectionRequired, setFormOmamoriSelectionRequired] = useState(false);
   const [formMaxOmamoriAllowed, setFormMaxOmamoriAllowed] = useState(1);
   const [formOmamoriOptions, setFormOmamoriOptions] = useState<ProductOmamoriOption[]>([]);
@@ -865,10 +867,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormEnableColorSelection(false);
     setFormColorOptions([]);
     setFormEnableCharmSelection(false);
+    setFormCharmTitle('');
     setFormCharmSelectionRequired(false);
     setFormMaxCharmsAllowed(1);
     setFormCharmOptions([]);
     setFormEnableOmamoriSelection(false);
+    setFormOmamoriTitle('');
     setFormOmamoriSelectionRequired(false);
     setFormMaxOmamoriAllowed(1);
     setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
@@ -906,10 +910,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       : (prod.availableColors || []).map((c) => ({ name: c }));
     setFormColorOptions(loadedColors);
     setFormEnableCharmSelection(Boolean(prod.enableCharmSelection));
+    setFormCharmTitle(prod.charmTitle || '');
     setFormCharmSelectionRequired(Boolean(prod.charmSelectionRequired));
     setFormMaxCharmsAllowed(prod.maxCharmsAllowed && prod.maxCharmsAllowed > 0 ? prod.maxCharmsAllowed : 1);
     setFormCharmOptions(prod.charmOptions || []);
     setFormEnableOmamoriSelection(Boolean(prod.enableOmamoriSelection));
+    setFormOmamoriTitle(prod.omamoriTitle || '');
     setFormOmamoriSelectionRequired(Boolean(prod.omamoriSelectionRequired));
     setFormMaxOmamoriAllowed(prod.maxOmamoriAllowed && prod.maxOmamoriAllowed > 0 ? prod.maxOmamoriAllowed : 1);
     const loadedOmamoris: ProductOmamoriOption[] = (prod.omamoriOptions && prod.omamoriOptions.length > 0)
@@ -1185,10 +1191,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         colorOptions: formEnableColorSelection ? formColorOptions : [],
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
         enableCharmSelection: formEnableCharmSelection,
+        charmTitle: formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined,
         charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
         maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
         charmOptions: formEnableCharmSelection ? formCharmOptions : [],
         enableOmamoriSelection: formEnableOmamoriSelection,
+        omamoriTitle: formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined,
         omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
         maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
         omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
@@ -1244,10 +1252,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         colorOptions: formEnableColorSelection ? formColorOptions : [],
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
         enableCharmSelection: formEnableCharmSelection,
+        charmTitle: formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined,
         charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
         maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
         charmOptions: formEnableCharmSelection ? formCharmOptions : [],
         enableOmamoriSelection: formEnableOmamoriSelection,
+        omamoriTitle: formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined,
         omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
         maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
         omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
@@ -3179,10 +3189,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900">
-                              ✨ Bật tùy chọn Charm (Charm / Phụ kiện đính kèm)
+                              ✨ Bật tùy chọn Phụ kiện 1 (Mặc định: Charm - Có thể đổi tên)
                             </span>
                             <span className="block text-[11px] text-slate-500">
-                              Khách hàng có thể chọn mẫu charm có ảnh xem trước trực quan và quản lý tồn kho từng charm
+                              Khách hàng có thể chọn mẫu charm/phụ kiện kèm theo có ảnh trực quan và quản lý tồn kho từng món
                             </span>
                           </div>
                         </label>
@@ -3208,7 +3218,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 onChange={(e) => setFormMaxCharmsAllowed(Math.max(1, parseInt(e.target.value, 10) || 1))}
                                 className="w-12 px-1 py-0.5 border border-slate-200 rounded text-center font-bold text-amber-900 focus:outline-none focus:border-amber-500 text-xs"
                               />
-                              <span>charm</span>
+                              <span>món</span>
                             </label>
                             {/* Hidden bulk file input for charms */}
                             <input
@@ -3248,7 +3258,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   ...prev,
                                   { 
                                     id: newId, 
-                                    name: `Charm mới ${prev.length + 1}`, 
+                                    name: `Mẫu mới ${prev.length + 1}`, 
                                     image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&auto=format&fit=crop&q=80', 
                                     priceDelta: 0,
                                     stock: 10
@@ -3258,11 +3268,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             >
                               <Plus className="w-3 h-3" />
-                              <span>Thêm Charm</span>
+                              <span>Thêm Mẫu Mới</span>
                             </button>
                           </div>
                         )}
                       </div>
+
+                      {formEnableCharmSelection && (
+                        <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 shadow-2xs">
+                          <label className="text-xs font-bold text-amber-950 shrink-0 flex items-center gap-1.5">
+                            🏷️ Đổi tên tiêu đề hiển thị:
+                          </label>
+                          <input
+                            type="text"
+                            value={formCharmTitle}
+                            onChange={(e) => setFormCharmTitle(e.target.value)}
+                            placeholder="Mặc định: Chọn Charm (vd: Chọn Charm, Chọn Phụ Kiện, Chọn Mặt Dây, Khóa Cài...)"
+                            className="w-full flex-1 px-3 py-1.5 bg-white border border-amber-300/80 rounded-lg text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                      )}
 
                       {formEnableCharmSelection && (
                         <div
@@ -3658,10 +3683,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                              Bật tùy chọn Bùa Omamori
+                              📿 Bật tùy chọn Phụ kiện 2 (Mặc định: Bùa Omamori - Có thể đổi tên)
                             </span>
                             <span className="block text-[11px] text-slate-500">
-                              Khách hàng có thể chọn nhiều bùa may mắn kèm theo sản phẩm và quản lý tồn kho từng bùa
+                              Khách hàng có thể chọn nhiều mẫu bùa may mắn / quà tặng kèm và quản lý tồn kho. Admin có thể đổi tên hiển thị tùy ý.
                             </span>
                           </div>
                         </div>
@@ -3687,7 +3712,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 onChange={(e) => setFormMaxOmamoriAllowed(Math.max(1, parseInt(e.target.value, 10) || 1))}
                                 className="w-12 px-1 py-0.5 border border-slate-200 rounded text-center font-bold text-red-900 focus:outline-none focus:border-red-500 text-xs"
                               />
-                              <span>bùa</span>
+                              <span>món</span>
                             </label>
                             {/* Hidden bulk file input for omamori */}
                             <input
@@ -3727,7 +3752,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   ...prev,
                                   { 
                                     id: newId, 
-                                    name: `Bùa may mắn ${prev.length + 1}`, 
+                                    name: `Món mới ${prev.length + 1}`, 
                                     image: DEFAULT_OMAMORI_PRESETS[0]?.image || '', 
                                     priceDelta: 25000,
                                     meaning: 'Bình an & may mắn',
@@ -3738,11 +3763,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                             >
                               <Plus className="w-3 h-3" />
-                              <span>Thêm Bùa</span>
+                              <span>Thêm Món Mới</span>
                             </button>
                           </div>
                         )}
                       </div>
+
+                      {formEnableOmamoriSelection && (
+                        <div className="bg-red-50/80 border border-red-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 shadow-2xs">
+                          <label className="text-xs font-bold text-red-950 shrink-0 flex items-center gap-1.5">
+                            🏷️ Đổi tên tiêu đề hiển thị:
+                          </label>
+                          <input
+                            type="text"
+                            value={formOmamoriTitle}
+                            onChange={(e) => setFormOmamoriTitle(e.target.value)}
+                            placeholder="Mặc định: Chọn Bùa Omamori (vd: Chọn Bùa May Mắn, Quà Tặng Kèm, Túi Thơm...)"
+                            className="w-full flex-1 px-3 py-1.5 bg-white border border-red-300/80 rounded-lg text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-red-500"
+                          />
+                        </div>
+                      )}
 
                       {formEnableOmamoriSelection && (
                         <div

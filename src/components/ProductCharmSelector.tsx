@@ -4,6 +4,7 @@ import { Check, Sparkles, X } from 'lucide-react';
 
 interface ProductCharmSelectorProps {
   charms: ProductCharmOption[];
+  title?: string;
   selectedCharm?: string;
   selectedCharms?: ProductCharmOption[];
   onSelectCharm?: (charm: ProductCharmOption | null) => void;
@@ -14,6 +15,7 @@ interface ProductCharmSelectorProps {
 
 export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   charms,
+  title,
   selectedCharm,
   selectedCharms,
   onSelectCharm,
@@ -22,6 +24,8 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   isRequired = false,
 }) => {
   if (!charms || charms.length === 0) return null;
+
+  const displayTitle = title?.trim() || 'Chọn Charm';
 
   // Resolve current active selection array
   const currentSelection: ProductCharmOption[] = React.useMemo(() => {
@@ -60,7 +64,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
       setLimitNotice(null);
     } else {
       if (currentSelection.length >= maxAllowed) {
-        setLimitNotice(`Đã đạt tối đa ${maxAllowed} charm. Hãy bỏ chọn bớt trước khi thêm.`);
+        setLimitNotice(`Đã đạt tối đa ${maxAllowed} mẫu đã chọn. Hãy bỏ chọn bớt trước khi thêm.`);
         return;
       }
       setLimitNotice(null);
@@ -99,7 +103,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 text-xs font-bold text-slate-800 tracking-wide">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>Chọn Charm {isRequired && <span className="text-rose-500">*</span>}</span>
+            <span>{displayTitle} {isRequired && <span className="text-rose-500">*</span>}</span>
           </div>
 
           <span className="text-[11px] text-slate-500 font-medium">

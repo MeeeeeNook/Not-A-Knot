@@ -55,13 +55,15 @@ export interface Product {
   // Dynamic Variation Settings
   enableColorSelection?: boolean;
   colorOptions?: ProductColorOption[];
-  // Charms selection settings
+  // Charms / Custom Accessory 1 selection settings
   enableCharmSelection?: boolean;
+  charmTitle?: string; // Tên hiển thị nhóm tùy chọn 1 (mặc định: "Chọn Charm", có thể tùy biến thành "Chọn Phụ Kiện", "Chọn Mặt Dây"...)
   charmOptions?: ProductCharmOption[];
   charmSelectionRequired?: boolean;
   maxCharmsAllowed?: number; // Maximum selectable charms (default: 1)
-  // Omamori amulet selection settings
+  // Omamori amulet / Custom Accessory 2 selection settings
   enableOmamoriSelection?: boolean;
+  omamoriTitle?: string; // Tên hiển thị nhóm tùy chọn 2 (mặc định: "Chọn Bùa Omamori", có thể tùy biến thành "Chọn Túi Thơm", "Chọn Quà Tặng"...)
   omamoriOptions?: ProductOmamoriOption[];
   omamoriSelectionRequired?: boolean;
   maxOmamoriAllowed?: number; // Maximum selectable Omamori amulets (default: 1)

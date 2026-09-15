@@ -110,17 +110,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let desc = `${item.product.name} (x${item.quantity}) - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
+      const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
+      const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
         const names = item.selectedCharms.map((c) => c.name).join(', ');
         extras.push(
-          `Charm: ${names}${
+          `${charmLabel}: ${names}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       } else if (item.selectedCharm) {
         extras.push(
-          `Charm: ${item.selectedCharm}${
+          `${charmLabel}: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -128,7 +131,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
         const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
         extras.push(
-          `Bùa Omamori: ${omNames}${
+          `${omamoriLabel}: ${omNames}${
             item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -178,17 +181,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0);
       let line = `${idx + 1}. ${item.product.name} - SL: ${item.quantity} - ${(unitPrice * item.quantity).toLocaleString('vi-VN')}đ`;
       const extras = [];
+      const charmLabel = item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm';
+      const omamoriLabel = item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa Omamori';
+
       if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
       if (item.selectedCharms && item.selectedCharms.length > 0) {
         const names = item.selectedCharms.map((c) => c.name).join(', ');
         extras.push(
-          `Charm: ${names}${
+          `${charmLabel}: ${names}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
       } else if (item.selectedCharm) {
         extras.push(
-          `Charm: ${item.selectedCharm}${
+          `${charmLabel}: ${item.selectedCharm}${
             item.selectedCharmPrice ? ` (+${item.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -196,7 +202,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       if (item.selectedOmamoris && item.selectedOmamoris.length > 0) {
         const omNames = item.selectedOmamoris.map((o) => o.name).join(', ');
         extras.push(
-          `Bùa Omamori: ${omNames}${
+          `${omamoriLabel}: ${omNames}${
             item.selectedOmamoriPrice ? ` (+${item.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''
           }`
         );
@@ -545,7 +551,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                           />
                                         )}
                                         <span className="text-[11px] font-bold text-amber-900">
-                                          Charm: {item.selectedCharm}
+                                          {item.product.charmTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Charm'}: {item.selectedCharm}
                                         </span>
                                       </>
                                     )}
@@ -559,7 +565,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                                 {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
                                   <div className="flex flex-wrap items-center gap-1.5 bg-rose-50/80 border border-rose-200/80 px-2 py-0.5 rounded-lg w-fit">
-                                    <span className="text-[11px] font-bold text-rose-900">Bùa:</span>
+                                    <span className="text-[11px] font-bold text-rose-900">
+                                      {item.product.omamoriTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Bùa'}:
+                                    </span>
                                     {item.selectedOmamoris.map((om, omIdx) => (
                                       <span key={omIdx} className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-900">
                                         {om.image && (
