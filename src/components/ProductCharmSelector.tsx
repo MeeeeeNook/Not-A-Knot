@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ProductCharmOption } from '../types';
 import { Check, Sparkles, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { resolveAssetUrl } from '../firebase';
 
 interface ProductCharmSelectorProps {
   charms: ProductCharmOption[];
@@ -216,7 +217,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
 
                 {charm.image && charm.image.trim() ? (
                   <img
-                    src={charm.image}
+                    src={resolveAssetUrl(charm.image)}
                     alt={charm.name}
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"
                     loading="lazy"

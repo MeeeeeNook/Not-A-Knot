@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
 import {
   initializeFirestore,
   getFirestore,
@@ -87,11 +87,24 @@ const targetDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestor
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(app, {
-    ignoreUndefinedProperties: true
+    ignoreUndefinedProperties: true,
+    experimentalAutoDetectLongPolling: true
   }, targetDbId);
 } catch {
   firestoreInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
 }
+
+export const canonicalOrderKey = (idOrTracking?: string): string => {
+  if (!idOrTracking) return '';
+  const clean = String(idOrTracking).replace(/^#/, '').trim().toUpperCase();
+  if (clean.startsWith('ORD-MAN-') || clean.startsWith('ORD-WEB-')) {
+    const digits = clean.replace(/[^0-9]/g, '');
+    if (digits.length >= 6) {
+      return `NAK-${digits.slice(-6)}`;
+    }
+  }
+  return clean;
+};
 
 export const db = firestoreInstance;
 export const storage = getStorage(app);
@@ -102,6 +115,106 @@ export async function uploadHeroArtwork(file: File, slideId: string, device: 'de
   const snapshot = await uploadBytes(artworkRef, file, { contentType: file.type, cacheControl: 'public,max-age=31536000,immutable' });
   return getDownloadURL(snapshot.ref);
 }
+
+export const uploadBase64ToStorage = async (
+  base64Data: string,
+  storagePath: string
+): Promise<string> => {
+  if (!base64Data || typeof base64Data !== 'string') return base64Data;
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://')) {
+    return base64Data;
+  }
+  if (base64Data.startsWith('data:') || base64Data.length > 300) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      let payload = base64Data;
+      if (!payload.startsWith('data:')) {
+        payload = `data:image/png;base64,${payload}`;
+      }
+      await uploadString(storageRef, payload, 'data_url');
+      const downloadUrl = await getDownloadURL(storageRef);
+      return downloadUrl;
+    } catch (err) {
+      console.warn(`[Firebase Storage] Upload failed for ${storagePath}:`, err);
+      return base64Data;
+    }
+  }
+  return base64Data;
+};
+
+export const uploadProductToFirebaseStorage = async (prod: Product): Promise<Product> => {
+  const updatedProd = { ...prod };
+  const prodId = prod.id;
+
+  // 1. Main image
+  if (updatedProd.image) {
+    updatedProd.image = await uploadBase64ToStorage(updatedProd.image, `products/${prodId}/main.png`);
+  }
+
+  // 2. Images gallery
+  if (Array.isArray(updatedProd.images)) {
+    const uploadedImages: string[] = [];
+    for (let i = 0; i < updatedProd.images.length; i++) {
+      const url = await uploadBase64ToStorage(updatedProd.images[i], `products/${prodId}/gallery_${i}.png`);
+      uploadedImages.push(url);
+    }
+    updatedProd.images = uploadedImages;
+  }
+
+  // 3. Color options
+  if (Array.isArray(updatedProd.colorOptions)) {
+    const updatedColors = [];
+    for (let i = 0; i < updatedProd.colorOptions.length; i++) {
+      const col = { ...updatedProd.colorOptions[i] };
+      if (col.image) {
+        col.image = await uploadBase64ToStorage(col.image, `products/${prodId}/color_${i}.png`);
+      }
+      updatedColors.push(col);
+    }
+    updatedProd.colorOptions = updatedColors;
+  }
+
+  // 4. Charm options
+  if (Array.isArray(updatedProd.charmOptions)) {
+    const updatedCharms = [];
+    for (let i = 0; i < updatedProd.charmOptions.length; i++) {
+      const c = { ...updatedProd.charmOptions[i] };
+      if (c.image) {
+        c.image = await uploadBase64ToStorage(c.image, `products/${prodId}/charm_${c.id || i}.png`);
+      }
+      updatedCharms.push(c);
+    }
+    updatedProd.charmOptions = updatedCharms;
+  }
+
+  // 5. Omamori options
+  if (Array.isArray(updatedProd.omamoriOptions)) {
+    const updatedOmamoris = [];
+    for (let i = 0; i < updatedProd.omamoriOptions.length; i++) {
+      const o = { ...updatedProd.omamoriOptions[i] };
+      if (o.image) {
+        o.image = await uploadBase64ToStorage(o.image, `products/${prodId}/omamori_${o.id || i}.png`);
+      }
+      updatedOmamoris.push(o);
+    }
+    updatedProd.omamoriOptions = updatedOmamoris;
+  }
+
+  // 6. Khoen options
+  if (Array.isArray(updatedProd.khoenOptions)) {
+    const updatedKhoens = [];
+    for (let i = 0; i < updatedProd.khoenOptions.length; i++) {
+      const k = { ...updatedProd.khoenOptions[i] };
+      if (k.image) {
+        k.image = await uploadBase64ToStorage(k.image, `products/${prodId}/khoen_${k.id || i}.png`);
+      }
+      updatedKhoens.push(k);
+    }
+    updatedProd.khoenOptions = updatedKhoens;
+  }
+
+  return updatedProd;
+};
 
 export function isQuotaExhaustedError(err: unknown): boolean {
   if (!err) return false;
@@ -480,6 +593,31 @@ export const clearFirestoreMemoryCache = () => {
 const inMemoryAssetCache = new Map<string, string>();
 
 /**
+ * Safely resolves any image string. If it is an asset token ('asset:...'),
+ * it returns the hydrated base64 image from memory cache, or falls back to a safe placeholder.
+ * It NEVER returns an unresolvable 'asset:...' protocol string to the DOM.
+ */
+export const resolveAssetUrl = (val?: string, fallback = '/assets/bracelet.jpg'): string => {
+  if (!val || typeof val !== 'string') return fallback;
+  if (!val.startsWith('asset:')) return val;
+  const assetId = val.replace('asset:', '');
+  if (inMemoryAssetCache.has(assetId)) {
+    return inMemoryAssetCache.get(assetId)!;
+  }
+  const parts = assetId.split('_');
+  if (parts.length >= 3) {
+    const hashSuffix = parts.slice(-2).join('_');
+    for (const [cachedId, cachedData] of inMemoryAssetCache.entries()) {
+      if (cachedId.endsWith(hashSuffix)) {
+        inMemoryAssetCache.set(assetId, cachedData);
+        return cachedData;
+      }
+    }
+  }
+  return fallback;
+};
+
+/**
  * Extract heavy Base64 image assets from a Product into standalone asset records
  */
 function extractProductAssets(prod: Product): {
@@ -628,37 +766,65 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
   if (stillMissing.length > 0) {
     try {
       recordOperation('read', Math.min(stillMissing.length, 30));
-      const fetchPromises = stillMissing.map(async (assetId) => {
-        try {
-          const docRef = doc(db, 'product_assets', assetId);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data?.isChunked && typeof data.totalChunks === 'number' && data.totalChunks > 0) {
-              // Reassemble chunked asset (>1MB) from product_asset_chunks
-              const chunkPromises = [];
-              for (let i = 0; i < data.totalChunks; i++) {
-                const chkRef = doc(db, 'product_asset_chunks', `${assetId}_chk_${i}`);
-                chunkPromises.push(getDoc(chkRef));
+      // Fetch in controlled batches of 6 to prevent connection throttling
+      const batchSize = 6;
+      for (let i = 0; i < stillMissing.length; i += batchSize) {
+        const chunk = stillMissing.slice(i, i + batchSize);
+        await Promise.all(
+          chunk.map(async (assetId) => {
+            try {
+              const docRef = doc(db, 'product_assets', assetId);
+              const snap = await getDoc(docRef);
+              if (snap.exists()) {
+                const data = snap.data();
+                if (data?.isChunked && typeof data.totalChunks === 'number' && data.totalChunks > 0) {
+                  // Reassemble chunked asset (>1MB) from product_asset_chunks
+                  const chunkPromises = [];
+                  for (let c = 0; c < data.totalChunks; c++) {
+                    const chkRef = doc(db, 'product_asset_chunks', `${assetId}_chk_${c}`);
+                    chunkPromises.push(getDoc(chkRef));
+                  }
+                  const chunkSnaps = await Promise.all(chunkPromises);
+                  const assembled = chunkSnaps.map((s) => (s.exists() ? (s.data()?.data || '') : '')).join('');
+                  if (assembled) {
+                    assetMap.set(assetId, assembled);
+                    inMemoryAssetCache.set(assetId, assembled);
+                    await saveAssetToIDB(assetId, assembled);
+                  }
+                } else if (data?.data && typeof data.data === 'string') {
+                  assetMap.set(assetId, data.data);
+                  inMemoryAssetCache.set(assetId, data.data);
+                  await saveAssetToIDB(assetId, data.data);
+                }
+              } else {
+                // If specific doc was not found, check if an asset with the exact same content hash exists in cache
+                const parts = assetId.split('_');
+                if (parts.length >= 3) {
+                  const hashSuffix = parts.slice(-2).join('_');
+                  for (const [cachedId, cachedData] of inMemoryAssetCache.entries()) {
+                    if (cachedId.endsWith(hashSuffix)) {
+                      assetMap.set(assetId, cachedData);
+                      break;
+                    }
+                  }
+                }
               }
-              const chunkSnaps = await Promise.all(chunkPromises);
-              const assembled = chunkSnaps.map((s) => (s.exists() ? (s.data()?.data || '') : '')).join('');
-              if (assembled) {
-                assetMap.set(assetId, assembled);
-                inMemoryAssetCache.set(assetId, assembled);
-                await saveAssetToIDB(assetId, assembled);
+            } catch (e) {
+              // Check memory cache fallback if Firestore query failed
+              const parts = assetId.split('_');
+              if (parts.length >= 3) {
+                const hashSuffix = parts.slice(-2).join('_');
+                for (const [cachedId, cachedData] of inMemoryAssetCache.entries()) {
+                  if (cachedId.endsWith(hashSuffix)) {
+                    assetMap.set(assetId, cachedData);
+                    break;
+                  }
+                }
               }
-            } else if (data?.data && typeof data.data === 'string') {
-              assetMap.set(assetId, data.data);
-              inMemoryAssetCache.set(assetId, data.data);
-              await saveAssetToIDB(assetId, data.data);
             }
-          }
-        } catch (e) {
-          // ignore individual missing asset
-        }
-      });
-      await Promise.all(fetchPromises);
+          })
+        );
+      }
     } catch (e) {
       console.warn('Lỗi tải tài nguyên ảnh từ Firestore:', e);
     }
@@ -669,8 +835,19 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
     if (!val || typeof val !== 'string') return val;
     if (val.startsWith('asset:')) {
       const assetId = val.replace('asset:', '');
-      const resolved = assetMap.get(assetId);
+      const resolved = assetMap.get(assetId) || inMemoryAssetCache.get(assetId);
       if (resolved) return resolved;
+      // Content hash fallback
+      const parts = assetId.split('_');
+      if (parts.length >= 3) {
+        const hashSuffix = parts.slice(-2).join('_');
+        for (const [cachedId, cachedData] of inMemoryAssetCache.entries()) {
+          if (cachedId.endsWith(hashSuffix)) {
+            assetMap.set(assetId, cachedData);
+            return cachedData;
+          }
+        }
+      }
       return '/assets/bracelet.jpg';
     }
     return val;
@@ -881,77 +1058,15 @@ export const subscribeToProductsFromFirestore = (
  */
 export const saveProductToFirestore = async (prod: Product): Promise<void> => {
   try {
-    // 1. Immediately save complete product with 100% original images to IndexedDB
-    await saveProductToIDB(prod);
+    // 1. Upload all Base64 images directly to Firebase Storage bucket
+    const storageProd = await uploadProductToFirebaseStorage(prod);
 
-    // 2. Extract heavy image assets
-    const { cleanProd, assetDocs } = extractProductAssets(prod);
+    // 2. Save complete product with Firebase Storage URLs to IndexedDB
+    await saveProductToIDB(storageProd);
 
-    // 3. Save all individual image assets to IndexedDB and Firestore in parallel
-    if (assetDocs.length > 0) {
-      const assetUploads = assetDocs.map(async (asset) => {
-        // Save to IndexedDB
-        await saveAssetToIDB(asset.id, asset.data);
-
-        // Save to Firestore `product_assets` collection (auto-chunks if > 600KB to guarantee 100% cloud sync for any file size)
-        try {
-          const uploadData = asset.data;
-          const CHUNK_SIZE = 600000; // ~450KB per chunk, well within Firestore 1MB limit
-
-          if (uploadData.length > CHUNK_SIZE) {
-            const chunks: string[] = [];
-            for (let i = 0; i < uploadData.length; i += CHUNK_SIZE) {
-              chunks.push(uploadData.slice(i, i + CHUNK_SIZE));
-            }
-
-            // Save chunk manifest document
-            const assetRef = doc(db, 'product_assets', asset.id);
-            await setDoc(assetRef, {
-              id: asset.id,
-              productId: asset.productId,
-              isChunked: true,
-              totalChunks: chunks.length,
-              totalLength: uploadData.length,
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-
-            // Save chunk documents in parallel
-            await Promise.all(
-              chunks.map((chkStr, idx) => {
-                const chunkDocRef = doc(db, 'product_asset_chunks', `${asset.id}_chk_${idx}`);
-                return setDoc(chunkDocRef, {
-                  assetId: asset.id,
-                  chunkIndex: idx,
-                  data: chkStr,
-                  updatedAt: new Date().toISOString()
-                }, { merge: true });
-              })
-            );
-
-            recordOperation('write', chunks.length + 1, uploadData.length);
-          } else {
-            // Single document
-            const assetRef = doc(db, 'product_assets', asset.id);
-            await setDoc(assetRef, {
-              id: asset.id,
-              productId: asset.productId,
-              isChunked: false,
-              data: uploadData,
-              updatedAt: new Date().toISOString()
-            }, { merge: true });
-            recordOperation('write', 1, uploadData.length);
-          }
-        } catch (assetErr) {
-          console.warn(`[Firestore Assets] Warning uploading asset ${asset.id}:`, assetErr);
-        }
-      });
-
-      await Promise.all(assetUploads);
-    }
-
-    // 4. Save lightweight product document to `products` collection
-    const docRef = doc(db, 'products', prod.id);
-    const payload = cleanFirestoreData(cleanProd);
+    // 3. Save lightweight product document to `products` collection with direct Storage URLs
+    const docRef = doc(db, 'products', storageProd.id);
+    const payload = cleanFirestoreData(storageProd);
     const prodSize = JSON.stringify(payload).length;
 
     await setDoc(docRef, payload, { merge: true });
@@ -1002,6 +1117,39 @@ export const deleteProductFromFirestore = async (productId: string): Promise<voi
 // ----------------------------------------------------
 // Firestore Orders CRUD
 // ----------------------------------------------------
+/**
+ * Deduplicates orders list by canonical ID or tracking number.
+ * Unifies any ord-man-* legacy IDs with their canonical NAK-* IDs.
+ */
+export const deduplicateStoredOrders = (ordersList: StoredOrder[]): StoredOrder[] => {
+  const map = new Map<string, StoredOrder>();
+  for (const ord of ordersList) {
+    if (!ord) continue;
+    const key = canonicalOrderKey(ord.id) || canonicalOrderKey(ord.trackingNumber) || ord.id;
+    if (!key) continue;
+    if (map.has(key)) {
+      const existing = map.get(key)!;
+      const preferOrd = (ord.id.startsWith('NAK-') && !existing.id.startsWith('NAK-')) ||
+        (new Date(ord.createdAt || ord.date || 0).getTime() >= new Date(existing.createdAt || existing.date || 0).getTime());
+      const base = preferOrd ? ord : existing;
+      const other = preferOrd ? existing : ord;
+      map.set(key, {
+        ...other,
+        ...base,
+        id: (base.id.startsWith('NAK-') ? base.id : (other.id.startsWith('NAK-') ? other.id : base.id)),
+        trackingNumber: base.trackingNumber || other.trackingNumber || key
+      });
+    } else {
+      map.set(key, ord);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+    return timeB - timeA;
+  });
+};
+
 export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
   try {
     recordOperation('read');
@@ -1053,14 +1201,7 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
       recordOperation('read');
     });
 
-    // In-memory stable sort by descending timestamp
-    results.sort((a, b) => {
-      const timeA = new Date(a.createdAt || a.date || 0).getTime();
-      const timeB = new Date(b.createdAt || b.date || 0).getTime();
-      return timeB - timeA;
-    });
-
-    return results;
+    return deduplicateStoredOrders(results);
   } catch (err) {
     console.error('Lỗi tải đơn hàng từ Firestore:', err);
     return [];
@@ -1092,14 +1233,15 @@ function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
 }
 
 export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> => {
-  const orderId = (order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
+  const canonicalId = canonicalOrderKey(order.id) || canonicalOrderKey(order.trackingNumber);
+  const orderId = (canonicalId || order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
   const docRef = doc(db, 'orders', orderId);
 
-  // 1. Bank receipt image is only kept if explicitly uploaded as proof of payment
+  // 1. Bank receipt image is uploaded directly to Firebase Storage bucket under receipts/
   let receiptImage = order.bankReceiptImage;
-  if (receiptImage && receiptImage.startsWith('data:image/')) {
+  if (receiptImage && (receiptImage.startsWith('data:image/') || receiptImage.length > 300) && !receiptImage.startsWith('http')) {
     try {
-      receiptImage = await compressBase64Image(receiptImage, 800, 800, 0.75);
+      receiptImage = await uploadBase64ToStorage(receiptImage, `receipts/${orderId}_receipt.png`);
     } catch {
       // ignore
     }
@@ -1153,6 +1295,15 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
       const orderSize = JSON.stringify(payload).length;
       await setDoc(docRef, payload, { merge: true });
       recordOperation('write', 1, orderSize);
+
+      // Also backup JSON file to Firebase Storage under orders/details/ and master backup
+      try {
+        const orderJsonRef = ref(storage, `orders/details/${orderId}.json`);
+        await uploadString(orderJsonRef, JSON.stringify(payload, null, 2), 'raw', { contentType: 'application/json' });
+      } catch (stErr) {
+        console.warn('Storage order backup error:', stErr);
+      }
+
       return; // Succeeded!
     } catch (err: any) {
       lastErr = err;
@@ -1362,9 +1513,9 @@ export const subscribeToOrdersFromFirestore = (
             statusHistory: data.statusHistory || []
           });
         });
-        // Sort descending by createdAt
-        results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        callback(results);
+        // Deduplicate and sort descending by createdAt
+        const deduplicated = deduplicateStoredOrders(results);
+        callback(deduplicated);
       },
       (error) => {
         console.warn('Real-time orders snapshot error:', error);
@@ -1497,8 +1648,15 @@ export const saveCategoryToFirestore = async (category: CategoryItem): Promise<v
   try {
     const docRef = doc(db, 'categories', category.id);
     const isCatHidden = category.isHidden === true || String(category.isHidden) === 'true';
+
+    let bannerImage = category.bannerImage;
+    if (bannerImage && (bannerImage.startsWith('data:image/') || bannerImage.length > 300) && !bannerImage.startsWith('http')) {
+      bannerImage = await uploadBase64ToStorage(bannerImage, `categories/${category.id}/banner.png`);
+    }
+
     const payload = cleanFirestoreData({
       ...category,
+      bannerImage,
       isHidden: isCatHidden,
       updatedAt: new Date().toISOString()
     });
@@ -1626,23 +1784,23 @@ export const saveCollectionToFirestore = async (collectionItem: CollectionInfo):
     const docRef = doc(db, 'collections', collectionItem.id);
 
     let bgImage = collectionItem.bgImage;
-    if (bgImage && bgImage.startsWith('data:image/')) {
-      bgImage = await compressBase64Image(bgImage, 1200, 800, 0.80);
+    if (bgImage && (bgImage.startsWith('data:image/') || bgImage.length > 300) && !bgImage.startsWith('http')) {
+      bgImage = await uploadBase64ToStorage(bgImage, `collections/${collectionItem.id}/bg.png`);
     }
 
     let bannerImage = collectionItem.bannerImage;
-    if (bannerImage && bannerImage.startsWith('data:image/')) {
-      bannerImage = await compressBase64Image(bannerImage, 1200, 800, 0.80);
+    if (bannerImage && (bannerImage.startsWith('data:image/') || bannerImage.length > 300) && !bannerImage.startsWith('http')) {
+      bannerImage = await uploadBase64ToStorage(bannerImage, `collections/${collectionItem.id}/banner.png`);
     }
 
     let horizontalImage = collectionItem.horizontalImage;
-    if (horizontalImage && horizontalImage.startsWith('data:image/')) {
-      horizontalImage = await compressBase64Image(horizontalImage, 1200, 800, 0.80);
+    if (horizontalImage && (horizontalImage.startsWith('data:image/') || horizontalImage.length > 300) && !horizontalImage.startsWith('http')) {
+      horizontalImage = await uploadBase64ToStorage(horizontalImage, `collections/${collectionItem.id}/horizontal.png`);
     }
 
     let productPageBanner = collectionItem.productPageBanner;
-    if (productPageBanner && productPageBanner.startsWith('data:image/')) {
-      productPageBanner = await compressBase64Image(productPageBanner, 1200, 800, 0.80);
+    if (productPageBanner && (productPageBanner.startsWith('data:image/') || productPageBanner.length > 300) && !productPageBanner.startsWith('http')) {
+      productPageBanner = await uploadBase64ToStorage(productPageBanner, `collections/${collectionItem.id}/product_page.png`);
     }
 
     const isColHidden = collectionItem.isHidden === true || String(collectionItem.isHidden) === 'true';

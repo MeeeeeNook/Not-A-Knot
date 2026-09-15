@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ProductKhoenOption } from '../types';
 import { Check, CircleDot, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { resolveAssetUrl } from '../firebase';
 
 interface ProductKhoenSelectorProps {
   khoenOptions: ProductKhoenOption[];
@@ -165,7 +166,7 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
 
                 {khoen.image && khoen.image.trim() ? (
                   <img
-                    src={khoen.image}
+                    src={resolveAssetUrl(khoen.image)}
                     alt={khoen.name}
                     className="w-full h-full object-contain p-1 transition-transform duration-200 hover:scale-105"
                     loading="lazy"

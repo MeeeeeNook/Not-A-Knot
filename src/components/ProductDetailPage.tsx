@@ -28,6 +28,7 @@ import {
   ZoomIn
 } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
+import { resolveAssetUrl } from '../firebase';
 import { useProductSEO } from '../utils/seo';
 
 interface ProductDetailPageProps {
@@ -188,7 +189,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const images = useMemo(() => {
     const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
     const filtered = rawList.filter((img) => typeof img === 'string' && img.trim().length > 0);
-    return filtered.length > 0 ? filtered : ['/assets/bracelet.jpg'];
+    const resolved = filtered.map((img) => resolveAssetUrl(img));
+    return resolved.length > 0 ? resolved : ['/assets/bracelet.jpg'];
   }, [product.images, product.image]);
 
   const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);

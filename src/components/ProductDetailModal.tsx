@@ -10,6 +10,7 @@ import { ProductColorSelector } from './ProductColorSelector';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { X, Check, ShoppingBag, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
+import { resolveAssetUrl } from '../firebase';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -106,7 +107,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     const validBase = rawList.filter(
       (img) => typeof img === 'string' && img.trim().length > 0
     );
-    return validBase.length > 0 ? validBase : ['/assets/bracelet.jpg'];
+    const resolved = validBase.map((img) => resolveAssetUrl(img));
+    return resolved.length > 0 ? resolved : ['/assets/bracelet.jpg'];
   }, [product.images, product.image]);
 
   const [compareModalOpen, setCompareModalOpen] = useState(false);

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ProductOmamoriOption } from '../types';
 import { Check, Flame, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { resolveAssetUrl } from '../firebase';
 
 interface ProductOmamoriSelectorProps {
   omamoris: ProductOmamoriOption[];
@@ -215,7 +216,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
 
                 {omamori.image && omamori.image.trim() ? (
                   <img
-                    src={omamori.image}
+                    src={resolveAssetUrl(omamori.image)}
                     alt={omamori.name}
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"
                     loading="lazy"

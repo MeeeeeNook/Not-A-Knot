@@ -72,6 +72,8 @@ import {
   saveCollectionsToFirestore,
   saveSiteContentToFirestore,
   clearFirestoreMemoryCache,
+  canonicalOrderKey,
+  resolveAssetUrl,
   StoredOrder
 } from '../firebase';
 import { safeStorageSetItem, safeStorageGetItem } from '../utils/storageHelper';
@@ -680,8 +682,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   }, [currentSeller]);
 
   const normalizeOrderKey = (str?: string): string => {
-    if (!str) return '';
-    return str.replace(/^#/, '').trim().toUpperCase();
+    return canonicalOrderKey(str);
   };
 
   const mergeOrderLists = (primary: StoredOrder[], secondary: StoredOrder[]): StoredOrder[] => {
@@ -702,11 +703,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       if (existingKey) {
         const existing = map.get(existingKey)!;
+        const canonicalId = (ord.id.startsWith('NAK-') ? ord.id : (existing.id.startsWith('NAK-') ? existing.id : ord.id));
         const merged: StoredOrder = {
           ...existing,
           ...ord,
-          id: ord.id || existing.id,
-          trackingNumber: ord.trackingNumber || existing.trackingNumber || ord.id || existing.id,
+          id: canonicalId,
+          trackingNumber: canonicalId,
           name: ord.name || ord.customerName || existing.name || existing.customerName || '',
           customerName: ord.customerName || ord.name || existing.customerName || existing.name || '',
           phone: ord.phone || existing.phone || '',
@@ -722,7 +724,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         };
         map.set(existingKey, merged);
       } else {
-        map.set(primaryKey, ord);
+        const canonicalId = canonicalOrderKey(ord.id) || ord.id;
+        map.set(primaryKey, {
+          ...ord,
+          id: canonicalId.startsWith('NAK-') ? canonicalId : ord.id,
+          trackingNumber: ord.trackingNumber || canonicalId
+        });
       }
     };
 
@@ -761,7 +768,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         safeStorageSetItem('nak_preorders', JSON.stringify(merged));
       }
 
-      // Auto-sync any unsynced local-only orders up to Firestore in background
+      // Auto-sync any truly new local-only orders up to Firestore in background
       if (dbOrders && localOrders.length > 0) {
         const dbIdSet = new Set(dbOrders.map((o) => normalizeOrderKey(o.id || o.trackingNumber)));
         const unsynced = localOrders.filter((o) => {

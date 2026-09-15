@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo } from '../types';
 import { DEFAULT_CATEGORIES } from '../data/categories';
+import { resolveAssetUrl } from '../firebase';
 
 export interface ProductCardProps {
   product: Product;
@@ -106,10 +107,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       const valid = product.images.filter(
         (img) => typeof img === 'string' && img.trim().length > 0
       );
-      if (valid.length > 0) return valid;
+      if (valid.length > 0) return valid.map((img) => resolveAssetUrl(img));
     }
     if (product.image && typeof product.image === 'string' && product.image.trim().length > 0) {
-      return [product.image];
+      return [resolveAssetUrl(product.image)];
     }
     return ['/assets/bracelet.jpg'];
   }, [product]);

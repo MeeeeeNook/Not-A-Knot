@@ -1,6 +1,7 @@
 import React from 'react';
 import { ProductColorOption } from '../types';
 import { Palette, Check, AlertCircle } from 'lucide-react';
+import { resolveAssetUrl } from '../firebase';
 
 interface ProductColorSelectorProps {
   colors: (ProductColorOption | string)[];
@@ -78,7 +79,7 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
               {opt.image && opt.image.trim() ? (
                 <div className="relative w-5 h-5 rounded-lg overflow-hidden flex-shrink-0">
                   <img
-                    src={opt.image}
+                    src={resolveAssetUrl(opt.image)}
                     alt={opt.name}
                     className={`w-full h-full object-cover border ${
                       isSelected ? 'border-white/50' : 'border-neutral-200'
