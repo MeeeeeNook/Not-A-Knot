@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import {
   initializeFirestore,
   getFirestore,
@@ -216,6 +216,36 @@ export const syncLocalStorageOrderDeletion = (orderId: string, permanent: boolea
   } catch {}
 };
 
+export const purgeAllDeletedOrdersFromLocalStorage = (orderIds?: string[]) => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  const keys = ['nak_preorders', 'nak_orders', 'nak_custom_orders'];
+
+  keys.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const list: StoredOrder[] = JSON.parse(raw);
+      if (!Array.isArray(list)) return;
+
+      const updated = list.filter((ord) => {
+        if (!ord) return false;
+        if (ord.isDeleted === true || (ord as any).deleted === true) return false;
+        if (orderIds && orderIds.length > 0) {
+          if (orderIds.some((id) => isMatchingOrderDoc(id, ord.id || '', ord))) return false;
+        }
+        return true;
+      });
+      safeStorageSetItem(key, JSON.stringify(updated));
+    } catch {}
+  });
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent('nak_order_deleted', { detail: { orderIds, permanent: true } })
+    );
+  } catch {}
+};
+
 export const db = firestoreInstance;
 export const storage = getStorage(app);
 
@@ -238,10 +268,19 @@ export const uploadBase64ToStorage = async (
     try {
       const storageRef = ref(storage, storagePath);
       let payload = base64Data;
+      let contentType = 'image/png';
       if (!payload.startsWith('data:')) {
         payload = `data:image/png;base64,${payload}`;
+      } else {
+        const mimeMatch = payload.match(/^data:([^;]+);base64,/);
+        if (mimeMatch && mimeMatch[1]) {
+          contentType = mimeMatch[1];
+        }
       }
-      await uploadString(storageRef, payload, 'data_url');
+      await uploadString(storageRef, payload, 'data_url', {
+        contentType,
+        cacheControl: 'public,max-age=31536000,immutable'
+      });
       const downloadUrl = await getDownloadURL(storageRef);
       return downloadUrl;
     } catch (err) {
@@ -657,6 +696,9 @@ export interface StoredOrder {
   totalAmount?: number;
   shippingFee?: number;
   discountAmount?: number;
+  voucherCode?: string;
+  voucherDiscountAmount?: number;
+  voucherType?: 'freeship' | 'percent';
   craftingStageNote?: string;
   source?: 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other';
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
@@ -874,13 +916,13 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
     }
   }
 
-  // 3. For any remaining missing assets (e.g., opened on a new device or cleared cache), fetch from Firestore `product_assets`
+  // 3. For any remaining missing assets (e.g., opened on a new device or cleared cache), fetch from Firestore `product_assets` in parallel
   const stillMissing = Array.from(neededAssetIds).filter((id) => !assetMap.has(id));
   if (stillMissing.length > 0) {
     try {
       recordOperation('read', Math.min(stillMissing.length, 30));
-      // Fetch in controlled batches of 6 to prevent connection throttling
-      const batchSize = 6;
+      // Fetch in concurrent batches for maximum throughput
+      const batchSize = 20;
       for (let i = 0; i < stillMissing.length; i += batchSize) {
         const chunk = stillMissing.slice(i, i + batchSize);
         await Promise.all(
@@ -902,12 +944,12 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
                   if (assembled) {
                     assetMap.set(assetId, assembled);
                     inMemoryAssetCache.set(assetId, assembled);
-                    await saveAssetToIDB(assetId, assembled);
+                    saveAssetToIDB(assetId, assembled).catch(() => {});
                   }
                 } else if (data?.data && typeof data.data === 'string') {
                   assetMap.set(assetId, data.data);
                   inMemoryAssetCache.set(assetId, data.data);
-                  await saveAssetToIDB(assetId, data.data);
+                  saveAssetToIDB(assetId, data.data).catch(() => {});
                 }
               } else {
                 // If specific doc was not found, check if an asset with the exact same content hash exists in cache
@@ -1314,6 +1356,9 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         totalAmount: data.totalAmount !== undefined ? Number(data.totalAmount) : (Number(data.totalPrice) || 0),
         shippingFee: Number(data.shippingFee) || 0,
         discountAmount: Number(data.discountAmount) || 0,
+        voucherCode: data.voucherCode || undefined,
+        voucherDiscountAmount: data.voucherDiscountAmount !== undefined ? Number(data.voucherDiscountAmount) : undefined,
+        voucherType: data.voucherType || undefined,
         craftingStageNote: data.craftingStageNote || '',
         source: data.source || 'website',
         type: data.type || 'standard_order',
@@ -1466,8 +1511,10 @@ export const saveOrdersToFirestore = async (ordersList: StoredOrder[]): Promise<
 };
 
 export const saveProductsToFirestore = async (productsList: Product[]): Promise<void> => {
-  for (const p of productsList) {
-    await saveProductToFirestore(p);
+  const batchSize = 6;
+  for (let i = 0; i < productsList.length; i += batchSize) {
+    const chunk = productsList.slice(i, i + batchSize);
+    await Promise.all(chunk.map((p) => saveProductToFirestore(p)));
   }
 };
 
@@ -1801,7 +1848,7 @@ export const deleteOrderPermanently = async (orderId: string): Promise<void> => 
     const cleanUpper = cleanId.toUpperCase();
     const candidates = resolveAllOrderIdCandidates(orderId);
 
-    // 1. Direct deletions for candidates
+    // 1. Direct document deletions for all candidate IDs in Firestore
     const deletePromises: Promise<any>[] = [
       deleteDoc(doc(db, 'orders', orderId)).catch(() => {}),
       deleteDoc(doc(db, 'orders', cleanId)).catch(() => {}),
@@ -1810,21 +1857,25 @@ export const deleteOrderPermanently = async (orderId: string): Promise<void> => 
 
     candidates.forEach((candId) => {
       deletePromises.push(deleteDoc(doc(db, 'orders', candId)).catch(() => {}));
+      deletePromises.push(deleteDoc(doc(db, 'orders', candId.replace(/^#/, ''))).catch(() => {}));
     });
 
-    // 2. Query collection and delete ANY doc that matches this order
+    // 2. Query Firestore collection and delete ANY doc that matches this order
     const colRef = collection(db, 'orders');
     const snap = await getDocs(colRef);
     snap.forEach((docSnap) => {
       const d = docSnap.data();
       if (isMatchingOrderDoc(orderId, docSnap.id, d)) {
         deletePromises.push(deleteDoc(docSnap.ref));
+        deletePromises.push(deleteObject(ref(storage, `orders/details/${docSnap.id}.json`)).catch(() => {}));
+        deletePromises.push(deleteObject(ref(storage, `orders/details/${docSnap.id.replace(/^#/, '')}.json`)).catch(() => {}));
       }
     });
 
-    // 3. Clean from Storage
+    // 3. Clean from Firebase Storage for all potential candidate paths
     candidates.forEach((candId) => {
       deletePromises.push(deleteObject(ref(storage, `orders/details/${candId}.json`)).catch(() => {}));
+      deletePromises.push(deleteObject(ref(storage, `orders/details/${candId.replace(/^#/, '')}.json`)).catch(() => {}));
     });
     deletePromises.push(deleteObject(ref(storage, `orders/details/${orderId}.json`)).catch(() => {}));
     deletePromises.push(deleteObject(ref(storage, `orders/details/${cleanId}.json`)).catch(() => {}));
@@ -1833,6 +1884,7 @@ export const deleteOrderPermanently = async (orderId: string): Promise<void> => 
 
     // 4. Remove completely from all local storage caches
     syncLocalStorageOrderDeletion(orderId, true);
+    purgeAllDeletedOrdersFromLocalStorage([orderId]);
     ordersMemoryCache = null;
     recordOperation('delete', 1, -900);
   } catch (err) {
@@ -1846,41 +1898,108 @@ export const emptyOrderTrash = async (orderIds?: string[]): Promise<void> => {
     const colRef = collection(db, 'orders');
     const snap = await getDocs(colRef);
     const deletePromises: Promise<any>[] = [];
+    const isSpecificBatch = Boolean(orderIds && orderIds.length > 0);
 
-    const targetSet = orderIds && orderIds.length > 0 ? new Set(orderIds.map((id) => id.toUpperCase())) : null;
+    // Resolve all target candidate IDs
+    const allTargets = new Set<string>();
+    if (isSpecificBatch && orderIds) {
+      orderIds.forEach((id) => {
+        allTargets.add(id);
+        const candidates = resolveAllOrderIdCandidates(id);
+        candidates.forEach((c) => allTargets.add(c));
+      });
+    }
 
     snap.forEach((docSnap) => {
       const d = docSnap.data();
       const isDeletedFlag = d.isDeleted === true || d.deleted === true;
       let shouldDelete = false;
 
-      if (isDeletedFlag) {
-        shouldDelete = true;
-      } else if (targetSet) {
-        if (
-          targetSet.has(docSnap.id.toUpperCase()) ||
-          targetSet.has((d.id || '').toUpperCase()) ||
-          targetSet.has((d.trackingNumber || '').toUpperCase())
-        ) {
-          shouldDelete = true;
-        }
+      if (isSpecificBatch && orderIds) {
+        shouldDelete = orderIds.some((id) => isMatchingOrderDoc(id, docSnap.id, d));
+      } else {
+        shouldDelete = isDeletedFlag;
       }
 
       if (shouldDelete) {
+        // 1. Delete document from Firestore
         deletePromises.push(deleteDoc(docSnap.ref));
+
+        // 2. Delete detail JSON and receipt files from Firebase Storage
         deletePromises.push(deleteObject(ref(storage, `orders/details/${docSnap.id}.json`)).catch(() => {}));
+        deletePromises.push(deleteObject(ref(storage, `orders/details/${docSnap.id.replace(/^#/, '')}.json`)).catch(() => {}));
+        if (d.id) {
+          deletePromises.push(deleteObject(ref(storage, `orders/details/${d.id}.json`)).catch(() => {}));
+          deletePromises.push(deleteObject(ref(storage, `orders/details/${String(d.id).replace(/^#/, '')}.json`)).catch(() => {}));
+        }
+        if (d.trackingNumber) {
+          deletePromises.push(deleteObject(ref(storage, `orders/details/${d.trackingNumber}.json`)).catch(() => {}));
+          deletePromises.push(deleteObject(ref(storage, `orders/details/${String(d.trackingNumber).replace(/^#/, '')}.json`)).catch(() => {}));
+        }
+        if (d.bankReceiptImage) {
+          deletePromises.push(deleteObject(ref(storage, `receipts/${docSnap.id}_receipt.png`)).catch(() => {}));
+          deletePromises.push(deleteObject(ref(storage, `receipts/${String(d.id || docSnap.id).replace(/^#/, '')}_receipt.png`)).catch(() => {}));
+        }
       }
     });
 
+    // Direct deletion for all candidate ID keys
+    allTargets.forEach((targetId) => {
+      deletePromises.push(deleteDoc(doc(db, 'orders', targetId)).catch(() => {}));
+      deletePromises.push(deleteDoc(doc(db, 'orders', targetId.replace(/^#/, ''))).catch(() => {}));
+      deletePromises.push(deleteObject(ref(storage, `orders/details/${targetId}.json`)).catch(() => {}));
+      deletePromises.push(deleteObject(ref(storage, `orders/details/${targetId.replace(/^#/, '')}.json`)).catch(() => {}));
+      deletePromises.push(deleteObject(ref(storage, `receipts/${targetId}_receipt.png`)).catch(() => {}));
+      deletePromises.push(deleteObject(ref(storage, `receipts/${targetId.replace(/^#/, '')}_receipt.png`)).catch(() => {}));
+    });
+
+    // 3. Scan Storage orders/details folder directly to purge any lingering order JSON files
+    try {
+      const folderRef = ref(storage, 'orders/details');
+      const fileList = await listAll(folderRef);
+      for (const itemRef of fileList.items) {
+        const itemName = itemRef.name.replace(/\.json$/i, '');
+        let shouldDeleteStorageFile = false;
+        if (!isSpecificBatch) {
+          // Empty all trash -> delete all storage files
+          shouldDeleteStorageFile = true;
+        } else if (orderIds) {
+          shouldDeleteStorageFile = orderIds.some((id) => {
+            const clean = id.replace(/^#/, '').toLowerCase();
+            const cand = itemName.replace(/^#/, '').toLowerCase();
+            return cand === clean || cand.includes(clean) || clean.includes(cand);
+          });
+        }
+        if (shouldDeleteStorageFile) {
+          deletePromises.push(deleteObject(itemRef).catch(() => {}));
+        }
+      }
+    } catch {
+      // Storage listing may be empty
+    }
+
+    await Promise.allSettled(deletePromises);
+
+    // 4. Thoroughly purge all matching or deleted items from local storage caches
     if (orderIds && orderIds.length > 0) {
       orderIds.forEach((id) => {
         syncLocalStorageOrderDeletion(id, true);
       });
     }
+    purgeAllDeletedOrdersFromLocalStorage(orderIds);
 
-    await Promise.allSettled(deletePromises);
+    // 5. Invalidate memory cache & record operation
     ordersMemoryCache = null;
-    recordOperation('delete', deletePromises.length || 1, -900);
+    recordOperation('delete', Math.max(1, deletePromises.length), -900);
+
+    // 6. Broadcast deletion event
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('nak_order_deleted', { detail: { orderIds, permanent: true } })
+        );
+      } catch {}
+    }
   } catch (err) {
     console.error('Lỗi dọn sạch thùng rác:', err);
     throw err;

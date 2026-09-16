@@ -348,10 +348,10 @@ export const generateOrderSlipHtml = (
         <span>Phí vận chuyển:</span>
         <strong style="color:${shippingFee > 0 ? '#0f172a' : '#15803d'};">${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí (Freeship)'}</strong>
       </div>
-      ${discount > 0 ? `
+      ${discount > 0 || order.voucherCode ? `
       <div class="summary-row">
-        <span>Giảm giá / Ưu đãi:</span>
-        <strong style="color:#15803d;">-${discount.toLocaleString('vi-VN')}đ</strong>
+        <span>Giảm giá / Voucher${order.voucherCode ? ` (${order.voucherCode})` : ''}:</span>
+        <strong style="color:#15803d;">-${(order.voucherDiscountAmount || discount).toLocaleString('vi-VN')}đ</strong>
       </div>` : ''}
       <div class="summary-total">
         <span>TỔNG TIỀN THANH TOÁN:</span>
@@ -444,7 +444,7 @@ ${itemsList}
 THANH TOÁN:
 Tạm tính tiền hàng: ${itemsSubtotal.toLocaleString('vi-VN')}đ
 Phí vận chuyển: ${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí (0đ)'}
-${discount > 0 ? `Giảm giá: -${discount.toLocaleString('vi-VN')}đ\n` : ''}TỔNG THANH TOÁN: ${total.toLocaleString('vi-VN')}đ
+${discount > 0 || order.voucherCode ? `Giảm giá / Voucher${order.voucherCode ? ` (${order.voucherCode})` : ''}: -${(order.voucherDiscountAmount || discount).toLocaleString('vi-VN')}đ\n` : ''}TỔNG THANH TOÁN: ${total.toLocaleString('vi-VN')}đ
 Hình thức: ${order.paymentMethod === 'bank_transfer' ? 'Chuyển khoản VietQR' : order.paymentMethod === 'cash' ? 'Tiền mặt tại xưởng' : 'Thu tiền khi nhận hàng (COD)'}
 Trạng thái: ${order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu COD'}
 

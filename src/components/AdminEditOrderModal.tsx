@@ -179,6 +179,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   );
   const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 0);
   const [discountAmount, setDiscountAmount] = useState<number>(order.discountAmount || 0);
+  const [voucherCode, setVoucherCode] = useState<string>(order.voucherCode || '');
   const [customTotalOverride, setCustomTotalOverride] = useState<string>(
     order.totalPrice !== undefined && order.totalPrice !== null ? String(order.totalPrice) : ''
   );
@@ -410,6 +411,9 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         bankTransferRef: bankTransferRef.trim() || undefined,
         shippingFee: Number(shippingFee) || 0,
         discountAmount: Number(discountAmount) || 0,
+        voucherCode: voucherCode.trim() ? voucherCode.trim().toUpperCase() : undefined,
+        voucherDiscountAmount: Number(discountAmount) || undefined,
+        voucherType: order.voucherType,
         totalPrice: finalTotal,
         totalAmount: finalTotal,
         paidAmount: paymentStatus === 'paid' ? finalTotal : 0,
@@ -1047,6 +1051,28 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
 
               {/* Shipping Fee, Discount & Total Amount Breakdown */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                {/* Voucher display & edit row */}
+                <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-xs font-bold text-amber-950">Mã giảm giá (Voucher) sử dụng:</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={voucherCode}
+                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                      placeholder="Mã voucher (VD: KNOT10)"
+                      className="px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs font-mono uppercase font-black text-amber-950 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    />
+                    {order.voucherType && (
+                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 shrink-0">
+                        {order.voucherType === 'freeship' ? 'Freeship' : 'Giảm %'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">

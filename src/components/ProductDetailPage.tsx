@@ -714,7 +714,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
               onClick={() => setProductCompareModalOpen(true)}
-              className="relative aspect-square max-h-[320px] sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto cursor-zoom-in"
+              className="relative aspect-square max-h-[250px] sm:max-h-[440px] max-w-[250px] sm:max-w-none rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto cursor-zoom-in"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}

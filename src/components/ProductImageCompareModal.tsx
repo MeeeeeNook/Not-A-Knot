@@ -32,12 +32,20 @@ export const ProductImageCompareModal: React.FC<ProductImageCompareModalProps> =
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
-  // Sync index on open
+  // Sync index on open & broadcast zoom state so chat widget and other floating elements hide
   useEffect(() => {
     if (isOpen) {
       const validIdx = Math.max(0, Math.min(initialIndex, items.length - 1));
       setCurrentIndex(validIdx);
+      window.dispatchEvent(new CustomEvent('nak-image-zoom-opened'));
+    } else {
+      window.dispatchEvent(new CustomEvent('nak-image-zoom-closed'));
     }
+    return () => {
+      if (isOpen) {
+        window.dispatchEvent(new CustomEvent('nak-image-zoom-closed'));
+      }
+    };
   }, [isOpen, initialIndex, items.length]);
 
   const handlePrev = useCallback(() => {

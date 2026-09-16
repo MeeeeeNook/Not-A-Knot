@@ -153,8 +153,8 @@ export interface SellerUser {
   username: string;
   usernameHash?: string;
   name: string;
-  passwordHash: string;
-  passwordSalt: string;
+  passwordHash?: string;
+  passwordSalt?: string;
   isRootAdmin?: boolean;
   role: 'root_admin' | 'member';
   isActive: boolean;
@@ -187,6 +187,9 @@ export interface OrderRecord {
   totalAmount?: number;
   shippingFee?: number;
   discountAmount?: number;
+  voucherCode?: string;
+  voucherDiscountAmount?: number;
+  voucherType?: 'freeship' | 'percent';
   craftingStageNote?: string;
   source?: OrderSource;
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
@@ -502,4 +505,23 @@ export interface SystemLogItem {
   status?: string; // e.g. "success", "blocked_geo", "failed_password"
   metadata?: Record<string, any>;
   isResolved?: boolean;
+}
+
+export type VoucherType = 'freeship' | 'percent';
+
+export interface Voucher {
+  id: string;
+  code: string; // Stored uppercase
+  type: VoucherType; // 'freeship' | 'percent'
+  discountPercent?: number; // e.g., 10 for 10%
+  minOrderValue?: number; // Min subtotal required (in VND)
+  maxDiscountAmount?: number; // Cap on discount (in VND) for percent vouchers
+  startDate?: string; // ISO date string or YYYY-MM-DD
+  endDate?: string; // ISO date string or YYYY-MM-DD
+  isActive: boolean;
+  usageCount?: number;
+  encryptedData?: string; // Encrypted / hashed validation integrity payload
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
 }

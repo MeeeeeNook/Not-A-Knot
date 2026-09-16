@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CartItem, SiteContentConfig } from '../types';
 import { 
@@ -22,12 +22,15 @@ import {
   Building2,
   MapPin,
   Gift,
-  RefreshCw
+  RefreshCw,
+  Ticket,
+  Tag
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
+import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -74,6 +77,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
   const [confirmedTotalAmount, setConfirmedTotalAmount] = useState<number>(0);
 
+  // Voucher states
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherDiscountAmount, setVoucherDiscountAmount] = useState<number>(0);
+  const [isFreeShippingVoucher, setIsFreeShippingVoucher] = useState<boolean>(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
+  const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
+
+  useEffect(() => {
+    getVouchers().then(setAvailableVouchers).catch(() => {});
+  }, []);
+
   const bankConfig = siteContent?.bankAccount || {
     bankId: 'VCB',
     bankName: 'Vietcombank',
@@ -103,7 +119,55 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
-  const grandTotal = subtotal + shippingFee;
+  // Recalculate voucher discount whenever subtotal or availableVouchers changes
+  useEffect(() => {
+    if (appliedVoucher) {
+      const res = validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee);
+      if (res.isValid) {
+        setVoucherDiscountAmount(res.discountAmount);
+        setIsFreeShippingVoucher(res.isFreeShipping);
+        setVoucherError(null);
+      } else {
+        setAppliedVoucher(null);
+        setVoucherDiscountAmount(0);
+        setIsFreeShippingVoucher(false);
+        setVoucherError(res.message || 'Voucher không còn thỏa điều kiện.');
+        setVoucherSuccessMsg(null);
+      }
+    }
+  }, [subtotal, shippingFee, appliedVoucher, availableVouchers]);
+
+  const handleApplyVoucher = () => {
+    setVoucherError(null);
+    setVoucherSuccessMsg(null);
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Vui lòng nhập mã voucher.');
+      return;
+    }
+    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee);
+    if (!res.isValid || !res.voucher) {
+      setVoucherError(res.message || 'Mã voucher không hợp lệ.');
+      return;
+    }
+    setAppliedVoucher(res.voucher);
+    setVoucherDiscountAmount(res.discountAmount);
+    setIsFreeShippingVoucher(res.isFreeShipping);
+    setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherDiscountAmount(0);
+    setIsFreeShippingVoucher(false);
+    setVoucherInput('');
+    setVoucherError(null);
+    setVoucherSuccessMsg(null);
+  };
+
+  const effectiveShippingFee = isFreeShippingVoucher ? 0 : shippingFee;
+  const discountedSubtotal = Math.max(0, subtotal - voucherDiscountAmount);
+  const grandTotal = discountedSubtotal + effectiveShippingFee;
 
   const formatCartItemsText = () => {
     return cartItems.map((item) => {
@@ -279,7 +343,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       province: province.trim(),
       district: district.trim(),
       detailedAddress: detailedAddress.trim(),
-      shippingFee: contactMethod === 'facebook' ? 0 : shippingFee,
+      shippingFee: contactMethod === 'facebook' ? 0 : effectiveShippingFee,
+      voucherCode: appliedVoucher?.code || undefined,
+      voucherDiscountAmount: voucherDiscountAmount > 0 ? voucherDiscountAmount : undefined,
+      voucherType: appliedVoucher?.type || undefined,
       note: note ? `${note} (Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})` : `(Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})`,
       items: formattedItems,
       itemDetails,
@@ -864,6 +931,61 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   </div>
 
+                  {/* Voucher Input Box */}
+                  <div className="p-3.5 rounded-2xl border border-amber-200 bg-amber-50/60 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
+                      <Ticket className="w-4 h-4 text-amber-600" />
+                      <span>Mã giảm giá / Ưu đãi</span>
+                    </div>
+
+                    {appliedVoucher ? (
+                      <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-amber-300 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-xs text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                            {appliedVoucher.code}
+                          </span>
+                          <span className="text-xs font-bold text-emerald-700">
+                            {isFreeShippingVoucher ? 'Freeship 0đ' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveVoucher}
+                          className="text-xs font-bold text-neutral-400 hover:text-rose-600 px-2 py-1 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={voucherInput}
+                          onChange={(e) => {
+                            setVoucherInput(e.target.value.toUpperCase());
+                            setVoucherError(null);
+                          }}
+                          placeholder="Nhập mã voucher (VD: KNOT10)"
+                          className="flex-1 px-3 py-2 bg-white border border-neutral-300 focus:border-neutral-950 rounded-xl text-xs font-mono uppercase font-bold text-neutral-950 placeholder:font-sans placeholder:font-normal focus:outline-none shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleApplyVoucher}
+                          className="px-3.5 py-2 bg-neutral-950 hover:bg-neutral-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+                        >
+                          Áp dụng
+                        </button>
+                      </div>
+                    )}
+
+                    {voucherError && (
+                      <p className="text-[11px] font-bold text-rose-600">{voucherError}</p>
+                    )}
+                    {voucherSuccessMsg && !voucherError && (
+                      <p className="text-[11px] font-bold text-emerald-700">{voucherSuccessMsg}</p>
+                    )}
+                  </div>
+
                   {/* Payment Method Banner */}
                   <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-neutral-900 text-white flex items-center justify-center flex-shrink-0 font-bold text-xs">
@@ -882,20 +1004,32 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <span className="font-bold text-neutral-950 font-mono">{subtotal.toLocaleString('vi-VN')}đ</span>
                     </div>
 
+                    {voucherDiscountAmount > 0 && (
+                      <div className="flex justify-between items-center text-emerald-700 font-medium">
+                        <span className="flex items-center gap-1.5">
+                          <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                          Giảm giá Voucher ({appliedVoucher?.code}):
+                        </span>
+                        <span className="font-bold font-mono">
+                          -{voucherDiscountAmount.toLocaleString('vi-VN')}đ
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center text-neutral-700">
                       <span className="flex items-center gap-1.5">
                         <Truck className="w-3.5 h-3.5 text-neutral-500" />
                         Phí vận chuyển:
                       </span>
                       <span className="font-bold font-mono text-neutral-950">
-                        {shippingInfo.isPending ? 'Chưa tính' : shippingInfo.isFree ? '0đ' : `${shippingFee.toLocaleString('vi-VN')}đ`}
+                        {shippingInfo.isPending ? 'Chưa tính' : (shippingInfo.isFree || isFreeShippingVoucher) ? '0đ (Miễn phí)' : `${shippingFee.toLocaleString('vi-VN')}đ`}
                       </span>
                     </div>
 
                     <div className="flex justify-between items-center pt-2.5 border-t border-neutral-200 text-sm">
                       <span className="font-bold text-neutral-950">Tổng thanh toán:</span>
                       <span className="font-black text-neutral-950 text-base font-mono">
-                        {(subtotal + (shippingInfo.isPending ? 0 : shippingFee)).toLocaleString('vi-VN')}đ
+                        {grandTotal.toLocaleString('vi-VN')}đ
                       </span>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { Product } from '../types';
 
-export const GA_MEASUREMENT_ID = 'G-MWTDSVH9ER';
+export const GA_MEASUREMENT_ID = 'G-G8Z5Z8R1CF';
 export const GA_DASHBOARD_URL = 'https://analytics.google.com/analytics/web/#/';
 
 // ========================================================

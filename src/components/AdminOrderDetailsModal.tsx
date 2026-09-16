@@ -303,6 +303,32 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               </div>
             </div>
 
+            {/* Voucher Information Row */}
+            {(order.voucherCode || (order.voucherDiscountAmount && order.voucherDiscountAmount > 0) || discountAmount > 0) && (
+              <div className="mt-2.5 p-2.5 bg-amber-50/90 border border-amber-300 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-amber-950 flex items-center gap-1">
+                    🎟️ Mã giảm giá (Voucher):
+                  </span>
+                  {order.voucherCode ? (
+                    <span className="font-mono font-black text-xs text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-300">
+                      {order.voucherCode}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500 italic">Chiết khấu trực tiếp</span>
+                  )}
+                  {order.voucherType && (
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                      {order.voucherType === 'freeship' ? 'Miễn phí vận chuyển' : 'Giảm giá %'}
+                    </span>
+                  )}
+                </div>
+                <div className="font-bold text-emerald-700 font-mono text-xs">
+                  Giảm: -{(order.voucherDiscountAmount || discountAmount || 0).toLocaleString('vi-VN')}đ
+                </div>
+              </div>
+            )}
+
             {/* Bill Receipt Image (if present) */}
             {order.bankReceiptImage && order.bankReceiptImage.trim() && (
               <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-3 bg-white p-3 rounded-lg border border-slate-200">

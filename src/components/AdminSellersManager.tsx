@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { SellerUser, SystemLogItem } from '../types';
 import { StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore } from '../firebase';
-import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser } from '../utils/auth';
+import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser, verifyAdminAction } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
 interface AdminSellersManagerProps {
@@ -142,7 +142,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         const key = matchedSeller.username.toLowerCase();
         if (!map[key]) map[key] = { totalOrders: 0, totalRevenue: 0, completedOrders: 0 };
         map[key].totalOrders += 1;
-        map[key].totalRevenue += (o.totalPrice || o.totalAmount || 0);
+        const netAmt = Math.max(0, (o.totalPrice || o.totalAmount || 0) - (Number(o.shippingFee) || 0));
+        map[key].totalRevenue += netAmt;
         if (o.status === 'completed' || o.status === 'Đã giao') {
           map[key].completedOrders += 1;
         }
@@ -324,6 +325,12 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       return;
     }
 
+    const authorized = await verifyAdminAction('change_password', seller.id);
+    if (!authorized) {
+      alert('Thao tác đổi mật khẩu bị từ chối: Phiên làm việc không có đủ quyền.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const salt = generateSalt();
@@ -355,6 +362,12 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       return;
     }
 
+    const authorized = await verifyAdminAction('toggle_seller_status', seller.id);
+    if (!authorized) {
+      alert('Thao tác thay đổi trạng thái bị từ chối: Phiên làm việc không có đủ quyền.');
+      return;
+    }
+
     const nextState = !seller.isActive;
     try {
       const updatedSeller: SellerUser = { ...seller, isActive: nextState };
@@ -371,6 +384,13 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   const handleConfirmDelete = async (seller: SellerUser) => {
     if (isRootAdminUser(seller)) {
       alert('Không thể xóa tài khoản Quản trị viên gốc.');
+      setDeletingSellerId(null);
+      return;
+    }
+
+    const authorized = await verifyAdminAction('delete_seller', seller.id);
+    if (!authorized) {
+      alert('Thao tác xóa người bán bị từ chối: Bạn không có quyền Root Admin.');
       setDeletingSellerId(null);
       return;
     }

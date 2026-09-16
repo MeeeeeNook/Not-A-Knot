@@ -56,6 +56,27 @@ interface AdminDashboardProps {
   onNavigateToManualOrder: () => void;
 }
 
+// Helper to calculate net merchandise revenue strictly excluding shipping fees
+function getOrderNetRevenue(o: StoredOrder): number {
+  const rawTotal = o.totalPrice ?? o.totalAmount ?? 0;
+  const shipping = Number(o.shippingFee) || 0;
+  return Math.max(0, rawTotal - shipping);
+}
+
+function getOrderPaidRevenue(o: StoredOrder): number {
+  const netTotal = getOrderNetRevenue(o);
+  if (o.paymentStatus === 'paid') {
+    return netTotal;
+  }
+  const rawTotal = o.totalPrice ?? o.totalAmount ?? 0;
+  const paidRaw = Number(o.paidAmount) || 0;
+  if (rawTotal > 0) {
+    if (paidRaw >= rawTotal) return netTotal;
+    return Math.max(0, Math.round(paidRaw * (netTotal / rawTotal)));
+  }
+  return Math.max(0, paidRaw - (Number(o.shippingFee) || 0));
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   products,
@@ -121,11 +142,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return timeFilteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
   }, [timeFilteredOrders]);
 
-  // Overall Team Gross Revenue
+  // Overall Team Gross Revenue (excluding shipping fees)
   const teamGrossRevenue = useMemo(() => {
     return teamValidOrders.reduce((sum, o) => {
-      const amt = o.totalPrice ?? o.totalAmount ?? 0;
-      return sum + amt;
+      return sum + getOrderNetRevenue(o);
     }, 0);
   }, [teamValidOrders]);
 
@@ -164,10 +184,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const norm = (str: string) =>
       str.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // 2. Tally from orders
+    // 2. Tally from orders (net revenue excluding shipping fees)
     teamValidOrders.forEach((o) => {
-      const amt = o.totalPrice ?? o.totalAmount ?? 0;
-      const paid = o.paymentStatus === 'paid' ? amt : (o.paidAmount || 0);
+      const amt = getOrderNetRevenue(o);
+      const paid = getOrderPaidRevenue(o);
       const isCompleted = o.status === 'completed' || o.status === 'Đã giao';
 
       const isLockedSource = o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee';
@@ -375,22 +395,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return filteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
   }, [filteredOrders]);
 
-  // 1. Total Gross Revenue
+  // 1. Total Gross Revenue (merchandise revenue excluding shipping fees)
   const totalGrossRevenue = useMemo(() => {
     return validOrders.reduce((sum, o) => {
-      const amt = o.totalPrice ?? o.totalAmount ?? 0;
-      return sum + amt;
+      return sum + getOrderNetRevenue(o);
     }, 0);
   }, [validOrders]);
 
-  // 2. Real Collected Revenue
+  // 2. Real Collected Revenue (excluding shipping fees)
   const totalPaidRevenue = useMemo(() => {
     return validOrders.reduce((sum, o) => {
-      if (o.paymentStatus === 'paid') {
-        const amt = o.totalPrice ?? o.totalAmount ?? 0;
-        return sum + amt;
-      }
-      return sum + (o.paidAmount || 0);
+      return sum + getOrderPaidRevenue(o);
     }, 0);
   }, [validOrders]);
 
@@ -414,7 +429,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, 0);
   }, [validOrders]);
 
-  // 6. Average Order Value (AOV)
+  // 6. Average Order Value (AOV - merchandise value excluding shipping)
   const averageOrderValue = useMemo(() => {
     if (validOrders.length === 0) return 0;
     return Math.round(totalGrossRevenue / validOrders.length);
@@ -426,7 +441,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return Math.round((completedOrdersCount / validOrders.length) * 100);
   }, [validOrders, completedOrdersCount]);
 
-  // 8. Revenue by Channel
+  // 8. Revenue by Channel (excluding shipping fees)
   const sourceMetrics = useMemo(() => {
     const counts: Record<string, { count: number; revenue: number; label: string }> = {
       website: { count: 0, revenue: 0, label: 'Website Trực Tuyến' },
@@ -436,7 +451,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     validOrders.forEach((o) => {
       const src = o.source || 'website';
-      const amt = o.totalPrice ?? o.totalAmount ?? 0;
+      const amt = getOrderNetRevenue(o);
       if (src === 'website') {
         counts.website.count++;
         counts.website.revenue += amt;
@@ -457,7 +472,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }));
   }, [validOrders, totalGrossRevenue]);
 
-  // 9. Payment Methods Breakdown
+  // 9. Payment Methods Breakdown (excluding shipping fees)
   const paymentMetrics = useMemo(() => {
     let bankTransfer = { count: 0, revenue: 0 };
     let cod = { count: 0, revenue: 0 };
@@ -465,7 +480,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     let billAttachedCount = 0;
 
     validOrders.forEach((o) => {
-      const amt = o.totalPrice ?? o.totalAmount ?? 0;
+      const amt = getOrderNetRevenue(o);
       if (o.bankReceiptImage) billAttachedCount++;
 
       const method = o.paymentMethod || (o.bankReceiptImage ? 'bank_transfer' : 'cash');
@@ -687,22 +702,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         
         {/* Total Gross Revenue */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Tổng Doanh Thu
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+              Tổng Doanh Thu
+            </span>
+            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
+              Không tính phí ship
+            </span>
+          </div>
           <span className="text-2xl font-bold text-slate-900 block mt-2">
             {totalGrossRevenue.toLocaleString('vi-VN')}đ
           </span>
           <div className="text-xs text-slate-500 mt-1">
-            Tính trên <strong>{validOrders.length} đơn hợp lệ</strong>
+            Doanh thu sản phẩm trên <strong>{validOrders.length} đơn hợp lệ</strong>
           </div>
         </div>
 
         {/* Real Collected / Paid Revenue */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Doanh Thu Thực Thu
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+              Doanh Thu Thực Thu
+            </span>
+            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+              Sản phẩm
+            </span>
+          </div>
           <span className="text-2xl font-bold text-slate-900 block mt-2">
             {totalPaidRevenue.toLocaleString('vi-VN')}đ
           </span>

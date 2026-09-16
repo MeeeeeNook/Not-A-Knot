@@ -122,9 +122,10 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
       ? Math.max(analytics.totalPageViews, filteredDaily.reduce((acc: number, d: DailyActivityStat) => acc + (Number(d.pageViews) || 0), 0))
       : filteredDaily.reduce((acc: number, d: DailyActivityStat) => acc + (Number(d.pageViews) || 0), 0);
     
-    // Real orders count from actual orders array
-    const totalOrders: number = orders.length;
-    const totalRevenue: number = orders.reduce((sum: number, ord: StoredOrder) => sum + (ord.totalPrice || ord.totalAmount || 0), 0);
+    // Real orders count from actual orders array (net merchandise revenue excluding shipping)
+    const validOrders = orders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
+    const totalOrders: number = validOrders.length;
+    const totalRevenue: number = validOrders.reduce((sum: number, ord: StoredOrder) => sum + Math.max(0, (ord.totalPrice || ord.totalAmount || 0) - (Number(ord.shippingFee) || 0)), 0);
 
     const estimatedSessions: number = Math.max(1, Math.round(totalViews / 1.8));
     const avgDurationSeconds: number = totalViews > 0 ? Math.min(240, 45 + Math.round((totalViews % 50) * 2)) : 0;

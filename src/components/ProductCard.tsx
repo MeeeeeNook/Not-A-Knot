@@ -119,40 +119,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [direction, setDirection] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
+  const [isInView, setIsInView] = useState(true);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // Lazy loading observer: loads image resources ahead of time (600px margin)
+  // Preload primary image as soon as product card mounts
   useEffect(() => {
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      setIsInView(true);
-      return;
+    if (images[0] && typeof window !== 'undefined') {
+      const preloadImg = new Image();
+      preloadImg.src = images[0];
+      if (preloadImg.complete && preloadImg.naturalWidth > 0) {
+        setIsLoaded(true);
+      }
     }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '600px 0px', threshold: 0.01 }
-    );
-
-    if (cardRef.current) {
-      observer.observe(cardRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
+  }, [images]);
 
   // Quick detect if image is already cached in memory
   useEffect(() => {
     if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
       setIsLoaded(true);
     }
-  }, [images, isInView]);
+  }, [images]);
 
   // Photos are STATIC by default. When mouse hovers, gentle smooth pacing auto-slide through photos.
   useEffect(() => {
@@ -274,10 +261,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   setIsLoaded(true);
                 }}
                 className={`w-full h-full object-cover transition-opacity duration-200 ${
-                  isLoaded ? 'opacity-100' : 'opacity-0'
+                  isLoaded || (images[0] && (images[0].startsWith('data:') || images[0].startsWith('/'))) ? 'opacity-100' : 'opacity-90'
                 } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
-                loading="lazy"
+                loading="eager"
                 decoding="async"
               />
             )

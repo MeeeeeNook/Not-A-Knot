@@ -15,7 +15,12 @@ import {
   MapPin,
   Tag
 } from 'lucide-react';
-import { restoreOrderFromTrash, deleteOrderPermanently, emptyOrderTrash } from '../../firebase';
+import {
+  restoreOrderFromTrash,
+  deleteOrderPermanently,
+  emptyOrderTrash,
+  isMatchingOrderDoc
+} from '../../firebase';
 
 interface AdminTrashPageProps {
   orders: StoredOrder[];
@@ -124,7 +129,7 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
-            onUpdateOrders(orders.filter((o) => o.id !== orderId));
+            onUpdateOrders(orders.filter((o) => !isMatchingOrderDoc(orderId, o.id || '', o)));
           }
           await deleteOrderPermanently(orderId);
           onNotify(`✓ Đã xóa vĩnh viễn đơn hàng #${orderId}.`);
@@ -143,7 +148,6 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
   const confirmDeleteSelectedPermanently = () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    const idsSet = new Set(selectedIds);
     setConfirmModal({
       type: 'delete_batch',
       title: `Xóa vĩnh viễn ${count} đơn hàng đã chọn?`,
@@ -152,7 +156,9 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
-            onUpdateOrders(orders.filter((o) => !o.id || !idsSet.has(o.id)));
+            onUpdateOrders(
+              orders.filter((o) => !selectedIds.some((id) => isMatchingOrderDoc(id, o.id || '', o)))
+            );
           }
           await emptyOrderTrash(selectedIds);
           onNotify(`✓ Đã xóa vĩnh viễn ${count} đơn hàng!`);
@@ -173,7 +179,6 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
     if (deletedOrders.length === 0) return;
     const count = deletedOrders.length;
     const allIds = deletedOrders.map((o) => o.id!).filter(Boolean);
-    const allIdsSet = new Set(allIds);
     setConfirmModal({
       type: 'empty_all',
       title: `Dọn sạch Thùng rác (${count} đơn)?`,
@@ -182,7 +187,9 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
-            onUpdateOrders(orders.filter((o) => !o.id || !allIdsSet.has(o.id)));
+            onUpdateOrders(
+              orders.filter((o) => !o.isDeleted && !allIds.some((id) => isMatchingOrderDoc(id, o.id || '', o)))
+            );
           }
           await emptyOrderTrash(allIds);
           onNotify(`✓ Đã dọn sạch ${count} đơn hàng khỏi Thùng rác!`);

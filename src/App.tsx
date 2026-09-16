@@ -22,9 +22,10 @@ import { DEFAULT_SITE_CONTENT } from './data/siteContent';
 import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import { AdminLoginModal } from './components/AdminLoginModal';
-import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers } from './utils/auth';
+import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
+import { useAdminPresence } from './hooks/useAdminPresence';
 
 // Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
 const AdminPage = React.lazy(() =>
@@ -241,6 +242,17 @@ export default function App() {
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
         setCurrentView('admin');
+        // Cryptographically verify session token with server in background
+        verifySessionWithServer().then((verifiedUser) => {
+          if (verifiedUser && verifiedUser.username) {
+            setCurrentSeller(verifiedUser as SellerUser);
+          } else {
+            setCurrentSeller(null);
+            setIsAdminLoginModalOpen(true);
+            setCurrentView('landing');
+            window.location.hash = '#home';
+          }
+        });
       } else {
         setIsAdminLoginModalOpen(true);
         setCurrentView('landing');
@@ -315,10 +327,24 @@ export default function App() {
     }
   }, []);
 
-  // Initialize anti-inspection, DevTools protection, and global client error telemetry
+  // Initialize anti-inspection, DevTools protection, global client error telemetry & server token verification
   useEffect(() => {
     initGlobalErrorLogging();
     const cleanupProtection = initDevToolsProtection();
+
+    // Verify cryptographic signature of admin session token on startup
+    verifySessionWithServer().then((verifiedUser) => {
+      if (verifiedUser && verifiedUser.username) {
+        setCurrentSeller(verifiedUser as SellerUser);
+      } else {
+        setCurrentSeller(null);
+        if (window.location.hash.includes('admin')) {
+          setCurrentView('landing');
+          setIsAdminLoginModalOpen(true);
+        }
+      }
+    });
+
     return () => {
       cleanupProtection();
     };
@@ -409,26 +435,8 @@ export default function App() {
     initSellers();
   }, [isAdminLoginModalOpen, currentSeller]);
 
-  // Online presence heartbeat for active admin/seller
-  useEffect(() => {
-    if (!currentSeller || !currentSeller.id) return;
-
-    // Send immediate presence update
-    updateSellerPresence(currentSeller.id, {
-      lastSeenAt: new Date().toISOString()
-    }).catch(() => {});
-
-    // Periodic heartbeat every 45 seconds while admin is in the session
-    const heartbeatInterval = setInterval(() => {
-      updateSellerPresence(currentSeller.id, {
-        lastSeenAt: new Date().toISOString()
-      }).catch(() => {});
-    }, 45000);
-
-    return () => {
-      clearInterval(heartbeatInterval);
-    };
-  }, [currentSeller]);
+  // Online presence, public IP detection (ipapi.co) and heartbeat for active admin/seller
+  useAdminPresence(currentSeller);
 
   // Cross-tab / Multi-device Instant Broadcast Synchronization Helper
   const broadcastStoreChange = (type: 'products' | 'categories' | 'collections' | 'siteContent', data: any) => {

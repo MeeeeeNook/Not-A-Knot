@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
 import { SellerUser } from '../types';
-import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH, isRootAdminUsername, hashUsername } from '../utils/auth';
+import { loginWithServer, ROOT_ADMIN_USERNAME, isRootAdminUsername, hashUsername } from '../utils/auth';
 import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
 import { updateSellerPresence } from '../firebase';
@@ -85,145 +85,64 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
       );
 
-      // Check root admin credentials with secure salted hash (supports hashed username verification)
-      const isRootUser = await isRootAdminUsername(cleanUsername);
-      if (isRootUser) {
-        const isRootValid = await verifyPassword(cleanPassword, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH);
-        if (isRootValid) {
-          const devInfo = getClientDeviceInfo();
-          const nowIso = new Date().toISOString();
-          const rootUser: SellerUser = {
-            ...(matchedSeller || {
-              id: `seller-${ROOT_ADMIN_USERNAME}`,
-              username: ROOT_ADMIN_USERNAME,
-              usernameHash: await hashUsername(ROOT_ADMIN_USERNAME),
-              name: 'Mạnh Cường',
-              passwordHash: ROOT_ADMIN_HASH,
-              passwordSalt: ROOT_ADMIN_SALT,
-              isRootAdmin: true,
-              role: 'root_admin',
-              isActive: true,
-              createdAt: nowIso,
-              avatarColor: '#B41C1A'
-            }),
-            lastLoginAt: nowIso,
-            lastSeenAt: nowIso,
-            lastLoginIp: geo.ip,
-            lastLoginCity: geo.city || geo.region || 'Hà Nội',
-            lastLoginCountry: geo.country || 'Vietnam',
-            lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-          };
+      // Perform server-side authentication (Rate-limited, never exposes hash or compares on client)
+      const loginRes = await loginWithServer(cleanUsername, cleanPassword, matchedSeller, rememberMe);
 
-          await logAdminLogin({
-            username: ROOT_ADMIN_USERNAME,
-            name: 'Mạnh Cường',
-            isRoot: true,
-            status: 'success',
-            customGeo: geo
-          });
-
-          await updateSellerPresence(rootUser.id, {
-            lastLoginAt: nowIso,
-            lastSeenAt: nowIso,
-            lastLoginIp: geo.ip,
-            lastLoginCity: geo.city || geo.region || 'Hà Nội',
-            lastLoginCountry: geo.country || 'Vietnam',
-            lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-          });
-
-          saveAdminSession(rootUser, rememberMe);
-          setIsLoading(false);
-          onLoginSuccess(rootUser);
-          return;
-        } else {
-          await logAdminLogin({
-            username: cleanUsername,
-            name: 'Mạnh Cường',
-            isRoot: true,
-            status: 'failed_password',
-            customGeo: geo
-          });
-          setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      if (!matchedSeller) {
+      if (!loginRes.success || !loginRes.user) {
         await logAdminLogin({
           username: cleanUsername,
+          name: matchedSeller?.name || cleanUsername,
           status: 'failed_password',
           customGeo: geo,
-          reason: `Tài khoản không tồn tại`
+          reason: loginRes.error || 'Mật khẩu hoặc tài khoản không hợp lệ'
         });
-        setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
+        setErrorMessage(loginRes.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
         setIsLoading(false);
         return;
       }
 
-      if (!matchedSeller.isActive) {
-        await logAdminLogin({
+      // Success authenticated by server JWT
+      const devInfo = getClientDeviceInfo();
+      const nowIso = new Date().toISOString();
+      const authenticatedUser: SellerUser = {
+        ...(matchedSeller || {
+          id: loginRes.user.id || `seller-${cleanUsername}`,
           username: cleanUsername,
-          name: matchedSeller.name,
-          status: 'failed_password',
-          customGeo: geo,
-          reason: `Tài khoản đang bị tạm khóa`
-        });
-        setErrorMessage('Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.');
-        setIsLoading(false);
-        return;
-      }
+          name: loginRes.user.name || cleanUsername,
+          role: loginRes.user.role || (loginRes.user.isRootAdmin ? 'root_admin' : 'member'),
+          isRootAdmin: Boolean(loginRes.user.isRootAdmin),
+          isActive: true,
+          createdAt: nowIso,
+          avatarColor: loginRes.user.avatarColor || '#B41C1A'
+        }),
+        ...(loginRes.user as any),
+        lastLoginAt: nowIso,
+        lastSeenAt: nowIso,
+        lastLoginIp: geo.ip,
+        lastLoginCity: geo.city || geo.region || 'Hà Nội',
+        lastLoginCountry: geo.country || 'Vietnam',
+        lastDevice: `${devInfo.browser} trên ${devInfo.os}`
+      };
 
-      // Verify hashed password
-      const isValid = await verifyPassword(
-        cleanPassword,
-        matchedSeller.passwordSalt,
-        matchedSeller.passwordHash
-      );
+      await logAdminLogin({
+        username: authenticatedUser.username,
+        name: authenticatedUser.name,
+        isRoot: Boolean(authenticatedUser.isRootAdmin),
+        status: 'success',
+        customGeo: geo
+      });
 
-      if (isValid) {
-        const devInfo = getClientDeviceInfo();
-        const nowIso = new Date().toISOString();
-        const updatedSeller: SellerUser = {
-          ...matchedSeller,
-          lastLoginAt: nowIso,
-          lastSeenAt: nowIso,
-          lastLoginIp: geo.ip,
-          lastLoginCity: geo.city || geo.region || 'Hà Nội',
-          lastLoginCountry: geo.country || 'Vietnam',
-          lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-        };
+      await updateSellerPresence(authenticatedUser.id, {
+        lastLoginAt: nowIso,
+        lastSeenAt: nowIso,
+        lastLoginIp: geo.ip,
+        lastLoginCity: geo.city || geo.region || 'Hà Nội',
+        lastLoginCountry: geo.country || 'Vietnam',
+        lastDevice: `${devInfo.browser} trên ${devInfo.os}`
+      });
 
-        await logAdminLogin({
-          username: matchedSeller.username,
-          name: matchedSeller.name,
-          isRoot: Boolean(matchedSeller.isRootAdmin),
-          status: 'success',
-          customGeo: geo
-        });
-
-        await updateSellerPresence(matchedSeller.id, {
-          lastLoginAt: nowIso,
-          lastSeenAt: nowIso,
-          lastLoginIp: geo.ip,
-          lastLoginCity: geo.city || geo.region || 'Hà Nội',
-          lastLoginCountry: geo.country || 'Vietnam',
-          lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-        });
-
-        saveAdminSession(updatedSeller, rememberMe);
-        setIsLoading(false);
-        onLoginSuccess(updatedSeller);
-      } else {
-        await logAdminLogin({
-          username: matchedSeller.username,
-          name: matchedSeller.name,
-          status: 'failed_password',
-          customGeo: geo
-        });
-        setErrorMessage('Tên đăng nhập hoặc mật khẩu không chính xác.');
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+      onLoginSuccess(authenticatedUser);
     } catch {
       setErrorMessage('Có lỗi xảy ra khi xác thực. Vui lòng thử lại.');
       setIsLoading(false);

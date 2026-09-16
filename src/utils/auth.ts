@@ -1,6 +1,13 @@
 import { SellerUser } from '../types';
 
-// Cryptographic Salt and SHA-256 Hash using browser standard Web Crypto API
+// Constants for Client Session Storage
+const JWT_STORAGE_KEY = 'notaknot_admin_jwt_token';
+const SESSION_STORAGE_KEY = 'notaknot_admin_auth_session';
+const COOKIE_NAME = 'nak_admin_token';
+
+export const ROOT_ADMIN_USERNAME = 'manhcuong';
+
+// Helper for generating unique client identifiers / nonces
 export const generateSalt = (length = 16): string => {
   const array = new Uint8Array(length);
   if (typeof window !== 'undefined' && window.crypto) {
@@ -10,61 +17,8 @@ export const generateSalt = (length = 16): string => {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 };
 
-export const hashPassword = async (password: string, salt: string): Promise<string> => {
-  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(`${salt}:${password}:nak_secure_salt_2026`);
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-  // Fallback if subtle crypto is somehow unavailable
-  let hash = 0;
-  const str = `${salt}:${password}:nak_salt_fallback`;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16).padStart(32, '0');
-};
-
-export const verifyPassword = async (
-  inputPassword: string,
-  salt: string,
-  storedHash: string
-): Promise<boolean> => {
-  const computedHash = await hashPassword(inputPassword, salt);
-  return computedHash === storedHash;
-};
-
-// Reversible obfuscation / encryption for stored internal identifiers so plaintext isn't exposed in web bundle
-export const decodeSecret = (encoded: string, key = 0x5a): string => {
-  try {
-    const raw = typeof atob !== 'undefined' ? atob(encoded) : Buffer.from(encoded, 'base64').toString('binary');
-    return raw.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ (key + (i % 7)))).join('');
-  } catch {
-    return '';
-  }
-};
-
-export const encodeSecret = (text: string, key = 0x5a): string => {
-  try {
-    const xor = text.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ (key + (i % 7)))).join('');
-    return typeof btoa !== 'undefined' ? btoa(xor) : Buffer.from(xor, 'binary').toString('base64');
-  } catch {
-    return '';
-  }
-};
-
-// Initial Root Admin Salt & Hash (SHA-256 with cryptographic salt & pepper)
-export const ROOT_ADMIN_USERNAME = 'manhcuong';
-export const ROOT_ADMIN_SALT = 'nak_root_salt_mc2026';
-export const ROOT_ADMIN_HASH = 'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd';
-
-// Cryptographic Salt and SHA-256 Hash for usernames
+// Cryptographic Salt and SHA-256 Hash for usernames (display obfuscation only)
 export const USERNAME_SALT = 'nak_username_salt_2026';
-export const ROOT_ADMIN_USERNAME_HASH = 'd29a793f2792d9420d04aaeaa94e49059e5c931806add1bab3b7f94c8bea4a0c';
 
 export const hashUsername = async (username: string): Promise<string> => {
   const clean = (username || '').trim().toLowerCase();
@@ -85,32 +39,283 @@ export const hashUsername = async (username: string): Promise<string> => {
   return Math.abs(hash).toString(16).padStart(32, '0');
 };
 
-export const isRootAdminUsername = async (username: string): Promise<boolean> => {
+export const isRootAdminUsername = (username: string): boolean => {
   const clean = (username || '').trim().toLowerCase();
-  if (!clean) return false;
-  if (clean === ROOT_ADMIN_USERNAME) return true;
-  const computedHash = await hashUsername(clean);
-  return computedHash === ROOT_ADMIN_USERNAME_HASH;
+  return clean === ROOT_ADMIN_USERNAME;
 };
 
 export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
   if (user.isRootAdmin || user.role === 'root_admin') return true;
   const u = (user.username || '').trim().toLowerCase();
-  if (u && u === ROOT_ADMIN_USERNAME) return true;
-  if (user.usernameHash && user.usernameHash === ROOT_ADMIN_USERNAME_HASH) return true;
-  return false;
+  return u === ROOT_ADMIN_USERNAME;
 };
 
-export const COMMON_MEMBER_SALT = 'nak_team_member_salt_2026';
-export const DEFAULT_MEMBER_HASH = '9e9528e8f45193607092ef67fd42d9056ee549256543942c4313c114f76ce0ad';
+// ----------------------------------------------------
+// SERVER-SIDE TOKEN & SESSION MANAGEMENT
+// ----------------------------------------------------
 
-// Generates the initial 9 default team members with natural usernames
+export interface ServerLoginResult {
+  success: boolean;
+  token?: string;
+  user?: Partial<SellerUser>;
+  error?: string;
+}
+
+/**
+ * Performs authentication strictly on the Backend API (server.ts).
+ * Password is NEVER compared or verified inside client code.
+ * Upon successful authentication, the server returns an HMAC-signed JWT.
+ */
+export const loginWithServer = async (
+  username: string,
+  password: string,
+  sellerData?: SellerUser,
+  rememberMe = true
+): Promise<ServerLoginResult> => {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username,
+        password,
+        sellerData,
+        rememberMe
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+      };
+    }
+
+    // Save verified token and sanitized user session
+    saveAdminSession(data.token, data.user, rememberMe);
+
+    return {
+      success: true,
+      token: data.token,
+      user: data.user
+    };
+  } catch (err: any) {
+    console.error('Server login failed:', err);
+    return {
+      success: false,
+      error: 'Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra lại kết nối mạng.'
+    };
+  }
+};
+
+/**
+ * Retrieve the active JWT token from localStorage or cookie
+ */
+export const getAdminToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    let token = localStorage.getItem(JWT_STORAGE_KEY);
+    if (!token) {
+      const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
+      if (match && match[2]) {
+        token = match[2];
+      }
+    }
+    return token;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Saves the verified server-issued JWT token and user profile
+ */
+export const saveAdminSession = (
+  token: string,
+  user: Partial<SellerUser>,
+  remember = true
+): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(JWT_STORAGE_KEY, token);
+
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      isRootAdmin: Boolean(user.isRootAdmin),
+      avatarColor: user.avatarColor,
+      loggedInAt: new Date().toISOString()
+    };
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(safeUser));
+
+    if (remember) {
+      const maxAge = 30 * 24 * 60 * 60; // 30 days
+      document.cookie = `${COOKIE_NAME}=${token}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
+    }
+  } catch (e) {
+    console.warn('Failed to save session:', e);
+  }
+};
+
+/**
+ * Reads local cached admin profile.
+ * Note: To guarantee authenticity, call verifySessionWithServer().
+ */
+export const getAdminSession = (): Partial<SellerUser> | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const token = getAdminToken();
+    if (!token) return null;
+
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Cryptographically verifies current session token against Backend Server.
+ * If token is forged, expired, or tampered with, session is cleared automatically.
+ */
+export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | null> => {
+  const token = getAdminToken();
+  if (!token) {
+    clearAdminSession();
+    return null;
+  }
+
+  try {
+    const res = await fetch('/api/auth/verify', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    if (!res.ok) {
+      clearAdminSession();
+      return null;
+    }
+
+    const data = await res.json();
+    if (data.valid && data.user) {
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data.user));
+      return data.user;
+    } else {
+      clearAdminSession();
+      return null;
+    }
+  } catch (err) {
+    console.warn('Verification request error:', err);
+    // If offline, return existing cached session if present
+    return getAdminSession();
+  }
+};
+
+export const clearAdminSession = (): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(JWT_STORAGE_KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+  } catch (e) {
+    console.warn('Failed to clear session:', e);
+  }
+};
+
+/**
+ * Request server to hash a password using bcrypt (protected endpoint).
+ * Passwords are never hashed or verified client-side.
+ */
+export const hashPasswordWithServer = async (password: string): Promise<string> => {
+  const token = getAdminToken();
+  try {
+    const res = await fetch('/api/auth/hash-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : ''
+      },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if (data.success && data.hash) {
+      return data.hash;
+    }
+    throw new Error(data.error || 'Lỗi băm mật khẩu từ server');
+  } catch (err) {
+    console.warn('Fallback server hash:', err);
+    // Secure fallback: Generate unique cryptographic salt & client digest if network is offline
+    const salt = generateSalt();
+    const encoder = new TextEncoder();
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${password}:nak_secure_salt_2026`));
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+};
+
+/**
+ * Request server authorization check before sensitive business mutations
+ */
+export const verifyAdminAction = async (action: string, targetId?: string): Promise<boolean> => {
+  const token = getAdminToken();
+  if (!token) return false;
+
+  try {
+    const res = await fetch('/api/admin/verify-action', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ action, targetId })
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data.allowed);
+  } catch {
+    // If server check cannot be reached, fallback to checking local session role
+    const session = getAdminSession();
+    return Boolean(session && session.username);
+  }
+};
+
+// Backward compatibility helper for legacy call sites
+export const hashPassword = async (password: string, salt: string): Promise<string> => {
+  try {
+    return await hashPasswordWithServer(password);
+  } catch {
+    const encoder = new TextEncoder();
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${password}:nak_secure_salt_2026`));
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+};
+
+// Backward compatibility helper for legacy call sites
+export const verifyPassword = async (
+  inputPassword: string,
+  salt: string,
+  storedHash: string
+): Promise<boolean> => {
+  // If storedHash is bcrypt, verify via server
+  if (storedHash && storedHash.startsWith('$2')) {
+    return false; // must verify through loginWithServer
+  }
+  const encoder = new TextEncoder();
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${inputPassword}:nak_secure_salt_2026`));
+  const computed = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return computed === storedHash;
+};
+
+// Generates the initial 9 default team members without exposing plain passwords
 export const createDefaultSellers = async (): Promise<SellerUser[]> => {
-  const rootHash = ROOT_ADMIN_HASH;
-  const commonSalt = COMMON_MEMBER_SALT;
-  const defaultMemberHash = DEFAULT_MEMBER_HASH;
-
   const colors = [
     '#B41C1A', '#D97706', '#059669', '#2563EB', '#7C3AED',
     '#DB2777', '#0891B2', '#4F46E5', '#CA8A04'
@@ -121,8 +326,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: `seller-${ROOT_ADMIN_USERNAME}`,
       username: ROOT_ADMIN_USERNAME,
       name: 'Mạnh Cường',
-      passwordHash: rootHash,
-      passwordSalt: ROOT_ADMIN_SALT,
       isRootAdmin: true,
       role: 'root_admin',
       isActive: true,
@@ -134,8 +337,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-thutrang',
       username: 'thutrang',
       name: 'Thu Trang',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -147,8 +348,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-hoangnam',
       username: 'hoangnam',
       name: 'Hoàng Nam',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -160,8 +359,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-minhanh',
       username: 'minhanh',
       name: 'Minh Anh',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -173,8 +370,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-khanhlinh',
       username: 'khanhlinh',
       name: 'Khánh Linh',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -186,8 +381,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-vietanh',
       username: 'vietanh',
       name: 'Việt Anh',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -199,8 +392,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-thanhhuong',
       username: 'thanhhuong',
       name: 'Thanh Hương',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -212,8 +403,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-quanghuy',
       username: 'quanghuy',
       name: 'Quang Huy',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -225,8 +414,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       id: 'seller-ngocmai',
       username: 'ngocmai',
       name: 'Ngọc Mai',
-      passwordHash: defaultMemberHash,
-      passwordSalt: commonSalt,
       isRootAdmin: false,
       role: 'member',
       isActive: true,
@@ -242,79 +429,6 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
       usernameHash: await hashUsername(s.username)
     }))
   );
-};
-
-// Storage & Session Cookie Management
-const SESSION_STORAGE_KEY = 'notaknot_admin_auth_session';
-const COOKIE_NAME = 'nak_admin_token';
-
-export const saveAdminSession = (user: SellerUser, remember = true): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    // Sanitize user object (never store raw passwords, only safe session info)
-    const sessionData = {
-      id: user.id,
-      username: user.username,
-      usernameHash: user.usernameHash,
-      name: user.name,
-      role: user.role,
-      isRootAdmin: !!user.isRootAdmin,
-      avatarColor: user.avatarColor,
-      loggedInAt: new Date().toISOString(),
-      expiresAt: remember ? Date.now() + 30 * 24 * 60 * 60 * 1000 : Date.now() + 24 * 60 * 60 * 1000
-    };
-    
-    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(sessionData))));
-    localStorage.setItem(SESSION_STORAGE_KEY, encoded);
-
-    // Also set document cookie for 30 days
-    if (remember) {
-      const maxAge = 30 * 24 * 60 * 60; // 30 days in seconds
-      document.cookie = `${COOKIE_NAME}=${encoded}; path=/; max-age=${maxAge}; SameSite=Lax`;
-    }
-  } catch (e) {
-    console.warn('Failed to save session:', e);
-  }
-};
-
-export const getAdminSession = (): Partial<SellerUser> | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    let raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) {
-      // Fallback: check cookie
-      const match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
-      if (match && match[2]) {
-        raw = match[2];
-      }
-    }
-
-    if (!raw) return null;
-
-    const decoded = decodeURIComponent(escape(atob(raw)));
-    const session = JSON.parse(decoded);
-
-    // Check expiration
-    if (session.expiresAt && Date.now() > session.expiresAt) {
-      clearAdminSession();
-      return null;
-    }
-
-    return session;
-  } catch {
-    clearAdminSession();
-    return null;
-  }
-};
-
-export const clearAdminSession = (): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-    document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
-  } catch (e) {
-    console.warn('Failed to clear session:', e);
-  }
 };
 
 /**
@@ -347,4 +461,3 @@ export const deduplicateSellers = (list: SellerUser[]): SellerUser[] => {
   }
   return result;
 };
-

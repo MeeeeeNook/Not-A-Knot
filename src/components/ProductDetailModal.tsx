@@ -302,7 +302,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="bg-neutral-50 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
             <div 
               onClick={() => setCompareModalOpen(true)}
-              className="relative aspect-square max-h-[260px] sm:max-h-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
+              className="relative aspect-square max-h-[210px] sm:max-h-none max-w-[210px] sm:max-w-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
             >
               {/* Zoom & Compare Overlay Button */}
               <button

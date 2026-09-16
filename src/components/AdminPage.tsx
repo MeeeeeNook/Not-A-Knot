@@ -25,6 +25,7 @@ import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
 import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
+import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportOrdersWithImageOption } from '../utils/excelImageExporter';
 import { 
@@ -111,6 +112,7 @@ export type AdminTabType =
   | 'analytics'
   | 'orders'
   | 'manual_order'
+  | 'vouchers'
   | 'sellers'
   | 'messages'
   | 'site_editor'
@@ -2862,10 +2864,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     return filteredOrders.slice(orderStartIndex, orderEndIndex);
   }, [filteredOrders, orderStartIndex, orderEndIndex]);
 
-  // Summary Metrics
+  // Summary Metrics (net merchandise revenue excluding shipping)
   const inStockCount = products.filter((p) => p.inStock !== false && (p.stock ?? 15) > 0).length;
   const outOfStockCount = products.filter((p) => p.inStock === false || (p.stock ?? 0) === 0).length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.totalPrice || o.totalAmount || 0), 0);
+  const totalRevenue = orders
+    .filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy')
+    .reduce((sum, o) => sum + Math.max(0, (o.totalPrice || o.totalAmount || 0) - (Number(o.shippingFee) || 0)), 0);
 
   const getTabDisplayName = (): string => {
     switch (activeTab) {
@@ -2899,8 +2903,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Quản trị viên';
       case 'logs':
         return 'System Log';
+      case 'vouchers':
+        return 'Mã giảm giá';
       case 'firebase':
-        return 'Dung lượng Firebase';
+        return 'Firebase Settings';
       default:
         return 'Quản trị';
     }
@@ -3034,6 +3040,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             }}
           />
         )}
+
+        {/* ======================================================== */}
+        {/* TAB: MÃ GIẢM GIÁ (VOUCHERS) */}
+        {/* ======================================================== */}
+        {activeTab === 'vouchers' && <AdminVouchersTab />}
 
         {/* ======================================================== */}
         {/* TAB: TÀI KHOẢN NGÂN HÀNG (VIETQR) */}
@@ -6541,6 +6552,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 Note: {getCleanOrderNote(ord.note)}
                               </div>
                             )}
+                            {ord.voucherCode && (
+                              <div className="text-[11px] text-amber-950 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md mt-1 flex items-center justify-between font-medium">
+                                <span className="flex items-center gap-1 font-bold">
+                                  <span>🎟️ Voucher:</span>
+                                  <span className="font-mono bg-amber-200 px-1.5 py-0.2 rounded border border-amber-300">
+                                    {ord.voucherCode}
+                                  </span>
+                                </span>
+                                {ord.voucherDiscountAmount ? (
+                                  <span className="text-emerald-700 font-bold font-mono">
+                                    -{ord.voucherDiscountAmount.toLocaleString('vi-VN')}đ
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
                           </div>
 
                           {/* Status & Payment Badges */}
@@ -6957,6 +6983,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               <span className="font-bold text-amber-800 text-xs block">
                                 {(ord.totalPrice || ord.totalAmount || 0).toLocaleString('vi-VN')}đ
                               </span>
+                              {ord.voucherCode && (
+                                <div className="text-[9px] font-bold text-amber-950 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded mt-0.5 inline-block font-mono shadow-2xs">
+                                  🎟️ {ord.voucherCode}
+                                </div>
+                              )}
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -7404,6 +7435,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <span>Tài khoản Google: <strong className="text-slate-800 font-mono">nhunhuhao71@gmail.com</strong></span>
                   <span>•</span>
                   <span>Project ID: <strong className="text-slate-800 font-mono">jittery-study-nzp2g</strong></span>
+                  <span>•</span>
+                  <span>Database ID: <strong className="text-slate-800 font-mono text-[11px]">ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f</strong></span>
                   <span>•</span>
                   <span>Khu vực: <strong className="text-slate-800 font-mono">asia-southeast1 (Singapore)</strong></span>
                 </div>

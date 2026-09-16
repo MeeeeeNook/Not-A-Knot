@@ -26,13 +26,16 @@ import {
   Building2,
   Gift,
   RefreshCw,
-  Clock
+  Clock,
+  Ticket,
+  Tag
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
 import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
+import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
 
 interface CartPageProps {
   cartItems: CartItem[];
@@ -116,6 +119,19 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   const hotline = siteContent?.phone || '079 655 5636';
 
+  // Voucher states
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherDiscountAmount, setVoucherDiscountAmount] = useState<number>(0);
+  const [isFreeShippingVoucher, setIsFreeShippingVoucher] = useState<boolean>(false);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
+  const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
+
+  useEffect(() => {
+    getVouchers().then(setAvailableVouchers).catch(() => {});
+  }, []);
+
   // Available districts for chosen province
   const availableDistricts = getDistrictsByProvince(province);
 
@@ -137,7 +153,55 @@ export const CartPage: React.FC<CartPageProps> = ({
     0
   );
 
-  const grandTotal = subtotal + shippingFee;
+  // Recalculate voucher discount whenever subtotal or availableVouchers changes
+  useEffect(() => {
+    if (appliedVoucher) {
+      const res = validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee);
+      if (res.isValid) {
+        setVoucherDiscountAmount(res.discountAmount);
+        setIsFreeShippingVoucher(res.isFreeShipping);
+        setVoucherError(null);
+      } else {
+        setAppliedVoucher(null);
+        setVoucherDiscountAmount(0);
+        setIsFreeShippingVoucher(false);
+        setVoucherError(res.message || 'Voucher không còn thỏa điều kiện.');
+        setVoucherSuccessMsg(null);
+      }
+    }
+  }, [subtotal, shippingFee, appliedVoucher, availableVouchers]);
+
+  const handleApplyVoucher = () => {
+    setVoucherError(null);
+    setVoucherSuccessMsg(null);
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Vui lòng nhập mã voucher.');
+      return;
+    }
+    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee);
+    if (!res.isValid || !res.voucher) {
+      setVoucherError(res.message || 'Mã voucher không hợp lệ.');
+      return;
+    }
+    setAppliedVoucher(res.voucher);
+    setVoucherDiscountAmount(res.discountAmount);
+    setIsFreeShippingVoucher(res.isFreeShipping);
+    setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherDiscountAmount(0);
+    setIsFreeShippingVoucher(false);
+    setVoucherInput('');
+    setVoucherError(null);
+    setVoucherSuccessMsg(null);
+  };
+
+  const effectiveShippingFee = isFreeShippingVoucher ? 0 : shippingFee;
+  const discountedSubtotal = Math.max(0, subtotal - voucherDiscountAmount);
+  const grandTotal = discountedSubtotal + effectiveShippingFee;
 
   // Track Begin Checkout on mount if items exist
   useEffect(() => {
@@ -299,7 +363,10 @@ export const CartPage: React.FC<CartPageProps> = ({
       province: cleanProvince,
       district: cleanDistrict,
       detailedAddress: cleanDetail,
-      shippingFee,
+      shippingFee: effectiveShippingFee,
+      voucherCode: appliedVoucher?.code || undefined,
+      voucherDiscountAmount: voucherDiscountAmount > 0 ? voucherDiscountAmount : undefined,
+      voucherType: appliedVoucher?.type || undefined,
       note: note.trim() ? note.trim() : undefined,
       items: formatCartItemsText(),
       itemDetails,
@@ -774,12 +841,79 @@ export const CartPage: React.FC<CartPageProps> = ({
                         </span>
                       </div>
 
+                      {/* Voucher Input Box */}
+                      <div className="pt-3 pb-2 border-t border-b border-slate-100 space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                          <Ticket className="w-4 h-4 text-amber-600" />
+                          <span>Mã giảm giá / Ưu đãi</span>
+                        </div>
+
+                        {appliedVoucher ? (
+                          <div className="flex items-center justify-between bg-amber-50/80 p-2.5 rounded-xl border border-amber-300">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-xs text-amber-950 bg-amber-200/80 px-2 py-0.5 rounded border border-amber-400/50">
+                                {appliedVoucher.code}
+                              </span>
+                              <span className="text-xs font-bold text-emerald-700">
+                                {isFreeShippingVoucher ? 'Freeship 0đ' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleRemoveVoucher}
+                              className="text-xs font-bold text-slate-400 hover:text-rose-600 px-2 py-1 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={voucherInput}
+                              onChange={(e) => {
+                                setVoucherInput(e.target.value.toUpperCase());
+                                setVoucherError(null);
+                              }}
+                              placeholder="Mã voucher (VD: KNOT10)"
+                              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 focus:bg-white focus:border-amber-400 rounded-xl text-xs font-mono uppercase font-bold text-slate-900 placeholder:font-sans placeholder:font-normal focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleApplyVoucher}
+                              className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
+                            >
+                              Áp dụng
+                            </button>
+                          </div>
+                        )}
+
+                        {voucherError && (
+                          <p className="text-[11px] font-bold text-rose-600">{voucherError}</p>
+                        )}
+                        {voucherSuccessMsg && !voucherError && (
+                          <p className="text-[11px] font-bold text-emerald-700">{voucherSuccessMsg}</p>
+                        )}
+                      </div>
+
                       <div className="flex items-center justify-between gap-2 text-slate-600">
                         <span className="whitespace-nowrap font-medium">Phí vận chuyển</span>
                         <span className="font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {shippingInfo.isPending ? 'Chưa tính' : shippingInfo.isFree ? '0đ' : `${shippingFee.toLocaleString('vi-VN')}đ`}
+                          {shippingInfo.isPending ? 'Chưa tính' : (shippingInfo.isFree || isFreeShippingVoucher) ? '0đ (Miễn phí)' : `${shippingFee.toLocaleString('vi-VN')}đ`}
                         </span>
                       </div>
+
+                      {voucherDiscountAmount > 0 && (
+                        <div className="flex items-center justify-between gap-2 text-emerald-700 font-bold">
+                          <span className="whitespace-nowrap flex items-center gap-1">
+                            <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                            Giảm giá Voucher
+                          </span>
+                          <span className="font-mono font-black whitespace-nowrap">
+                            -{voucherDiscountAmount.toLocaleString('vi-VN')}đ
+                          </span>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between gap-2 text-slate-600">
                         <span className="whitespace-nowrap font-medium">Hình thức</span>
@@ -793,7 +927,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                           Tổng thanh toán:
                         </span>
                         <span className="text-xl sm:text-2xl font-black text-amber-600 font-mono whitespace-nowrap">
-                          {(subtotal + (shippingInfo.isPending ? 0 : shippingFee)).toLocaleString('vi-VN')}đ
+                          {grandTotal.toLocaleString('vi-VN')}đ
                         </span>
                       </div>
                     </div>

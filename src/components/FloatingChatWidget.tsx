@@ -32,6 +32,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +42,19 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   const hotline = siteContent?.hotline || '0342 938 174';
   const cleanPhone = hotline.replace(/[^0-9]/g, '');
   const zaloUrl = siteContent?.socialLinks?.zalo || `https://zalo.me/${cleanPhone || '0342938174'}`;
+
+  // Listen for image zoom modal events to hide chat bubble when viewing zoomed images
+  useEffect(() => {
+    const handleZoomOpened = () => setIsZoomModalOpen(true);
+    const handleZoomClosed = () => setIsZoomModalOpen(false);
+
+    window.addEventListener('nak-image-zoom-opened', handleZoomOpened);
+    window.addEventListener('nak-image-zoom-closed', handleZoomClosed);
+    return () => {
+      window.removeEventListener('nak-image-zoom-opened', handleZoomOpened);
+      window.removeEventListener('nak-image-zoom-closed', handleZoomClosed);
+    };
+  }, []);
 
   // Listen for global open chat event
   useEffect(() => {
@@ -106,6 +120,8 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
       ref={containerRef}
       id="floating-chat-widget-root"
       className={`fixed z-50 flex flex-col items-end pointer-events-auto select-none font-sans transition-all duration-300 ${
+        isZoomModalOpen ? 'hidden opacity-0 pointer-events-none' : ''
+      } ${
         isProductDetail 
           ? 'bottom-[78px] right-3 sm:bottom-6 sm:right-6' 
           : 'bottom-4 right-4 sm:bottom-6 sm:right-6'

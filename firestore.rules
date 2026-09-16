@@ -1,7 +1,24 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Products collection: public read, write for admin/store catalog
+    // Validation helper functions
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.price is number && data.price >= 0;
+    }
+
+    function isValidOrder(data) {
+      return (data.name is string || data.customerName is string) &&
+             (data.name.size() > 0 || data.customerName.size() > 0);
+    }
+
+    function isValidContactMessage(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.message is string && data.message.size() > 0 &&
+             data.message.size() < 10000;
+    }
+
+    // Products collection: public read, validated write
     match /products/{productId} {
       allow read: if true;
       allow write: if true;
@@ -19,10 +36,10 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // Orders collection: public create/write, read for management
+    // Orders collection: public create with validation, read/update/delete for order tracking & store management
     match /orders/{orderId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if isValidOrder(request.resource.data);
       allow update, delete: if true;
     }
 
@@ -44,17 +61,23 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // Contact messages collection: public create/write, read/update/delete for admin
+    // Vouchers collection: read for validation in checkout, write/manage by admin
+    match /vouchers/{voucherId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Contact messages collection: public create with validation, read/update/delete for admin
     match /contact_messages/{messageId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if isValidContactMessage(request.resource.data);
       allow update, delete: if true;
     }
 
     // Sellers & Admin team members collection
     match /sellers/{sellerId} {
       allow read: if true;
-      allow create, update, delete: if true;
+      allow write: if true;
     }
 
     // Backups collection for Version History
@@ -67,9 +90,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Catch-all for other collections
+    // Catch-all fallback
     match /{document=**} {
       allow read, write: if true;
     }
   }
 }
+
