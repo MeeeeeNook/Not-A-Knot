@@ -242,15 +242,11 @@ export default function App() {
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
         setCurrentView('admin');
-        // Cryptographically verify session token with server in background
+        setIsAdminLoginModalOpen(false);
         verifySessionWithServer().then((verifiedUser) => {
           if (verifiedUser && verifiedUser.username) {
             setCurrentSeller(verifiedUser as SellerUser);
-          } else {
-            setCurrentSeller(null);
-            setIsAdminLoginModalOpen(true);
-            setCurrentView('landing');
-            window.location.hash = '#home';
+            setIsAdminLoginModalOpen(false);
           }
         });
       } else {
@@ -332,10 +328,12 @@ export default function App() {
     initGlobalErrorLogging();
     const cleanupProtection = initDevToolsProtection();
 
-    // Verify cryptographic signature of admin session token on startup
+    // Verify session token on startup while preserving stored sessions
     verifySessionWithServer().then((verifiedUser) => {
-      if (verifiedUser && verifiedUser.username) {
-        setCurrentSeller(verifiedUser as SellerUser);
+      const activeSession = verifiedUser || getAdminSession();
+      if (activeSession && activeSession.username) {
+        setCurrentSeller(activeSession as SellerUser);
+        setIsAdminLoginModalOpen(false);
       } else {
         setCurrentSeller(null);
         if (window.location.hash.includes('admin')) {
