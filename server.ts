@@ -12,6 +12,22 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Client IP detection endpoint
+  app.get('/api/client-ip', (req, res) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    let ip = typeof forwarded === 'string'
+      ? forwarded.split(',')[0].trim()
+      : Array.isArray(forwarded)
+      ? forwarded[0]
+      : (req.headers['x-real-ip'] as string) || req.socket.remoteAddress || '';
+    if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+    res.json({
+      ip: ip || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || '',
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // Vite middleware for development / Static file serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

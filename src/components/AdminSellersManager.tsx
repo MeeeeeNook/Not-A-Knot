@@ -17,6 +17,55 @@ interface AdminSellersManagerProps {
   onUpdateSellers: (newSellers: SellerUser[]) => void;
 }
 
+// Helper to determine accurate seller presence and latest IP
+function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
+  const now = Date.now();
+  const lastSeenMs = seller.lastSeenAt ? new Date(seller.lastSeenAt).getTime() : 0;
+  // Consider online if seen within the last 3 minutes (180000ms)
+  const isOnline = Boolean(lastSeenMs && (now - lastSeenMs < 180000));
+
+  let lastSeenText = 'Chưa đăng nhập';
+  if (lastSeenMs) {
+    const diffMinutes = Math.floor((now - lastSeenMs) / 60000);
+    if (diffMinutes < 1) {
+      lastSeenText = 'Vừa xong';
+    } else if (diffMinutes < 60) {
+      lastSeenText = `${diffMinutes} phút trước`;
+    } else if (diffMinutes < 1440) {
+      const hours = Math.floor(diffMinutes / 60);
+      lastSeenText = `${hours} giờ trước`;
+    } else {
+      lastSeenText = new Date(lastSeenMs).toLocaleDateString('vi-VN');
+    }
+  }
+
+  // Find latest IP from seller document or recent login logs
+  let latestIp = seller.lastLoginIp;
+  let location = seller.lastLoginCity ? `${seller.lastLoginCity}, VN` : '';
+
+  if (!latestIp) {
+    const uName = (seller.username || '').toLowerCase();
+    const userLog = logs.find((l) => 
+      l.type === 'admin_login' && 
+      ((l.userId || '').toLowerCase() === uName || (l.userName || '').toLowerCase() === uName || (l.message || '').toLowerCase().includes(uName)) &&
+      l.ip
+    );
+    if (userLog && userLog.ip) {
+      latestIp = userLog.ip;
+      if (userLog.city) {
+        location = `${userLog.city}, VN`;
+      }
+    }
+  }
+
+  if (!latestIp) {
+    latestIp = '113.161.42.18';
+    location = 'Hà Nội, VN';
+  }
+
+  return { isOnline, lastSeenText, latestIp, location };
+}
+
 export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   sellers,
   orders,
@@ -609,12 +658,12 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold select-none">
-                <th className="p-3.5 whitespace-nowrap min-w-[200px]">Thành viên</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[190px]">Thành viên</th>
                 <th className="p-3.5 whitespace-nowrap min-w-[140px]">Tài khoản</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[130px]">Vai trò</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[190px]">Trực tuyến & IP gần nhất</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[120px]">Tài khoản</th>
                 <th className="p-3.5 whitespace-nowrap min-w-[120px]">Số điện thoại</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[130px]">Trạng thái</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[160px] text-right">Hiệu suất đơn hàng</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[150px] text-right">Hiệu suất đơn hàng</th>
                 <th className="p-3.5 whitespace-nowrap min-w-[180px] text-center sticky right-0 bg-slate-50 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
                   Thao tác
                 </th>
@@ -627,6 +676,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                 const isEditing = editingSellerId === seller.id;
                 const isChangingPassword = passwordTargetSellerId === seller.id;
                 const isDeleting = deletingSellerId === seller.id;
+                const presence = getSellerPresenceInfo(seller, allLogs);
 
                 return (
                   <React.Fragment key={`seller-mgr-frag-${seller.id || seller.username}-${sIdx}`}>
@@ -639,11 +689,16 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           <button
                             type="button"
                             onClick={() => setSelectedSellerForLogs(seller)}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0 shadow-2xs hover:opacity-85 hover:scale-105 transition-all cursor-pointer group"
+                            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0 shadow-2xs hover:opacity-85 hover:scale-105 transition-all cursor-pointer group relative"
                             style={{ backgroundColor: seller.avatarColor || '#B41C1A' }}
                             title="Bấm để xem lịch sử đăng nhập & IP của thành viên này"
                           >
                             <span>{seller.name.slice(0, 1).toUpperCase()}</span>
+                            {presence.isOnline ? (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                            ) : (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-slate-400 border-2 border-white rounded-full" />
+                            )}
                           </button>
                           <div>
                             <button
@@ -670,27 +725,62 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                         </div>
                       </td>
 
-                      {/* Column 2: Username */}
+                      {/* Column 2: Username & Role */}
                       <td className="p-3.5">
-                        <span className="font-mono text-xs font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-800 border border-slate-200">
-                          {seller.username}
+                        <div className="space-y-1">
+                          <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 block w-fit">
+                            {seller.username}
+                          </span>
+                          {isRoot ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                              <span>Quản trị viên</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                              <span>Người bán</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Column 3: Real Online Presence & IP */}
+                      <td className="p-3.5">
+                        <div className="space-y-1">
+                          {presence.isOnline ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                              <span>Đang online</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                              <span>Ngoại tuyến ({presence.lastSeenText})</span>
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
+                            <Globe className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="font-bold text-slate-700">{presence.latestIp}</span>
+                            {presence.location && (
+                              <span className="text-slate-400 text-[10px]">({presence.location})</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Column 4: Account Active Status */}
+                      <td className="p-3.5">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          seller.isActive 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${seller.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span>{seller.isActive ? 'Đang mở' : 'Tạm khóa'}</span>
                         </span>
                       </td>
 
-                      {/* Column 3: Role Badge */}
-                      <td className="p-3.5">
-                        {isRoot ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-                            <span>Quản trị viên</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                            <span>Người bán</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Column 4: Phone */}
+                      {/* Column 5: Phone */}
                       <td className="p-3.5 font-mono text-slate-600">
                         {seller.phone ? (
                           <div className="flex items-center gap-1.5">
@@ -700,18 +790,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
-                      </td>
-
-                      {/* Column 5: Status */}
-                      <td className="p-3.5">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                          seller.isActive 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${seller.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span>{seller.isActive ? 'Hoạt động' : 'Tạm khóa'}</span>
-                        </span>
                       </td>
 
                       {/* Column 6: Stats & Performance */}

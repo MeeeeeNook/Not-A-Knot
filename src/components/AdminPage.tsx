@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, GripVertical, ArrowUp, ArrowDown, Copy } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -22,6 +22,7 @@ import { AdminHeader } from './admin/AdminHeader';
 import { AdminSidebar } from './admin/AdminSidebar';
 import { AdminBankAccountPage } from './admin/AdminBankAccountPage';
 import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
+import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
@@ -33,7 +34,8 @@ import {
   getCleanOrderNote,
   getOrderTrackingNumber,
   normalizeOrderStatus,
-  NormalizedOrderStatus
+  NormalizedOrderStatus,
+  safeOrderTimestamp
 } from '../utils/orderFormatters';
 import { createDefaultSellers, deduplicateSellers, isRootAdminUser } from '../utils/auth';
 import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
@@ -59,8 +61,11 @@ import {
   saveOrderToFirestore,
   saveOrdersToFirestore,
   subscribeToOrdersFromFirestore,
-  deleteOrderFromFirestore,
-  deleteOrdersBatchFromFirestore,
+  moveOrderToTrash,
+  moveOrdersBatchToTrash,
+  restoreOrderFromTrash,
+  deleteOrderPermanently,
+  emptyOrderTrash,
   updateOrderStatusInFirestore,
   fetchContactMessagesFromFirestore,
   subscribeToContactMessagesFromFirestore,
@@ -73,6 +78,7 @@ import {
   saveSiteContentToFirestore,
   clearFirestoreMemoryCache,
   canonicalOrderKey,
+  isMatchingOrderDoc,
   resolveAssetUrl,
   StoredOrder
 } from '../firebase';
@@ -574,6 +580,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [showUrlInput, setShowUrlInput] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const productJsonInputRef = useRef<HTMLInputElement>(null);
 
   // Helper to parse price cleanly
   const parsePrice = (val: string | number): number => {
@@ -681,6 +688,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     checkConn();
   }, [currentSeller]);
 
+  // Synchronize deleted orders across sessions & components
+  useEffect(() => {
+    const handleOrderDeleted = (e: any) => {
+      const { orderId, permanent } = e.detail || {};
+      if (!orderId) return;
+
+      setOrders((prev) => {
+        if (permanent) {
+          return prev.filter((o) => !isMatchingOrderDoc(orderId, o.id, o));
+        }
+        return prev.map((o) => {
+          if (isMatchingOrderDoc(orderId, o.id, o)) {
+            return { ...o, isDeleted: true, deletedAt: new Date().toISOString() };
+          }
+          return o;
+        });
+      });
+    };
+
+    window.addEventListener('nak_order_deleted', handleOrderDeleted);
+    return () => window.removeEventListener('nak_order_deleted', handleOrderDeleted);
+  }, []);
+
   const normalizeOrderKey = (str?: string): string => {
     return canonicalOrderKey(str);
   };
@@ -704,6 +734,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       if (existingKey) {
         const existing = map.get(existingKey)!;
         const canonicalId = (ord.id.startsWith('NAK-') ? ord.id : (existing.id.startsWith('NAK-') ? existing.id : ord.id));
+        const isDeleted = ord.isDeleted === true || existing.isDeleted === true;
+        const deletedAt = isDeleted ? (ord.deletedAt || existing.deletedAt || new Date().toISOString()) : undefined;
+
         const merged: StoredOrder = {
           ...existing,
           ...ord,
@@ -720,7 +753,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           status: ord.status || existing.status || 'Chờ xác nhận',
           paymentStatus: ord.paymentStatus || existing.paymentStatus || 'unpaid',
           bankReceiptImage: ord.bankReceiptImage || existing.bankReceiptImage,
-          source: ord.source || existing.source || 'website'
+          source: ord.source || existing.source || 'website',
+          isDeleted,
+          deletedAt
         };
         map.set(existingKey, merged);
       } else {
@@ -746,53 +781,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     return merged;
   };
 
-  // Fetch orders from Firestore and localStorage (merged for 100% data integrity)
+  // Fetch orders directly from Firestore as single source of truth
   const loadOrders = async (isManualReload = false) => {
     setLoadingOrders(true);
     if (isManualReload) {
       showAdminToast('🔄 Đang đồng bộ và tải lại danh sách đơn hàng...');
     }
     try {
-      let localOrders: StoredOrder[] = [];
-      try {
-        const local = localStorage.getItem('nak_preorders');
-        if (local) localOrders = JSON.parse(local);
-      } catch {
-        // ignore
-      }
-
       const dbOrders = await fetchOrdersFromFirestore();
-      const merged = mergeOrderLists(dbOrders || [], localOrders);
-      setOrders(merged);
-      if (merged.length > 0) {
-        safeStorageSetItem('nak_preorders', JSON.stringify(merged));
-      }
-
-      // Auto-sync any truly new local-only orders up to Firestore in background
-      if (dbOrders && localOrders.length > 0) {
-        const dbIdSet = new Set(dbOrders.map((o) => normalizeOrderKey(o.id || o.trackingNumber)));
-        const unsynced = localOrders.filter((o) => {
-          const k = normalizeOrderKey(o.id || o.trackingNumber);
-          return k && !dbIdSet.has(k);
-        });
-        if (unsynced.length > 0) {
-          saveOrdersToFirestore(unsynced).catch(() => {});
-        }
-      }
+      setOrders(dbOrders || []);
 
       if (isManualReload) {
-        showAdminToast(`✓ Đã tải lại thành công! Tổng cộng ${merged.length} đơn hàng.`);
+        showAdminToast(`✓ Đã tải lại thành công! Tổng cộng ${(dbOrders || []).length} đơn hàng từ Firestore.`);
       }
     } catch (e) {
       console.warn('Lỗi khi tải đơn hàng:', e);
-      try {
-        const local = localStorage.getItem('nak_preorders');
-        if (local) setOrders(JSON.parse(local));
-      } catch {
-        // ignore
-      }
       if (isManualReload) {
-        showAdminToast('Đã tải lại dữ liệu đơn hàng từ bộ nhớ cục bộ.');
+        showAdminToast('Không thể tải danh sách đơn hàng từ máy chủ.');
       }
     } finally {
       setLoadingOrders(false);
@@ -834,17 +839,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     loadMessagesCount();
 
     const unsubscribeOrders = subscribeToOrdersFromFirestore((realtimeOrders) => {
-      if (realtimeOrders && realtimeOrders.length > 0) {
-        let localOrders: StoredOrder[] = [];
-        try {
-          const local = localStorage.getItem('nak_preorders');
-          if (local) localOrders = JSON.parse(local);
-        } catch {
-          // ignore
-        }
-        const merged = mergeOrderLists(realtimeOrders, localOrders);
-        setOrders(merged);
-        safeStorageSetItem('nak_preorders', JSON.stringify(merged));
+      if (realtimeOrders) {
+        setOrders(realtimeOrders);
       }
     });
 
@@ -1014,6 +1010,111 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     a.download = `notaknot-database-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    showAdminToast('Đã tải xuống file sao lưu sản phẩm .JSON!');
+  };
+
+  // Import products from JSON file
+  const handleImportProductsJSONFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        if (!text || !text.trim()) {
+          showAdminToast('File JSON trống. Vui lòng kiểm tra lại nội dung.');
+          return;
+        }
+
+        const parsed = JSON.parse(text);
+        let rawProducts: any[] = [];
+        let rawCategories: any[] = [];
+
+        if (Array.isArray(parsed)) {
+          rawProducts = parsed;
+        } else if (parsed && typeof parsed === 'object') {
+          if (Array.isArray(parsed.payload?.products)) {
+            rawProducts = parsed.payload.products;
+            if (Array.isArray(parsed.payload?.categories)) rawCategories = parsed.payload.categories;
+          } else if (Array.isArray(parsed.data?.products)) {
+            rawProducts = parsed.data.products;
+            if (Array.isArray(parsed.data?.categories)) rawCategories = parsed.data.categories;
+          } else if (Array.isArray(parsed.products)) {
+            rawProducts = parsed.products;
+            if (Array.isArray(parsed.categories)) rawCategories = parsed.categories;
+          }
+        }
+
+        if (rawProducts.length === 0) {
+          showAdminToast('Không tìm thấy dữ liệu sản phẩm hợp lệ trong file JSON.');
+          return;
+        }
+
+        // Sanitize products
+        const sanitizedProducts: Product[] = rawProducts
+          .filter((p) => p && typeof p === 'object')
+          .map((p, idx) => {
+            const id = p.id ? String(p.id).trim() : `prod_${Date.now()}_${idx}`;
+            const name = p.name ? String(p.name).trim() : `Sản phẩm ${idx + 1}`;
+            const price = Number(p.price) >= 0 ? Number(p.price) : 0;
+            const originalPrice = p.originalPrice !== undefined && Number(p.originalPrice) >= 0 ? Number(p.originalPrice) : undefined;
+            let images: string[] = [];
+            if (Array.isArray(p.images) && p.images.length > 0) {
+              images = p.images.map((img: any) => String(img).trim()).filter(Boolean);
+            } else if (p.image) {
+              images = [String(p.image).trim()];
+            }
+            if (images.length === 0) {
+              images = ['/assets/hero-bg.png'];
+            }
+
+            return {
+              ...p,
+              id,
+              name,
+              price,
+              originalPrice,
+              category: p.category ? String(p.category).trim() : 'all',
+              image: images[0],
+              images,
+              stock: p.stock !== undefined ? Number(p.stock) : 50,
+              inStock: p.inStock !== undefined ? Boolean(p.inStock) : true,
+              soldCount: p.soldCount !== undefined ? Number(p.soldCount) : 0,
+              isNew: p.isNew !== undefined ? Boolean(p.isNew) : false,
+              isBestSeller: p.isBestSeller !== undefined ? Boolean(p.isBestSeller) : false,
+              detailsText: p.detailsText || p.description || ''
+            } as Product;
+          });
+
+        // Update local state
+        onUpdateProducts(sanitizedProducts);
+        safeStorageSetItem('nak_admin_products', JSON.stringify(sanitizedProducts));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(sanitizedProducts));
+        await saveProductsToFirestore(sanitizedProducts);
+
+        if (rawCategories.length > 0) {
+          const sanitizedCats: CategoryItem[] = rawCategories
+            .filter((c) => c && typeof c === 'object' && (c.id || c.name))
+            .map((c, idx) => ({
+              ...c,
+              id: c.id ? String(c.id).trim() : `cat_${idx + 1}`,
+              name: c.name ? String(c.name).trim() : `Danh mục ${idx + 1}`
+            }));
+          setLocalCategories(sanitizedCats);
+          onUpdateCategories?.(sanitizedCats);
+          safeStorageSetItem('nak_categories', JSON.stringify(sanitizedCats));
+          await saveCategoriesToFirestore(sanitizedCats);
+        }
+
+        showAdminToast(`Đã nạp và đồng bộ ${sanitizedProducts.length} sản phẩm từ file JSON thành công!`);
+      } catch (err: any) {
+        console.error('Lỗi nạp file JSON sản phẩm:', err);
+        showAdminToast(`Lỗi đọc file JSON: ${err.message || 'Sai cú pháp'}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Export orders to Excel (.xlsx) file with detailed data & column formatting
@@ -2162,39 +2263,42 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     return { restoredCount: totalRestoredUnits, productsUpdated: updatedCount };
   };
 
-  // Delete an order with modal and smart stock management
+  // Delete an order (move to trash) with modal and smart stock management
   const handleDeleteOrder = (orderId: string) => {
-    const targetOrder = orders.find((o) => o.id === orderId);
+    const targetOrder = orders.find((o) => isMatchingOrderDoc(orderId, o.id, o));
     const isProduced = targetOrder ? isOrderProducedOrCompleted(targetOrder) : false;
 
     setDeleteConfirmModal({
-      title: 'Xóa đơn hàng',
-      message: `Bạn có chắc chắn muốn xóa đơn hàng #${orderId}?`,
+      title: 'Chuyển đơn hàng vào Thùng Rác',
+      message: `Bạn có chắc chắn muốn chuyển đơn hàng #${orderId} vào Thùng Rác không?`,
       submessage: isProduced
-        ? 'Đơn hàng này đã/đang sản xuất hoặc hoàn tất nên số lượng tồn kho sẽ được giữ nguyên (không hoàn kho).'
-        : 'Đơn hàng này chưa được xác nhận sản xuất. Khi xóa, hệ thống sẽ tự động hoàn lại số lượng sản phẩm vào tồn kho.',
-      confirmLabel: 'Xóa đơn hàng',
+        ? 'Đơn hàng sẽ được chuyển vào Thùng Rác. Bạn có thể khôi phục lại bất kỳ lúc nào.'
+        : 'Đơn hàng chưa sản xuất. Khi chuyển vào Thùng rác, hệ thống sẽ tự động hoàn lại số lượng sản phẩm vào tồn kho.',
+      confirmLabel: 'Chuyển Vào Thùng Rác',
       onConfirm: async () => {
         setDeleteConfirmModal(null);
-        const updated = orders.filter((o) => o.id !== orderId);
+        const nowIso = new Date().toISOString();
+        const updated = orders.map((o) =>
+          isMatchingOrderDoc(orderId, o.id, o) ? { ...o, isDeleted: true, deletedAt: nowIso } : o
+        );
         setOrders(updated);
         try {
           safeStorageSetItem('nak_preorders', JSON.stringify(updated));
-          await deleteOrderFromFirestore(orderId);
+          await moveOrderToTrash(orderId);
         } catch (err) {
-          console.warn('Delete order error:', err);
+          console.warn('Move to trash error:', err);
         }
 
         // If order was NOT produced, restore stock
         if (targetOrder && !isProduced) {
           const { restoredCount } = await restoreStockFromDeletedOrders([targetOrder]);
           if (restoredCount > 0) {
-            showAdminToast(`Đã xóa đơn #${orderId} và tự động hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
+            showAdminToast(`Đã chuyển đơn #${orderId} vào Thùng rác và hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
             return;
           }
         }
 
-        showAdminToast(`Đã xóa đơn hàng #${orderId} thành công.`);
+        showAdminToast(`Đã chuyển đơn hàng #${orderId} vào Thùng rác.`);
       }
     });
   };
@@ -2296,7 +2400,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
-  // Bulk Deletion with smart stock management
+  // Bulk Deletion (move to trash) with smart stock management
   const handleBulkDelete = () => {
     if (selectedOrderIds.length === 0) return;
     const count = selectedOrderIds.length;
@@ -2306,40 +2410,42 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const producedOrders = targetOrders.filter((o) => isOrderProducedOrCompleted(o));
 
     setDeleteConfirmModal({
-      title: `Xác nhận xóa ${count} đơn hàng`,
-      message: `Bạn có chắc chắn muốn xóa vĩnh viễn ${count} đơn hàng đã chọn?`,
-      submessage: unproducedOrders.length > 0
-        ? `Có ${unproducedOrders.length} đơn chưa sản xuất (sẽ tự động hoàn tồn kho), và ${producedOrders.length} đơn đã/đang sản xuất hoặc hoàn tất (giữ nguyên tồn kho).`
-        : 'Các đơn đã chọn đều đã/đang sản xuất hoặc hoàn tất nên số lượng tồn kho sẽ được giữ nguyên (không hoàn kho).',
-      confirmLabel: `Xóa ${count} Đơn`,
+      title: `Chuyển ${count} đơn hàng vào Thùng Rác`,
+      message: `Bạn có chắc chắn muốn chuyển ${count} đơn hàng đã chọn vào Thùng Rác không?`,
+      submessage: 'Đơn hàng sẽ được chuyển vào Thùng rác. Bạn có thể khôi phục lại bất kỳ lúc nào.',
+      confirmLabel: `Chuyển ${count} Đơn Về Thùng Rác`,
       onConfirm: async () => {
         setDeleteConfirmModal(null);
         setSelectedOrderIds([]);
-        const remaining = orders.filter((o) => o.id && !idsToDelete.includes(o.id));
-        setOrders(remaining);
+        const nowIso = new Date().toISOString();
+        const updated = orders.map((o) =>
+          o.id && idsToDelete.includes(o.id)
+            ? { ...o, isDeleted: true, deletedAt: nowIso }
+            : o
+        );
+        setOrders(updated);
         try {
-          safeStorageSetItem('nak_preorders', JSON.stringify(remaining));
+          safeStorageSetItem('nak_preorders', JSON.stringify(updated));
         } catch (e) {
           console.warn('Lỗi lưu đơn local:', e);
         }
 
-        // Batch delete on Firestore in a single atomic commit
         try {
-          await deleteOrdersBatchFromFirestore(idsToDelete);
+          await moveOrdersBatchToTrash(idsToDelete);
         } catch (e) {
-          console.error('Lỗi xóa đơn bulk Firestore:', e);
+          console.error('Lỗi chuyển đơn hàng vào Thùng rác:', e);
         }
 
         // Restore stock only for unproduced orders
         if (unproducedOrders.length > 0) {
           const { restoredCount } = await restoreStockFromDeletedOrders(unproducedOrders);
           if (restoredCount > 0) {
-            showAdminToast(`Đã xóa ${count} đơn hàng và hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
+            showAdminToast(`Đã chuyển ${count} đơn hàng vào Thùng rác và hoàn lại ${restoredCount} sản phẩm về tồn kho.`);
             return;
           }
         }
 
-        showAdminToast(`Đã xóa ${count} đơn hàng thành công.`);
+        showAdminToast(`Đã chuyển ${count} đơn hàng vào Thùng rác thành công.`);
       }
     });
   };
@@ -2396,6 +2502,51 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setSelectedOrderIds([]);
   };
 
+  // Quick Single Order Payment Update
+  const handleUpdateSingleOrderPayment = async (orderId: string, newPayment: 'paid' | 'unpaid') => {
+    const isPaid = newPayment === 'paid';
+    const updated = orders.map((o) =>
+      o.id === orderId
+        ? {
+            ...o,
+            paymentStatus: newPayment,
+            paidAmount: isPaid ? (o.totalPrice || o.totalAmount || 0) : 0,
+            status: isPaid && (!o.status || o.status === 'Chờ xác nhận') ? 'Đã xác nhận' : o.status
+          }
+        : o
+    );
+    setOrders(updated);
+    safeStorageSetItem('nak_preorders', JSON.stringify(updated));
+
+    if (inspectingOrder && inspectingOrder.id === orderId) {
+      setInspectingOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              paymentStatus: newPayment,
+              paidAmount: isPaid ? (prev.totalPrice || prev.totalAmount || 0) : 0,
+              status: isPaid && (!prev.status || prev.status === 'Chờ xác nhận') ? 'Đã xác nhận' : prev.status
+            }
+          : null
+      );
+    }
+
+    const targetOrd = updated.find((o) => o.id === orderId);
+    if (targetOrd) {
+      try {
+        await saveOrderToFirestore(targetOrd);
+      } catch (e) {
+        console.warn('Lỗi lưu thanh toán đơn hàng:', e);
+      }
+    }
+
+    showAdminToast(
+      isPaid
+        ? `✓ Đã đánh dấu đơn #${orderId} là ĐÃ THANH TOÁN.`
+        : `✓ Đã chuyển đơn #${orderId} sang CHƯA THANH TOÁN.`
+    );
+  };
+
   // Calculate sold count for each product from real orders + manual initial sold count
   const productSoldMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -2433,6 +2584,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     return map;
   }, [orders, products]);
+
+  const activeOrders = useMemo(() => orders.filter((o) => o.isDeleted !== true), [orders]);
+  const trashOrders = useMemo(() => orders.filter((o) => o.isDeleted === true), [orders]);
 
   const totalSoldProducts = useMemo(() => {
     return products.reduce((acc, p) => {
@@ -2537,6 +2691,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
 
     const list = orders.filter((o) => {
+      // Exclude soft-deleted orders from active list
+      if (o.isDeleted === true) return false;
       const q = orderSearchQuery.toLowerCase().trim().replace(/^#/, '');
       const matchSearch =
         !q ||
@@ -2616,13 +2772,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     // Dynamic Multi-field Sorting
     return list.sort((a, b) => {
       if (orderSortBy === 'date_desc') {
-        const timeA = new Date(a.date || a.createdAt || 0).getTime();
-        const timeB = new Date(b.date || b.createdAt || 0).getTime();
+        const timeA = safeOrderTimestamp(a.createdAt || a.date);
+        const timeB = safeOrderTimestamp(b.createdAt || b.date);
         return timeB - timeA;
       }
       if (orderSortBy === 'date_asc') {
-        const timeA = new Date(a.date || a.createdAt || 0).getTime();
-        const timeB = new Date(b.date || b.createdAt || 0).getTime();
+        const timeA = safeOrderTimestamp(a.createdAt || a.date);
+        const timeB = safeOrderTimestamp(b.createdAt || b.date);
         return timeA - timeB;
       }
       if (orderSortBy === 'category_asc') {
@@ -2721,6 +2877,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Đơn hàng';
       case 'manual_order':
         return 'Tạo đơn hàng';
+      case 'trash':
+        return 'Thùng rác đơn hàng';
       case 'messages':
         return 'Hộp thư liên hệ';
       case 'products':
@@ -2764,7 +2922,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         currentSeller={currentSeller}
         isRootAdmin={isRootAdmin}
         unreadMessagesCount={unreadMessagesCount}
-        ordersCount={orders.length}
+        ordersCount={activeOrders.length}
+        trashCount={trashOrders.length}
         productsCount={products.length}
         categoriesCount={localCategories.length}
         collectionsCount={localCollections.length}
@@ -2790,7 +2949,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           desktopSidebarCollapsed={desktopSidebarCollapsed}
           onToggleDesktopSidebar={() => setDesktopSidebarCollapsed((prev) => !prev)}
           onOpenMobileSidebar={() => setSidebarOpen(true)}
-          orders={orders}
+          orders={activeOrders}
           contactMessages={contactMessages}
           productsCount={products.length}
           categoriesCount={localCategories.length}
@@ -2858,6 +3017,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               showAdminToast('Đã lưu và cập nhật cấu hình nội dung website thành công!');
             }}
             onPreviewWebsite={onBackToStore}
+          />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: THÙNG RÁC ĐƠN HÀNG */}
+        {/* ======================================================== */}
+        {activeTab === 'trash' && (
+          <AdminTrashPage
+            orders={orders}
+            onNotify={showAdminToast}
+            onRefreshOrders={() => loadOrders(true)}
+            onUpdateOrders={(newOrders) => {
+              setOrders(newOrders);
+              safeStorageSetItem('nak_preorders', JSON.stringify(newOrders));
+            }}
           />
         )}
 
@@ -2990,10 +3164,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <button
                   onClick={handleExportProductsJSON}
                   className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
-                  title="Xuất file JSON sao lưu"
+                  title="Xuất file JSON sao lưu danh sách sản phẩm"
                 >
+                  <Download className="w-3.5 h-3.5 text-slate-600" />
                   <span>Sao Lưu JSON</span>
                 </button>
+
+                <button
+                  onClick={() => productJsonInputRef.current?.click()}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
+                  title="Nhập và cập nhật danh sách sản phẩm từ file .JSON (có thể chỉnh sửa thủ công trước khi nạp)"
+                >
+                  <Upload className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Nhập JSON</span>
+                </button>
+                <input
+                  ref={productJsonInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportProductsJSONFile}
+                  className="hidden"
+                />
 
                 <button
                   onClick={handleResetDefaults}
@@ -5623,7 +5814,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'dashboard' && (
           <AdminDashboard
-            orders={orders}
+            orders={activeOrders}
             products={products}
             categories={localCategories}
             sellers={sellers}
@@ -5638,7 +5829,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'analytics' && (
           <AdminAnalyticsDashboard
             products={products}
-            orders={orders}
+            orders={activeOrders}
           />
         )}
 
@@ -5664,7 +5855,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'sellers' && (
           <AdminSellersManager
             sellers={sellers}
-            orders={orders}
+            orders={activeOrders}
             currentAdmin={currentSeller || (sellers[0] || null)}
             onUpdateSellers={handleUpdateSellers}
           />
@@ -5680,12 +5871,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
                 {[
-                  { id: 'all', label: 'Tất cả đơn', count: orders.length },
-                  { id: 'Chờ xác nhận', label: 'Chờ xác nhận', count: orders.filter((o) => getNormalizedStatus(o.status) === 'Chờ xác nhận').length },
-                  { id: 'Đã xác nhận', label: 'Đã xác nhận', count: orders.filter((o) => getNormalizedStatus(o.status) === 'Đã xác nhận').length },
-                  { id: 'Knot đang được sản xuất', label: 'Đang làm/Sản xuất', count: orders.filter((o) => getNormalizedStatus(o.status) === 'Knot đang được sản xuất').length },
-                  { id: 'Đang giao hàng', label: 'Đang giao', count: orders.filter((o) => getNormalizedStatus(o.status) === 'Đang giao hàng').length },
-                  { id: 'Đơn hàng giao thành công', label: 'Giao thành công', count: orders.filter((o) => getNormalizedStatus(o.status) === 'Đơn hàng giao thành công').length }
+                  { id: 'all', label: 'Tất cả đơn', count: activeOrders.length },
+                  { id: 'Chờ xác nhận', label: 'Chờ xác nhận', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Chờ xác nhận').length },
+                  { id: 'Đã xác nhận', label: 'Đã xác nhận', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Đã xác nhận').length },
+                  { id: 'Knot đang được sản xuất', label: 'Đang làm/Sản xuất', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Knot đang được sản xuất').length },
+                  { id: 'Đang giao hàng', label: 'Đang giao', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Đang giao hàng').length },
+                  { id: 'Đơn hàng giao thành công', label: 'Giao thành công', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Đơn hàng giao thành công').length }
                 ].map((st) => (
                   <button
                     key={st.id}
@@ -6766,13 +6957,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               <span className="font-bold text-amber-800 text-xs block">
                                 {(ord.totalPrice || ord.totalAmount || 0).toLocaleString('vi-VN')}đ
                               </span>
-                              <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold mt-0.5 ${
-                                currentPayment === 'paid'
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-                              }`}>
-                                {currentPayment === 'paid' ? 'Đã TT' : 'Chưa TT'}
-                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const nextPayment = currentPayment === 'paid' ? 'unpaid' : 'paid';
+                                  handleUpdateSingleOrderPayment(ord.id!, nextPayment);
+                                }}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold mt-0.5 cursor-pointer transition-all hover:scale-105 active:scale-95 shadow-2xs ${
+                                  currentPayment === 'paid'
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300'
+                                    : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
+                                }`}
+                                title={`Nhấp để chuyển nhanh sang "${currentPayment === 'paid' ? 'Chưa thanh toán' : 'Đã thanh toán'}"`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${currentPayment === 'paid' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                <span>{currentPayment === 'paid' ? 'Đã TT' : 'Chưa TT'}</span>
+                              </button>
                             </td>
 
                             {/* Col 9: Trạng thái */}
@@ -7574,6 +7775,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             handleUpdateOrderStatus(orderId, status);
             setInspectingOrder((prev) => prev ? { ...prev, status } : null);
           }}
+          onUpdatePaymentStatus={handleUpdateSingleOrderPayment}
           onZoomReceipt={(img) => setZoomReceiptImage(img)}
           onEdit={(ord) => setEditingOrder(ord)}
           onDelete={(orderId) => {

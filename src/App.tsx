@@ -36,6 +36,7 @@ import {
   fetchCollectionsFromFirestore,
   fetchSiteContentFromFirestore,
   fetchSellersFromFirestore,
+  updateSellerPresence,
   saveSiteContentToFirestore,
   saveCategoryToFirestore,
   saveCollectionToFirestore,
@@ -407,6 +408,27 @@ export default function App() {
     };
     initSellers();
   }, [isAdminLoginModalOpen, currentSeller]);
+
+  // Online presence heartbeat for active admin/seller
+  useEffect(() => {
+    if (!currentSeller || !currentSeller.id) return;
+
+    // Send immediate presence update
+    updateSellerPresence(currentSeller.id, {
+      lastSeenAt: new Date().toISOString()
+    }).catch(() => {});
+
+    // Periodic heartbeat every 45 seconds while admin is in the session
+    const heartbeatInterval = setInterval(() => {
+      updateSellerPresence(currentSeller.id, {
+        lastSeenAt: new Date().toISOString()
+      }).catch(() => {});
+    }, 45000);
+
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
+  }, [currentSeller]);
 
   // Cross-tab / Multi-device Instant Broadcast Synchronization Helper
   const broadcastStoreChange = (type: 'products' | 'categories' | 'collections' | 'siteContent', data: any) => {

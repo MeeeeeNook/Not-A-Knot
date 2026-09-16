@@ -11,6 +11,7 @@ import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModa
 import { X, Check, ShoppingBag, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { trackGA4ViewItem } from '../utils/analytics';
 import { resolveAssetUrl } from '../firebase';
+import { useProductSEO } from '../utils/seo';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -39,6 +40,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onClose,
   onAddToCart
 }) => {
+  useProductSEO(product, product?.category);
+
   if (!product) return null;
 
   const [quantity, setQuantity] = useState(1);

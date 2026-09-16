@@ -92,7 +92,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [district, setDistrict] = useState('');
   const [detailedAddress, setDetailedAddress] = useState('');
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
+  const [paymentMethod] = useState<'cod'>('cod');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'preparing' | 'syncing' | 'confirmed' | 'error'>('idle');
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -308,7 +308,7 @@ export const CartPage: React.FC<CartPageProps> = ({
       source: 'website' as const,
       type: 'standard_order' as const,
       status: 'Chờ xác nhận' as const,
-      paymentMethod: paymentMethod === 'vietqr' ? ('bank_transfer' as const) : ('cod' as const),
+      paymentMethod: 'cod' as const,
       paymentStatus: 'unpaid' as const
     };
 
@@ -737,49 +737,21 @@ export const CartPage: React.FC<CartPageProps> = ({
 
                   {/* Section C: Payment Method Selection */}
                   <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs">
-                    <div className="flex items-center gap-2.5 pb-4 mb-5 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5 pb-4 mb-4 border-b border-slate-100">
                       <CreditCard className="w-5 h-5 text-amber-600" />
                       <h2 className="text-base sm:text-lg font-black text-slate-900">
                         Phương thức thanh toán
                       </h2>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Option 1: Chuyển khoản */}
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('vietqr')}
-                        className={`px-4 py-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-left ${
-                          paymentMethod === 'vietqr'
-                            ? 'border-amber-500 bg-amber-50/40 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                        }`}
-                      >
-                        <span className="text-sm font-bold text-slate-900">
-                          Chuyển khoản
-                        </span>
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'vietqr' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
-                          {paymentMethod === 'vietqr' && <Check className="w-3 h-3 stroke-[3]" />}
-                        </div>
-                      </button>
-
-                      {/* Option 2: Thanh toán khi nhận hàng */}
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('cod')}
-                        className={`px-4 py-3.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-left ${
-                          paymentMethod === 'cod'
-                            ? 'border-amber-500 bg-amber-50/40 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                        }`}
-                      >
-                        <span className="text-sm font-bold text-slate-900">
-                          Thanh toán khi nhận hàng
-                        </span>
-                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${paymentMethod === 'cod' ? 'border-amber-500 bg-amber-500 text-white' : 'border-slate-300'}`}>
-                          {paymentMethod === 'cod' && <Check className="w-3 h-3 stroke-[3]" />}
-                        </div>
-                      </button>
+                    <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 font-extrabold text-xs tracking-wider">
+                        COD
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-emerald-950">Thanh toán khi nhận hàng (Ship COD)</div>
+                        <div className="text-xs text-emerald-700 mt-0.5">Quý khách nhận hàng, kiểm tra sản phẩm và thanh toán tiền mặt trực tiếp cho bưu tá.</div>
+                      </div>
                     </div>
                   </div>
 

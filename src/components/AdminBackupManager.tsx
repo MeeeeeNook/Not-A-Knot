@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage } from '../types';
-import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck, FileJson, CheckCircle2 } from 'lucide-react';
 import { StoredOrder, saveSiteContentToFirestore, saveCategoriesToFirestore, saveCollectionsToFirestore, saveProductsToFirestore, saveOrdersToFirestore } from '../firebase';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportMasterBackupWithImageOption } from '../utils/excelImageExporter';
+import { safeStorageSetItem } from '../utils/storageHelper';
+import { safeIsoDateString, formatOrderDateWithoutSeconds } from '../utils/orderFormatters';
 
 interface AdminBackupManagerProps {
   orders: StoredOrder[];
@@ -172,11 +174,92 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   };
 
   // ----------------------------------------------------
-  // 3. Handle File Upload & Drag-and-Drop for Restore
+  // 3. Helper Sanitizers for Edited / Imported JSON
+  // ----------------------------------------------------
+  const sanitizeImportedProducts = (rawList: any[]): Product[] => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList
+      .filter((item) => item && typeof item === 'object')
+      .map((item, idx) => {
+        const id = item.id ? String(item.id).trim() : `prod_${Date.now()}_${idx}`;
+        const name = item.name ? String(item.name).trim() : `Sản phẩm ${idx + 1}`;
+        const price = Number(item.price) >= 0 ? Number(item.price) : 0;
+        const originalPrice = item.originalPrice !== undefined && Number(item.originalPrice) >= 0 
+          ? Number(item.originalPrice) 
+          : undefined;
+        
+        let images: string[] = [];
+        if (Array.isArray(item.images) && item.images.length > 0) {
+          images = item.images.map((img: any) => String(img).trim()).filter(Boolean);
+        } else if (item.image) {
+          images = [String(item.image).trim()];
+        }
+        if (images.length === 0) {
+          images = ['/assets/hero-bg.png'];
+        }
+
+        return {
+          ...item,
+          id,
+          name,
+          price,
+          originalPrice,
+          category: item.category ? String(item.category).trim() : 'all',
+          image: images[0],
+          images,
+          stock: item.stock !== undefined ? Number(item.stock) : 50,
+          inStock: item.inStock !== undefined ? Boolean(item.inStock) : true,
+          soldCount: item.soldCount !== undefined ? Number(item.soldCount) : 0,
+          isNew: item.isNew !== undefined ? Boolean(item.isNew) : false,
+          isBestSeller: item.isBestSeller !== undefined ? Boolean(item.isBestSeller) : false,
+          detailsText: item.detailsText || item.description || ''
+        } as Product;
+      });
+  };
+
+  const sanitizeImportedOrders = (rawList: any[]): StoredOrder[] => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList
+      .filter((item) => item && typeof item === 'object')
+      .map((item, idx) => {
+        const id = item.id ? String(item.id).trim() : `NAK-${Date.now()}-${idx}`;
+        const safeIso = safeIsoDateString(item.createdAt || item.date);
+        const safeDisplayDate = item.date ? formatOrderDateWithoutSeconds(item.date) : formatOrderDateWithoutSeconds(safeIso);
+        
+        return {
+          ...item,
+          id,
+          date: safeDisplayDate,
+          createdAt: safeIso,
+          name: item.name || item.customerName || 'Khách hàng',
+          customerName: item.customerName || item.name || 'Khách hàng',
+          phone: item.phone ? String(item.phone).trim() : '',
+          total: Number(item.total) >= 0 ? Number(item.total) : 0,
+          status: item.status || 'Chờ xác nhận',
+          paymentStatus: item.paymentStatus || 'unpaid',
+          source: item.source || 'website',
+          itemDetails: Array.isArray(item.itemDetails) ? item.itemDetails : []
+        } as StoredOrder;
+      });
+  };
+
+  const sanitizeImportedCategories = (rawList: any[]): CategoryItem[] => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList
+      .filter((item) => item && typeof item === 'object' && (item.id || item.name))
+      .map((item, idx) => ({
+        ...item,
+        id: item.id ? String(item.id).trim() : `cat_${idx + 1}`,
+        name: item.name ? String(item.name).trim() : `Danh mục ${idx + 1}`
+      }));
+  };
+
+  // ----------------------------------------------------
+  // 4. Handle File Upload & Drag-and-Drop for Restore
   // ----------------------------------------------------
   const processBackupFile = (file: File) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
+    if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json' && file.type !== 'text/json') {
       alert('Vui lòng chọn file sao lưu định dạng .JSON');
       return;
     }
@@ -185,32 +268,80 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
     reader.onload = (evt) => {
       try {
         const content = evt.target?.result as string;
-        const parsed = JSON.parse(content);
-
-        // Validate structure
-        if (!parsed.payload && !parsed.orders && !parsed.products) {
-          alert('File không đúng định dạng sao lưu của hệ thống NOT A KNOT.');
+        if (!content || !content.trim()) {
+          alert('File JSON trống. Vui lòng kiểm tra lại nội dung file.');
           return;
         }
 
-        const payload = parsed.payload || parsed;
+        const parsed = JSON.parse(content);
+
+        // Normalize payload from various JSON formats:
+        // 1. Unified v2 format: { schemaVersion: "2.0.0", payload: { ... } }
+        // 2. Version history format: { id: "backup_...", data: { ... } }
+        // 3. Database export: { products: [...], categories: [...] }
+        // 4. Direct array of products or orders: [ {...}, {...} ]
+        let payload: any = {};
+        if (parsed.payload && typeof parsed.payload === 'object') {
+          payload = parsed.payload;
+        } else if (parsed.data && typeof parsed.data === 'object') {
+          payload = parsed.data;
+        } else if (Array.isArray(parsed)) {
+          // Detect if array contains orders or products
+          if (parsed.length > 0 && (parsed[0].phone !== undefined || parsed[0].itemDetails !== undefined || parsed[0].status !== undefined)) {
+            payload = { orders: parsed };
+          } else {
+            payload = { products: parsed };
+          }
+        } else if (typeof parsed === 'object') {
+          payload = parsed;
+        }
+
+        const rawOrders = Array.isArray(payload.orders) ? payload.orders : [];
+        const rawProducts = Array.isArray(payload.products) ? payload.products : [];
+        const rawCategories = Array.isArray(payload.categories) ? payload.categories : [];
+        const rawCollections = Array.isArray(payload.collections) ? payload.collections : [];
+        const rawSiteContent = payload.siteContent && typeof payload.siteContent === 'object' ? payload.siteContent : null;
+        const rawMessages = Array.isArray(payload.messages) ? payload.messages : [];
+
+        // Validate that at least one recognizable data field exists
+        if (
+          rawOrders.length === 0 &&
+          rawProducts.length === 0 &&
+          rawCategories.length === 0 &&
+          rawCollections.length === 0 &&
+          !rawSiteContent &&
+          rawMessages.length === 0
+        ) {
+          alert('File không chứa dữ liệu hợp lệ của hệ thống NOT A KNOT (Không tìm thấy đơn hàng, sản phẩm, danh mục hoặc giao diện).');
+          return;
+        }
+
+        const sanitizedPayload = {
+          orders: sanitizeImportedOrders(rawOrders),
+          products: sanitizeImportedProducts(rawProducts),
+          categories: sanitizeImportedCategories(rawCategories),
+          collections: rawCollections,
+          siteContent: rawSiteContent,
+          messages: rawMessages
+        };
+
         setRestorePreview({
           fileName: file.name,
           fileSize: (file.size / 1024).toFixed(1) + ' KB',
-          version: parsed.schemaVersion || '1.0',
-          exportedAt: parsed.exportedAt || 'Không rõ',
-          ordersCount: payload.orders ? payload.orders.length : 0,
-          productsCount: payload.products ? payload.products.length : 0,
-          categoriesCount: payload.categories ? payload.categories.length : 0,
-          collectionsCount: payload.collections ? payload.collections.length : 0,
-          hasSiteContent: !!payload.siteContent,
-          hasMessages: payload.messages ? payload.messages.length : 0,
-          rawPayload: payload
+          version: parsed.schemaVersion || (parsed.id?.startsWith('backup_') ? 'Version History' : '1.0 / Custom'),
+          exportedAt: parsed.exportedAt || parsed.createdAt || 'Tùy chỉnh (Đã chỉnh sửa)',
+          ordersCount: sanitizedPayload.orders.length,
+          productsCount: sanitizedPayload.products.length,
+          categoriesCount: sanitizedPayload.categories.length,
+          collectionsCount: sanitizedPayload.collections.length,
+          hasSiteContent: !!sanitizedPayload.siteContent,
+          hasMessages: sanitizedPayload.messages.length,
+          rawPayload: sanitizedPayload
         });
-        notify(`Đã tải file "${file.name}" thành công.`);
-      } catch (err) {
-        console.error(err);
-        alert('Không thể đọc file JSON. Vui lòng kiểm tra lại tính toàn vẹn của file.');
+        notify(`Đã nạp file "${file.name}" thành công. Xem chi tiết bên dưới để xác nhận.`);
+      } catch (err: any) {
+        console.error('Lỗi đọc JSON:', err);
+        alert(`Không thể đọc file JSON (Lỗi cú pháp: ${err.message || 'Sai định dạng'}). Hãy kiểm tra các dấu ngoặc hoặc dấu phẩy nếu bạn vừa sửa file thủ công.`);
       }
     };
     reader.readAsText(file);
@@ -253,54 +384,78 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
 
     try {
       const payload = restorePreview.rawPayload;
+      const restoredItemsList: string[] = [];
 
       // 1. Orders
-      if (payload.orders && Array.isArray(payload.orders)) {
-        const nextOrders = restoreMode === 'replace' ? payload.orders : [...payload.orders, ...orders.filter(o => !payload.orders.some((p: any) => p.id === o.id))];
+      if (payload.orders && Array.isArray(payload.orders) && payload.orders.length > 0) {
+        let nextOrders: StoredOrder[] = [];
+        if (restoreMode === 'replace') {
+          nextOrders = payload.orders;
+        } else {
+          // Merge mode: replace matching by ID, append new ones
+          const existingMap = new Map<string, StoredOrder>(orders.map((o) => [o.id || '', o]));
+          payload.orders.forEach((o: StoredOrder) => existingMap.set(o.id, o));
+          nextOrders = Array.from(existingMap.values());
+        }
         onUpdateOrders(nextOrders);
-        localStorage.setItem('nak_orders', JSON.stringify(nextOrders));
+        safeStorageSetItem('nak_orders', JSON.stringify(nextOrders));
         await saveOrdersToFirestore(nextOrders);
+        restoredItemsList.push(`${nextOrders.length} đơn hàng`);
       }
 
       // 2. Products
-      if (payload.products && Array.isArray(payload.products)) {
-        const nextProds = restoreMode === 'replace' ? payload.products : [...payload.products, ...products.filter(p => !payload.products.some((np: any) => np.id === p.id))];
+      if (payload.products && Array.isArray(payload.products) && payload.products.length > 0) {
+        let nextProds: Product[] = [];
+        if (restoreMode === 'replace') {
+          nextProds = payload.products;
+        } else {
+          // Merge mode: replace matching by ID, append new ones
+          const existingMap = new Map<string, Product>(products.map((p) => [p.id, p]));
+          payload.products.forEach((p: Product) => existingMap.set(p.id, p));
+          nextProds = Array.from(existingMap.values());
+        }
         onUpdateProducts(nextProds);
-        localStorage.setItem('nak_admin_products', JSON.stringify(nextProds));
+        safeStorageSetItem('nak_admin_products', JSON.stringify(nextProds));
+        safeStorageSetItem('nak_custom_products', JSON.stringify(nextProds));
         await saveProductsToFirestore(nextProds);
+        restoredItemsList.push(`${nextProds.length} sản phẩm`);
       }
 
       // 3. Categories
-      if (payload.categories && Array.isArray(payload.categories)) {
+      if (payload.categories && Array.isArray(payload.categories) && payload.categories.length > 0) {
         onUpdateCategories(payload.categories);
-        localStorage.setItem('nak_categories', JSON.stringify(payload.categories));
+        safeStorageSetItem('nak_categories', JSON.stringify(payload.categories));
         await saveCategoriesToFirestore(payload.categories);
+        restoredItemsList.push(`${payload.categories.length} danh mục`);
       }
 
       // 4. Collections
-      if (payload.collections && Array.isArray(payload.collections)) {
+      if (payload.collections && Array.isArray(payload.collections) && payload.collections.length > 0) {
         onUpdateCollections(payload.collections);
-        localStorage.setItem('nak_collections', JSON.stringify(payload.collections));
+        safeStorageSetItem('nak_collections', JSON.stringify(payload.collections));
         await saveCollectionsToFirestore(payload.collections);
+        restoredItemsList.push(`${payload.collections.length} banner`);
       }
 
       // 5. Site Content
       if (payload.siteContent && typeof payload.siteContent === 'object') {
         onUpdateSiteContent(payload.siteContent);
-        localStorage.setItem('nak_site_content', JSON.stringify(payload.siteContent));
+        safeStorageSetItem('nak_site_content', JSON.stringify(payload.siteContent));
         await saveSiteContentToFirestore(payload.siteContent);
+        restoredItemsList.push('giao diện website');
       }
 
       // 6. Messages
-      if (payload.messages && Array.isArray(payload.messages)) {
-        localStorage.setItem('nak_contact_messages', JSON.stringify(payload.messages));
+      if (payload.messages && Array.isArray(payload.messages) && payload.messages.length > 0) {
+        safeStorageSetItem('nak_contact_messages', JSON.stringify(payload.messages));
+        restoredItemsList.push(`${payload.messages.length} tin nhắn`);
       }
 
-      notify('Khôi phục dữ liệu từ bản sao lưu thành công!');
+      notify(`Khôi phục thành công (${restoredItemsList.join(', ')}). Dữ liệu đã đồng bộ lên Firebase!`);
       setRestorePreview(null);
     } catch (e: any) {
-      console.error(e);
-      notify('Lỗi trong quá trình khôi phục: ' + (e.message || 'Thử lại'));
+      console.error('Lỗi khôi phục:', e);
+      notify('Lỗi trong quá trình khôi phục: ' + (e.message || 'Vui lòng thử lại'));
     } finally {
       setIsRestoring(false);
     }

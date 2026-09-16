@@ -121,8 +121,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
-  // Lazy loading observer: only loads image resources when card approaches viewport (300px margin)
+  // Lazy loading observer: loads image resources ahead of time (600px margin)
   useEffect(() => {
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
       setIsInView(true);
@@ -136,7 +137,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           observer.disconnect();
         }
       },
-      { rootMargin: '300px 0px', threshold: 0.01 }
+      { rootMargin: '600px 0px', threshold: 0.01 }
     );
 
     if (cardRef.current) {
@@ -145,6 +146,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
     return () => observer.disconnect();
   }, []);
+
+  // Quick detect if image is already cached in memory
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    }
+  }, [images, isInView]);
 
   // Photos are STATIC by default. When mouse hovers, gentle smooth pacing auto-slide through photos.
   useEffect(() => {
@@ -252,6 +260,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </AnimatePresence>
             ) : (
               <img
+                ref={(node) => {
+                  imgRef.current = node;
+                  if (node && node.complete && node.naturalWidth > 0 && !isLoaded) {
+                    setIsLoaded(true);
+                  }
+                }}
                 src={images[0] || product.image || '/assets/bracelet.jpg'}
                 alt={product.name}
                 onLoad={() => setIsLoaded(true)}
@@ -259,7 +273,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
                   setIsLoaded(true);
                 }}
-                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                className={`w-full h-full object-cover transition-opacity duration-200 ${
                   isLoaded ? 'opacity-100' : 'opacity-0'
                 } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
                 style={{ imageRendering: '-webkit-optimize-contrast' }}

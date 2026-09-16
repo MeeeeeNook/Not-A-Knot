@@ -1,31 +1,168 @@
 import { StoredOrder } from '../types';
 
 /**
- * Format date string without seconds (e.g. "16:15 31/08/2026")
+ * Safely parse any date value into a valid Date object.
+ * Handles:
+ * - Date instances
+ * - Firestore Timestamp objects ({ seconds, nanoseconds } or { _seconds, _nanoseconds } or .toDate())
+ * - Epoch millisecond / second numbers or numeric strings
+ * - Vietnamese strings like "16:15:29 31/8/2026", "16:15, 31/08/2026"
+ * - Strings like "31/08/2026 16:15:29", "31/8/2026"
+ * - ISO strings "2026-08-31T16:15:29.000Z"
+ * - HTML datetime-local strings "2026-08-31T16:15"
+ * Returns null if completely invalid or absent.
  */
-export const formatOrderDateWithoutSeconds = (dateStr?: string): string => {
-  if (!dateStr) return 'N/A';
+export const parseAnyDate = (val: any): Date | null => {
+  if (!val) return null;
 
-  const clean = dateStr.trim();
-
-  // Pattern 1: "16:15:29 31/8/2026" or "16:15:29, 31/8/2026" or "16:15:29 31/08/2026"
-  const timeSecRegex = /(\d{1,2}):(\d{2}):\d{2}/;
-  if (timeSecRegex.test(clean)) {
-    return clean.replace(timeSecRegex, '$1:$2').replace(/,\s*/g, ' ').trim();
+  if (val instanceof Date) {
+    return !isNaN(val.getTime()) ? val : null;
   }
 
-  // Pattern 2: ISO string or standard parseable Date
-  const parsed = new Date(clean);
-  if (!isNaN(parsed.getTime()) && clean.length >= 10 && (clean.includes('-') || clean.includes('T'))) {
-    const hours = String(parsed.getHours()).padStart(2, '0');
-    const mins = String(parsed.getMinutes()).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const year = parsed.getFullYear();
+  // Firestore Timestamp object
+  if (typeof val === 'object') {
+    if (typeof val.toDate === 'function') {
+      try {
+        const d = val.toDate();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      } catch {
+        // ignore
+      }
+    }
+    const sec = val.seconds ?? val._seconds;
+    if (typeof sec === 'number') {
+      const d = new Date(sec * 1000);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  if (typeof val === 'number') {
+    const d = new Date(val > 1e11 ? val : val * 1000);
+    return !isNaN(d.getTime()) ? d : null;
+  }
+
+  if (typeof val !== 'string') return null;
+  const clean = val.trim();
+  if (!clean || clean === 'N/A' || clean === 'null' || clean === 'undefined') return null;
+
+  // Pure numeric timestamp in string form
+  if (/^\d{10,13}$/.test(clean)) {
+    const num = Number(clean);
+    const d = new Date(num > 1e11 ? num : num * 1000);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Pattern A: Vietnamese locale "HH:mm(:ss) DD/MM/YYYY" or "HH:mm(:ss), DD/MM/YYYY"
+  // e.g., "16:15:29 31/8/2026" or "16:15, 31/08/2026"
+  const viMatchA = clean.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?[,\s]+(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (viMatchA) {
+    const hours = parseInt(viMatchA[1], 10);
+    const mins = parseInt(viMatchA[2], 10);
+    const secs = viMatchA[3] ? parseInt(viMatchA[3], 10) : 0;
+    const day = parseInt(viMatchA[4], 10);
+    const month = parseInt(viMatchA[5], 10) - 1;
+    const year = parseInt(viMatchA[6], 10);
+    const d = new Date(year, month, day, hours, mins, secs);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Pattern B: "DD/MM/YYYY HH:mm(:ss)" or "DD/MM/YYYY, HH:mm(:ss)" or "DD/MM/YYYY"
+  // e.g., "31/08/2026, 16:15:29" or "31/8/2026"
+  const viMatchB = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (viMatchB) {
+    const day = parseInt(viMatchB[1], 10);
+    const month = parseInt(viMatchB[2], 10) - 1;
+    const year = parseInt(viMatchB[3], 10);
+    const hours = viMatchB[4] ? parseInt(viMatchB[4], 10) : 0;
+    const mins = viMatchB[5] ? parseInt(viMatchB[5], 10) : 0;
+    const secs = viMatchB[6] ? parseInt(viMatchB[6], 10) : 0;
+    const d = new Date(year, month, day, hours, mins, secs);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Pattern C: HTML datetime-local "YYYY-MM-DDTHH:mm" or "YYYY-MM-DD HH:mm:ss"
+  const dtLocalMatch = clean.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (dtLocalMatch) {
+    const year = parseInt(dtLocalMatch[1], 10);
+    const month = parseInt(dtLocalMatch[2], 10) - 1;
+    const day = parseInt(dtLocalMatch[3], 10);
+    const hours = parseInt(dtLocalMatch[4], 10);
+    const mins = parseInt(dtLocalMatch[5], 10);
+    const secs = dtLocalMatch[6] ? parseInt(dtLocalMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hours, mins, secs);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Standard Date parse (ISO 8601, RFC2822, etc.)
+  try {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) return d;
+  } catch {
+    // ignore
+  }
+
+  return null;
+};
+
+/**
+ * Format any date into "YYYY-MM-DDTHH:mm" for HTML <input type="datetime-local" />.
+ * Returns empty string if invalid or absent.
+ */
+export const formatToDatetimeLocal = (val: any): string => {
+  const d = parseAnyDate(val);
+  if (!d) return '';
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/**
+ * Safely convert any date to ISO string. NEVER throws "RangeError: Invalid time value".
+ * Falls back to secondary fallback or current date.
+ */
+export const safeIsoDateString = (val: any, fallback?: any): string => {
+  const d = parseAnyDate(val) || (fallback ? parseAnyDate(fallback) : null) || new Date();
+  try {
+    return d.toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+};
+
+/**
+ * Get numeric millisecond timestamp for reliable sorting. Returns 0 if invalid.
+ */
+export const safeOrderTimestamp = (val: any): number => {
+  const d = parseAnyDate(val);
+  return d ? d.getTime() : 0;
+};
+
+/**
+ * Format date string without seconds (e.g. "16:15 31/08/2026")
+ */
+export const formatOrderDateWithoutSeconds = (dateStr?: any): string => {
+  if (!dateStr) return 'N/A';
+
+  const d = parseAnyDate(dateStr);
+  if (d) {
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
     return `${hours}:${mins} ${day}/${month}/${year}`;
   }
 
-  return clean;
+  // Fallback for unparsed strings
+  if (typeof dateStr === 'string') {
+    const clean = dateStr.trim();
+    const timeSecRegex = /(\d{1,2}):(\d{2}):\d{2}/;
+    if (timeSecRegex.test(clean)) {
+      return clean.replace(timeSecRegex, '$1:$2').replace(/,\s*/g, ' ').trim();
+    }
+    return clean;
+  }
+
+  return 'N/A';
 };
 
 /**

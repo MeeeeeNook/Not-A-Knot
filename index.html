@@ -14,6 +14,9 @@
     </script>
     <title>Not a Knot | Handmade Accessories</title>
     
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://notaknot.vn/" />
+
     <!-- Favicon & Brand Icons -->
     <link rel="icon" type="image/jpeg" href="/assets/logo.jpg" />
     <link rel="apple-touch-icon" href="/assets/logo.jpg" />
@@ -33,19 +36,80 @@
     <meta name="language" content="Vietnamese" />
     <meta http-equiv="content-language" content="vi" />
 
-    <!-- Open Graph / Facebook / Zalo -->
+    <!-- Open Graph / Facebook / Zalo (Default & Dynamic Targets) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="NOT A KNOT Handmade Studio" />
     <meta property="og:title" content="Not a Knot | Handmade Accessories" />
     <meta property="og:description" content="NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam." />
     <meta property="og:image" content="/assets/logo.jpg" />
+    <meta property="og:image:secure_url" content="https://notaknot.vn/assets/logo.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="NOT A KNOT - Handmade Paracord Accessories Studio" />
+    <meta property="og:url" content="https://notaknot.vn/" />
     <meta property="og:locale" content="vi_VN" />
 
     <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@notaknot" />
+    <meta name="twitter:creator" content="@notaknot" />
     <meta name="twitter:title" content="Not a Knot | Handmade Accessories" />
     <meta name="twitter:description" content="NOT A KNOT - Thương hiệu phụ kiện dây dù Paracord thủ công cao cấp. Vòng tay nam nữ, móc khóa EDC, BST Hào Khí 02.09 chế tác thủ công tại Việt Nam." />
     <meta name="twitter:image" content="/assets/logo.jpg" />
+    <meta name="twitter:image:alt" content="NOT A KNOT Handmade Studio" />
+
+    <!-- High-Speed Pre-render Meta Tag Hydration for Crawlers (Google, Facebook, Zalo, Twitter, Bing) -->
+    <script>
+      (function() {
+        try {
+          var origin = window.location.origin || 'https://notaknot.vn';
+          var hash = window.location.hash || '';
+          var search = window.location.search || '';
+          var params = new URLSearchParams(search);
+          var productId = params.get('product') || (hash.match(/#product\/([^/?&]+)/) ? hash.match(/#product\/([^/?&]+)/)[1] : null);
+          var collectionId = params.get('collection') || (hash.match(/#collection\/([^/?&]+)/) ? hash.match(/#collection\/([^/?&]+)/)[1] : null);
+
+          function updateMeta(attr, key, val) {
+            var el = document.querySelector('meta[' + attr + '="' + key + '"]');
+            if (!el) {
+              el = document.createElement('meta');
+              el.setAttribute(attr, key);
+              document.head.appendChild(el);
+            }
+            el.setAttribute('content', val);
+          }
+
+          function updateCanonical(url) {
+            var el = document.querySelector('link[rel="canonical"]');
+            if (!el) {
+              el = document.createElement('link');
+              el.setAttribute('rel', 'canonical');
+              document.head.appendChild(el);
+            }
+            el.setAttribute('href', url);
+          }
+
+          if (productId) {
+            var cleanId = decodeURIComponent(productId);
+            var prodUrl = origin + '/#product/' + cleanId;
+            updateCanonical(prodUrl);
+            updateMeta('property', 'og:url', prodUrl);
+            updateMeta('property', 'og:type', 'product');
+            updateMeta('property', 'product:brand', 'NOT A KNOT');
+            updateMeta('property', 'product:availability', 'in stock');
+            updateMeta('property', 'product:condition', 'new');
+            updateMeta('property', 'product:price:currency', 'VND');
+          } else if (collectionId) {
+            var cleanCol = decodeURIComponent(collectionId);
+            var colUrl = origin + '/#collection/' + cleanCol;
+            updateCanonical(colUrl);
+            updateMeta('property', 'og:url', colUrl);
+            updateMeta('property', 'og:type', 'website');
+          }
+        } catch (e) {}
+      })();
+    </script>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -93,6 +157,21 @@
             "name": "BST Móc Khóa EDC Paracord"
           }
         ]
+      }
+    }
+    </script>
+
+    <!-- JSON-LD SearchAction WebSite Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "NOT A KNOT",
+      "url": "https://notaknot.vn",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://notaknot.vn/#search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
       }
     }
     </script>
@@ -147,4 +226,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

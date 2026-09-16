@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getStorage, ref, uploadBytes, uploadString, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   initializeFirestore,
   getFirestore,
@@ -30,6 +30,11 @@ import {
   deleteProductFromIDB,
   safeStorageSetItem
 } from './utils/storageHelper';
+import {
+  safeIsoDateString,
+  safeOrderTimestamp,
+  formatOrderDateWithoutSeconds
+} from './utils/orderFormatters';
 
 // Load client configuration using encrypted database connection parameters
 // protected from plain-text exposure in client bundle
@@ -104,6 +109,111 @@ export const canonicalOrderKey = (idOrTracking?: string): string => {
     }
   }
   return clean;
+};
+
+export const resolveAllOrderIdCandidates = (idOrTracking?: string): string[] => {
+  if (!idOrTracking) return [];
+  const raw = String(idOrTracking).trim();
+  if (!raw) return [];
+  const upper = raw.toUpperCase();
+  const lower = raw.toLowerCase();
+  const withoutHash = raw.replace(/^#/, '').trim();
+  const withoutHashUpper = withoutHash.toUpperCase();
+  const canonical = canonicalOrderKey(raw);
+
+  const set = new Set<string>();
+  set.add(raw);
+  set.add(upper);
+  set.add(lower);
+  if (withoutHash) set.add(withoutHash);
+  if (withoutHashUpper) set.add(withoutHashUpper);
+  if (canonical) {
+    set.add(canonical);
+    set.add(canonical.toUpperCase());
+    set.add(canonical.toLowerCase());
+  }
+
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (digits.length >= 6) {
+    const lastDigits = digits.slice(-6);
+    set.add(`NAK-${lastDigits}`);
+    set.add(`ord-web-${lastDigits}`);
+    set.add(`ord-man-${lastDigits}`);
+    set.add(`ORD-WEB-${lastDigits}`);
+    set.add(`ORD-MAN-${lastDigits}`);
+  }
+  return Array.from(set).filter(Boolean);
+};
+
+export const isMatchingOrderDoc = (targetId: string, docId?: string, docData?: any): boolean => {
+  if (!targetId) return false;
+  const t = String(targetId).trim().toUpperCase();
+  const tClean = t.replace(/^#/, '').trim();
+
+  if (docId) {
+    const d = String(docId).trim().toUpperCase();
+    const dClean = d.replace(/^#/, '').trim();
+    if (t === d || tClean === dClean || t === dClean || tClean === d) return true;
+    const cDoc = canonicalOrderKey(docId).toUpperCase();
+    const cTarget = canonicalOrderKey(targetId).toUpperCase();
+    if (cTarget && cDoc && cTarget === cDoc) return true;
+  }
+
+  if (docData) {
+    const dataId = docData.id ? String(docData.id).trim().toUpperCase() : '';
+    const dataIdClean = dataId.replace(/^#/, '').trim();
+    if (dataId && (t === dataId || tClean === dataIdClean || t === dataIdClean || tClean === dataId)) return true;
+
+    const dataTrack = docData.trackingNumber ? String(docData.trackingNumber).trim().toUpperCase() : '';
+    const dataTrackClean = dataTrack.replace(/^#/, '').trim();
+    if (dataTrack && (t === dataTrack || tClean === dataTrackClean || t === dataTrackClean || tClean === dataTrack)) return true;
+
+    const dataCode = docData.orderCode ? String(docData.orderCode).trim().toUpperCase() : '';
+    const dataCodeClean = dataCode.replace(/^#/, '').trim();
+    if (dataCode && (t === dataCode || tClean === dataCodeClean || t === dataCodeClean || tClean === dataCode)) return true;
+
+    const cTarget = canonicalOrderKey(targetId).toUpperCase();
+    if (dataId && canonicalOrderKey(dataId).toUpperCase() === cTarget) return true;
+    if (dataTrack && canonicalOrderKey(dataTrack).toUpperCase() === cTarget) return true;
+  }
+
+  return false;
+};
+
+export const syncLocalStorageOrderDeletion = (orderId: string, permanent: boolean = false) => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  const keys = ['nak_preorders', 'nak_orders', 'nak_custom_orders'];
+
+  keys.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const list: StoredOrder[] = JSON.parse(raw);
+      if (!Array.isArray(list)) return;
+
+      let updated: StoredOrder[];
+      if (permanent) {
+        updated = list.filter((ord) => !isMatchingOrderDoc(orderId, ord.id || '', ord));
+      } else {
+        const nowIso = new Date().toISOString();
+        updated = list.map((ord) => {
+          if (isMatchingOrderDoc(orderId, ord.id || '', ord)) {
+            return { ...ord, isDeleted: true, deletedAt: nowIso };
+          }
+          return ord;
+        });
+      }
+      safeStorageSetItem(key, JSON.stringify(updated));
+    } catch {
+      // ignore parsing error
+    }
+  });
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent('nak_order_deleted', { detail: { orderId, permanent } })
+    );
+  } catch {}
 };
 
 export const db = firestoreInstance;
@@ -570,6 +680,9 @@ export interface StoredOrder {
     note?: string;
     actor?: string;
   }[];
+  isDeleted?: boolean;
+  deletedAt?: string;
+  updatedAt?: string;
 }
 
 // In-memory cache for ultra-fast reads
@@ -1125,27 +1238,47 @@ export const deduplicateStoredOrders = (ordersList: StoredOrder[]): StoredOrder[
   const map = new Map<string, StoredOrder>();
   for (const ord of ordersList) {
     if (!ord) continue;
-    const key = canonicalOrderKey(ord.id) || canonicalOrderKey(ord.trackingNumber) || ord.id;
+    // Filter out corrupted or completely empty ghost documents
+    const hasInfo = Boolean(
+      (ord.customerName && ord.customerName.trim()) ||
+      (ord.name && ord.name.trim()) ||
+      (ord.phone && ord.phone.trim()) ||
+      (ord.items && ord.items.length > 0) ||
+      (ord.itemDetails && ord.itemDetails.length > 0) ||
+      ord.totalPrice ||
+      ord.totalAmount
+    );
+    if (!hasInfo) {
+      continue;
+    }
+
+    const key = (ord.id || ord.trackingNumber || '').trim().toUpperCase();
     if (!key) continue;
+
     if (map.has(key)) {
       const existing = map.get(key)!;
-      const preferOrd = (ord.id.startsWith('NAK-') && !existing.id.startsWith('NAK-')) ||
-        (new Date(ord.createdAt || ord.date || 0).getTime() >= new Date(existing.createdAt || existing.date || 0).getTime());
+      const isDeleted = ord.isDeleted === true || existing.isDeleted === true;
+      const deletedAt = isDeleted ? (ord.deletedAt || existing.deletedAt || new Date().toISOString()) : undefined;
+
+      const preferOrd = (safeOrderTimestamp(ord.updatedAt || ord.createdAt || ord.date) >= safeOrderTimestamp(existing.updatedAt || existing.createdAt || existing.date));
       const base = preferOrd ? ord : existing;
       const other = preferOrd ? existing : ord;
+
       map.set(key, {
         ...other,
         ...base,
-        id: (base.id.startsWith('NAK-') ? base.id : (other.id.startsWith('NAK-') ? other.id : base.id)),
-        trackingNumber: base.trackingNumber || other.trackingNumber || key
+        id: base.id || other.id || key,
+        trackingNumber: base.trackingNumber || other.trackingNumber || key,
+        isDeleted,
+        deletedAt
       });
     } else {
       map.set(key, ord);
     }
   }
   return Array.from(map.values()).sort((a, b) => {
-    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+    const timeA = safeOrderTimestamp(a.createdAt || a.date);
+    const timeB = safeOrderTimestamp(b.createdAt || b.date);
     return timeB - timeA;
   });
 };
@@ -1165,8 +1298,8 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
       results.push({
         ...data,
         id: orderId,
-        date: data.date || data.createdAt || new Date().toLocaleString('vi-VN'),
-        createdAt: data.createdAt || data.date || new Date().toISOString(),
+        date: data.date ? formatOrderDateWithoutSeconds(data.date) : formatOrderDateWithoutSeconds(data.createdAt || new Date()),
+        createdAt: safeIsoDateString(data.createdAt || data.date),
         name: data.name || data.customerName || '',
         customerName: data.customerName || data.name || '',
         phone: data.phone || '',
@@ -1196,7 +1329,9 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
         shippingCarrier: data.shippingCarrier || '',
         shippingCode: data.shippingCode || '',
         estimatedDelivery: data.estimatedDelivery || '',
-        statusHistory: data.statusHistory || []
+        statusHistory: data.statusHistory || [],
+        isDeleted: data.isDeleted === true,
+        deletedAt: data.deletedAt || undefined
       });
       recordOperation('read');
     });
@@ -1256,8 +1391,8 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
     trackingNumber: order.trackingNumber || orderId,
     bankReceiptImage: receiptImage,
     itemDetails: sanitizedItemDetails,
-    date: order.date || new Date().toLocaleString('vi-VN'),
-    createdAt: order.createdAt || new Date().toISOString(),
+    date: order.date ? formatOrderDateWithoutSeconds(order.date) : formatOrderDateWithoutSeconds(order.createdAt || new Date()),
+    createdAt: safeIsoDateString(order.createdAt || order.date),
     status: order.status || 'Chờ xác nhận',
     paymentStatus: order.paymentStatus || 'unpaid',
     source: order.source || 'website',
@@ -1479,8 +1614,8 @@ export const subscribeToOrdersFromFirestore = (
           results.push({
             ...data,
             id: orderId,
-            date: data.date || data.createdAt || new Date().toLocaleString('vi-VN'),
-            createdAt: data.createdAt || data.date || new Date().toISOString(),
+            date: data.date ? formatOrderDateWithoutSeconds(data.date) : formatOrderDateWithoutSeconds(data.createdAt || new Date()),
+            createdAt: safeIsoDateString(data.createdAt || data.date),
             name: data.name || data.customerName || '',
             customerName: data.customerName || data.name || '',
             phone: data.phone || '',
@@ -1510,7 +1645,9 @@ export const subscribeToOrdersFromFirestore = (
             shippingCarrier: data.shippingCarrier || '',
             shippingCode: data.shippingCode || '',
             estimatedDelivery: data.estimatedDelivery || '',
-            statusHistory: data.statusHistory || []
+            statusHistory: data.statusHistory || [],
+            isDeleted: data.isDeleted === true,
+            deletedAt: data.deletedAt || undefined
           });
         });
         // Deduplicate and sort descending by createdAt
@@ -1529,34 +1666,223 @@ export const subscribeToOrdersFromFirestore = (
   }
 };
 
-export const deleteOrderFromFirestore = async (orderId: string): Promise<void> => {
+export const moveOrderToTrash = async (orderId: string): Promise<void> => {
+  if (!orderId) return;
   try {
-    const docRef = doc(db, 'orders', orderId);
-    await deleteDoc(docRef);
+    const now = new Date().toISOString();
+    const cleanId = orderId.replace(/^#/, '').trim();
+    const cleanUpper = cleanId.toUpperCase();
+
+    // 1. Prepare direct document writes
+    const updatePromises: Promise<any>[] = [
+      setDoc(doc(db, 'orders', orderId), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {}),
+      setDoc(doc(db, 'orders', cleanId), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {}),
+      setDoc(doc(db, 'orders', cleanUpper), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {})
+    ];
+
+    // 2. Query Firestore collection to find and update all matching documents
+    const colRef = collection(db, 'orders');
+    const snap = await getDocs(colRef);
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      if (isMatchingOrderDoc(orderId, docSnap.id, d)) {
+        updatePromises.push(
+          setDoc(docSnap.ref, { isDeleted: true, deletedAt: now }, { merge: true })
+        );
+      }
+    });
+
+    await Promise.allSettled(updatePromises);
+
+    // 3. Clean and sync all local storage caches
+    syncLocalStorageOrderDeletion(orderId, false);
     ordersMemoryCache = null;
-    recordOperation('delete', 1, -900);
+    recordOperation('write', 1, -100);
   } catch (err) {
-    console.error('Lỗi xóa đơn hàng Firestore:', err);
+    console.error('Lỗi chuyển đơn hàng vào thùng rác:', err);
     throw err;
   }
 };
 
-/**
- * Fast bulk order deletion using atomic writeBatch for maximum speed
- */
-export const deleteOrdersBatchFromFirestore = async (orderIds: string[]): Promise<void> => {
+export const moveOrdersBatchToTrash = async (orderIds: string[]): Promise<void> => {
   if (!orderIds || orderIds.length === 0) return;
   try {
-    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+    const colRef = collection(db, 'orders');
+    const snap = await getDocs(colRef);
+    const updatePromises: Promise<any>[] = [];
+
     orderIds.forEach((id) => {
-      const docRef = doc(db, 'orders', id);
-      batch.delete(docRef);
+      const cleanId = id.replace(/^#/, '').trim();
+      const cleanUpper = cleanId.toUpperCase();
+      updatePromises.push(
+        setDoc(doc(db, 'orders', id), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {}),
+        setDoc(doc(db, 'orders', cleanId), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {}),
+        setDoc(doc(db, 'orders', cleanUpper), { isDeleted: true, deletedAt: now }, { merge: true }).catch(() => {})
+      );
+      syncLocalStorageOrderDeletion(id, false);
     });
-    await batch.commit();
+
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      const matchesAny = orderIds.some((id) => isMatchingOrderDoc(id, docSnap.id, d));
+      if (matchesAny) {
+        updatePromises.push(
+          setDoc(docSnap.ref, { isDeleted: true, deletedAt: now }, { merge: true })
+        );
+      }
+    });
+
+    await Promise.allSettled(updatePromises);
     ordersMemoryCache = null;
-    recordOperation('delete', orderIds.length, -900 * orderIds.length);
+    recordOperation('write', orderIds.length, -100 * orderIds.length);
   } catch (err) {
-    console.error('Lỗi xóa batch đơn hàng Firestore:', err);
+    console.error('Lỗi chuyển hàng loạt đơn hàng vào thùng rác:', err);
+    throw err;
+  }
+};
+
+export const restoreOrderFromTrash = async (orderId: string): Promise<void> => {
+  if (!orderId) return;
+  try {
+    const now = new Date().toISOString();
+    const cleanId = orderId.replace(/^#/, '').trim();
+    const cleanUpper = cleanId.toUpperCase();
+
+    const updatePromises: Promise<any>[] = [
+      setDoc(doc(db, 'orders', orderId), { isDeleted: false, deletedAt: null, updatedAt: now }, { merge: true }).catch(() => {}),
+      setDoc(doc(db, 'orders', cleanId), { isDeleted: false, deletedAt: null, updatedAt: now }, { merge: true }).catch(() => {}),
+      setDoc(doc(db, 'orders', cleanUpper), { isDeleted: false, deletedAt: null, updatedAt: now }, { merge: true }).catch(() => {})
+    ];
+
+    const colRef = collection(db, 'orders');
+    const snap = await getDocs(colRef);
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      if (isMatchingOrderDoc(orderId, docSnap.id, d)) {
+        updatePromises.push(
+          setDoc(docSnap.ref, { isDeleted: false, deletedAt: null, updatedAt: now }, { merge: true })
+        );
+      }
+    });
+
+    await Promise.allSettled(updatePromises);
+
+    // Update in localStorage
+    const keys = ['nak_preorders', 'nak_orders', 'nak_custom_orders'];
+    keys.forEach((key) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const list: StoredOrder[] = JSON.parse(raw);
+        if (!Array.isArray(list)) return;
+        const updated = list.map((ord) => {
+          if (isMatchingOrderDoc(orderId, ord.id || '', ord)) {
+            return { ...ord, isDeleted: false, deletedAt: undefined, updatedAt: now };
+          }
+          return ord;
+        });
+        safeStorageSetItem(key, JSON.stringify(updated));
+      } catch {}
+    });
+
+    ordersMemoryCache = null;
+    recordOperation('write', 1, -100);
+  } catch (err) {
+    console.error('Lỗi khôi phục đơn hàng:', err);
+    throw err;
+  }
+};
+
+export const deleteOrderPermanently = async (orderId: string): Promise<void> => {
+  if (!orderId) return;
+  try {
+    const cleanId = orderId.replace(/^#/, '').trim();
+    const cleanUpper = cleanId.toUpperCase();
+    const candidates = resolveAllOrderIdCandidates(orderId);
+
+    // 1. Direct deletions for candidates
+    const deletePromises: Promise<any>[] = [
+      deleteDoc(doc(db, 'orders', orderId)).catch(() => {}),
+      deleteDoc(doc(db, 'orders', cleanId)).catch(() => {}),
+      deleteDoc(doc(db, 'orders', cleanUpper)).catch(() => {})
+    ];
+
+    candidates.forEach((candId) => {
+      deletePromises.push(deleteDoc(doc(db, 'orders', candId)).catch(() => {}));
+    });
+
+    // 2. Query collection and delete ANY doc that matches this order
+    const colRef = collection(db, 'orders');
+    const snap = await getDocs(colRef);
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      if (isMatchingOrderDoc(orderId, docSnap.id, d)) {
+        deletePromises.push(deleteDoc(docSnap.ref));
+      }
+    });
+
+    // 3. Clean from Storage
+    candidates.forEach((candId) => {
+      deletePromises.push(deleteObject(ref(storage, `orders/details/${candId}.json`)).catch(() => {}));
+    });
+    deletePromises.push(deleteObject(ref(storage, `orders/details/${orderId}.json`)).catch(() => {}));
+    deletePromises.push(deleteObject(ref(storage, `orders/details/${cleanId}.json`)).catch(() => {}));
+
+    await Promise.allSettled(deletePromises);
+
+    // 4. Remove completely from all local storage caches
+    syncLocalStorageOrderDeletion(orderId, true);
+    ordersMemoryCache = null;
+    recordOperation('delete', 1, -900);
+  } catch (err) {
+    console.error('Lỗi xóa vĩnh viễn đơn hàng:', err);
+    throw err;
+  }
+};
+
+export const emptyOrderTrash = async (orderIds?: string[]): Promise<void> => {
+  try {
+    const colRef = collection(db, 'orders');
+    const snap = await getDocs(colRef);
+    const deletePromises: Promise<any>[] = [];
+
+    const targetSet = orderIds && orderIds.length > 0 ? new Set(orderIds.map((id) => id.toUpperCase())) : null;
+
+    snap.forEach((docSnap) => {
+      const d = docSnap.data();
+      const isDeletedFlag = d.isDeleted === true || d.deleted === true;
+      let shouldDelete = false;
+
+      if (isDeletedFlag) {
+        shouldDelete = true;
+      } else if (targetSet) {
+        if (
+          targetSet.has(docSnap.id.toUpperCase()) ||
+          targetSet.has((d.id || '').toUpperCase()) ||
+          targetSet.has((d.trackingNumber || '').toUpperCase())
+        ) {
+          shouldDelete = true;
+        }
+      }
+
+      if (shouldDelete) {
+        deletePromises.push(deleteDoc(docSnap.ref));
+        deletePromises.push(deleteObject(ref(storage, `orders/details/${docSnap.id}.json`)).catch(() => {}));
+      }
+    });
+
+    if (orderIds && orderIds.length > 0) {
+      orderIds.forEach((id) => {
+        syncLocalStorageOrderDeletion(id, true);
+      });
+    }
+
+    await Promise.allSettled(deletePromises);
+    ordersMemoryCache = null;
+    recordOperation('delete', deletePromises.length || 1, -900);
+  } catch (err) {
+    console.error('Lỗi dọn sạch thùng rác:', err);
     throw err;
   }
 };
@@ -2195,6 +2521,11 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         isActive: data.isActive !== false,
         createdAt: data.createdAt || new Date().toISOString(),
         lastLoginAt: data.lastLoginAt,
+        lastLoginIp: data.lastLoginIp || '',
+        lastLoginCity: data.lastLoginCity || '',
+        lastLoginCountry: data.lastLoginCountry || '',
+        lastSeenAt: data.lastSeenAt,
+        lastDevice: data.lastDevice || '',
         avatarColor: data.avatarColor || '#B41C1A',
         phone: data.phone || ''
       });
@@ -2249,6 +2580,36 @@ export const deleteSellerFromFirestore = async (sellerId: string): Promise<void>
   } catch (err) {
     console.error('Lỗi xóa người bán trên Firestore:', err);
     throw err;
+  }
+};
+
+/**
+ * Updates seller's online presence, latest IP and device info on Firestore.
+ */
+export const updateSellerPresence = async (
+  sellerId: string, 
+  presenceData: {
+    lastSeenAt?: string;
+    lastLoginAt?: string;
+    lastLoginIp?: string;
+    lastLoginCity?: string;
+    lastLoginCountry?: string;
+    lastDevice?: string;
+  }
+): Promise<void> => {
+  if (!sellerId) return;
+  try {
+    const docRef = doc(db, 'sellers', sellerId);
+    const nowIso = new Date().toISOString();
+    const payload = cleanFirestoreData({
+      ...presenceData,
+      lastSeenAt: presenceData.lastSeenAt || nowIso,
+      updatedAt: nowIso
+    });
+    await setDoc(docRef, payload, { merge: true });
+  } catch (err) {
+    // Non-blocking error for background presence update
+    console.warn('Lỗi cập nhật trạng thái người bán:', err);
   }
 };
 
@@ -2461,7 +2822,7 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
 
   const result = Array.from(backupMap.values())
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+    .slice(0, 30);
 
   if (result.length > 0) {
     saveBackupsToIDB(result);
@@ -2474,10 +2835,18 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
 };
 
 /**
- * Saves a backup to Firestore Cloud, IndexedDB, and localStorage cache, retaining the latest 5 backups.
+ * Saves a backup to Firestore Cloud, Firebase Storage, IndexedDB, and localStorage cache, retaining the latest 30 backups.
  */
 export const saveBackupToFirestore = async (backup: VersionBackup): Promise<VersionBackup[]> => {
-  // 1. Persist to Firestore Cloud FIRST
+  // 1. Save full, un-truncated backup to Firebase Storage bucket
+  try {
+    const storageBackupRef = ref(storage, `backups/${backup.id}.json`);
+    await uploadString(storageBackupRef, JSON.stringify(backup, null, 2), 'raw', { contentType: 'application/json' });
+  } catch (stErr) {
+    console.warn('Không thể lưu bản sao lưu nguyên vẹn vào Firebase Storage:', stErr);
+  }
+
+  // 2. Persist metadata & summary to Firestore Cloud
   let cloudSuccess = false;
   try {
     const docRef = doc(db, 'backups', backup.id);
@@ -2487,7 +2856,7 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
     cloudSuccess = true;
     backup.syncedToCloud = true;
 
-    // Enforce max 5 documents on Firestore
+    // Enforce max 30 documents on Firestore
     const colRef = collection(db, 'backups');
     const snap = await getDocs(colRef);
     const fsDocs: { id: string; createdAt: string }[] = [];
@@ -2497,14 +2866,18 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
     });
     fsDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    if (fsDocs.length > 5) {
-      const toDelete = fsDocs.slice(5);
+    if (fsDocs.length > 30) {
+      const toDelete = fsDocs.slice(30);
       for (const oldDoc of toDelete) {
         try {
           await deleteDoc(doc(db, 'backups', oldDoc.id));
+          // Also delete old file from Storage
+          try {
+            await deleteObject(ref(storage, `backups/${oldDoc.id}.json`));
+          } catch {}
           recordOperation('delete', 1, -2500);
         } catch (delErr) {
-          console.warn('Không thể xóa backup cũ vượt quá giới hạn 5:', delErr);
+          console.warn('Không thể xóa backup cũ vượt quá giới hạn 30:', delErr);
         }
       }
     }
@@ -2519,20 +2892,20 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
       cloudSuccess = true;
       backup.syncedToCloud = true;
     } catch (retryErr: any) {
-      console.warn('Không thể lưu backup lên Firestore (vượt quá dung lượng 1MB hoặc lỗi mạng), chuyển sang lưu trữ an toàn cục bộ trên máy:', retryErr);
+      console.warn('Không thể lưu backup lên Firestore, lưu trữ an toàn cục bộ trên máy:', retryErr);
       cloudSuccess = false;
       backup.syncedToCloud = false;
     }
   }
 
-  // 2. Fetch existing backups from all sources
+  // 3. Fetch existing backups from all sources
   const existingList = await fetchBackupsFromFirestore();
   const updatedList: VersionBackup[] = [
     { ...backup, syncedToCloud: cloudSuccess },
     ...existingList.filter((b) => b.id !== backup.id)
   ]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+    .slice(0, 30);
 
   // 3. Immediately persist to IndexedDB and localStorage
   await saveBackupsToIDB(updatedList);

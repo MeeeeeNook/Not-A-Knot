@@ -26,7 +26,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
   wrapperClassName = '',
   fallbackSrc = '/assets/hero-bg.png',
   priority = false,
-  rootMargin = '250px 0px',
+  rootMargin = '600px 0px',
   threshold = 0.01,
   ...props
 }) => {
@@ -34,6 +34,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (priority || isInView) return;
@@ -68,10 +69,14 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
     };
   }, [priority, isInView, rootMargin, threshold]);
 
-  // Reset loaded status if src changes
+  // Reset or instantly resolve if cached
   useEffect(() => {
-    setIsLoaded(false);
     setHasError(false);
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+      setIsLoaded(true);
+    } else {
+      setIsLoaded(false);
+    }
   }, [src]);
 
   const validSrc = typeof src === 'string' && src.trim().length > 0 ? src : fallbackSrc;
@@ -85,16 +90,22 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
       {/* Skeleton Shimmer / Placeholder while loading */}
       {!isLoaded && (
         <div
-          className="absolute inset-0 bg-neutral-200/70 animate-pulse flex items-center justify-center pointer-events-none z-0"
+          className="absolute inset-0 bg-neutral-200/60 animate-pulse flex items-center justify-center pointer-events-none z-0"
           aria-hidden="true"
         >
-          <div className="w-8 h-8 rounded-full border-2 border-neutral-300 border-t-neutral-500 animate-spin opacity-40" />
+          <div className="w-6 h-6 rounded-full border-2 border-neutral-300 border-t-neutral-500 animate-spin opacity-40" />
         </div>
       )}
 
       {/* Actual Image rendered only when in view */}
       {isInView && activeSrc && (
         <img
+          ref={(node) => {
+            imgRef.current = node;
+            if (node && node.complete && node.naturalWidth > 0 && !isLoaded) {
+              setIsLoaded(true);
+            }
+          }}
           src={activeSrc}
           alt={alt}
           loading={priority ? 'eager' : 'lazy'}
@@ -106,7 +117,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
             }
             setIsLoaded(true);
           }}
-          className={`transition-opacity duration-300 ease-out ${
+          className={`transition-opacity duration-200 ease-out ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           } ${className}`}
           {...props}

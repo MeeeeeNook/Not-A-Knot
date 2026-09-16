@@ -70,7 +70,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [createdTrackingCode, setCreatedTrackingCode] = useState('');
   const [copiedTrackingCode, setCopiedTrackingCode] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'vietqr' | 'cod'>('vietqr');
+  const [paymentMethod, setPaymentMethod] = useState<'cod'>('cod');
   const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
   const [confirmedTotalAmount, setConfirmedTotalAmount] = useState<number>(0);
 
@@ -288,7 +288,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       source: contactMethod === 'facebook' ? ('facebook' as const) : ('website' as const),
       type: 'standard_order' as const,
       status: 'Chờ xác nhận' as const,
-      paymentMethod: contactMethod === 'facebook' ? ('cod' as const) : (paymentMethod === 'vietqr' ? ('bank_transfer' as const) : ('cod' as const)),
+      paymentMethod: 'cod' as const,
       paymentStatus: 'unpaid' as const
     };
   };
@@ -864,41 +864,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
                   </div>
 
-                  {/* Payment Method Selector */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-neutral-950">
-                      Phương thức thanh toán <span className="text-red-600">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('vietqr')}
-                        className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
-                          paymentMethod === 'vietqr'
-                            ? 'border-amber-500 bg-amber-50/50 shadow-xs'
-                            : 'border-neutral-200 hover:border-neutral-300 bg-white'
-                        }`}
-                      >
-                        <span className="font-bold text-xs text-slate-950">
-                          Chuyển khoản
-                        </span>
-                        {paymentMethod === 'vietqr' && <Check className="w-4 h-4 text-amber-600 font-bold" />}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('cod')}
-                        className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer flex items-center justify-between ${
-                          paymentMethod === 'cod'
-                            ? 'border-neutral-950 bg-neutral-50 shadow-xs'
-                            : 'border-neutral-200 hover:border-neutral-300 bg-white'
-                        }`}
-                      >
-                        <span className="font-bold text-xs text-slate-950">
-                          Thanh toán khi nhận hàng
-                        </span>
-                        {paymentMethod === 'cod' && <Check className="w-4 h-4 text-neutral-950 font-bold" />}
-                      </button>
+                  {/* Payment Method Banner */}
+                  <div className="p-3.5 rounded-xl border border-neutral-200 bg-neutral-50 flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-neutral-900 text-white flex items-center justify-center flex-shrink-0 font-bold text-xs">
+                      COD
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-neutral-950">Thanh toán khi nhận hàng (COD)</div>
+                      <div className="text-[11px] text-neutral-500">Quý khách nhận hàng, kiểm tra sản phẩm và thanh toán tiền mặt trực tiếp cho bưu tá.</div>
                     </div>
                   </div>
 

@@ -30,6 +30,7 @@ import {
 import { saveOrderToFirestore, saveCollectionToFirestore, deleteCollectionFromFirestore } from '../firebase';
 import { ProductCard } from './ProductCard';
 import { stripBstPrefix } from '../utils/orderFormatters';
+import { useCollectionSEO } from '../utils/seo';
 
 interface CollectionDetailPageProps {
   collectionId: string;
@@ -196,6 +197,9 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
       (p) => !p.isHidden && p.category === currentCollection.categoryKey
     );
   }, [products, currentCollection.categoryKey]);
+
+  // Apply rich dynamic Collection SEO tags and JSON-LD schema
+  useCollectionSEO(currentCollection, collectionProducts);
 
   const productIdsKey = useMemo(() => {
     return collectionProducts.map((p) => p.id).join(',');

@@ -7,7 +7,9 @@ import {
   getOrderTrackingNumber, 
   generateTrackingNumber, 
   getCarrierTrackingUrl,
-  normalizeOrderStatus
+  normalizeOrderStatus,
+  formatToDatetimeLocal,
+  safeIsoDateString
 } from '../utils/orderFormatters';
 import { deduplicateSellers } from '../utils/auth';
 import { 
@@ -96,19 +98,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     order.trackingNumber || getOrderTrackingNumber(order)
   );
   const [orderDate, setOrderDate] = useState<string>(() => {
-    const raw = order.date || order.createdAt;
-    if (!raw) return '';
-    try {
-      const d = new Date(raw);
-      if (!isNaN(d.getTime())) {
-        // format as YYYY-MM-DDTHH:mm for datetime-local input
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      }
-    } catch {
-      // fallback
-    }
-    return raw;
+    return formatToDatetimeLocal(order.createdAt) || formatToDatetimeLocal(order.date) || '';
   });
   const [source, setSource] = useState<'website' | 'mạng xã hội' | 'trực tiếp'>(normalizeSource(order.source));
 
@@ -395,10 +385,13 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
 
       const finalTotal = finalCalculatedTotal;
 
+      const safeIso = safeIsoDateString(orderDate, order.createdAt || order.date);
+      const safeDisplayDate = formatOrderDateWithoutSeconds(safeIso);
+
       const updatedOrder: StoredOrder = {
         ...order,
-        date: orderDate ? new Date(orderDate).toISOString() : (order.date || new Date().toISOString()),
-        createdAt: orderDate ? new Date(orderDate).toISOString() : (order.createdAt || order.date || new Date().toISOString()),
+        date: safeDisplayDate,
+        createdAt: safeIso,
         name: customerName.trim(),
         customerName: customerName.trim(),
         phone: phone.trim(),

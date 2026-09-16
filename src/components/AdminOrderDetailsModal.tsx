@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText } from 'lucide-react';
+import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2 } from 'lucide-react';
 import {
   printOrderSlipDirectly,
   openOrderPrintTab,
@@ -14,6 +14,7 @@ interface AdminOrderDetailsModalProps {
   order: StoredOrder;
   onClose: () => void;
   onUpdateStatus: (orderId: string, status: string) => void;
+  onUpdatePaymentStatus?: (orderId: string, paymentStatus: 'paid' | 'unpaid') => void;
   onZoomReceipt: (imageUrl: string) => void;
   onEdit?: (order: StoredOrder) => void;
   onDelete?: (orderId: string) => void;
@@ -23,6 +24,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   order,
   onClose,
   onUpdateStatus,
+  onUpdatePaymentStatus,
   onZoomReceipt,
   onEdit,
   onDelete
@@ -224,20 +226,51 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
           {/* Payment & Bill Proof Section */}
           <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                 Thông Tin Thanh Toán
               </span>
 
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                order.paymentStatus === 'paid'
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  : order.paymentStatus === 'partial'
-                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                  : 'bg-slate-200 text-slate-700'
-              }`}>
-                {order.paymentStatus === 'paid' ? 'Đã thanh toán đủ (100%)' : order.paymentStatus === 'partial' ? 'Đã đặt cọc 1 phần' : 'Chưa thanh toán'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1.5 ${
+                  order.paymentStatus === 'paid'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : order.paymentStatus === 'partial'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : 'bg-slate-200 text-slate-700 border border-slate-300'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${order.paymentStatus === 'paid' ? 'bg-emerald-600' : order.paymentStatus === 'partial' ? 'bg-amber-500' : 'bg-slate-500'}`} />
+                  {order.paymentStatus === 'paid' ? 'Đã thanh toán đủ (100%)' : order.paymentStatus === 'partial' ? 'Đã đặt cọc 1 phần' : 'Chưa thanh toán'}
+                </span>
+
+                {onUpdatePaymentStatus && order.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextPayment = order.paymentStatus === 'paid' ? 'unpaid' : 'paid';
+                      onUpdatePaymentStatus(order.id!, nextPayment);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer border ${
+                      order.paymentStatus === 'paid'
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 hover:border-amber-400'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-sm'
+                    }`}
+                    title={order.paymentStatus === 'paid' ? 'Chuyển đơn này sang Chưa thanh toán' : 'Đánh dấu đơn này là Đã thanh toán nhanh'}
+                  >
+                    {order.paymentStatus === 'paid' ? (
+                      <>
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Chuyển Chưa TT</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        <span>Đánh Dấu Đã TT</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
@@ -443,19 +476,21 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
           {/* Status Quick Update & Action Footer */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
-              <select
-                value={currentStatus}
-                onChange={(e) => onUpdateStatus(order.id!, e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none"
-              >
-                <option value="Chờ xác nhận">Chờ xác nhận</option>
-                <option value="Đã xác nhận">Đã xác nhận</option>
-                <option value="Knot đang được sản xuất">Knot đang được sản xuất</option>
-                <option value="Đang giao hàng">Đang giao hàng</option>
-                <option value="Đơn hàng giao thành công">Đơn hàng giao thành công</option>
-              </select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
+                <select
+                  value={currentStatus}
+                  onChange={(e) => onUpdateStatus(order.id!, e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none"
+                >
+                  <option value="Chờ xác nhận">Chờ xác nhận</option>
+                  <option value="Đã xác nhận">Đã xác nhận</option>
+                  <option value="Knot đang được sản xuất">Knot đang được sản xuất</option>
+                  <option value="Đang giao hàng">Đang giao hàng</option>
+                  <option value="Đơn hàng giao thành công">Đơn hàng giao thành công</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

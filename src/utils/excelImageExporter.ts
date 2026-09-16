@@ -46,6 +46,77 @@ function sanitizeFilename(name: string): string {
     .slice(0, 50);
 }
 
+// Ensure cell string content does not exceed Excel's strict limit of 32,767 characters
+export function safeCellText(val: any, maxLength = 32000): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number') return isNaN(val) ? '' : String(val);
+  if (typeof val === 'boolean') return val ? 'Có' : 'Không';
+  
+  let str = typeof val === 'string' ? val : String(val);
+  
+  // If string is a large Base64 image Data URL, replace with a clear informative note
+  if (str.startsWith('data:image/')) {
+    return '[Dữ liệu ảnh Base64 - Đã lưu kèm trong file ZIP]';
+  }
+  
+  // Excel hard limit is 32,767 characters. Truncate safely before limit.
+  if (str.length > maxLength) {
+    return str.slice(0, maxLength) + '... [Đã rút gọn do giới hạn 32.767 ký tự của ô Excel]';
+  }
+  return str;
+}
+
+// Helper to format full product name with all customer-selected variations & options
+function formatOrderItemFullNameAndOptions(it: any): string {
+  if (!it) return '';
+  const baseName = it.productName || it.name || 'Sản phẩm';
+  const optionsParts: string[] = [];
+
+  if (it.selectedColor) {
+    optionsParts.push(`Màu: ${it.selectedColor}`);
+  }
+
+  if (it.selectedCharm) {
+    const charmName = typeof it.selectedCharm === 'object' ? (it.selectedCharm.name || '') : String(it.selectedCharm);
+    if (charmName) {
+      optionsParts.push(`Charm: ${charmName}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')}đ)` : ''}`);
+    }
+  } else if (Array.isArray(it.selectedCharms) && it.selectedCharms.length > 0) {
+    const charmNames = it.selectedCharms.map((c: any) => typeof c === 'object' ? (c.name || '') : String(c)).filter(Boolean).join(', ');
+    if (charmNames) {
+      optionsParts.push(`Charm: ${charmNames}`);
+    }
+  }
+
+  if (it.selectedKhoen) {
+    optionsParts.push(`Khoen: ${it.selectedKhoen}${it.selectedKhoenPrice ? ` (+${it.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}`);
+  }
+
+  if (Array.isArray(it.selectedOmamoris) && it.selectedOmamoris.length > 0) {
+    const omamoriNames = it.selectedOmamoris.map((o: any) => typeof o === 'object' ? (o.name || '') : String(o)).filter(Boolean).join(', ');
+    if (omamoriNames) {
+      optionsParts.push(`Bùa Omamori: ${omamoriNames}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}`);
+    }
+  }
+
+  if (it.selectedSize) {
+    optionsParts.push(`Size: ${it.selectedSize}`);
+  }
+
+  if (it.customKnotColor) {
+    optionsParts.push(`Màu nút: ${it.customKnotColor}`);
+  }
+
+  if (it.customNote) {
+    optionsParts.push(`Yêu cầu riêng: ${it.customNote}`);
+  }
+
+  if (optionsParts.length > 0) {
+    return `${baseName} (${optionsParts.join(' | ')})`;
+  }
+  return baseName;
+}
+
 /**
  * Helper to build styled Orders worksheet matching the exact template:
  * - Header Row (Row 1): Background #3B608D, Font: Bold, size 11, White (#FFFFFF), Height: 26, vertical & horizontal center
@@ -94,20 +165,20 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
     const stt = idx + 1;
 
     // 2. Mã Đơn Hàng
-    const orderId = o.id || '';
+    const orderId = safeCellText(o.id || '');
     const safeId = sanitizeFilename(o.id || `ORD_${idx + 1}`);
 
     // 3. Thời Gian Đặt
-    const orderTime = o.date || o.createdAt || '';
+    const orderTime = safeCellText(o.date || o.createdAt || '');
 
     // 4. Tên Khách Hàng
-    const customerName = o.name || o.customerName || '';
+    const customerName = safeCellText(o.name || o.customerName || '');
 
     // 5. Số Điện Thoại
-    const phone = o.phone || '';
+    const phone = safeCellText(o.phone || '');
 
     // 6. Địa Chỉ
-    const address = o.address || '';
+    const address = safeCellText(o.address || '');
 
     // Order Totals
     const orderTotal = typeof o.totalPrice === 'number' ? o.totalPrice : typeof o.totalAmount === 'number' ? o.totalAmount : '';
@@ -149,20 +220,20 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
     } else if (pMethod === 'cod' || pMethod.includes('cod')) {
       paymentMethodText = 'Thu COD khi giao';
     } else if (o.paymentMethod) {
-      paymentMethodText = o.paymentMethod;
+      paymentMethodText = safeCellText(o.paymentMethod);
     }
 
     // 15. Bill Chuyển Khoản: display exact filename such as Bill_Don_ord-man-1788370328910
     const billText = o.bankReceiptImage ? `Bill_Don_${safeId}` : '';
 
     // 16. Trạng Thái Xử Lý
-    const statusText = o.status || 'Đã đặt';
+    const statusText = safeCellText(o.status || 'Đã đặt');
 
     // 17. Ghi Chú
-    const noteText = getCleanOrderNote(o.note);
+    const noteText = safeCellText(getCleanOrderNote(o.note));
 
     // 18. Người bán
-    const sellerText = o.sellerName || o.sellerId || '';
+    const sellerText = safeCellText(o.sellerName || o.sellerId || '');
 
     // Extract individual product lines
     interface ExtractedItem {
@@ -175,7 +246,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
     if (o.itemDetails && o.itemDetails.length > 0) {
       o.itemDetails.forEach((it) => {
-        const pName = `${it.productName || 'Sản phẩm'}${it.customNote ? ` [${it.customNote}]` : ''}`;
+        const pName = safeCellText(formatOrderItemFullNameAndOptions(it));
         const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
         let price: number | '' = '';
         if (typeof it.price === 'number' && it.price >= 0) {
@@ -191,11 +262,11 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
       o.items.forEach((itStr) => {
         const match = itStr.match(/^(.*?)\s*\(x(\d+)\)(.*)$/);
         if (match) {
-          const pName = (match[1] + (match[3] || '')).trim();
+          const pName = safeCellText((match[1] + (match[3] || '')).trim());
           const qty = parseInt(match[2], 10) || 1;
           items.push({ name: pName, quantity: qty, unitPrice: '' });
         } else {
-          items.push({ name: itStr, quantity: 1, unitPrice: '' });
+          items.push({ name: safeCellText(itStr), quantity: 1, unitPrice: '' });
         }
       });
       if (items.length === 1 && items[0].unitPrice === '' && typeof orderTotal === 'number' && typeof items[0].quantity === 'number') {
@@ -523,20 +594,20 @@ export async function exportMasterBackupWithImageOption({
   if (selectedTypes.products && products.length > 0) {
     const productRows = products.map((p, idx) => ({
       'STT': idx + 1,
-      'Mã SP (ID)': p.id,
-      'Tên Sản Phẩm': p.name,
-      'Danh Mục': p.category,
-      'Giá Bán (VNĐ)': p.price,
-      'Giá Gốc (VNĐ)': p.originalPrice || '',
+      'Mã SP (ID)': safeCellText(p.id),
+      'Tên Sản Phẩm': safeCellText(p.name),
+      'Danh Mục': safeCellText(p.category),
+      'Giá Bán (VNĐ)': typeof p.price === 'number' ? p.price : safeCellText(p.price),
+      'Giá Gốc (VNĐ)': typeof p.originalPrice === 'number' ? p.originalPrice : (p.originalPrice ? safeCellText(p.originalPrice) : ''),
       'Tồn Kho': p.stock ?? 15,
       'Còn Hàng': p.inStock !== false ? 'Còn hàng' : 'Hết hàng',
-      'Nhãn Giảm Giá': p.discountBadge || '',
+      'Nhãn Giảm Giá': safeCellText(p.discountBadge || ''),
       'BST 02.09': p.isEvent0209 ? 'Có' : 'Không',
       'Best Seller': p.isBestSeller ? 'Có' : 'Không',
       'Sản Phẩm Mới': p.isNew ? 'Có' : 'Không',
-      'Mô Tả': p.description || '',
-      'Thông Số Chi Tiết': Array.isArray(p.details) ? p.details.join(' | ') : '',
-      'Đường Dẫn Ảnh': p.image || ''
+      'Mô Tả': safeCellText(p.description || ''),
+      'Thông Số Chi Tiết': safeCellText(Array.isArray(p.details) ? p.details.join(' | ') : (p as any).detailsText || ''),
+      'Đường Dẫn Ảnh': safeCellText(p.image || '')
     }));
     const wsProducts = XLSX.utils.json_to_sheet(productRows);
     XLSX.utils.book_append_sheet(workbook, wsProducts, '2. Sản Phẩm & Kho');
@@ -546,11 +617,11 @@ export async function exportMasterBackupWithImageOption({
   if (selectedTypes.categories && categories.length > 0) {
     const categoryRows = categories.map((c, idx) => ({
       'STT': idx + 1,
-      'Mã Danh Mục (ID)': c.id,
-      'Tên Danh Mục': c.label,
-      'Màu Nổi Bật': c.highlightColor || '',
-      'Badge Nhãn': c.badge || '',
-      'Mô Tả': c.description || ''
+      'Mã Danh Mục (ID)': safeCellText(c.id),
+      'Tên Danh Mục': safeCellText(c.label || (c as any).name || ''),
+      'Màu Nổi Bật': safeCellText(c.highlightColor || ''),
+      'Badge Nhãn': safeCellText(c.badge || ''),
+      'Mô Tả': safeCellText(c.description || '')
     }));
     const wsCategories = XLSX.utils.json_to_sheet(categoryRows);
     XLSX.utils.book_append_sheet(workbook, wsCategories, '3. Danh Mục');
@@ -560,14 +631,14 @@ export async function exportMasterBackupWithImageOption({
   if (selectedTypes.banners && collections.length > 0) {
     const collectionRows = collections.map((b, idx) => ({
       'STT': idx + 1,
-      'Mã BST (ID)': b.id,
-      'Tiêu Đề': b.title,
-      'Tag Nhãn': b.tag || '',
-      'Điểm Nhấn': b.highlight || '',
-      'Mô Tả Phụ': b.subtitle || '',
+      'Mã BST (ID)': safeCellText(b.id),
+      'Tiêu Đề': safeCellText(b.title),
+      'Tag Nhãn': safeCellText(b.tag || ''),
+      'Điểm Nhấn': safeCellText(b.highlight || ''),
+      'Mô Tả Phụ': safeCellText(b.subtitle || ''),
       'Là Đặt Trước (Pre-order)': b.isPreorder ? 'Có' : 'Không',
       'Thứ Tự Hiển Thị': b.order || idx + 1,
-      'Ảnh Banner': b.bannerImage || b.bgImage || ''
+      'Ảnh Banner': safeCellText(b.bannerImage || b.bgImage || b.horizontalImage || '')
     }));
     const wsCollections = XLSX.utils.json_to_sheet(collectionRows);
     XLSX.utils.book_append_sheet(workbook, wsCollections, '4. Bộ Sưu Tập');
@@ -576,17 +647,17 @@ export async function exportMasterBackupWithImageOption({
   // Sheet 5: Site Configuration
   if (selectedTypes.siteContent && siteContent) {
     const siteRows = [
-      { 'Thuộc Tính': 'Tên Thương Hiệu', 'Giá Trị': siteContent.brandName || '' },
-      { 'Thuộc Tính': 'Slogan / Tagline', 'Giá Trị': siteContent.brandTagline || '' },
-      { 'Thuộc Tính': 'Thông Báo Đầu Trang', 'Giá Trị': siteContent.announcementText || '' },
+      { 'Thuộc Tính': 'Tên Thương Hiệu', 'Giá Trị': safeCellText(siteContent.brandName || '') },
+      { 'Thuộc Tính': 'Slogan / Tagline', 'Giá Trị': safeCellText(siteContent.brandTagline || '') },
+      { 'Thuộc Tính': 'Thông Báo Đầu Trang', 'Giá Trị': safeCellText(siteContent.announcementText || '') },
       { 'Thuộc Tính': 'Bật Thông Báo', 'Giá Trị': siteContent.announcementActive ? 'BẬT' : 'TẮT' },
-      { 'Thuộc Tính': 'Số Điện Thoại Hotline', 'Giá Trị': siteContent.phone || '' },
-      { 'Thuộc Tính': 'Zalo CSKH', 'Giá Trị': siteContent.zalo || '' },
-      { 'Thuộc Tính': 'Địa Chỉ Xưởng', 'Giá Trị': siteContent.address || '' },
-      { 'Thuộc Tính': 'Email Liên Hệ', 'Giá Trị': siteContent.email || '' },
-      { 'Thuộc Tính': 'Facebook Link', 'Giá Trị': siteContent.socialLinks?.facebook || '' },
-      { 'Thuộc Tính': 'Instagram Link', 'Giá Trị': siteContent.socialLinks?.instagram || '' },
-      { 'Thuộc Tính': 'Threads Link', 'Giá Trị': siteContent.socialLinks?.threads || '' }
+      { 'Thuộc Tính': 'Số Điện Thoại Hotline', 'Giá Trị': safeCellText(siteContent.phone || '') },
+      { 'Thuộc Tính': 'Zalo CSKH', 'Giá Trị': safeCellText(siteContent.zalo || '') },
+      { 'Thuộc Tính': 'Địa Chỉ Xưởng', 'Giá Trị': safeCellText(siteContent.address || '') },
+      { 'Thuộc Tính': 'Email Liên Hệ', 'Giá Trị': safeCellText(siteContent.email || '') },
+      { 'Thuộc Tính': 'Facebook Link', 'Giá Trị': safeCellText(siteContent.socialLinks?.facebook || '') },
+      { 'Thuộc Tính': 'Instagram Link', 'Giá Trị': safeCellText(siteContent.socialLinks?.instagram || '') },
+      { 'Thuộc Tính': 'Threads Link', 'Giá Trị': safeCellText(siteContent.socialLinks?.threads || '') }
     ];
     const wsSite = XLSX.utils.json_to_sheet(siteRows);
     XLSX.utils.book_append_sheet(workbook, wsSite, '5. Cấu Hình Website');

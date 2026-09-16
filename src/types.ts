@@ -160,6 +160,11 @@ export interface SellerUser {
   isActive: boolean;
   createdAt: string;
   lastLoginAt?: string;
+  lastLoginIp?: string;
+  lastLoginCity?: string;
+  lastLoginCountry?: string;
+  lastSeenAt?: string;
+  lastDevice?: string;
   avatarColor?: string;
   phone?: string;
 }
@@ -204,6 +209,9 @@ export interface OrderRecord {
     timestamp: string;
     note?: string;
   }[];
+  isDeleted?: boolean;
+  deletedAt?: string;
+  updatedAt?: string;
 }
 
 export type StoredOrder = OrderRecord;

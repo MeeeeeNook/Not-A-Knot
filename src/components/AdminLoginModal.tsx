@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
 import { SellerUser } from '../types';
 import { verifyPassword, saveAdminSession, ROOT_ADMIN_USERNAME, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH, isRootAdminUsername, hashUsername } from '../utils/auth';
-import { getClientGeoLocation, GeoLocationInfo } from '../utils/ipGeo';
+import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
+import { updateSellerPresence } from '../firebase';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -89,18 +90,28 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       if (isRootUser) {
         const isRootValid = await verifyPassword(cleanPassword, ROOT_ADMIN_SALT, ROOT_ADMIN_HASH);
         if (isRootValid) {
-          const rootUser: SellerUser = matchedSeller || {
-            id: `seller-${ROOT_ADMIN_USERNAME}`,
-            username: ROOT_ADMIN_USERNAME,
-            usernameHash: await hashUsername(ROOT_ADMIN_USERNAME),
-            name: 'Mạnh Cường',
-            passwordHash: ROOT_ADMIN_HASH,
-            passwordSalt: ROOT_ADMIN_SALT,
-            isRootAdmin: true,
-            role: 'root_admin',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            avatarColor: '#B41C1A'
+          const devInfo = getClientDeviceInfo();
+          const nowIso = new Date().toISOString();
+          const rootUser: SellerUser = {
+            ...(matchedSeller || {
+              id: `seller-${ROOT_ADMIN_USERNAME}`,
+              username: ROOT_ADMIN_USERNAME,
+              usernameHash: await hashUsername(ROOT_ADMIN_USERNAME),
+              name: 'Mạnh Cường',
+              passwordHash: ROOT_ADMIN_HASH,
+              passwordSalt: ROOT_ADMIN_SALT,
+              isRootAdmin: true,
+              role: 'root_admin',
+              isActive: true,
+              createdAt: nowIso,
+              avatarColor: '#B41C1A'
+            }),
+            lastLoginAt: nowIso,
+            lastSeenAt: nowIso,
+            lastLoginIp: geo.ip,
+            lastLoginCity: geo.city || geo.region || 'Hà Nội',
+            lastLoginCountry: geo.country || 'Vietnam',
+            lastDevice: `${devInfo.browser} trên ${devInfo.os}`
           };
 
           await logAdminLogin({
@@ -109,6 +120,15 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             isRoot: true,
             status: 'success',
             customGeo: geo
+          });
+
+          await updateSellerPresence(rootUser.id, {
+            lastLoginAt: nowIso,
+            lastSeenAt: nowIso,
+            lastLoginIp: geo.ip,
+            lastLoginCity: geo.city || geo.region || 'Hà Nội',
+            lastLoginCountry: geo.country || 'Vietnam',
+            lastDevice: `${devInfo.browser} trên ${devInfo.os}`
           });
 
           saveAdminSession(rootUser, rememberMe);
@@ -162,6 +182,18 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       );
 
       if (isValid) {
+        const devInfo = getClientDeviceInfo();
+        const nowIso = new Date().toISOString();
+        const updatedSeller: SellerUser = {
+          ...matchedSeller,
+          lastLoginAt: nowIso,
+          lastSeenAt: nowIso,
+          lastLoginIp: geo.ip,
+          lastLoginCity: geo.city || geo.region || 'Hà Nội',
+          lastLoginCountry: geo.country || 'Vietnam',
+          lastDevice: `${devInfo.browser} trên ${devInfo.os}`
+        };
+
         await logAdminLogin({
           username: matchedSeller.username,
           name: matchedSeller.name,
@@ -170,9 +202,18 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           customGeo: geo
         });
 
-        saveAdminSession(matchedSeller, rememberMe);
+        await updateSellerPresence(matchedSeller.id, {
+          lastLoginAt: nowIso,
+          lastSeenAt: nowIso,
+          lastLoginIp: geo.ip,
+          lastLoginCity: geo.city || geo.region || 'Hà Nội',
+          lastLoginCountry: geo.country || 'Vietnam',
+          lastDevice: `${devInfo.browser} trên ${devInfo.os}`
+        });
+
+        saveAdminSession(updatedSeller, rememberMe);
         setIsLoading(false);
-        onLoginSuccess(matchedSeller);
+        onLoginSuccess(updatedSeller);
       } else {
         await logAdminLogin({
           username: matchedSeller.username,

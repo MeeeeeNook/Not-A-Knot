@@ -93,7 +93,7 @@ const generatePrintHtml = (order: StoredOrder, hotline: string, brandName: strin
   const shippingFee = Number(order.shippingFee || 0);
   const discount = Number(order.discountAmount || 0);
   const carrier = order.shippingCarrier ? `${order.shippingCarrier} ${order.shippingCode ? `(${order.shippingCode})` : ''}` : '';
-  const pMethod = order.paymentMethod === 'bank_transfer'
+  const pMethod = (order.paymentMethod === 'bank_transfer' && order.source !== 'website')
     ? 'Chuyển khoản VietQR'
     : order.paymentMethod === 'cash'
     ? 'Tiền mặt tại xưởng'
@@ -722,7 +722,7 @@ ${itemsText}
 THANH TOÁN:
 Tổng tiền: ${total}đ
 Trạng thái: ${payment}
-Phương thức: ${order.paymentMethod === 'cod' ? 'Thanh toán khi nhận hàng (COD)' : 'Chuyển khoản VietQR'}
+Phương thức: ${order.paymentMethod === 'bank_transfer' && order.source !== 'website' ? 'Chuyển khoản VietQR' : order.paymentMethod === 'cash' ? 'Tiền mặt tại xưởng' : 'Thanh toán khi nhận hàng (COD)'}
 ${order.shippingCarrier ? `Vận chuyển: ${order.shippingCarrier} ${order.shippingCode ? `(Mã: ${order.shippingCode})` : ''}\n` : ''}
 ----------------------------------------
 Hotline xưởng: ${hotline}
@@ -1456,7 +1456,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                     <div className="flex items-center justify-between text-slate-700">
                       <span>Hình thức thanh toán:</span>
                       <strong className="text-slate-950 font-bold">
-                        {activeOrder.paymentMethod === 'bank_transfer'
+                        {activeOrder.paymentMethod === 'bank_transfer' && activeOrder.source !== 'website'
                           ? 'Chuyển khoản VietQR'
                           : activeOrder.paymentMethod === 'cash'
                           ? 'Tiền mặt tại xưởng'
@@ -1496,7 +1496,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                 {/* ======================================================= */}
                 {/* IF UNPAID & BANK TRANSFER: RENDER LARGE VIETQR CARD      */}
                 {/* ======================================================= */}
-                {activeOrder.paymentStatus !== 'paid' && activeOrder.paymentMethod === 'bank_transfer' && (
+                {activeOrder.paymentStatus !== 'paid' && activeOrder.paymentMethod === 'bank_transfer' && activeOrder.source !== 'website' && (
                   <div className="bg-white rounded-3xl border-2 border-amber-400 p-5 sm:p-6 shadow-md space-y-4">
                     <div className="text-center">
                       <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-100 text-amber-950 text-xs font-black mb-2">
@@ -1587,6 +1587,19 @@ Cam kết bảo hành chốt khóa trọn đời!
 
                     <p className="text-[11px] text-slate-500 italic text-center leading-tight">
                       Vui lòng giữ nguyên nội dung chuyển khoản để hệ thống tự động cập nhật đơn.
+                    </p>
+                  </div>
+                )}
+
+                {/* IF UNPAID & COD: RENDER FRIENDLY COD NOTICE */}
+                {activeOrder.paymentStatus !== 'paid' && (activeOrder.paymentMethod === 'cod' || !activeOrder.paymentMethod || activeOrder.source === 'website') && (
+                  <div className="bg-emerald-50/70 rounded-3xl border border-emerald-200 p-4 sm:p-5 shadow-xs space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-950 font-bold text-xs sm:text-sm">
+                      <Truck className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>Thanh toán khi nhận hàng (COD)</span>
+                    </div>
+                    <p className="text-xs text-emerald-900 leading-relaxed">
+                      Quý khách vui lòng chuẩn bị số tiền <strong className="font-bold text-emerald-950">{activeOrderAmount.toLocaleString('vi-VN')}đ</strong> để thanh toán trực tiếp cho nhân viên giao hàng (Shipper) khi nhận và đồng kiểm bưu phẩm.
                     </p>
                   </div>
                 )}
