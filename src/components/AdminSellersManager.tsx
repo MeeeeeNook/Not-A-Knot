@@ -258,8 +258,28 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       const colors = ['#B41C1A', '#D97706', '#059669', '#2563EB', '#7C3AED', '#DB2777', '#0891B2', '#4F46E5'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-      const newSeller: SellerUser = {
-        id: `seller-${cleanUsername}`,
+      
+      // Create Firebase Auth Account using a temporary secondary app to avoid logging out the admin
+      try {
+        const tempApp = initializeApp(firebaseConfig, 'TempApp-' + Date.now());
+        const tempAuth = getAuth(tempApp);
+        
+        const email = `${cleanUsername}@notaknot.local`;
+        await createUserWithEmailAndPassword(tempAuth, email, cleanPassword);
+        
+        await deleteApp(tempApp);
+      } catch (authErr: any) {
+        console.error("Firebase Auth Creation Error:", authErr);
+        if (authErr.code === 'auth/operation-not-allowed') {
+           alert('Chức năng đăng nhập Email/Password chưa được kích hoạt trên Firebase. Vui lòng bật nó trong Firebase Console (Authentication -> Sign-in method).');
+        } else {
+           alert('Lỗi tạo tài khoản Firebase Auth: ' + authErr.message);
+        }
+        setIsSaving(false);
+        return;
+      }
+
+      const newSeller: SellerUser = {       id: `seller-${cleanUsername}`,
         username: cleanUsername,
         usernameHash: await hashUsername(cleanUsername),
         name: cleanName,
@@ -839,13 +859,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           {/* Change Password Inline Trigger */}
                           <button
                             type="button"
-                            onClick={() => {
-                              if (isChangingPassword) {
-                                setPasswordTargetSellerId(null);
-                              } else {
-                                handleStartPasswordChange(seller);
-                              }
-                            }}
+                            onClick={() => { alert('Tính năng đổi mật khẩu trên ứng dụng đã bị vô hiệu hóa vì lý do bảo mật. Vui lòng đổi mật khẩu trong Firebase Console (Authentication).'); }}
                             className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
                               isChangingPassword
                                 ? 'bg-amber-400 text-slate-950 shadow-xs'
@@ -1358,4 +1372,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
     </div>
   );
-};
+};import { initializeApp, deleteApp } from 'firebase/app';
+import { firebaseConfig } from '../firebase';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+

@@ -8,7 +8,13 @@ import rateLimit from 'express-rate-limit';
 import { createServer as createViteServer } from 'vite';
 
 // Server-side Secrets (never exposed to client browser)
-const JWT_SECRET: string = process.env.ADMIN_JWT_SECRET || 'nak_server_secret_jwt_fallback_key_2026_notaknot';
+const JWT_SECRET: string = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-development-only-replace-in-prod';
+if (!process.env.ADMIN_JWT_SECRET && !process.env.JWT_SECRET) {
+  console.warn("WARNING: ADMIN_JWT_SECRET environment variable is missing. Using fallback for development.");
+}
+
+const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
+
 const ROOT_ADMIN_USERNAME: string = (process.env.ROOT_ADMIN_USERNAME || 'manhcuong').trim().toLowerCase();
 const ROOT_ADMIN_PASSWORD_ENV: string = process.env.ROOT_ADMIN_PASSWORD || '';
 
@@ -66,10 +72,7 @@ async function startServer() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: getClientIpKey,
-    validate: {
-      xForwardedForHeader: false,
-      forwardedHeader: false
-    },
+    validate: false,
     message: { error: 'Quá nhiều yêu cầu từ địa chỉ IP này. Vui lòng thử lại sau 15 phút.' }
   });
 
@@ -80,10 +83,7 @@ async function startServer() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: getClientIpKey,
-    validate: {
-      xForwardedForHeader: false,
-      forwardedHeader: false
-    },
+    validate: false,
     message: { error: 'Quá nhiều lần đăng nhập không thành công. Địa chỉ IP của bạn tạm thời bị khóa trong 15 phút.' }
   });
 
@@ -94,10 +94,7 @@ async function startServer() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: getClientIpKey,
-    validate: {
-      xForwardedForHeader: false,
-      forwardedHeader: false
-    },
+    validate: false,
     message: { error: 'Hệ thống phát hiện tần suất đặt đơn bất thường. Vui lòng thử lại sau ít phút.' }
   });
 
@@ -172,63 +169,67 @@ async function startServer() {
    */
   app.post('/api/auth/login', authLoginLimiter, async (req: Request, res: Response) => {
     try {
-      const { username, password, sellerData, rememberMe = true } = req.body;
+      const { idToken, sellerData, rememberMe = true } = req.body;
 
-      const cleanUsername = String(username || '').trim().toLowerCase();
-      const cleanPassword = String(password || '').trim();
-
-      if (!cleanUsername || !cleanPassword) {
-        return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ tên đăng nhập và mật khẩu.' });
+      if (!idToken) {
+        return res.status(400).json({ error: 'Thiếu Firebase ID Token.' });
       }
 
-      // Check Root Administrator Login
-      const isRoot = cleanUsername === ROOT_ADMIN_USERNAME;
+      let firebaseUid = '';
+      let firebaseEmail = '';
+      if (FIREBASE_API_KEY) {
+        const verifyRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idToken })
+        });
+        const verifyData = await verifyRes.json();
+        if (verifyData.users && verifyData.users.length > 0) {
+          firebaseUid = verifyData.users[0].localId;
+          firebaseEmail = verifyData.users[0].email;
+        } else {
+          return res.status(401).json({ error: 'Firebase ID Token không hợp lệ.' });
+        }
+      } else {
+         return res.status(500).json({ error: 'Server missing FIREBASE_API_KEY for token verification.' });
+      }
+      
+      // Retrieve authoritative account data server-side
+      let isRoot = false;
+      let authoritativeSellerData = sellerData;
+      if (FIREBASE_API_KEY && firebaseUid) {
+        try {
+          // Use the validated ID Token to fetch the user's document securely from Firestore REST API
+          const dbId = process.env.VITE_FIREBASE_DATABASE_ID || '(default)';
+          const projectId = process.env.VITE_FIREBASE_PROJECT_ID || 'jittery-study-nzp2g';
+          const firestoreRes = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/${dbId}/documents/sellers/seller-${firebaseEmail.split('@')[0]}`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          const firestoreData = await firestoreRes.json();
+          if (firestoreData && firestoreData.fields) {
+            isRoot = firestoreData.fields.isRootAdmin?.booleanValue === true;
+            authoritativeSellerData = {
+               name: firestoreData.fields.name?.stringValue || '',
+               role: firestoreData.fields.role?.stringValue || 'member',
+               avatarColor: firestoreData.fields.avatarColor?.stringValue || '#2563EB',
+               isRootAdmin: isRoot
+            };
+          }
+        } catch (e) {
+          console.error("Failed to fetch authoritative seller data", e);
+        }
+      }
+      
       if (isRoot) {
-        let isValid = false;
-
-        // 1. Check against process.env.ROOT_ADMIN_PASSWORD if provided
-        if (ROOT_ADMIN_PASSWORD_ENV && cleanPassword === ROOT_ADMIN_PASSWORD_ENV) {
-          isValid = true;
-        }
-
-        // 2. Check against bcrypt if ROOT_ADMIN_PASSWORD_ENV is a bcrypt hash
-        if (!isValid && ROOT_ADMIN_PASSWORD_ENV && ROOT_ADMIN_PASSWORD_ENV.startsWith('$2')) {
-          isValid = await bcrypt.compare(cleanPassword, ROOT_ADMIN_PASSWORD_ENV);
-        }
-
-        // 3. Fallback check with legacy salted SHA-256 for backward compatibility
-        if (!isValid) {
-          const computedHash = computeLegacyHash(cleanPassword, ROOT_ADMIN_SALT);
-          if (computedHash === ROOT_ADMIN_HASH) {
-            isValid = true;
-          }
-        }
-
-        // 4. Accept admin passwords for manhcuong
-        if (!isValid) {
-          if (
-            cleanPassword === 'manhcuong' ||
-            cleanPassword === 'admin' ||
-            cleanPassword === 'admin123' ||
-            cleanPassword === '123456' ||
-            cleanPassword === 'manhcuong2026' ||
-            cleanPassword.length >= 4
-          ) {
-            isValid = true;
-          }
-        }
-
-        if (!isValid) {
-          return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác.' });
-        }
-
         const userPayload: JwtAdminPayload = {
-          id: `seller-${ROOT_ADMIN_USERNAME}`,
-          username: ROOT_ADMIN_USERNAME,
-          name: 'Mạnh Cường',
+          id: firebaseUid,
+          username: firebaseEmail.split('@')[0],
+          name: authoritativeSellerData?.name || 'Quản Trị Viên Gốc',
           role: 'root_admin',
           isRootAdmin: true,
-          avatarColor: '#B41C1A',
+          avatarColor: authoritativeSellerData?.avatarColor || '#B41C1A',
           issuedAt: new Date().toISOString()
         };
 
@@ -245,46 +246,13 @@ async function startServer() {
         });
       }
 
-      // Check Member / Seller Login
-      if (!sellerData) {
-        return res.status(401).json({ error: 'Tài khoản người bán không tồn tại hoặc thông tin xác thực không hợp lệ.' });
-      }
-
-      if (!sellerData.isActive) {
-        return res.status(403).json({ error: 'Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.' });
-      }
-
-      let isSellerValid = false;
-
-      // 1. If seller has modern bcrypt password hash
-      if (sellerData.passwordHash && sellerData.passwordHash.startsWith('$2')) {
-        isSellerValid = await bcrypt.compare(cleanPassword, sellerData.passwordHash);
-      }
-      // 2. Legacy salt & hash verification
-      else if (sellerData.passwordSalt && sellerData.passwordHash) {
-        const computedHash = computeLegacyHash(cleanPassword, sellerData.passwordSalt);
-        if (computedHash === sellerData.passwordHash) {
-          isSellerValid = true;
-        }
-      }
-
-      if (!isSellerValid) {
-        if (cleanPassword === sellerData.username || cleanPassword === '123456' || cleanPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword.length >= 4) {
-          isSellerValid = true;
-        }
-      }
-
-      if (!isSellerValid) {
-        return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác.' });
-      }
-
       const memberPayload: JwtAdminPayload = {
-        id: sellerData.id,
-        username: sellerData.username,
-        name: sellerData.name || sellerData.username,
-        role: sellerData.role || 'member',
-        isRootAdmin: Boolean(sellerData.isRootAdmin),
-        avatarColor: sellerData.avatarColor || '#2563EB',
+        id: firebaseUid,
+        username: firebaseEmail.split('@')[0],
+        name: authoritativeSellerData?.name || firebaseEmail.split('@')[0],
+        role: authoritativeSellerData?.role || 'member',
+        isRootAdmin: false,
+        avatarColor: authoritativeSellerData?.avatarColor || '#2563EB',
         issuedAt: new Date().toISOString()
       };
 
@@ -307,9 +275,7 @@ async function startServer() {
 
   /**
    * GET /api/auth/verify
-   * Cryptographically verifies the client's JWT session token.
-   */
-  app.get('/api/auth/verify', (req: Request, res: Response) => {
+req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ valid: false, error: 'Thiếu token xác thực.' });

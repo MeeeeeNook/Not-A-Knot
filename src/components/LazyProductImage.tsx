@@ -156,7 +156,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
           alt={alt}
           loading={priority ? 'eager' : 'lazy'}
           decoding="async"
-          {...({ fetchpriority: priority ? 'high' : 'low' } as any)}
+          fetchPriority={priority ? 'high' : 'low'}
           onLoad={handleImageLoad}
           onError={handleImageError}
           className={`w-full h-full ${objectFitClass} transition-opacity duration-300 ease-out ${

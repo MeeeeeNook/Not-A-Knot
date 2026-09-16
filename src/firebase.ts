@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import {
   initializeFirestore,
@@ -71,7 +72,7 @@ const ENCRYPTED_CONFIG = {
   messagingSenderId: 'fHJ4b3V2amt0cms='
 };
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: decodeDbParam(ENCRYPTED_CONFIG.apiKey),
   authDomain: decodeDbParam(ENCRYPTED_CONFIG.authDomain),
   projectId: decodeDbParam(ENCRYPTED_CONFIG.projectId),
@@ -247,6 +248,7 @@ export const purgeAllDeletedOrdersFromLocalStorage = (orderIds?: string[]) => {
 };
 
 export const db = firestoreInstance;
+
 export const storage = getStorage(app);
 
 export async function uploadHeroArtwork(file: File, slideId: string, device: 'desktop' | 'mobile'): Promise<string> {

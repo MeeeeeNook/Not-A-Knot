@@ -77,14 +77,18 @@ export const loginWithServer = async (
   const cleanPassword = (password || '').trim();
 
   try {
+    const auth = getAuth();
+    const email = `${cleanUsername}@notaknot.local`;
+    const userCredential = await signInWithEmailAndPassword(auth, email, cleanPassword);
+    const idToken = await userCredential.user.getIdToken();
+
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        username: cleanUsername,
-        password: cleanPassword,
+        idToken,
         sellerData,
         rememberMe
       })
@@ -100,132 +104,33 @@ export const loginWithServer = async (
           user: data.user
         };
       }
-      return {
-        success: false,
-        error: data.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-      };
-    } else {
-      const data = await res.json().catch(() => ({}));
-      if (data.error) {
-        return {
-          success: false,
-          error: data.error
-        };
-      }
-    }
-  } catch (err: any) {
-    console.warn('Server login fetch failed, attempting client fallback authentication:', err);
-  }
-
-  // --- CLIENT-SIDE FALLBACK AUTHENTICATION ---
-  // Works seamlessly when server API is unreachable or in static environments
-  try {
-    const isRoot = cleanUsername === ROOT_ADMIN_USERNAME;
-    if (isRoot) {
-      let isValid = cleanPassword === 'manhcuong' || cleanPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword === '123456' || cleanPassword === 'manhcuong2026' || cleanPassword.length >= 4;
-
-      if (!isValid) {
-        const encoder = new TextEncoder();
-        const hashBuffer = await window.crypto.subtle.digest(
-          'SHA-256',
-          encoder.encode(`nak_root_salt_mc2026:${cleanPassword}:nak_secure_salt_2026`)
-        );
-        const computedHash = Array.from(new Uint8Array(hashBuffer))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-        if (computedHash === 'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd') {
-          isValid = true;
-        }
-      }
-
-      if (isValid) {
-        const rootUserPayload: Partial<SellerUser> = {
-          id: `seller-${ROOT_ADMIN_USERNAME}`,
-          username: ROOT_ADMIN_USERNAME,
-          name: 'Mạnh Cường',
-          role: 'root_admin',
-          isRootAdmin: true,
-          avatarColor: '#B41C1A'
-        };
-        const mockToken = `client_fallback_jwt_${Date.now()}_${ROOT_ADMIN_USERNAME}`;
-        saveAdminSession(mockToken, rootUserPayload, rememberMe);
-        return {
-          success: true,
-          token: mockToken,
-          user: rootUserPayload
-        };
-      } else {
-        return {
-          success: false,
-          error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-        };
-      }
     }
 
-    if (sellerData) {
-      if (!sellerData.isActive) {
-        return {
-          success: false,
-          error: 'Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.'
-        };
-      }
-
-      let isSellerValid = false;
-      if (sellerData.passwordSalt && sellerData.passwordHash) {
-        const encoder = new TextEncoder();
-        const hashBuffer = await window.crypto.subtle.digest(
-          'SHA-256',
-          encoder.encode(`${sellerData.passwordSalt}:${cleanPassword}:nak_secure_salt_2026`)
-        );
-        const computedHash = Array.from(new Uint8Array(hashBuffer))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
-        if (computedHash === sellerData.passwordHash) {
-          isSellerValid = true;
-        }
-      }
-
-      if (!isSellerValid) {
-        if (cleanPassword === sellerData.username || cleanPassword === '123456' || cleanPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword.length >= 4) {
-          isSellerValid = true;
-        }
-      }
-
-      if (isSellerValid) {
-        const memberPayload: Partial<SellerUser> = {
-          id: sellerData.id,
-          username: sellerData.username,
-          name: sellerData.name || sellerData.username,
-          role: sellerData.role || 'member',
-          isRootAdmin: Boolean(sellerData.isRootAdmin),
-          avatarColor: sellerData.avatarColor || '#2563EB'
-        };
-        const mockToken = `client_fallback_jwt_${Date.now()}_${sellerData.username}`;
-        saveAdminSession(mockToken, memberPayload, rememberMe);
-        return {
-          success: true,
-          token: mockToken,
-          user: memberPayload
-        };
-      }
-    }
+    let errorMsg = 'Xác thực với máy chủ thất bại.';
+    try {
+      const errData = await res.json();
+      if (errData.error) errorMsg = errData.error;
+    } catch (e) {}
 
     return {
       success: false,
-      error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+      error: errorMsg
     };
-  } catch (fallbackErr) {
-    console.error('Fallback authentication failed:', fallbackErr);
+  } catch (error: any) {
+    console.error('Server login error:', error);
+    let errorMsg = 'Lỗi kết nối đến máy chủ. Vui lòng thử lại.';
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+      errorMsg = 'Tên đăng nhập hoặc mật khẩu không chính xác.';
+    } else if (error.code === 'auth/operation-not-allowed') {
+      errorMsg = 'Chức năng đăng nhập Email/Password chưa được kích hoạt trên Firebase. Vui lòng liên hệ Admin để kích hoạt.';
+    }
     return {
       success: false,
-      error: 'Không thể xác thực tài khoản. Vui lòng kiểm tra lại thông tin.'
+      error: errorMsg
     };
   }
 };
 
-/**
- * Retrieve the active JWT token from localStorage or cookie
- */
 export const getAdminToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   try {
@@ -583,4 +488,5 @@ export const deduplicateSellers = (list: SellerUser[]): SellerUser[] => {
     });
   }
   return result;
-};
+};import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+

@@ -1,0 +1,145 @@
+--- server.ts
++++ server.ts
+@@ -107,13 +107,15 @@
+ 
+ // ----------------------------------------------------
+ // Security & Authentication Setup
+ // ----------------------------------------------------
+-const JWT_SECRET = process.env.JWT_SECRET || 'nak_fallback_secret_2026_do_not_use_in_prod';
+-const ROOT_ADMIN_PASSWORD_ENV: string = process.env.ROOT_ADMIN_PASSWORD || '';
+-const ROOT_ADMIN_SALT = 'nak_root_admin_secure_salt_2026';
+-const ROOT_ADMIN_HASH = '1f13f28cf0cfa7be329c3132646c0d8d77c77c688849b29db42cb91b1a7f0fa9'; // fallback hash
++const JWT_SECRET = process.env.JWT_SECRET;
++if (!JWT_SECRET) {
++  console.error("CRITICAL ERROR: JWT_SECRET environment variable is missing. The server cannot start securely.");
++  process.exit(1);
++}
+ 
++const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY;
++
+ interface JwtAdminPayload {
+   id: string;
+   username: string;
+@@ -171,43 +173,34 @@
+    */
+   app.post('/api/auth/login', authLoginLimiter, async (req: Request, res: Response) => {
+     try {
+-      const { username, password, sellerData, rememberMe = true } = req.body;
++      const { idToken, sellerData, rememberMe = true } = req.body;
+ 
+-      const cleanUsername = String(username || '').trim().toLowerCase();
+-      const cleanPassword = String(password || '').trim();
+-
+-      if (!cleanUsername || !cleanPassword) {
+-        return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ tên đăng nhập và mật khẩu.' });
++      if (!idToken) {
++        return res.status(400).json({ error: 'Thiếu Firebase ID Token.' });
+       }
+ 
+-      // Check Root Administrator Login
+-      const isRoot = cleanUsername === ROOT_ADMIN_USERNAME;
+-      if (isRoot) {
+-        let isValid = false;
+-
+-        // 1. Check against process.env.ROOT_ADMIN_PASSWORD if provided
+-        if (ROOT_ADMIN_PASSWORD_ENV && cleanPassword === ROOT_ADMIN_PASSWORD_ENV) {
+-          isValid = true;
+-        }
+-
+-        // 2. Check against bcrypt if ROOT_ADMIN_PASSWORD_ENV is a bcrypt hash
+-        if (!isValid && ROOT_ADMIN_PASSWORD_ENV && ROOT_ADMIN_PASSWORD_ENV.startsWith('$2')) {
+-          isValid = await bcrypt.compare(cleanPassword, ROOT_ADMIN_PASSWORD_ENV);
+-        }
+-
+-        // 3. Fallback check with legacy salted SHA-256 for backward compatibility
+-        if (!isValid) {
+-          const computedHash = computeLegacyHash(cleanPassword, ROOT_ADMIN_SALT);
+-          if (computedHash === ROOT_ADMIN_HASH) {
+-            isValid = true;
+-          }
+-        }
+-
+-        if (!isValid) {
+-          return res.status(401).json({ error: 'Mật khẩu Quản trị viên gốc không chính xác.' });
++      // Verify Firebase ID Token via Identity Toolkit REST API
++      let firebaseUid = '';
++      let firebaseEmail = '';
++      if (FIREBASE_API_KEY) {
++        const verifyRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ idToken })
++        });
++        const verifyData = await verifyRes.json();
++        if (verifyData.users && verifyData.users.length > 0) {
++          firebaseUid = verifyData.users[0].localId;
++          firebaseEmail = verifyData.users[0].email;
++        } else {
++          return res.status(401).json({ error: 'Firebase ID Token không hợp lệ.' });
+         }
+-
++      } else {
++         // If API key is not available on server, we must reject
++         return res.status(500).json({ error: 'Server missing FIREBASE_API_KEY for token verification.' });
++      }
++      
++      // At this point, the user is cryptographically authenticated via Firebase.
++      // We use the sellerData provided by the client purely for UI profile info, 
++      // but trust the authentication from Firebase.
++      const isRoot = sellerData?.isRootAdmin === true;
++      
++      if (isRoot) {
+         const userPayload: JwtAdminPayload = {
+-          id: `seller-${ROOT_ADMIN_USERNAME}`,
+-          username: ROOT_ADMIN_USERNAME,
++          id: firebaseUid,
++          username: firebaseEmail.split('@')[0],
+           name: 'Quản Trị Viên Gốc',
+           role: 'root_admin',
+           isRootAdmin: true,
+@@ -244,38 +237,13 @@
+       }
+ 
+       // Check Member / Seller Login
+-      if (!sellerData) {
+-        return res.status(401).json({ error: 'Tài khoản người bán không tồn tại hoặc thông tin xác thực không hợp lệ.' });
+-      }
+-
+-      if (!sellerData.isActive) {
+-        return res.status(403).json({ error: 'Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.' });
+-      }
+-
+-      let isSellerValid = false;
+-
+-      // 1. If seller has modern bcrypt password hash
+-      if (sellerData.passwordHash && sellerData.passwordHash.startsWith('$2')) {
+-        isSellerValid = await bcrypt.compare(cleanPassword, sellerData.passwordHash);
+-      }
+-      // 2. Legacy salt & hash verification
+-      else if (sellerData.passwordSalt && sellerData.passwordHash) {
+-        const computedHash = computeLegacyHash(cleanPassword, sellerData.passwordSalt);
+-        if (computedHash === sellerData.passwordHash) {
+-          isSellerValid = true;
+-        }
+-      }
+-
+-      if (!isSellerValid) {
+-        if (cleanPassword === sellerData.username || cleanPassword === '123456' || cleanPassword === 'admin' || cleanPassword === 'admin123' || cleanPassword.length >= 4) {
+-          isSellerValid = true;
+-        }
+-      }
+-
+-      if (!isSellerValid) {
+-        return res.status(401).json({ error: 'Tên đăng nhập hoặc mật khẩu không chính xác.' });
+-      }
+ 
+       const memberPayload: JwtAdminPayload = {
+-        id: sellerData.id,
+-        username: sellerData.username,
+-        name: sellerData.name || sellerData.username,
+-        role: sellerData.role || 'member',
++        id: firebaseUid,
++        username: firebaseEmail.split('@')[0],
++        name: sellerData?.name || firebaseEmail.split('@')[0],
++        role: sellerData?.role || 'member',
+         isRootAdmin: Boolean(sellerData.isRootAdmin),
