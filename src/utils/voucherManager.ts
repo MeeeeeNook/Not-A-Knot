@@ -1,4 +1,5 @@
 import { Voucher } from '../types';
+export type { Voucher };
 import { db } from '../firebase';
 import {
   collection,

@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, LandingCollectionProductsConfig } from '../types';
+import { LazyProductImage } from './LazyProductImage';
+import { IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
 
 interface LandingProductsCollectionProps {
   config?: LandingCollectionProductsConfig;
@@ -210,11 +212,16 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
       {/* Optional Background Image Layer with custom opacity */}
       {config?.backgroundImage && (
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-          <img
+          <LazyProductImage
             src={config.backgroundImage}
             alt=""
             aria-hidden="true"
-            className="w-full h-full object-cover select-none"
+            sizes="100vw"
+            responsiveWidths={[480, 768, 1024, 1280, 1600]}
+            wrapperClassName="w-full h-full"
+            className="select-none"
+            objectFit="cover"
+            showSkeleton={false}
             style={{ opacity: typeof config.bgImageOpacity === 'number' ? config.bgImageOpacity : 0.25 }}
           />
         </div>
@@ -281,7 +288,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
               }`}
               style={{ WebkitOverflowScrolling: 'touch' }}
             >
-              {displayProducts.map((product) => {
+              {displayProducts.map((product, pIdx) => {
                 const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0);
                 const mainImg = (product.images && product.images[0]) || product.image || '/assets/bracelet.jpg';
                 const priceFormatted = Number(product.price || 0).toLocaleString('vi-VN') + 'đ';
@@ -309,15 +316,15 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                       ) : null}
 
                       {/* Product Photo with subtle hover zoom */}
-                      <img
+                      <LazyProductImage
                         src={mainImg}
                         alt={product.name}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-contain p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
-                        }}
+                        sizes={IMAGE_SIZES_PRESETS.landingCarousel}
+                        responsiveWidths={[180, 260, 360, 480, 640]}
+                        priority={sectionIndex === 0 && pIdx < 3}
+                        objectFit="contain"
+                        className="p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
+                        wrapperClassName="w-full h-full bg-white"
                       />
                     </div>
 
@@ -370,7 +377,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
         ) : (
           /* Centered Responsive Grid / Flex (Perfect alignment whether 1, 2, 3, or 4 products) */
           <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 lg:gap-x-10 gap-y-10 sm:gap-y-12 lg:gap-y-16">
-            {displayProducts.map((product) => {
+            {displayProducts.map((product, pIdx) => {
               const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0);
               const mainImg = (product.images && product.images[0]) || product.image || '/assets/bracelet.jpg';
               const priceFormatted = Number(product.price || 0).toLocaleString('vi-VN') + 'đ';
@@ -398,15 +405,15 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                     ) : null}
 
                     {/* Centered Product Photo with subtle hover zoom */}
-                    <img
+                    <LazyProductImage
                       src={mainImg}
                       alt={product.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-contain p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
-                      }}
+                      sizes={IMAGE_SIZES_PRESETS.landingGrid}
+                      responsiveWidths={[180, 260, 360, 480, 640]}
+                      priority={sectionIndex === 0 && pIdx < 4}
+                      objectFit="contain"
+                      className="p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
+                      wrapperClassName="w-full h-full bg-white"
                     />
                   </div>
 

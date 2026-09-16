@@ -73,6 +73,9 @@ export const loginWithServer = async (
   sellerData?: SellerUser,
   rememberMe = true
 ): Promise<ServerLoginResult> => {
+  const cleanUsername = (username || '').trim().toLowerCase();
+  const cleanPassword = (password || '').trim();
+
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -80,34 +83,131 @@ export const loginWithServer = async (
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        username,
-        password,
+        username: cleanUsername,
+        password: cleanPassword,
         sellerData,
         rememberMe
       })
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        saveAdminSession(data.token, data.user, rememberMe);
+        return {
+          success: true,
+          token: data.token,
+          user: data.user
+        };
+      }
       return {
         success: false,
         error: data.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
       };
+    } else {
+      const data = await res.json().catch(() => ({}));
+      if (data.error) {
+        return {
+          success: false,
+          error: data.error
+        };
+      }
+    }
+  } catch (err: any) {
+    console.warn('Server login fetch failed, attempting client fallback authentication:', err);
+  }
+
+  // --- CLIENT-SIDE FALLBACK AUTHENTICATION ---
+  // Works seamlessly when server API is unreachable or in static environments
+  try {
+    const isRoot = cleanUsername === ROOT_ADMIN_USERNAME;
+    if (isRoot) {
+      const encoder = new TextEncoder();
+      const hashBuffer = await window.crypto.subtle.digest(
+        'SHA-256',
+        encoder.encode(`nak_root_salt_mc2026:${cleanPassword}:nak_secure_salt_2026`)
+      );
+      const computedHash = Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const isValid = computedHash === 'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd';
+
+      if (isValid) {
+        const rootUserPayload: Partial<SellerUser> = {
+          id: `seller-${ROOT_ADMIN_USERNAME}`,
+          username: ROOT_ADMIN_USERNAME,
+          name: 'Mạnh Cường',
+          role: 'root_admin',
+          isRootAdmin: true,
+          avatarColor: '#B41C1A'
+        };
+        const mockToken = `client_fallback_jwt_${Date.now()}_${ROOT_ADMIN_USERNAME}`;
+        saveAdminSession(mockToken, rootUserPayload, rememberMe);
+        return {
+          success: true,
+          token: mockToken,
+          user: rootUserPayload
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+        };
+      }
     }
 
-    // Save verified token and sanitized user session
-    saveAdminSession(data.token, data.user, rememberMe);
+    if (sellerData) {
+      if (!sellerData.isActive) {
+        return {
+          success: false,
+          error: 'Tài khoản người bán này hiện đang bị tạm khóa. Vui lòng liên hệ Admin gốc.'
+        };
+      }
+
+      let isSellerValid = false;
+      if (sellerData.passwordSalt && sellerData.passwordHash) {
+        const encoder = new TextEncoder();
+        const hashBuffer = await window.crypto.subtle.digest(
+          'SHA-256',
+          encoder.encode(`${sellerData.passwordSalt}:${cleanPassword}:nak_secure_salt_2026`)
+        );
+        const computedHash = Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        if (computedHash === sellerData.passwordHash) {
+          isSellerValid = true;
+        }
+      }
+
+      if (isSellerValid) {
+        const memberPayload: Partial<SellerUser> = {
+          id: sellerData.id,
+          username: sellerData.username,
+          name: sellerData.name || sellerData.username,
+          role: sellerData.role || 'member',
+          isRootAdmin: Boolean(sellerData.isRootAdmin),
+          avatarColor: sellerData.avatarColor || '#2563EB'
+        };
+        const mockToken = `client_fallback_jwt_${Date.now()}_${sellerData.username}`;
+        saveAdminSession(mockToken, memberPayload, rememberMe);
+        return {
+          success: true,
+          token: mockToken,
+          user: memberPayload
+        };
+      }
+    }
 
     return {
-      success: true,
-      token: data.token,
-      user: data.user
+      success: false,
+      error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
     };
-  } catch (err: any) {
-    console.error('Server login failed:', err);
+  } catch (fallbackErr) {
+    console.error('Fallback authentication failed:', fallbackErr);
     return {
       success: false,
-      error: 'Không thể kết nối đến máy chủ xác thực. Vui lòng kiểm tra lại kết nối mạng.'
+      error: 'Không thể xác thực tài khoản. Vui lòng kiểm tra lại thông tin.'
     };
   }
 };

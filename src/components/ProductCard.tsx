@@ -4,6 +4,8 @@ import { ShoppingBag } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo } from '../types';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { resolveAssetUrl } from '../firebase';
+import { LazyProductImage } from './LazyProductImage';
+import { generateSrcSet, IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
 
 export interface ProductCardProps {
   product: Product;
@@ -12,6 +14,7 @@ export interface ProductCardProps {
   className?: string;
   categories?: CategoryItem[];
   collections?: CollectionInfo[];
+  priority?: boolean;
 }
 
 export const getCategoryLabel = (
@@ -100,7 +103,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onAddToCart,
   className = '',
   categories,
-  collections
+  collections,
+  priority = false
 }) => {
   const images = useMemo(() => {
     if (product.images && product.images.length > 0) {
@@ -119,27 +123,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [direction, setDirection] = useState(1);
   const [isHovered, setIsHovered] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(true);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
-
-  // Preload primary image as soon as product card mounts
-  useEffect(() => {
-    if (images[0] && typeof window !== 'undefined') {
-      const preloadImg = new Image();
-      preloadImg.src = images[0];
-      if (preloadImg.complete && preloadImg.naturalWidth > 0) {
-        setIsLoaded(true);
-      }
-    }
-  }, [images]);
-
-  // Quick detect if image is already cached in memory
-  useEffect(() => {
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
-      setIsLoaded(true);
-    }
-  }, [images]);
 
   // Photos are STATIC by default. When mouse hovers, gentle smooth pacing auto-slide through photos.
   useEffect(() => {
@@ -187,6 +171,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return getCategoryLabel(product.category, categories, collections);
   }, [product.category, categories, collections]);
 
+  const activeHoverSrc = images[currentIdx] || product.image || '/assets/bracelet.jpg';
+  const hoverSrcSet = useMemo(() => generateSrcSet(activeHoverSrc), [activeHoverSrc]);
+
   return (
     <motion.div
       ref={cardRef}
@@ -205,69 +192,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       {/* Product Image Container with Zoom, Skeleton and Silky Horizontal Slide on Hover */}
       <div className="relative aspect-square overflow-hidden bg-neutral-100">
-        {/* Placeholder skeleton while image is offscreen or downloading */}
-        {!isLoaded && (
-          <div
-            className="absolute inset-0 bg-neutral-200 animate-pulse flex items-center justify-center pointer-events-none z-0 overflow-hidden"
-            aria-hidden="true"
-          >
-            <div className="w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.4s_infinite]" />
-          </div>
-        )}
-
         <div className="w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out">
-          {isInView && (
-            isHovered && images.length > 1 ? (
-              <AnimatePresence initial={false} custom={direction} mode="popLayout">
-                <motion.img
-                  key={currentIdx}
-                  src={images[currentIdx] || product.image || '/assets/bracelet.jpg'}
-                  alt={product.name}
-                  custom={direction}
-                  variants={cardSlideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{
-                    x: { type: 'tween', ease: [0.25, 1, 0.5, 1], duration: 0.55 },
-                    opacity: { duration: 0.35 }
-                  }}
-                  onLoad={() => setIsLoaded(true)}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
-                    setIsLoaded(true);
-                  }}
-                  className={`w-full h-full object-cover transition-opacity duration-300 ${
-                    isLoaded ? 'opacity-100' : 'opacity-0'
-                  } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
-                  style={{ imageRendering: '-webkit-optimize-contrast' }}
-                  loading="lazy"
-                  decoding="async"
-                />
-              </AnimatePresence>
-            ) : (
-              <img
-                ref={(node) => {
-                  imgRef.current = node;
-                  if (node && node.complete && node.naturalWidth > 0 && !isLoaded) {
-                    setIsLoaded(true);
-                  }
-                }}
-                src={images[0] || product.image || '/assets/bracelet.jpg'}
+          {isHovered && images.length > 1 ? (
+            <AnimatePresence initial={false} custom={direction} mode="popLayout">
+              <motion.img
+                key={currentIdx}
+                src={activeHoverSrc}
+                srcSet={hoverSrcSet}
+                sizes={IMAGE_SIZES_PRESETS.productCard}
                 alt={product.name}
+                custom={direction}
+                variants={cardSlideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{
+                  x: { type: 'tween', ease: [0.25, 1, 0.5, 1], duration: 0.55 },
+                  opacity: { duration: 0.35 }
+                }}
                 onLoad={() => setIsLoaded(true)}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
                   setIsLoaded(true);
                 }}
-                className={`w-full h-full object-cover transition-opacity duration-200 ${
-                  isLoaded || (images[0] && (images[0].startsWith('data:') || images[0].startsWith('/'))) ? 'opacity-100' : 'opacity-90'
-                } ${isSoldOut ? 'grayscale-[35%]' : ''}`}
+                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                  isSoldOut ? 'grayscale-[35%]' : ''
+                }`}
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
-                loading="eager"
+                loading="lazy"
                 decoding="async"
               />
-            )
+            </AnimatePresence>
+          ) : (
+            <LazyProductImage
+              src={images[0] || product.image || '/assets/bracelet.jpg'}
+              alt={product.name}
+              sizes={IMAGE_SIZES_PRESETS.productCard}
+              priority={priority}
+              className={`w-full h-full object-cover ${isSoldOut ? 'grayscale-[35%]' : ''}`}
+              wrapperClassName="w-full h-full"
+              objectFit="cover"
+            />
           )}
         </div>
 

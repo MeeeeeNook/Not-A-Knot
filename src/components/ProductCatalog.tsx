@@ -4,6 +4,8 @@ import { Product, CategoryItem, CollectionInfo } from '../types';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { Search, SlidersHorizontal, ArrowRight } from 'lucide-react';
 import { ProductCard } from './ProductCard';
+import { LazyProductImage } from './LazyProductImage';
+import { IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -208,15 +210,15 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             animate={{ opacity: 1, y: 0 }}
             className="relative w-full rounded-3xl overflow-hidden shadow-xs border border-neutral-200/80 bg-neutral-900 text-white aspect-[2.6/1] sm:aspect-[3.4/1] md:aspect-[4/1] lg:aspect-[4.2/1] min-h-[160px] max-h-[320px] flex items-end p-5 sm:p-7 md:p-8 group"
           >
-            <img
+            <LazyProductImage
               src={collectionBannerImg}
               alt={displayBannerTitle}
-              className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-[1.02] transition-all duration-700 opacity-95 group-hover:opacity-100"
-              loading="lazy"
-              decoding="async"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
-              }}
+              priority={true}
+              sizes={IMAGE_SIZES_PRESETS.collectionBanner}
+              responsiveWidths={[480, 768, 1024, 1280, 1600]}
+              wrapperClassName="absolute inset-0 w-full h-full"
+              className="group-hover:scale-[1.02] transition-all duration-700 opacity-95 group-hover:opacity-100"
+              objectFit="cover"
             />
             {/* Subtle scrim overlay to ensure text readability without obscuring banner graphics */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
@@ -455,10 +457,11 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
                 <AnimatePresence mode="popLayout">
-                  {filteredProducts.map((product) => (
+                  {filteredProducts.map((product, idx) => (
                     <ProductCard
                       key={product.id}
                       product={product}
+                      priority={idx < 4}
                       onOpenDetail={onOpenProductDetail}
                       onAddToCart={onAddToCart}
                       categories={categories}
