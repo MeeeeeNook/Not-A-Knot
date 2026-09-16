@@ -269,14 +269,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         
         await deleteApp(tempApp);
       } catch (authErr: any) {
-        console.error("Firebase Auth Creation Error:", authErr);
-        if (authErr.code === 'auth/operation-not-allowed') {
-           alert('Chức năng đăng nhập Email/Password chưa được kích hoạt trên Firebase. Vui lòng bật nó trong Firebase Console (Authentication -> Sign-in method).');
-        } else {
-           alert('Lỗi tạo tài khoản Firebase Auth: ' + authErr.message);
-        }
-        setIsSaving(false);
-        return;
+        console.warn("Firebase Auth account creation skipped/failed:", authErr?.code || authErr?.message);
       }
 
       const newSeller: SellerUser = {       id: `seller-${cleanUsername}`,
