@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { SiteContentConfig, ContactMessage } from '../types';
 import { saveContactMessageToFirestore } from '../firebase';
+import { trackGA4Contact } from '../utils/analytics';
 
 interface FloatingChatWidgetProps {
   siteContent?: SiteContentConfig;
@@ -25,6 +26,10 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   // STRICT REQUIREMENT: Does NOT auto-open until user clicks
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'options' | 'leave-message'>('options');
+  
+  // Draggable state handling
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartPoint = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   
   // Message Form State
   const [name, setName] = useState('');
@@ -103,12 +108,14 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
 
     try {
       await saveContactMessageToFirestore(newMsg);
+      trackGA4Contact('contact_form', 'Gửi lời nhắn hỗ trợ');
       setIsSubmitted(true);
       setName('');
       setContactInfo('');
       setMessage('');
     } catch (err) {
       console.warn('Lỗi gửi tin nhắn:', err);
+      trackGA4Contact('contact_form', 'Gửi lời nhắn hỗ trợ (thử lại)');
       setIsSubmitted(true);
     } finally {
       setIsSubmitting(false);
@@ -116,14 +123,29 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   };
 
   return (
-    <div 
+    <motion.div 
       ref={containerRef}
       id="floating-chat-widget-root"
-      className={`fixed z-50 flex flex-col items-end pointer-events-auto select-none font-sans transition-all duration-300 ${
+      drag
+      dragMomentum={false}
+      dragElastic={0.08}
+      onDragStart={(_, info) => {
+        dragStartPoint.current = { x: info.point.x, y: info.point.y };
+        setIsDragging(true);
+      }}
+      onDragEnd={(_, info) => {
+        const dist = Math.hypot(info.point.x - dragStartPoint.current.x, info.point.y - dragStartPoint.current.y);
+        if (dist > 6) {
+          setTimeout(() => setIsDragging(false), 120);
+        } else {
+          setIsDragging(false);
+        }
+      }}
+      className={`fixed z-50 flex flex-col items-end pointer-events-auto select-none font-sans ${
         isZoomModalOpen ? 'hidden opacity-0 pointer-events-none' : ''
       } ${
         isProductDetail 
-          ? 'bottom-[78px] right-3 sm:bottom-6 sm:right-6' 
+          ? 'bottom-[84px] right-3 sm:bottom-6 sm:right-6' 
           : 'bottom-4 right-4 sm:bottom-6 sm:right-6'
       }`}
     >
@@ -205,6 +227,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
                       href={messengerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => trackGA4Contact('messenger', 'Floating Chat Messenger')}
                       className="w-full py-3 px-4 rounded-2xl bg-[#1d5ec9] hover:bg-[#164da7] active:scale-98 text-white font-bold text-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-xs"
                     >
                       <MessageCircle className="w-5 h-5" />
@@ -216,6 +239,7 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
                       href={facebookUrl}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={() => trackGA4Contact('facebook', 'Floating Chat Facebook')}
                       className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 active:scale-98 text-slate-800 font-bold text-sm border-2 border-slate-300 hover:border-slate-400 flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-2xs"
                     >
                       <Facebook className="w-5 h-5 text-[#1d5ec9]" />
@@ -316,15 +340,20 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
         )}
       </AnimatePresence>
 
-      {/* 2. CIRCULAR FLOATING CHAT BUBBLE BUTTON WITH SMOOTH ROTATION ANIMATION */}
+      {/* 2. CIRCULAR FLOATING CHAT BUBBLE BUTTON WITH DRAG & CLICK */}
       <motion.button
         type="button"
         id="btn-toggle-floating-chat"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isDragging) {
+            setIsOpen(!isOpen);
+          }
+        }}
         aria-label="Mở menu tư vấn trực tiếp"
+        title="Bấm để tư vấn | Giữ & kéo để di chuyển vị trí bong bóng chat"
         whileTap={{ scale: 0.92 }}
         whileHover={{ scale: 1.05 }}
-        className="w-11 h-11 sm:w-14 sm:h-14 rounded-full shadow-lg flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] text-white shadow-blue-500/30 cursor-pointer"
+        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-xl flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] active:bg-[#124294] text-white shadow-blue-500/40 cursor-grab active:cursor-grabbing border-2 border-white/20"
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
@@ -350,6 +379,6 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
           )}
         </AnimatePresence>
       </motion.button>
-    </div>
+    </motion.div>
   );
 };

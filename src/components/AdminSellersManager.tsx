@@ -5,8 +5,9 @@ import {
   TrendingUp, ShoppingBag, ShieldAlert, X, Sparkles, RefreshCw,
   Globe, MapPin, Clock, Laptop, Smartphone, CheckCircle2, XCircle, History, Copy
 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
 import { SellerUser, SystemLogItem } from '../types';
-import { StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore } from '../firebase';
+import { db, StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore, updateSellerPresence } from '../firebase';
 import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser, verifyAdminAction } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
@@ -59,8 +60,8 @@ function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
   }
 
   if (!latestIp) {
-    latestIp = '113.161.42.18';
-    location = 'Hà Nội, VN';
+    latestIp = 'Chưa ghi nhận IP';
+    location = 'Chưa có vị trí';
   }
 
   return { isOnline, lastSeenText, latestIp, location };
@@ -422,29 +423,184 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     }
   };
 
-  // Filtered logs for currently selected seller
+  // Auto-fetch fresh seller presence and ipHistory directly from Firestore when modal opens
+  useEffect(() => {
+    if (!selectedSellerForLogs?.id) return;
+    let isMounted = true;
+
+    const fetchLatestSellerData = async () => {
+      try {
+        const docRef = doc(db, 'sellers', selectedSellerForLogs.id);
+        const snap = await getDoc(docRef);
+        if (snap.exists() && isMounted) {
+          const freshData = snap.data();
+          let parsedHistory: Array<{ ip: string; city?: string; country?: string; device?: string; timestamp: string }> = [];
+          if (Array.isArray(freshData.ipHistory)) {
+            parsedHistory = freshData.ipHistory.filter((item: any) => item && typeof item === 'object' && item.ip);
+          } else if (freshData.ipHistory && typeof freshData.ipHistory === 'object') {
+            if (Array.isArray((freshData.ipHistory as any)._elements)) {
+              parsedHistory = (freshData.ipHistory as any)._elements.filter((item: any) => item && typeof item === 'object' && item.ip);
+            }
+          }
+
+          if (parsedHistory.length === 0 && freshData.lastLoginIp && freshData.lastLoginIp !== 'Unknown') {
+            parsedHistory.push({
+              ip: freshData.lastLoginIp,
+              city: freshData.lastLoginCity || 'Hà Nội',
+              country: freshData.lastLoginCountry || 'Vietnam',
+              device: freshData.lastDevice || 'Thiết bị quản trị',
+              timestamp: freshData.lastLoginAt || freshData.lastSeenAt || freshData.createdAt || new Date().toISOString()
+            });
+          }
+
+          setSelectedSellerForLogs((prev) => {
+            if (!prev || prev.id !== selectedSellerForLogs.id) return prev;
+            return {
+              ...prev,
+              lastLoginIp: freshData.lastLoginIp || prev.lastLoginIp,
+              lastLoginCity: freshData.lastLoginCity || prev.lastLoginCity,
+              lastLoginCountry: freshData.lastLoginCountry || prev.lastLoginCountry,
+              lastSeenAt: freshData.lastSeenAt || prev.lastSeenAt,
+              lastLoginAt: freshData.lastLoginAt || prev.lastLoginAt,
+              lastDevice: freshData.lastDevice || prev.lastDevice,
+              ipHistory: parsedHistory.length > 0 ? parsedHistory : prev.ipHistory
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('Lỗi đọc dữ liệu người bán từ Firestore:', err);
+      }
+    };
+
+    fetchLatestSellerData();
+    return () => { isMounted = false; };
+  }, [selectedSellerForLogs?.id]);
+
+  // Filtered logs for currently selected seller (merging system_logs, seller.ipHistory and seller document presence)
   const selectedSellerLogs = useMemo(() => {
     if (!selectedSellerForLogs) return [];
-    const username = selectedSellerForLogs.username.toLowerCase();
-    const name = selectedSellerForLogs.name.toLowerCase();
+    const username = (selectedSellerForLogs.username || '').toLowerCase().trim();
+    const name = (selectedSellerForLogs.name || '').toLowerCase().trim();
 
-    return allLogs.filter((l) => {
+    // 1. Logs from system_logs collection
+    const matchedSystemLogs = allLogs.filter((l) => {
       if (l.type !== 'admin_login') return false;
-      const uId = (l.userId || '').toLowerCase();
-      const uName = (l.userName || '').toLowerCase();
+      const uId = (l.userId || '').toLowerCase().trim();
+      const uName = (l.userName || '').toLowerCase().trim();
       const uTitle = (l.title || '').toLowerCase();
       const uMsg = (l.message || '').toLowerCase();
 
-      return uId === username || uName === name || uTitle.includes(username) || uMsg.includes(username);
+      return (
+        (username && (uId === username || uName === username || uTitle.includes(username) || uMsg.includes(username))) ||
+        (name && (uId === name || uName === name || uTitle.includes(name) || uMsg.includes(name)))
+      );
     });
+
+    // 2. Convert seller's ipHistory array into structured log items
+    const documentIpHistoryLogs: SystemLogItem[] = (selectedSellerForLogs.ipHistory || []).map((ipItem, idx) => ({
+      id: `doc-ip-${selectedSellerForLogs.id}-${idx}-${ipItem.timestamp}`,
+      type: 'admin_login',
+      level: 'info',
+      title: `Đăng nhập hệ thống: ${selectedSellerForLogs.name}`,
+      message: `Đăng nhập từ IP ${ipItem.ip} (${ipItem.city || 'Việt Nam'}) - Thiết bị: ${ipItem.device || 'Thiết bị quản trị'}`,
+      timestamp: ipItem.timestamp,
+      formattedDate: new Date(ipItem.timestamp).toLocaleString('vi-VN'),
+      source: 'AdminAuth',
+      userName: selectedSellerForLogs.name,
+      userId: selectedSellerForLogs.username,
+      status: 'success',
+      ip: ipItem.ip,
+      city: ipItem.city || 'Hà Nội',
+      country: ipItem.country || 'Vietnam',
+      countryCode: 'VN',
+      browser: ipItem.device
+    }));
+
+    // 3. Fallback/Guaranteed presence log from seller's active document fields
+    const sellerActiveLogs: SystemLogItem[] = [];
+    if (
+      selectedSellerForLogs.lastLoginIp && 
+      selectedSellerForLogs.lastLoginIp !== 'Unknown' && 
+      selectedSellerForLogs.lastLoginIp !== '127.0.0.1'
+    ) {
+      const activeTimestamp = selectedSellerForLogs.lastLoginAt || selectedSellerForLogs.lastSeenAt || selectedSellerForLogs.createdAt || new Date().toISOString();
+      sellerActiveLogs.push({
+        id: `seller-active-ip-${selectedSellerForLogs.id}-${activeTimestamp}`,
+        type: 'admin_login',
+        level: 'info',
+        title: `Phiên hoạt động gần nhất: ${selectedSellerForLogs.name}`,
+        message: `Hoạt động từ IP ${selectedSellerForLogs.lastLoginIp} (${selectedSellerForLogs.lastLoginCity || 'Hà Nội'}) - Thiết bị: ${selectedSellerForLogs.lastDevice || 'Trình duyệt Web'}`,
+        timestamp: activeTimestamp,
+        formattedDate: new Date(activeTimestamp).toLocaleString('vi-VN'),
+        source: 'AdminPresence',
+        userName: selectedSellerForLogs.name,
+        userId: selectedSellerForLogs.username,
+        status: 'success',
+        ip: selectedSellerForLogs.lastLoginIp,
+        city: selectedSellerForLogs.lastLoginCity || 'Hà Nội',
+        country: selectedSellerForLogs.lastLoginCountry || 'Vietnam',
+        countryCode: 'VN',
+        browser: selectedSellerForLogs.lastDevice || 'Trình duyệt Web'
+      });
+    }
+
+    // Combine all sources
+    const combined = [...sellerActiveLogs, ...documentIpHistoryLogs, ...matchedSystemLogs];
+    const uniqueMap = new Map<string, SystemLogItem>();
+
+    combined.forEach((item) => {
+      // Group by IP and approximately same hour / date to prevent duplicate records
+      const timeKey = item.timestamp ? new Date(item.timestamp).toISOString().slice(0, 14) : item.formattedDate;
+      const key = `${item.ip || 'noip'}-${timeKey}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, item);
+      }
+    });
+
+    return Array.from(uniqueMap.values()).sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
   }, [allLogs, selectedSellerForLogs]);
 
   const handleRefreshSellerLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const fresh = await fetchSystemLogsFromFirestore(200);
-      setAllLogs(fresh);
-      triggerSuccess('Đã cập nhật dữ liệu nhật ký đăng nhập mới nhất.');
+      const [freshLogs, freshSnap] = await Promise.all([
+        fetchSystemLogsFromFirestore(200),
+        selectedSellerForLogs?.id ? getDoc(doc(db, 'sellers', selectedSellerForLogs.id)) : Promise.resolve(null)
+      ]);
+      setAllLogs(freshLogs);
+
+      if (freshSnap && freshSnap.exists()) {
+        const freshData = freshSnap.data();
+        let parsedHistory: Array<{ ip: string; city?: string; country?: string; device?: string; timestamp: string }> = [];
+        if (Array.isArray(freshData.ipHistory)) {
+          parsedHistory = freshData.ipHistory.filter((item: any) => item && typeof item === 'object' && item.ip);
+        }
+        if (parsedHistory.length === 0 && freshData.lastLoginIp) {
+          parsedHistory.push({
+            ip: freshData.lastLoginIp,
+            city: freshData.lastLoginCity || 'Hà Nội',
+            country: freshData.lastLoginCountry || 'Vietnam',
+            device: freshData.lastDevice || 'Thiết bị quản trị',
+            timestamp: freshData.lastLoginAt || freshData.lastSeenAt || freshData.createdAt || new Date().toISOString()
+          });
+        }
+        setSelectedSellerForLogs((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            lastLoginIp: freshData.lastLoginIp || prev.lastLoginIp,
+            lastLoginCity: freshData.lastLoginCity || prev.lastLoginCity,
+            lastLoginCountry: freshData.lastLoginCountry || prev.lastLoginCountry,
+            lastSeenAt: freshData.lastSeenAt || prev.lastSeenAt,
+            lastLoginAt: freshData.lastLoginAt || prev.lastLoginAt,
+            lastDevice: freshData.lastDevice || prev.lastDevice,
+            ipHistory: parsedHistory.length > 0 ? parsedHistory : prev.ipHistory
+          };
+        });
+      }
+      triggerSuccess('Đã cập nhật dữ liệu nhật ký đăng nhập và IP mới nhất từ Firebase.');
     } catch {
       // ignore
     } finally {
@@ -455,22 +611,63 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   const handleCreateTestMemberLogin = async (seller: SellerUser) => {
     setTestLoginLogMessage(`Đang ghi log đăng nhập thử nghiệm cho ${seller.name}...`);
     try {
+      const testTimestamp = new Date().toISOString();
+      const testIp = '113.161.42.18';
+      const testCity = 'Ho Chi Minh City';
+      const testCountry = 'Vietnam';
+      const testDevice = 'Chrome (macOS) / Quản trị viên';
+
+      // 1. Write to system_logs collection
       await logAdminLogin({
         username: seller.username,
         name: seller.name,
         isRoot: seller.isRootAdmin,
         status: 'success',
         customGeo: {
-          ip: '113.161.42.18',
-          country: 'Vietnam',
+          ip: testIp,
+          country: testCountry,
           countryCode: 'VN',
-          city: 'Ho Chi Minh City',
+          city: testCity,
           region: 'Thanh pho Ho Chi Minh',
           isp: 'VNPT Telecom Vietnam',
           isVietnam: true
         }
       });
-      setTestLoginLogMessage(`Đã tạo 1 bản ghi đăng nhập thành công từ TP.HCM cho ${seller.name}!`);
+
+      // 2. Persist to sellers collection presence and ipHistory on Firebase
+      await updateSellerPresence(seller.id, {
+        lastSeenAt: testTimestamp,
+        lastLoginAt: testTimestamp,
+        lastLoginIp: testIp,
+        lastLoginCity: testCity,
+        lastLoginCountry: testCountry,
+        lastDevice: testDevice
+      });
+
+      // 3. Immediately reflect in local state
+      const newIpItem = {
+        ip: testIp,
+        city: testCity,
+        country: testCountry,
+        device: testDevice,
+        timestamp: testTimestamp
+      };
+
+      setSelectedSellerForLogs((prev) => {
+        if (!prev || prev.id !== seller.id) return prev;
+        return {
+          ...prev,
+          lastLoginIp: testIp,
+          lastLoginCity: testCity,
+          lastLoginCountry: testCountry,
+          lastSeenAt: testTimestamp,
+          lastLoginAt: testTimestamp,
+          lastDevice: testDevice,
+          ipHistory: [newIpItem, ...(prev.ipHistory || [])]
+        };
+      });
+
+      setTestLoginLogMessage(`Đã lưu log đăng nhập lên Firebase (IP: ${testIp}) cho ${seller.name}!`);
       setTimeout(() => setTestLoginLogMessage(null), 3500);
     } catch {
       setTestLoginLogMessage('Không thể tạo bản ghi thử nghiệm.');
@@ -514,7 +711,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500">
-            Quản trị quyền truy cập nội bộ, quản lý tài khoản bán hàng và theo dõi hiệu suất doanh số của từng cá nhân.
+            Quản trị danh sách tài khoản, phân quyền đăng nhập nội bộ và quản lý trạng thái bảo mật hệ thống.
           </p>
         </div>
 
@@ -562,7 +759,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
           </div>
 
           <form onSubmit={handleCreateSeller} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
               <div>
                 <label className="block text-slate-700 font-bold mb-1.5">
                   Họ và tên người bán <span className="text-rose-500">*</span>
@@ -613,19 +810,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1.5">
-                  Số điện thoại / Zalo
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="0912345678"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
-                />
               </div>
             </div>
 
@@ -691,13 +875,11 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold select-none">
-                <th className="p-3.5 whitespace-nowrap min-w-[190px]">Thành viên</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[200px]">Thành viên</th>
                 <th className="p-3.5 whitespace-nowrap min-w-[140px]">Tài khoản</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[190px]">Trực tuyến & IP gần nhất</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[120px]">Tài khoản</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[120px]">Số điện thoại</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[150px] text-right">Hiệu suất đơn hàng</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[180px] text-center sticky right-0 bg-slate-50 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
+                <th className="p-3.5 whitespace-nowrap min-w-[220px]">Trực tuyến & IP gần nhất</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[120px]">Trạng thái</th>
+                <th className="p-3.5 whitespace-nowrap min-w-[250px] text-center sticky right-0 bg-slate-50 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
                   Thao tác
                 </th>
               </tr>
@@ -746,10 +928,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                                   <ShieldCheck className="w-4 h-4 text-amber-500 inline shrink-0" />
                                 </span>
                               )}
-                              <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 group-hover:bg-amber-100 border border-amber-200/80 px-1.5 py-0.2 rounded-md flex items-center gap-1 transition-colors">
-                                <History className="w-2.5 h-2.5" />
-                                <span>Log</span>
-                              </span>
                             </button>
                             <span className="text-[11px] text-slate-400">
                               Tạo: {new Date(seller.createdAt).toLocaleDateString('vi-VN')}
@@ -803,65 +981,28 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
                       {/* Column 4: Account Active Status */}
                       <td className="p-3.5">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
                           seller.isActive 
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${seller.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${seller.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                           <span>{seller.isActive ? 'Đang mở' : 'Tạm khóa'}</span>
                         </span>
                       </td>
 
-                      {/* Column 5: Phone */}
-                      <td className="p-3.5 font-mono text-slate-600">
-                        {seller.phone ? (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            <span>{seller.phone}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-
-                      {/* Column 6: Stats & Performance */}
-                      <td className="p-3.5 text-right">
-                        <div className="font-bold text-slate-900 text-xs">
-                          {stats.totalOrders} <span className="font-normal text-slate-500">đơn</span>
-                        </div>
-                        <div className="font-extrabold text-emerald-700 text-xs mt-0.5">
-                          {stats.totalRevenue.toLocaleString('vi-VN')}₫
-                        </div>
-                      </td>
-
-                      {/* Column 7: Actions */}
+                      {/* Column 5: Actions */}
                       <td className="p-3.5 text-center sticky right-0 bg-white/95 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* View Member Login Logs Trigger */}
                           <button
                             type="button"
                             onClick={() => setSelectedSellerForLogs(seller)}
-                            className="px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200"
+                            className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 shadow-2xs"
                             title="Xem lịch sử đăng nhập & IP của thành viên"
                           >
-                            <History className="w-3 h-3 text-amber-700" />
+                            <History className="w-3.5 h-3.5 text-amber-700" />
                             <span>Log IP</span>
-                          </button>
-
-                          {/* Change Password Inline Trigger */}
-                          <button
-                            type="button"
-                            onClick={() => { alert('Tính năng đổi mật khẩu trên ứng dụng đã bị vô hiệu hóa vì lý do bảo mật. Vui lòng đổi mật khẩu trong Firebase Console (Authentication).'); }}
-                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
-                              isChangingPassword
-                                ? 'bg-amber-400 text-slate-950 shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                            }`}
-                            title="Đổi mật khẩu"
-                          >
-                            <Key className="w-3 h-3 text-amber-700" />
-                            <span>Đổi MK</span>
                           </button>
 
                           {/* Edit Inline Trigger */}
@@ -874,15 +1015,26 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                                 handleStartEdit(seller);
                               }
                             }}
-                            className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer ${
+                            className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
                               isEditing
-                                ? 'bg-sky-600 text-white shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                             }`}
                             title="Sửa thông tin"
                           >
-                            <Edit2 className="w-3 h-3 text-sky-600" />
+                            <Edit2 className="w-3.5 h-3.5 text-sky-600" />
                             <span>Sửa</span>
+                          </button>
+
+                          {/* Change Password Inline Trigger */}
+                          <button
+                            type="button"
+                            onClick={() => { alert('Tính năng đổi mật khẩu trên ứng dụng đã bị vô hiệu hóa vì lý do bảo mật. Vui lòng đổi mật khẩu trong Firebase Console (Authentication).'); }}
+                            className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                            title="Đổi mật khẩu"
+                          >
+                            <Key className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Đổi MK</span>
                           </button>
 
                           {/* Toggle Active / Inactive status */}
@@ -891,10 +1043,10 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleToggleStatus(seller)}
-                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
                                   seller.isActive
-                                    ? 'bg-slate-100 hover:bg-amber-100 text-amber-700'
-                                    : 'bg-slate-100 hover:bg-emerald-100 text-emerald-700'
+                                    ? 'bg-slate-100 hover:bg-amber-100 text-amber-700 border-slate-200 hover:border-amber-300'
+                                    : 'bg-slate-100 hover:bg-emerald-100 text-emerald-700 border-slate-200 hover:border-emerald-300'
                                 }`}
                                 title={seller.isActive ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}
                               >
@@ -911,10 +1063,10 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                                     handleStartDelete(seller);
                                   }
                                 }}
-                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
                                   isDeleting
-                                    ? 'bg-rose-600 text-white'
-                                    : 'bg-slate-100 hover:bg-rose-100 text-rose-600'
+                                    ? 'bg-rose-600 text-white border-rose-600'
+                                    : 'bg-slate-100 hover:bg-rose-100 text-rose-600 border-slate-200 hover:border-rose-300'
                                 }`}
                                 title="Xóa tài khoản"
                               >
@@ -929,14 +1081,14 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     {/* INLINE ROW SUB-PANEL: EDIT SELLER (NO POPUP) */}
                     {isEditing && (
                       <tr className="bg-sky-50/50 border-y-2 border-sky-300">
-                        <td colSpan={7} className="p-4">
+                        <td colSpan={5} className="p-4">
                           <form onSubmit={(e) => handleSaveEdit(seller, e)} className="space-y-3">
                             <div className="flex items-center gap-2 text-sky-900 font-bold text-xs pb-1 border-b border-sky-200">
                               <Edit2 className="w-3.5 h-3.5 text-sky-700" />
-                              <span>Chỉnh sửa thông tin người bán: {seller.name}</span>
+                              <span>Chỉnh sửa họ và tên người bán: {seller.name}</span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                              <div>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs">
+                              <div className="w-full sm:w-80">
                                 <label className="block text-slate-700 font-semibold mb-1">Họ và tên</label>
                                 <input
                                   type="text"
@@ -946,17 +1098,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                                   className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
                                 />
                               </div>
-                              <div>
-                                <label className="block text-slate-700 font-semibold mb-1">Số điện thoại / Zalo</label>
-                                <input
-                                  type="tel"
-                                  value={formData.phone}
-                                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                  placeholder="0912345678"
-                                  className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
-                                />
-                              </div>
-                              <div className="flex items-end gap-2">
+                              <div className="flex items-center gap-2 sm:mt-5">
                                 <button
                                   type="submit"
                                   disabled={isSaving}
@@ -981,7 +1123,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     {/* INLINE ROW SUB-PANEL: CHANGE PASSWORD (NO POPUP) */}
                     {isChangingPassword && (
                       <tr className="bg-amber-50/70 border-y-2 border-amber-300">
-                        <td colSpan={7} className="p-4">
+                        <td colSpan={5} className="p-4">
                           <form onSubmit={(e) => handleChangePassword(seller, e)} className="space-y-3">
                             <div className="flex items-center gap-2 text-amber-950 font-bold text-xs pb-1 border-b border-amber-200">
                               <Key className="w-3.5 h-3.5 text-amber-700" />
@@ -1033,7 +1175,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     {/* INLINE ROW SUB-PANEL: DELETE CONFIRMATION (NO POPUP) */}
                     {isDeleting && (
                       <tr className="bg-rose-50 border-y-2 border-rose-300">
-                        <td colSpan={7} className="p-4">
+                        <td colSpan={5} className="p-4">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                             <div className="flex items-center gap-2 text-rose-900 font-semibold">
                               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -1068,7 +1210,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
               {filteredSellers.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
+                  <td colSpan={5} className="p-8 text-center text-slate-400">
                     Không tìm thấy tài khoản người bán nào phù hợp.
                   </td>
                 </tr>
@@ -1180,8 +1322,28 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
               <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
                 <span className="text-[11px] font-bold text-slate-400 block">Vị Trí Gần Nhất</span>
                 <span className="text-xs font-bold text-slate-800 mt-1 block truncate">
-                  {selectedSellerLogs[0]?.city ? `${selectedSellerLogs[0].city}, VN 🇻🇳` : 'Chưa có dữ liệu'}
+                  {selectedSellerLogs[0]?.city ? `${selectedSellerLogs[0].city}, VN 🇻🇳` : (selectedSellerForLogs.lastLoginCity ? `${selectedSellerForLogs.lastLoginCity}, VN 🇻🇳` : 'Chưa có dữ liệu')}
                 </span>
+              </div>
+            </div>
+
+            {/* Firebase Sync & Presence Status Banner */}
+            <div className="px-5 sm:px-6 py-2.5 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between gap-3 text-xs flex-wrap">
+              <div className="flex items-center gap-2 text-emerald-950 font-semibold">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Firebase Cloud Firestore:</span>
+                <span className="text-emerald-800 font-medium">
+                  Đang hoạt động & lưu trữ lịch sử IP / tài khoản người bán
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-700 text-xs font-medium">
+                {selectedSellerForLogs.lastLoginIp ? (
+                  <span>
+                    IP trên Firebase: <strong className="font-mono text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">{selectedSellerForLogs.lastLoginIp}</strong> ({selectedSellerForLogs.lastLoginCity || 'Việt Nam'})
+                  </span>
+                ) : (
+                  <span className="text-slate-500 italic">Chưa ghi nhận IP phiên đăng nhập</span>
+                )}
               </div>
             </div>
 
@@ -1284,7 +1446,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           <span className="text-slate-400 text-[10px] font-bold block">ĐỊA CHỈ IP & NHÀ MẠNG</span>
                           <div className="flex items-center gap-1.5 font-mono font-bold text-slate-800">
                             <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{log.ip || '127.0.0.1'}</span>
+                            <span>{log.ip || 'Chưa ghi nhận IP'}</span>
                             {log.ip && (
                               <button
                                 type="button"

@@ -9,6 +9,7 @@ import {
   downloadOrderSlipTxt,
   copyOrderSlipToClipboard
 } from '../utils/printOrderSlip';
+import { LoadingImage } from './LoadingImage';
 
 interface AdminOrderDetailsModalProps {
   order: StoredOrder;
@@ -385,10 +386,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         {it.selectedColor && (
                           <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-800 shadow-2xs">
                             {it.selectedColorImage && it.selectedColorImage.trim() ? (
-                              <img
+                              <LoadingImage
                                 src={it.selectedColorImage}
                                 alt={it.selectedColor}
-                                className="w-5 h-5 rounded object-cover border border-slate-200 shrink-0"
+                                containerClassName="w-5 h-5 rounded border border-slate-200 shrink-0"
+                                className="w-full h-full object-cover"
+                                spinnerSize="xs"
+                                spinnerColor="amber"
                               />
                             ) : null}
                             <span>Màu: <strong className="text-slate-900">{it.selectedColor}</strong></span>
@@ -398,10 +402,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         {it.selectedCharm && (
                           <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-300 px-2 py-1 rounded-lg text-[11px] font-bold text-amber-950 shadow-2xs">
                             {it.selectedCharmImage && it.selectedCharmImage.trim() ? (
-                              <img
+                              <LoadingImage
                                 src={it.selectedCharmImage}
                                 alt={typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}
-                                className="w-6 h-6 rounded-md object-cover border border-amber-300 shrink-0"
+                                containerClassName="w-6 h-6 rounded-md border border-amber-300 shrink-0"
+                                className="w-full h-full object-cover"
+                                spinnerSize="xs"
+                                spinnerColor="amber"
                               />
                             ) : null}
                             <span>Charm: <strong>{typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm}</strong></span>
@@ -414,10 +421,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         {it.selectedKhoen && (
                           <div className="inline-flex items-center gap-1.5 bg-sky-50/90 border border-sky-300 px-2 py-1 rounded-lg text-[11px] font-bold text-sky-950 shadow-2xs">
                             {it.selectedKhoenImage && it.selectedKhoenImage.trim() ? (
-                              <img
+                              <LoadingImage
                                 src={it.selectedKhoenImage}
                                 alt={it.selectedKhoen}
-                                className="w-6 h-6 rounded-md object-cover border border-sky-300 shrink-0"
+                                containerClassName="w-6 h-6 rounded-md border border-sky-300 shrink-0"
+                                className="w-full h-full object-cover"
+                                spinnerSize="xs"
+                                spinnerColor="amber"
                               />
                             ) : null}
                             <span>Khoen: <strong>{it.selectedKhoen}</strong></span>
@@ -430,10 +440,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
                           <div className="inline-flex items-center gap-1.5 bg-rose-50/90 border border-rose-300 px-2 py-1 rounded-lg text-[11px] font-bold text-rose-950 shadow-2xs">
                             {it.selectedOmamoris[0]?.image ? (
-                              <img
+                              <LoadingImage
                                 src={it.selectedOmamoris[0].image}
                                 alt="Bùa Omamori"
-                                className="w-6 h-6 rounded-md object-cover border border-rose-300 shrink-0"
+                                containerClassName="w-6 h-6 rounded-md border border-rose-300 shrink-0"
+                                className="w-full h-full object-cover"
+                                spinnerSize="xs"
+                                spinnerColor="rose"
                               />
                             ) : null}
                             <span>Bùa: <strong>{it.selectedOmamoris.map((o) => o.name).join(', ')}</strong></span>

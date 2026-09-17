@@ -9,12 +9,14 @@
         "@gsap/react": "^2.1.2",
         "@tailwindcss/vite": "^4.1.14",
         "@types/bcryptjs": "^3.0.0",
+        "@types/compression": "^1.8.1",
         "@types/express": "^4.17.21",
         "@types/jsonwebtoken": "^9.0.10",
         "@types/node": "^22.14.0",
         "@vitejs/plugin-react": "^5.0.4",
         "autoprefixer": "^10.4.21",
         "bcryptjs": "^3.0.3",
+        "compression": "^1.8.2",
         "dotenv": "^17.2.3",
         "esbuild": "^0.25.0",
         "express": "^4.21.2",
@@ -256,6 +258,8 @@
 
     "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, ""],
 
+    "@types/compression": ["@types/compression@1.8.1", "", { "dependencies": { "@types/express": "*", "@types/node": "*" } }, "sha512-kCFuWS0ebDbmxs0AXYn6e2r2nrGAb5KwQhknjSPSPgJcGd8+HVSILlUyFhGqML2gk39HcG7D1ydW9/qpYkN00Q=="],
+
     "@types/connect": ["@types/connect@3.4.38", "", { "dependencies": { "@types/node": "*" } }, ""],
 
     "@types/estree": ["@types/estree@1.0.9", "", {}, ""],
@@ -343,6 +347,10 @@
     "color-name": ["color-name@1.1.4", "", {}, "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA=="],
 
     "commander": ["commander@2.17.1", "", {}, "sha512-wPMUt6FnH2yzG95SA6mzjQOEKUU3aLaDEmzs1ti+1E9h+CsrZghRlqEM/EJ4KscsQVG8uNN4uVreUeT8+drlgg=="],
+
+    "compressible": ["compressible@2.0.18", "", { "dependencies": { "mime-db": ">= 1.43.0 < 2" } }, "sha512-AF3r7P5dWxL8MxyITRMlORQNaOA2IkAFaTr4k7BUumjPtRpGDTZpl0Pb1XCO6JeDCBdp126Cgs9sMxqSjgYyRg=="],
+
+    "compression": ["compression@1.8.2", "", { "dependencies": { "bytes": "3.1.2", "compressible": "~2.0.18", "debug": "2.6.9", "destroy": "1.2.0", "negotiator": "~0.6.4", "on-headers": "~1.1.0", "safe-buffer": "5.2.1", "vary": "~1.1.2" } }, "sha512-o8vI5RE5A6EVVOd9o41jKp41aJom+QTEO/Bx8MYNjexMo/Bv2WOjUfZr+aL0WnYSgymUy6zeguqLTsIhV0gMvQ=="],
 
     "content-disposition": ["content-disposition@0.5.4", "", { "dependencies": { "safe-buffer": "5.2.1" } }, ""],
 
@@ -608,7 +616,7 @@
 
     "nanoid": ["nanoid@3.3.18", "", { "bin": "bin/nanoid.cjs" }, ""],
 
-    "negotiator": ["negotiator@0.6.3", "", {}, ""],
+    "negotiator": ["negotiator@0.6.4", "", {}, "sha512-myRT3DiWPHqho5PrJaIRyaMv2kgYf0mUVgBNOYMuCH5Ki1yEiQaf/ZJuQ62nvpc44wL5WDbTX7yGJi1Neevw8w=="],
 
     "node-domexception": ["node-domexception@1.0.0", "", {}, ""],
 
@@ -621,6 +629,8 @@
     "object-inspect": ["object-inspect@1.13.4", "", {}, ""],
 
     "on-finished": ["on-finished@2.4.1", "", { "dependencies": { "ee-first": "1.1.1" } }, ""],
+
+    "on-headers": ["on-headers@1.1.0", "", {}, "sha512-737ZY3yNnXy37FHkQxPzt4UZ2UWPWiCZWLvFZ4fu5cueciegX0zGPnrlY6bwRg4FdQOe9YU8MkmJwGhoMybl8A=="],
 
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
 
@@ -846,6 +856,8 @@
 
     "@types/body-parser/@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
 
+    "@types/compression/@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
+
     "@types/connect/@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
 
     "@types/express-serve-static-core/@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
@@ -857,6 +869,8 @@
     "@types/serve-static/@types/node": ["@types/node@26.4.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, ""],
 
     "@types/serve-static/@types/send": ["@types/send@0.17.6", "", { "dependencies": { "@types/mime": "^1", "@types/node": "*" } }, ""],
+
+    "accepts/negotiator": ["negotiator@0.6.3", "", {}, ""],
 
     "debug/ms": ["ms@2.0.0", "", {}, ""],
 
@@ -917,6 +931,8 @@
     "@isaacs/cliui/wrap-ansi/ansi-styles": ["ansi-styles@6.2.3", "", {}, "sha512-4Dj6M28JB+oAH8kFkTLUo+a2jwOFkuqb3yucU0CANcRRUbxS0cP0nZYCGjcc3BNXwRIsUVmDGgzawme7zvJHvg=="],
 
     "@types/body-parser/@types/node/undici-types": ["undici-types@8.3.0", "", {}, ""],
+
+    "@types/compression/@types/node/undici-types": ["undici-types@8.3.0", "", {}, ""],
 
     "@types/connect/@types/node/undici-types": ["undici-types@8.3.0", "", {}, ""],
 

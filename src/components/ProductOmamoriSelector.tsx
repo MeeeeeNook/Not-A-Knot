@@ -3,6 +3,7 @@ import { ProductOmamoriOption } from '../types';
 import { Check, Flame, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
+import { LoadingImage } from './LoadingImage';
 
 interface ProductOmamoriSelectorProps {
   omamoris: ProductOmamoriOption[];
@@ -30,6 +31,21 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   const displayTitle = title?.trim() || 'Chọn Bùa Omamori';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
+
+  // Preload all omamori option images in parallel
+  React.useEffect(() => {
+    if (omamoris && omamoris.length > 0) {
+      omamoris.forEach((o) => {
+        if (o.image) {
+          const resolved = resolveAssetUrl(o.image);
+          if (resolved && resolved !== '/assets/bracelet.jpg') {
+            const img = new Image();
+            img.src = resolved;
+          }
+        }
+      });
+    }
+  }, [omamoris]);
 
   const compareItems: CompareItem[] = useMemo(() => {
     return omamoris.map((o, i) => ({
@@ -215,11 +231,16 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                 </button>
 
                 {omamori.image && omamori.image.trim() ? (
-                  <img
+                  <LoadingImage
                     src={resolveAssetUrl(omamori.image)}
                     alt={omamori.name}
+                    containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"
-                    loading="lazy"
+                    spinnerSize="sm"
+                    spinnerColor="rose"
+                    loading={idx < 12 ? 'eager' : 'lazy'}
+                    fetchPriority={idx < 12 ? 'high' : 'low'}
+                    decoding="async"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-slate-300 font-medium">

@@ -2,6 +2,7 @@ import React from 'react';
 import { ProductColorOption } from '../types';
 import { Palette, Check, AlertCircle } from 'lucide-react';
 import { resolveAssetUrl } from '../firebase';
+import { LoadingImage } from './LoadingImage';
 
 interface ProductColorSelectorProps {
   colors: (ProductColorOption | string)[];
@@ -27,6 +28,19 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
   const selectedOption = normalizedOptions.find(
     (c) => (selectedColor || '').trim().toLowerCase() === c.name.trim().toLowerCase()
   );
+
+  // Preload color option images
+  React.useEffect(() => {
+    normalizedOptions.forEach((opt) => {
+      if (opt.image) {
+        const resolved = resolveAssetUrl(opt.image);
+        if (resolved && resolved !== '/assets/bracelet.jpg') {
+          const img = new Image();
+          img.src = resolved;
+        }
+      }
+    });
+  }, [normalizedOptions]);
 
   return (
     <div className="space-y-2 pt-1">
@@ -78,15 +92,21 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
               {/* Optional mini image thumbnail linked with this color */}
               {opt.image && opt.image.trim() ? (
                 <div className="relative w-5 h-5 rounded-lg overflow-hidden flex-shrink-0">
-                  <img
+                  <LoadingImage
                     src={resolveAssetUrl(opt.image)}
                     alt={opt.name}
+                    containerClassName="w-full h-full"
                     className={`w-full h-full object-cover border ${
                       isSelected ? 'border-white/50' : 'border-neutral-200'
                     }`}
+                    spinnerSize="xs"
+                    spinnerColor={isSelected ? 'white' : 'neutral'}
+                    loading={idx < 8 ? 'eager' : 'lazy'}
+                    fetchPriority={idx < 8 ? 'high' : 'low'}
+                    decoding="async"
                   />
                   {isSelected && (
-                    <div className="absolute inset-0 bg-neutral-900/50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-neutral-900/50 flex items-center justify-center pointer-events-none">
                       <Check className="w-3 h-3 text-white" strokeWidth={3} />
                     </div>
                   )}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Upload, GripVertical, ArrowUp, ArrowDown, Plus } from 'lucide-react';
 import { ProductKhoenOption } from '../../types';
 import { DEFAULT_KHOEN_PRESETS } from '../../data/sampleKhoen';
+import { LoadingImage } from '../LoadingImage';
 
 interface AdminProductKhoenSectionProps {
   formEnableKhoenSelection: boolean;
@@ -360,15 +361,15 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
                       title="Bấm để tải ảnh hoặc kéo thả ảnh vào đây"
                     >
                       {khoen.image && khoen.image.trim() ? (
-                        <img
+                        <LoadingImage
                           src={khoen.image}
                           alt={khoen.name}
+                          containerClassName="w-full h-full"
                           className="w-full h-full object-contain"
                           referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&auto=format&fit=crop&q=80';
-                          }}
+                          fallbackSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&auto=format&fit=crop&q=80"
+                          spinnerSize="xs"
+                          spinnerColor="emerald"
                         />
                       ) : (
                         <span className="text-[10px] text-slate-400 text-center leading-tight">Chưa có ảnh</span>

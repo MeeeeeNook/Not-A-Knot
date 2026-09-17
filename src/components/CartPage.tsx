@@ -32,10 +32,17 @@ import {
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
-import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
+import {
+  trackGA4BeginCheckout,
+  trackGA4Purchase,
+  trackGA4ViewCart,
+  trackGA4RemoveFromCart,
+  trackGA4ApplyCoupon
+} from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
+import { LoadingImage } from './LoadingImage';
 
 interface CartPageProps {
   cartItems: CartItem[];
@@ -188,6 +195,7 @@ export const CartPage: React.FC<CartPageProps> = ({
     setVoucherDiscountAmount(res.discountAmount);
     setIsFreeShippingVoucher(res.isFreeShipping);
     setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
+    trackGA4ApplyCoupon(res.voucher.code, res.discountAmount);
   };
 
   const handleRemoveVoucher = () => {
@@ -203,12 +211,26 @@ export const CartPage: React.FC<CartPageProps> = ({
   const discountedSubtotal = Math.max(0, subtotal - voucherDiscountAmount);
   const grandTotal = discountedSubtotal + effectiveShippingFee;
 
-  // Track Begin Checkout on mount if items exist
+  // Track View Cart & Begin Checkout on mount if items exist
   useEffect(() => {
     if (availableCartItems.length > 0 && step === 'checkout') {
+      trackGA4ViewCart(availableCartItems, subtotal);
       trackGA4BeginCheckout(availableCartItems, subtotal);
     }
   }, [availableCartItems, step, subtotal]);
+
+  const handleRemoveItem = (index: number) => {
+    const itemToRemove = availableCartItems[index] || cartItems[index];
+    if (itemToRemove) {
+      trackGA4RemoveFromCart(
+        itemToRemove.product,
+        itemToRemove.quantity,
+        itemToRemove.selectedColor,
+        itemToRemove.selectedSize
+      );
+    }
+    onRemoveItem(index);
+  };
 
   // Copy helper
   const copyToClipboard = async (text: string, fieldKey: string) => {
@@ -547,11 +569,14 @@ export const CartPage: React.FC<CartPageProps> = ({
                           >
                             {/* Product Thumbnail */}
                             <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-100 border border-slate-200/80 overflow-hidden flex-shrink-0 relative ${!isAvailable ? 'grayscale-[50%]' : ''}`}>
-                              <img
+                              <LoadingImage
                                 src={itemImage}
                                 alt={item.product.name}
+                                containerClassName="w-full h-full"
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
+                                spinnerSize="sm"
+                                spinnerColor="amber"
                               />
                               {!isAvailable && (
                                 <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center p-1 text-center">
@@ -579,7 +604,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => onRemoveItem(index)}
+                                    onClick={() => handleRemoveItem(index)}
                                     className="text-slate-400 hover:text-rose-600 p-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer flex-shrink-0"
                                     title="Xóa sản phẩm này"
                                   >
@@ -618,7 +643,14 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   {item.selectedKhoen && (
                                     <span className="inline-flex items-center gap-1 bg-sky-50 text-sky-900 border border-sky-200/60 px-2.5 py-0.5 rounded-md font-medium text-[11px]">
                                       {item.selectedKhoenImage && (
-                                        <img src={item.selectedKhoenImage} alt={item.selectedKhoen} className="w-3.5 h-3.5 object-contain rounded-xs" />
+                                        <LoadingImage
+                                          src={item.selectedKhoenImage}
+                                          alt={item.selectedKhoen}
+                                          containerClassName="w-3.5 h-3.5 rounded-xs shrink-0"
+                                          className="w-full h-full object-contain"
+                                          spinnerSize="xs"
+                                          spinnerColor="amber"
+                                        />
                                       )}
                                       {item.product.khoenTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'Khoen'}: {item.selectedKhoen} {item.selectedKhoenPrice ? `(+${item.selectedKhoenPrice.toLocaleString('vi-VN')}đ)` : ''}
                                     </span>

@@ -4,6 +4,8 @@ import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObjec
 import {
   initializeFirestore,
   getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   setLogLevel,
   collection,
   doc,
@@ -17,6 +19,7 @@ import {
   where,
   limit,
   writeBatch,
+  arrayUnion,
   onSnapshot
 } from 'firebase/firestore';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig } from './types';
@@ -89,12 +92,13 @@ const targetDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestor
   ? firebaseConfig.firestoreDatabaseId
   : undefined;
 
-// Initialize Firestore with clean settings for fast direct connection in all browser/iframe environments
+// Initialize Firestore with clean settings and persistent local cache for instant multi-tab loading
 let firestoreInstance;
 try {
   firestoreInstance = initializeFirestore(app, {
     ignoreUndefinedProperties: true,
-    experimentalAutoDetectLongPolling: true
+    experimentalAutoDetectLongPolling: true,
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
   }, targetDbId);
 } catch {
   firestoreInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
@@ -378,13 +382,30 @@ export function isQuotaExhaustedError(err: unknown): boolean {
   );
 }
 
+function isFirestoreSentinel(val: any): boolean {
+  if (!val || typeof val !== 'object') return false;
+  if (val instanceof Date) return false;
+  if (
+    '_methodName' in val || 
+    '_delegate' in val || 
+    (val.constructor && (val.constructor.name.includes('FieldValue') || val.constructor.name.includes('FieldTransform')))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Strips undefined values recursively so Firestore setDoc/updateDoc never throws:
  * "Function setDoc() called with invalid data. Unsupported field value: undefined".
+ * Preserves FieldValue sentinels (e.g. arrayUnion, serverTimestamp) and Date instances.
  */
 export function cleanFirestoreData<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return null as any;
+  }
+  if (isFirestoreSentinel(obj)) {
+    return obj;
   }
   if (Array.isArray(obj)) {
     return obj.map((item) => cleanFirestoreData(item)) as any;
@@ -2631,6 +2652,30 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
     const results: SellerUser[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();
+
+      // Robust extraction of ipHistory (handles arrays, recovered elements, or single lastLoginIp fallback)
+      let parsedHistory: Array<{ ip: string; city?: string; country?: string; device?: string; timestamp: string }> = [];
+      if (Array.isArray(data.ipHistory)) {
+        parsedHistory = data.ipHistory.filter((item: any) => item && typeof item === 'object' && item.ip);
+      } else if (data.ipHistory && typeof data.ipHistory === 'object') {
+        if (Array.isArray((data.ipHistory as any)._elements)) {
+          parsedHistory = (data.ipHistory as any)._elements.filter((item: any) => item && typeof item === 'object' && item.ip);
+        } else if (Array.isArray((data.ipHistory as any).elements)) {
+          parsedHistory = (data.ipHistory as any).elements.filter((item: any) => item && typeof item === 'object' && item.ip);
+        }
+      }
+
+      // If ipHistory array is empty but lastLoginIp is stored on document, synthesize a valid entry
+      if (parsedHistory.length === 0 && data.lastLoginIp && data.lastLoginIp !== 'Unknown' && data.lastLoginIp !== '127.0.0.1') {
+        parsedHistory.push({
+          ip: data.lastLoginIp,
+          city: data.lastLoginCity || 'Hà Nội',
+          country: data.lastLoginCountry || 'Vietnam',
+          device: data.lastDevice || 'Thiết bị quản trị',
+          timestamp: data.lastLoginAt || data.lastSeenAt || data.createdAt || new Date().toISOString()
+        });
+      }
+
       results.push({
         id: docSnap.id,
         username: data.username || docSnap.id,
@@ -2648,7 +2693,8 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         lastSeenAt: data.lastSeenAt,
         lastDevice: data.lastDevice || '',
         avatarColor: data.avatarColor || '#B41C1A',
-        phone: data.phone || ''
+        phone: data.phone || '',
+        ipHistory: parsedHistory
       });
     });
 
@@ -2722,11 +2768,26 @@ export const updateSellerPresence = async (
   try {
     const docRef = doc(db, 'sellers', sellerId);
     const nowIso = new Date().toISOString();
-    const payload = cleanFirestoreData({
+    
+    const updateObj: Record<string, any> = {
       ...presenceData,
       lastSeenAt: presenceData.lastSeenAt || nowIso,
       updatedAt: nowIso
-    });
+    };
+
+    // If a valid IP is supplied, append to ipHistory on the seller document
+    if (presenceData.lastLoginIp && presenceData.lastLoginIp !== '127.0.0.1' && presenceData.lastLoginIp !== 'Unknown') {
+      const ipEntry = {
+        ip: presenceData.lastLoginIp,
+        city: presenceData.lastLoginCity || 'Hà Nội',
+        country: presenceData.lastLoginCountry || 'Vietnam',
+        device: presenceData.lastDevice || 'Không xác định',
+        timestamp: presenceData.lastLoginAt || nowIso
+      };
+      updateObj.ipHistory = arrayUnion(ipEntry);
+    }
+
+    const payload = cleanFirestoreData(updateObj);
     await setDoc(docRef, payload, { merge: true });
   } catch (err) {
     // Non-blocking error for background presence update

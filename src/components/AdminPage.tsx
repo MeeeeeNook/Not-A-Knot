@@ -20,7 +20,6 @@ import { AdminSellersManager } from './AdminSellersManager';
 import { AdminNotifications } from './AdminNotifications';
 import { AdminHeader } from './admin/AdminHeader';
 import { AdminSidebar } from './admin/AdminSidebar';
-import { AdminBankAccountPage } from './admin/AdminBankAccountPage';
 import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
 import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
@@ -116,7 +115,6 @@ export type AdminTabType =
   | 'sellers'
   | 'messages'
   | 'site_editor'
-  | 'bank_account'
   | 'banners'
   | 'products'
   | 'categories'
@@ -3045,18 +3043,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* TAB: MÃ GIẢM GIÁ (VOUCHERS) */}
         {/* ======================================================== */}
         {activeTab === 'vouchers' && <AdminVouchersTab />}
-
-        {/* ======================================================== */}
-        {/* TAB: TÀI KHOẢN NGÂN HÀNG (VIETQR) */}
-        {/* ======================================================== */}
-        {activeTab === 'bank_account' && (
-          <AdminBankAccountPage
-            siteContent={siteContent}
-            onUpdateSiteContent={onUpdateSiteContent}
-            onNotify={showAdminToast}
-            onToast={showAdminToast}
-          />
-        )}
 
         {/* ======================================================== */}
         {/* TAB: VERSION HISTORY (LỊCH SỬ PHIÊN BẢN & AUTO BACKUP) */}

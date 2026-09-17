@@ -25,6 +25,7 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
+import { checkAndRunAutoBackup } from './utils/autoBackup';
 import { useAdminPresence } from './hooks/useAdminPresence';
 
 // Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
@@ -348,21 +349,44 @@ export default function App() {
     };
   }, []);
 
+  // Periodic server-side auto-backup check (triggers background backup if due whenever any user/admin is online)
+  useEffect(() => {
+    checkAndRunAutoBackup().catch(() => {});
+    const timer = setInterval(() => {
+      checkAndRunAutoBackup().catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Listen to browser hash changes (Back / Forward buttons) & track GA4 page views
   useEffect(() => {
     const handleHashChange = () => {
       const currentHash = window.location.hash || '#home';
       syncStateFromHash(currentHash);
       
-      // Determine readable title for GA4
+      // Determine readable title for GA4 with dynamic product/collection names
       let pageTitle = 'Trang Chủ - NOT A KNOT';
-      if (currentHash.includes('#admin')) pageTitle = 'Quản Trị Hệ Thống - NOT A KNOT';
-      else if (currentHash.includes('#cart') || currentHash.includes('#checkout')) pageTitle = 'Giỏ Hàng & Thanh Toán';
-      else if (currentHash.includes('#products')) pageTitle = 'Tất Cả Sản Phẩm';
-      else if (currentHash.includes('#product-detail')) pageTitle = 'Chi Tiết Sản Phẩm';
-      else if (currentHash.includes('#collection')) pageTitle = 'Bộ Sưu Tập';
-      else if (currentHash.includes('#about')) pageTitle = 'Về Chúng Tôi - NOT A KNOT';
-      else if (currentHash.includes('#contact')) pageTitle = 'Liên Hệ & Showroom';
+      if (currentHash.includes('#admin')) {
+        pageTitle = 'Quản Trị Hệ Thống - NOT A KNOT';
+      } else if (currentHash.includes('#cart') || currentHash.includes('#checkout')) {
+        pageTitle = 'Giỏ Hàng & Thanh Toán';
+      } else if (currentHash.includes('#products')) {
+        pageTitle = 'Tất Cả Sản Phẩm';
+      } else if (currentHash.includes('#product-detail')) {
+        const urlParams = new URLSearchParams(currentHash.split('?')[1] || '');
+        const prodId = urlParams.get('id');
+        const foundProd = products.find((p) => p.id === prodId);
+        pageTitle = foundProd ? `${foundProd.name} - Chi Tiết Sản Phẩm` : 'Chi Tiết Sản Phẩm - NOT A KNOT';
+      } else if (currentHash.includes('#collection')) {
+        const urlParams = new URLSearchParams(currentHash.split('?')[1] || '');
+        const colId = urlParams.get('id');
+        const foundCol = collections.find((c) => c.id === colId);
+        pageTitle = foundCol ? `${foundCol.title} - Bộ Sưu Tập` : 'Bộ Sưu Tập - NOT A KNOT';
+      } else if (currentHash.includes('#about')) {
+        pageTitle = 'Về Chúng Tôi - NOT A KNOT';
+      } else if (currentHash.includes('#contact')) {
+        pageTitle = 'Liên Hệ & Showroom';
+      }
 
       trackGA4PageView(currentHash, pageTitle);
     };

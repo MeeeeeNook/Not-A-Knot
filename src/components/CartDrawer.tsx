@@ -27,10 +27,17 @@ import {
   Tag
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
-import { trackGA4BeginCheckout, trackGA4Purchase } from '../utils/analytics';
+import {
+  trackGA4BeginCheckout,
+  trackGA4Purchase,
+  trackGA4ViewCart,
+  trackGA4RemoveFromCart,
+  trackGA4ApplyCoupon
+} from '../utils/analytics';
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
+import { LoadingImage } from './LoadingImage';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -137,6 +144,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [subtotal, shippingFee, appliedVoucher, availableVouchers]);
 
+  // Track view_cart in GA4 when drawer opens with items
+  useEffect(() => {
+    if (isOpen && cartItems.length > 0) {
+      trackGA4ViewCart(cartItems, subtotal);
+    }
+  }, [isOpen]);
+
+  const handleRemoveItem = (index: number) => {
+    const itemToRemove = cartItems[index];
+    if (itemToRemove) {
+      trackGA4RemoveFromCart(
+        itemToRemove.product,
+        itemToRemove.quantity,
+        itemToRemove.selectedColor,
+        itemToRemove.selectedSize
+      );
+    }
+    onRemoveItem(index);
+  };
+
   const handleApplyVoucher = () => {
     setVoucherError(null);
     setVoucherSuccessMsg(null);
@@ -154,6 +181,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setVoucherDiscountAmount(res.discountAmount);
     setIsFreeShippingVoucher(res.isFreeShipping);
     setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
+    trackGA4ApplyCoupon(res.voucher.code, res.discountAmount);
   };
 
   const handleRemoveVoucher = () => {
@@ -581,12 +609,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           className="relative rounded-2xl group/item select-none p-3.5 bg-neutral-50 hover:bg-neutral-100/70 border border-neutral-200 shadow-xs transition-colors"
                         >
                           <div className="flex items-start gap-3">
-                            <img
+                            <LoadingImage
                               src={item.selectedColorImage || item.product.image}
                               alt={item.product.name}
-                              className="w-16 h-16 rounded-xl object-cover border border-neutral-200 flex-shrink-0 bg-white"
+                              containerClassName="w-16 h-16 rounded-xl border border-neutral-200 flex-shrink-0 bg-white"
+                              className="w-full h-full object-cover"
                               loading="lazy"
                               decoding="async"
+                              spinnerSize="sm"
+                              spinnerColor="amber"
                             />
                             <div className="flex-grow min-w-0">
                               <div className="flex items-start justify-between gap-2">
@@ -595,7 +626,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 </h4>
                                 <button
                                   type="button"
-                                  onClick={() => onRemoveItem(idx)}
+                                  onClick={() => handleRemoveItem(idx)}
                                   className="text-neutral-400 hover:text-red-600 p-1 -mt-0.5 -mr-1 rounded-lg hover:bg-red-50 transition-colors cursor-pointer flex-shrink-0"
                                   title="Xóa món này"
                                 >
@@ -619,10 +650,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         {item.selectedCharms.map((c, cIdx) => (
                                           <span key={cIdx} className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900">
                                             {c.image && (
-                                              <img
+                                              <LoadingImage
                                                 src={c.image}
                                                 alt={c.name}
-                                                className="w-3.5 h-3.5 object-contain rounded-sm"
+                                                containerClassName="w-3.5 h-3.5 rounded-xs shrink-0"
+                                                className="w-full h-full object-contain"
+                                                spinnerSize="xs"
+                                                spinnerColor="amber"
                                               />
                                             )}
                                             {c.name}
@@ -633,10 +667,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     ) : (
                                       <>
                                         {item.selectedCharmImage && (
-                                          <img
+                                          <LoadingImage
                                             src={item.selectedCharmImage}
                                             alt={item.selectedCharm}
-                                            className="w-4 h-4 object-contain rounded-sm"
+                                            containerClassName="w-4 h-4 rounded-xs shrink-0"
+                                            className="w-full h-full object-contain"
+                                            spinnerSize="xs"
+                                            spinnerColor="amber"
                                           />
                                         )}
                                         <span className="text-[11px] font-bold text-amber-900">
@@ -660,10 +697,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     {item.selectedOmamoris.map((om, omIdx) => (
                                       <span key={omIdx} className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-900">
                                         {om.image && (
-                                          <img
+                                          <LoadingImage
                                             src={om.image}
                                             alt={om.name}
-                                            className="w-3.5 h-3.5 object-contain rounded-sm"
+                                            containerClassName="w-3.5 h-3.5 rounded-xs shrink-0"
+                                            className="w-full h-full object-contain"
+                                            spinnerSize="xs"
+                                            spinnerColor="rose"
                                           />
                                         )}
                                         {om.name}
@@ -681,10 +721,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                 {item.selectedKhoen && (
                                   <div className="flex items-center gap-1.5 bg-sky-50/80 border border-sky-200/80 px-2 py-0.5 rounded-lg w-fit">
                                     {item.selectedKhoenImage && (
-                                      <img
+                                      <LoadingImage
                                         src={item.selectedKhoenImage}
                                         alt={item.selectedKhoen}
-                                        className="w-3.5 h-3.5 object-contain rounded-sm"
+                                        containerClassName="w-3.5 h-3.5 rounded-xs shrink-0"
+                                        className="w-full h-full object-contain"
+                                        spinnerSize="xs"
+                                        spinnerColor="amber"
                                       />
                                     )}
                                     <span className="text-[11px] font-bold text-sky-900">

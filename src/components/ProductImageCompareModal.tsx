@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LoadingImage } from './LoadingImage';
 
 export interface CompareItem {
   id: string;
@@ -170,17 +171,17 @@ export const ProductImageCompareModal: React.FC<ProductImageCompareModalProps> =
           className="relative max-w-full max-h-[92vh] flex items-center justify-center pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <img
+          <LoadingImage
             key={currentItem.id || currentItem.image}
             src={currentItem.image}
             alt={currentItem.title || 'Xem ảnh lớn'}
             referrerPolicy="no-referrer"
             draggable={false}
+            containerClassName="max-w-[92vw] max-h-[88vh] sm:max-w-[85vw] sm:max-h-[90vh] flex items-center justify-center rounded-2xl"
             className="max-w-[92vw] max-h-[88vh] sm:max-w-[85vw] sm:max-h-[90vh] object-contain rounded-2xl shadow-2xl select-none"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src =
-                'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80';
-            }}
+            spinnerSize="lg"
+            spinnerColor="white"
+            fallbackSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80"
           />
         </motion.div>
       </div>

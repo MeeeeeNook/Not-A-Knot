@@ -107,6 +107,89 @@ export function trackGA4AddToCart(
 }
 
 /**
+ * Track E-commerce: view_cart
+ */
+export function trackGA4ViewCart(cartItems: any[], totalValue: number) {
+  const safeItems = Array.isArray(cartItems) ? cartItems : [];
+  sendGA4Event('view_cart', {
+    currency: 'VND',
+    value: totalValue,
+    items: safeItems.map((i) => {
+      const prod = i?.product || i;
+      return {
+        item_id: prod?.id || 'item',
+        item_name: prod?.name || 'Sản phẩm NOT A KNOT',
+        price: prod?.price ?? (typeof i?.price === 'number' ? i.price : 0),
+        quantity: i?.quantity || 1,
+        item_category: prod?.category || 'Knot',
+        item_variant: [i?.selectedColor, i?.selectedSize].filter(Boolean).join(' / ') || undefined,
+        item_brand: 'NOT A KNOT',
+      };
+    }),
+  });
+}
+
+/**
+ * Track E-commerce: remove_from_cart
+ */
+export function trackGA4RemoveFromCart(
+  product: any,
+  quantity: number = 1,
+  selectedColor?: string,
+  selectedSize?: string
+) {
+  if (!product) return;
+  sendGA4Event('remove_from_cart', {
+    currency: 'VND',
+    value: (product?.price || 0) * quantity,
+    items: [
+      {
+        item_id: product?.id,
+        item_name: product?.name,
+        price: product?.price || 0,
+        quantity,
+        item_category: product?.category,
+        item_variant: [selectedColor, selectedSize].filter(Boolean).join(' / ') || undefined,
+        item_brand: 'NOT A KNOT',
+      },
+    ],
+  });
+}
+
+/**
+ * Track Search queries
+ */
+export function trackGA4Search(searchTerm: string, resultCount?: number) {
+  if (!searchTerm || !searchTerm.trim()) return;
+  sendGA4Event('search', {
+    search_term: searchTerm.trim(),
+    results_count: typeof resultCount === 'number' ? resultCount : undefined,
+  });
+}
+
+/**
+ * Track Lead & Contact Channel interactions (Zalo, Messenger, Hotline, Contact Form)
+ */
+export function trackGA4Contact(channel: string, label?: string) {
+  sendGA4Event('generate_lead', {
+    method: channel,
+    contact_channel: channel,
+    event_label: label || channel,
+  });
+}
+
+/**
+ * Track Coupon/Voucher application
+ */
+export function trackGA4ApplyCoupon(couponCode: string, discountAmount: number = 0) {
+  sendGA4Event('apply_promotion', {
+    coupon: couponCode,
+    discount: discountAmount,
+    currency: 'VND',
+  });
+}
+
+/**
  * Track E-commerce: begin_checkout
  */
 export function trackGA4BeginCheckout(

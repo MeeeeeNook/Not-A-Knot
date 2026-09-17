@@ -37,7 +37,7 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
   wrapperClassName = '',
   fallbackSrc = '/assets/bracelet.jpg',
   priority = false,
-  rootMargin = '400px 0px',
+  rootMargin = '800px 0px',
   threshold = 0.01,
   objectFit = 'cover',
   aspectRatioClassName = '',
@@ -131,13 +131,13 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
       ref={wrapperRef}
       className={`relative overflow-hidden bg-neutral-100 ${aspectRatioClassName} ${wrapperClassName}`}
     >
-      {/* Skeleton Shimmer / Placeholder while loading */}
+      {/* Skeleton Shimmer / Placeholder with Hardwired Loading Circle while loading */}
       {showSkeleton && !isLoaded && (
         <div
-          className="absolute inset-0 bg-neutral-200 animate-pulse flex items-center justify-center pointer-events-none z-0 overflow-hidden"
+          className="absolute inset-0 bg-neutral-100/90 flex items-center justify-center pointer-events-none z-0 overflow-hidden"
           aria-hidden="true"
         >
-          <div className="w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.4s_infinite]" />
+          <div className="w-5 h-5 rounded-full border-2 border-neutral-300 border-t-amber-500 animate-spin" />
         </div>
       )}
 

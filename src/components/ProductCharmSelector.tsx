@@ -3,6 +3,7 @@ import { ProductCharmOption } from '../types';
 import { Check, Sparkles, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
+import { LoadingImage } from './LoadingImage';
 
 interface ProductCharmSelectorProps {
   charms: ProductCharmOption[];
@@ -30,6 +31,21 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   const displayTitle = title?.trim() || 'Chọn Charm';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
+
+  // Preload all charm option images in parallel for instant display
+  React.useEffect(() => {
+    if (charms && charms.length > 0) {
+      charms.forEach((c) => {
+        if (c.image) {
+          const resolved = resolveAssetUrl(c.image);
+          if (resolved && resolved !== '/assets/bracelet.jpg') {
+            const img = new Image();
+            img.src = resolved;
+          }
+        }
+      });
+    }
+  }, [charms]);
 
   // Convert charms to CompareItems for zoom/compare modal
   const compareItems: CompareItem[] = useMemo(() => {
@@ -216,11 +232,16 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                 </button>
 
                 {charm.image && charm.image.trim() ? (
-                  <img
+                  <LoadingImage
                     src={resolveAssetUrl(charm.image)}
                     alt={charm.name}
+                    containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"
-                    loading="lazy"
+                    spinnerSize="sm"
+                    spinnerColor="amber"
+                    loading={idx < 12 ? 'eager' : 'lazy'}
+                    fetchPriority={idx < 12 ? 'high' : 'low'}
+                    decoding="async"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-slate-300 font-medium">

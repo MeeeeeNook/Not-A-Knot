@@ -8,8 +8,9 @@ import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { LoadingImage } from './LoadingImage';
 import { X, Check, ShoppingBag, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
-import { trackGA4ViewItem } from '../utils/analytics';
+import { trackGA4ViewItem, trackGA4PageView } from '../utils/analytics';
 import { resolveAssetUrl } from '../firebase';
 import { useProductSEO } from '../utils/seo';
 
@@ -102,6 +103,25 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
     if (product) {
       trackGA4ViewItem(product);
+      trackGA4PageView(`#product-modal?id=${product.id}`, `Xem Nhanh: ${product.name} - NOT A KNOT`);
+
+      // Preload product images and option images when modal opens
+      const optionImageUrls: string[] = [];
+      product.charmOptions?.forEach((c) => c.image && optionImageUrls.push(resolveAssetUrl(c.image)));
+      product.omamoriOptions?.forEach((o) => o.image && optionImageUrls.push(resolveAssetUrl(o.image)));
+      product.khoenOptions?.forEach((k) => k.image && optionImageUrls.push(resolveAssetUrl(k.image)));
+      product.colorOptions?.forEach((cl) => {
+        if (typeof cl !== 'string' && cl.image) {
+          optionImageUrls.push(resolveAssetUrl(cl.image));
+        }
+      });
+
+      optionImageUrls.forEach((url) => {
+        if (url && url !== '/assets/bracelet.jpg') {
+          const img = new Image();
+          img.src = url;
+        }
+      });
     }
   }, [product?.id]);
 
@@ -302,7 +322,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="bg-neutral-50 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
             <div 
               onClick={() => setCompareModalOpen(true)}
-              className="relative aspect-square max-h-[210px] sm:max-h-none max-w-[210px] sm:max-w-none mx-auto w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
+              className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
             >
               {/* Zoom & Compare Overlay Button */}
               <button
@@ -324,13 +344,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 style={{ transform: `translateX(-${activeImageIdx * 100}%)` }}
               >
                 {images.map((imgSrc, idx) => (
-                  <div key={idx} className="w-full h-full flex-shrink-0 relative">
-                    <img
+                  <div key={idx} className="w-full h-full flex-shrink-0 relative flex items-center justify-center">
+                    <LoadingImage
                       src={imgSrc || product.image || '/assets/bracelet.jpg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
+                      loading={idx === 0 ? "eager" : "lazy"}
+                      fetchPriority={idx === 0 ? "high" : "low"}
+                      decoding="async"
+                      containerClassName="w-full h-full"
                       className="w-full h-full object-cover select-none pointer-events-none"
                       style={{ imageRendering: '-webkit-optimize-contrast' }}
                       draggable={false}
+                      spinnerSize="md"
+                      spinnerColor="amber"
                     />
                   </div>
                 ))}
@@ -401,12 +427,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                         : 'border-neutral-200 opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img
+                    <LoadingImage
                       src={img || '/assets/bracelet.jpg'}
                       alt="thumb"
+                      containerClassName="w-full h-full"
                       className="w-full h-full object-cover"
                       loading="lazy"
                       decoding="async"
+                      spinnerSize="xs"
+                      spinnerColor="neutral"
                     />
                   </button>
                 ))}
@@ -451,15 +480,28 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
 
               {/* Price */}
-              <div className="flex flex-wrap items-baseline gap-3">
-                <span className="text-2xl font-bold text-neutral-950">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="text-2xl font-bold text-neutral-950 font-mono">
                   {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                 </span>
-                {product.originalPrice && (
-                  <span className="text-sm text-neutral-400 line-through font-normal">
+                {product.originalPrice && product.originalPrice > product.price && (
+                  <span className="text-sm text-neutral-400 line-through font-mono">
                     {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
                   </span>
                 )}
+                {(() => {
+                  const hasOrig = product.originalPrice && product.originalPrice > product.price;
+                  const pct = hasOrig 
+                    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+                    : 0;
+                  const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
+                  if (!badgeText) return null;
+                  return (
+                    <span className="px-2 py-0.5 bg-rose-600 text-white text-xs font-black rounded-lg shadow-2xs flex items-center shrink-0">
+                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
+                    </span>
+                  );
+                })()}
                 {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                   <span className="bg-amber-100/80 text-amber-900 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">
                     +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện

@@ -8,6 +8,7 @@ import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { LoadingImage } from './LoadingImage';
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,7 +28,7 @@ import {
   MessageCircle,
   ZoomIn
 } from 'lucide-react';
-import { trackGA4ViewItem } from '../utils/analytics';
+import { trackGA4ViewItem, trackGA4PageView } from '../utils/analytics';
 import { resolveAssetUrl } from '../firebase';
 import { useProductSEO } from '../utils/seo';
 
@@ -230,6 +231,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
     if (product) {
       trackGA4ViewItem(product);
+      trackGA4PageView(`#product-detail?id=${product.id}`, `${product.name} - NOT A KNOT`);
     }
   }, [product?.id]);
 
@@ -642,6 +644,36 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Automatically update page title, meta description, keywords, Open Graph, Twitter cards, and JSON-LD schema for this product
   useProductSEO(product, categoryName);
 
+  // Preload main product images and all option images for instant loading
+  useEffect(() => {
+    // 1. Main gallery images
+    if (images && images.length > 0) {
+      images.slice(0, 4).forEach((imgSrc) => {
+        if (imgSrc) {
+          const img = new Image();
+          img.src = resolveAssetUrl(imgSrc);
+        }
+      });
+    }
+    // 2. Product Option Images (Charms, Omamori, Khoens, Colors)
+    const optionImageUrls: string[] = [];
+    product.charmOptions?.forEach((c) => c.image && optionImageUrls.push(resolveAssetUrl(c.image)));
+    product.omamoriOptions?.forEach((o) => o.image && optionImageUrls.push(resolveAssetUrl(o.image)));
+    product.khoenOptions?.forEach((k) => k.image && optionImageUrls.push(resolveAssetUrl(k.image)));
+    product.colorOptions?.forEach((cl) => {
+      if (typeof cl !== 'string' && cl.image) {
+        optionImageUrls.push(resolveAssetUrl(cl.image));
+      }
+    });
+
+    optionImageUrls.forEach((url) => {
+      if (url && url !== '/assets/bracelet.jpg') {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [images, product]);
+
   if (product.isHidden === true || String(product.isHidden) === 'true') {
     return (
       <div id="product-hidden-page" className="min-h-[70vh] bg-[#FAF8F5] flex flex-col items-center justify-center p-6 text-center">
@@ -710,31 +742,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         {/* Product Hero: Left Gallery, Right Details */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
           
-          {/* LEFT: Compact Interactive High-Res Gallery (Shopee Mobile-optimized) */}
+          {/* LEFT: Compact Interactive High-Res Gallery (Responsive Full-Width Mobile) */}
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
               onClick={() => setProductCompareModalOpen(true)}
-              className="relative aspect-square max-h-[250px] sm:max-h-[440px] max-w-[250px] sm:max-w-none rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-2xs group select-none touch-pan-y mx-auto cursor-zoom-in"
+              className="relative aspect-square w-full sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-xs group select-none touch-pan-y mx-auto cursor-zoom-in"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Promo / Discount Badge Overlay */}
-              {product.discountBadge && (
-                <div className="absolute top-2.5 left-2.5 z-20 px-2.5 py-1 bg-rose-600/95 backdrop-blur-sm text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-md flex items-center gap-1 max-w-[85%] pointer-events-none">
-                  <span className="truncate">{product.discountBadge}</span>
-                </div>
-              )}
-
-              {/* Zoom & Compare Overlay Button */}
+              {/* Zoom & Compare Overlay Button (Positioned safely inside frame) */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setProductCompareModalOpen(true);
                 }}
-                className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 bg-black/60 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
+                className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
                 title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
               >
                 <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
@@ -748,13 +773,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 style={{ transform: `translateX(-${activeImageIdx * 100}%)` }}
               >
                 {images.map((imgSrc, idx) => (
-                  <div key={idx} className="w-full h-full flex-shrink-0 relative">
-                    <img
+                  <div key={idx} className="w-full h-full flex-shrink-0 relative flex items-center justify-center">
+                    <LoadingImage
                       src={imgSrc || product.image || '/assets/bracelet.jpg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
+                      loading={idx === 0 ? "eager" : "lazy"}
+                      fetchPriority={idx === 0 ? "high" : "low"}
+                      decoding="async"
+                      containerClassName="w-full h-full"
                       className="w-full h-full object-cover object-center select-none pointer-events-none"
                       style={{ imageRendering: '-webkit-optimize-contrast' }}
                       draggable={false}
+                      spinnerSize="md"
+                      spinnerColor="amber"
                     />
                   </div>
                 ))}
@@ -852,12 +883,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                           : 'border-neutral-200 opacity-60 hover:opacity-100 hover:border-neutral-400'
                       }`}
                     >
-                      <img
+                      <LoadingImage
                         src={img || '/assets/bracelet.jpg'}
                         alt={`${product.name} thumbnail ${idx + 1}`}
+                        containerClassName="w-full h-full"
                         className="w-full h-full object-cover"
                         loading="lazy"
                         decoding="async"
+                        spinnerSize="xs"
+                        spinnerColor="neutral"
                       />
                       {idx === 0 && (
                         <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[7px] text-white text-center font-bold py-0.2">
@@ -883,17 +917,32 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>
 
               {/* Price & Sales Row */}
-              <div className="p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/80 flex items-baseline justify-between gap-3">
+              <div className="p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/80 flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
-                  <div className="flex flex-wrap items-baseline gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <span className="text-2xl sm:text-3xl font-black text-neutral-950 font-mono tracking-tight">
                       {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                     </span>
-                    {product.originalPrice && (
+                    {product.originalPrice && product.originalPrice > product.price && (
                       <span className="text-sm sm:text-base text-neutral-400 line-through font-mono">
                         {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
                       </span>
                     )}
+
+                    {/* Discount Badge Tag next to Price */}
+                    {(() => {
+                      const hasOrig = product.originalPrice && product.originalPrice > product.price;
+                      const pct = hasOrig 
+                        ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+                        : 0;
+                      const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
+                      if (!badgeText) return null;
+                      return (
+                        <span className="px-2 py-0.5 bg-rose-600 text-white text-xs sm:text-sm font-extrabold rounded-lg shadow-2xs flex items-center shrink-0">
+                          {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
+                        </span>
+                      );
+                    })()}
                   </div>
                   {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                     <div className="text-xs font-medium text-amber-800">

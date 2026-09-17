@@ -3,6 +3,7 @@ import { ProductKhoenOption } from '../types';
 import { Check, CircleDot, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
+import { LoadingImage } from './LoadingImage';
 
 interface ProductKhoenSelectorProps {
   khoenOptions: ProductKhoenOption[];
@@ -24,6 +25,21 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
   const displayTitle = title?.trim() || 'Chọn Khoen';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
+
+  // Preload all khoen option images in parallel
+  React.useEffect(() => {
+    if (khoenOptions && khoenOptions.length > 0) {
+      khoenOptions.forEach((k) => {
+        if (k.image) {
+          const resolved = resolveAssetUrl(k.image);
+          if (resolved && resolved !== '/assets/bracelet.jpg') {
+            const img = new Image();
+            img.src = resolved;
+          }
+        }
+      });
+    }
+  }, [khoenOptions]);
 
   const compareItems: CompareItem[] = useMemo(() => {
     return khoenOptions.map((k, i) => ({
@@ -165,11 +181,16 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                 </button>
 
                 {khoen.image && khoen.image.trim() ? (
-                  <img
+                  <LoadingImage
                     src={resolveAssetUrl(khoen.image)}
                     alt={khoen.name}
+                    containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 hover:scale-105"
-                    loading="lazy"
+                    spinnerSize="sm"
+                    spinnerColor="amber"
+                    loading={idx < 12 ? 'eager' : 'lazy'}
+                    fetchPriority={idx < 12 ? 'high' : 'low'}
+                    decoding="async"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 font-medium">

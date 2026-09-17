@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, Sparkles, Heart, Compass, ShieldCheck } from 'lucide-react';
 import { Product } from '../types';
+import { LoadingImage } from './LoadingImage';
 
 interface FeaturedCollectionsSectionProps {
   products: Product[];
@@ -58,12 +59,15 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   onClick={() => onOpenProductDetail(event2010Item)}
                   className="bg-white/90 p-3 rounded-2xl border border-rose-100 flex items-center gap-3 cursor-pointer hover:border-rose-300 transition-colors"
                 >
-                  <img
+                  <LoadingImage
                     src={event2010Item.image || '/assets/bracelet.jpg'}
                     alt={event2010Item.name}
-                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
+                    className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
+                    spinnerSize="xs"
+                    spinnerColor="rose"
                   />
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{event2010Item.name}</p>
@@ -105,12 +109,15 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   onClick={() => onOpenProductDetail(charmItem)}
                   className="bg-white/90 p-3 rounded-2xl border border-purple-100 flex items-center gap-3 cursor-pointer hover:border-purple-300 transition-colors"
                 >
-                  <img
+                  <LoadingImage
                     src={charmItem.image || '/assets/bracelet.jpg'}
                     alt={charmItem.name}
-                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
+                    className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
+                    spinnerSize="xs"
+                    spinnerColor="amber"
                   />
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{charmItem.name}</p>
@@ -152,12 +159,15 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   onClick={() => onOpenProductDetail(everydayItem)}
                   className="bg-white/90 p-3 rounded-2xl border border-neutral-200 flex items-center gap-3 cursor-pointer hover:border-neutral-400 transition-colors"
                 >
-                  <img
+                  <LoadingImage
                     src={everydayItem.image || '/assets/bracelet.jpg'}
                     alt={everydayItem.name}
-                    className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                    containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
+                    className="w-full h-full object-cover"
                     loading="lazy"
                     decoding="async"
+                    spinnerSize="xs"
+                    spinnerColor="neutral"
                   />
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{everydayItem.name}</p>

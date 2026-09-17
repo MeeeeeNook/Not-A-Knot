@@ -167,6 +167,13 @@ export interface SellerUser {
   lastDevice?: string;
   avatarColor?: string;
   phone?: string;
+  ipHistory?: Array<{
+    ip: string;
+    city?: string;
+    country?: string;
+    device?: string;
+    timestamp: string;
+  }>;
 }
 
 export interface OrderRecord {
@@ -505,6 +512,7 @@ export interface SystemLogItem {
   status?: string; // e.g. "success", "blocked_geo", "failed_password"
   metadata?: Record<string, any>;
   isResolved?: boolean;
+  count?: number;
 }
 
 export type VoucherType = 'freeship' | 'percent';

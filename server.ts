@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -44,6 +45,9 @@ function computeLegacyHash(password: string, salt: string): string {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Enable gzip/brotli response compression for all responses
+  app.use(compression());
 
   // Enable trust proxy for reverse proxy environment (Google Cloud Run / Nginx)
   app.set('trust proxy', 1);
@@ -144,15 +148,48 @@ async function startServer() {
 
   // Client IP and Geo detection endpoint
   app.get('/api/client-ip', (req, res) => {
+    const cfIp = req.headers['cf-connecting-ip'] as string;
+    const realIp = req.headers['x-real-ip'] as string;
+    const fastlyIp = req.headers['fastly-client-ip'] as string;
     const forwarded = req.headers['x-forwarded-for'];
-    let ip = typeof forwarded === 'string'
-      ? forwarded.split(',')[0].trim()
-      : Array.isArray(forwarded)
-      ? forwarded[0]
-      : (req.headers['x-real-ip'] as string) || req.socket.remoteAddress || '';
-    if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+
+    let candidateIps: string[] = [];
+
+    if (cfIp) candidateIps.push(cfIp);
+    if (realIp) candidateIps.push(realIp);
+    if (fastlyIp) candidateIps.push(fastlyIp);
+
+    if (typeof forwarded === 'string') {
+      candidateIps.push(...forwarded.split(',').map((s) => s.trim()));
+    } else if (Array.isArray(forwarded)) {
+      candidateIps.push(...forwarded.map((s) => String(s).trim()));
+    }
+
+    if (req.socket.remoteAddress) {
+      candidateIps.push(req.socket.remoteAddress);
+    }
+
+    // Clean up ::ffff: prefix
+    candidateIps = candidateIps.map((ip) => (ip.startsWith('::ffff:') ? ip.slice(7) : ip));
+
+    const isPrivateIp = (ipStr: string): boolean => {
+      if (!ipStr || ipStr === '127.0.0.1' || ipStr === '::1' || ipStr === 'localhost') return true;
+      if (ipStr.startsWith('10.') || ipStr.startsWith('192.168.') || ipStr.startsWith('169.254.')) return true;
+      if (ipStr.startsWith('172.')) {
+        const parts = ipStr.split('.');
+        const second = parseInt(parts[1] || '0', 10);
+        if (second >= 16 && second <= 31) return true;
+      }
+      return false;
+    };
+
+    const firstPublicIp = candidateIps.find((ipStr) => !isPrivateIp(ipStr));
+    const resolvedIp = firstPublicIp || candidateIps[0] || '127.0.0.1';
+    const isPublic = !isPrivateIp(resolvedIp);
+
     res.json({
-      ip: ip || '127.0.0.1',
+      ip: resolvedIp,
+      isPublic,
       userAgent: req.headers['user-agent'] || '',
       timestamp: new Date().toISOString()
     });
@@ -391,7 +428,17 @@ req: Request, res: Response) => {
     const distPath = fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'))
       ? path.join(process.cwd(), 'dist')
       : path.join(process.cwd(), 'build');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      maxAge: '1y',
+      etag: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });

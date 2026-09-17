@@ -501,6 +501,13 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
                           {log.title}
                         </span>
 
+                        {log.count && log.count > 1 && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shrink-0">
+                            <span>x{log.count}</span>
+                            <span className="text-[9px] font-medium text-amber-800">(lặp lại)</span>
+                          </span>
+                        )}
+
                         {log.source && (
                           <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">
                             @{log.source}

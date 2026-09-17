@@ -211,12 +211,14 @@ export function useAdminPresence(currentSeller: SellerUser | null): AdminPresenc
           presencePayload.lastLoginAt = nowIso;
         }
 
+        const isIpChanged = Boolean(geo.ip && geo.ip !== lastSyncedIpRef.current);
+
         await updateSellerPresence(sellerId, presencePayload);
         lastSellerIdRef.current = sellerId;
         lastSyncedIpRef.current = geo.ip;
 
         // If newly logged in or IP changed, log presence auth record in Firestore
-        if (isInitialLogin || (geo.ip && geo.ip !== lastSyncedIpRef.current)) {
+        if (isInitialLogin || isIpChanged) {
           writeSystemLog({
             type: 'admin_login',
             level: 'info',

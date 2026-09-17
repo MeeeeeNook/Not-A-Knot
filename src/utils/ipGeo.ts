@@ -13,17 +13,28 @@ export interface GeoLocationInfo {
 
 const CACHE_KEY = 'nak_admin_client_geo';
 
+function isPublicIp(ipStr?: string): boolean {
+  if (!ipStr || ipStr === 'Unknown' || ipStr === '127.0.0.1' || ipStr === '::1' || ipStr === 'localhost') return false;
+  if (ipStr.startsWith('10.') || ipStr.startsWith('192.168.') || ipStr.startsWith('169.254.')) return false;
+  if (ipStr.startsWith('172.')) {
+    const parts = ipStr.split('.');
+    const second = parseInt(parts[1] || '0', 10);
+    if (second >= 16 && second <= 31) return false;
+  }
+  return true;
+}
+
 /**
  * Fetches the user's public IP address and approximate Geolocation.
  * Uses multiple reliable providers with fallback for 100% uptime.
  */
 export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
-  // Check session cache first
+  // Check session cache first (must be a valid public IP)
   try {
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (parsed && parsed.ip && parsed.ip !== 'Unknown' && !parsed.ip.includes('127.0.0.1') && parsed.countryCode) {
+      if (parsed && isPublicIp(parsed.ip) && parsed.countryCode) {
         return parsed;
       }
     }
@@ -31,40 +42,15 @@ export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
     // ignore storage error
   }
 
-  // Provider 1: Direct backend /api/client-ip endpoint
-  try {
-    const res = await fetch('/api/client-ip', { signal: AbortSignal.timeout(2000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.ip && data.ip !== '127.0.0.1' && data.ip !== '::1') {
-        const info: GeoLocationInfo = {
-          ip: data.ip,
-          country: 'Vietnam',
-          countryCode: 'VN',
-          city: 'Hà Nội',
-          region: 'Việt Nam',
-          isp: 'Internet Provider',
-          isVietnam: true
-        };
-        try {
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify(info));
-        } catch {}
-        return info;
-      }
-    }
-  } catch {
-    // try next
-  }
-
-  // Provider 2: ipwho.is (fast, CORS-friendly, no key required)
+  // Provider 1: ipwho.is (fast, CORS-friendly, full public geo)
   try {
     const res = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.success !== false && (data.country_code || data.ip)) {
+      if (data && data.success !== false && isPublicIp(data.ip)) {
         const countryCode = String(data.country_code || '').toUpperCase();
         const info: GeoLocationInfo = {
-          ip: data.ip || 'Unknown',
+          ip: data.ip,
           country: data.country || (countryCode === 'VN' ? 'Vietnam' : 'Unknown'),
           countryCode: countryCode || 'VN',
           city: data.city || 'Hà Nội',
@@ -82,7 +68,33 @@ export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
       }
     }
   } catch {
-    // fallback to provider 3
+    // try next
+  }
+
+  // Provider 2: ipapi.co
+  try {
+    const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && isPublicIp(data.ip) && !data.error) {
+        const countryCode = String(data.country_code || '').toUpperCase();
+        const info: GeoLocationInfo = {
+          ip: data.ip,
+          country: data.country_name || 'Vietnam',
+          countryCode: countryCode || 'VN',
+          city: data.city || 'Hà Nội',
+          region: data.region || '',
+          isp: data.org || '',
+          isVietnam: countryCode === 'VN'
+        };
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(info));
+        } catch {}
+        return info;
+      }
+    }
+  } catch {
+    // try next
   }
 
   // Provider 3: api.ipify.org
@@ -90,7 +102,7 @@ export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
     const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
-      if (data && data.ip) {
+      if (data && isPublicIp(data.ip)) {
         const info: GeoLocationInfo = {
           ip: data.ip,
           country: 'Vietnam',
@@ -107,7 +119,32 @@ export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
       }
     }
   } catch {
-    // fallback to provider 4
+    // try next
+  }
+
+  // Provider 4: Backend /api/client-ip
+  try {
+    const res = await fetch('/api/client-ip', { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && isPublicIp(data.ip)) {
+        const info: GeoLocationInfo = {
+          ip: data.ip,
+          country: 'Vietnam',
+          countryCode: 'VN',
+          city: 'Hà Nội',
+          region: 'Việt Nam',
+          isp: 'Internet Provider',
+          isVietnam: true
+        };
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(info));
+        } catch {}
+        return info;
+      }
+    }
+  } catch {
+    // fallback
   }
 
   // Provider 4: ipapi.co

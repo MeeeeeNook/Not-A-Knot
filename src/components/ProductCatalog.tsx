@@ -6,6 +6,7 @@ import { Search, SlidersHorizontal, ArrowRight } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import { LazyProductImage } from './LazyProductImage';
 import { IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
+import { trackGA4Search } from '../utils/analytics';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -32,7 +33,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
-  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock'>('in_stock');
 
   // Set of hidden category IDs
   const hiddenCategoryIds = useMemo(() => {
@@ -199,6 +200,16 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       });
   }, [products, selectedCategory, searchQuery, sortBy, stockFilter]);
 
+  // Track search query on GA4 with debounce
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query || query.length < 2) return;
+    const timer = setTimeout(() => {
+      trackGA4Search(query, filteredProducts.length);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filteredProducts.length]);
+
   return (
     <div id="product-catalog-page" className="pt-4 sm:pt-6 pb-20 bg-[#FAF8F5] text-neutral-900 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -318,25 +329,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 
               {/* Filters & Sorting Controls */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                {/* Stock Toggle Filter Buttons (Tất cả / Còn hàng / Hết hàng) */}
+                {/* Stock Toggle Filter Buttons (Còn hàng / Tất cả) */}
                 <div className="inline-flex p-1 bg-neutral-100/90 rounded-full border border-neutral-200/90 text-xs font-semibold">
-                  <button
-                    type="button"
-                    onClick={() => setStockFilter('all')}
-                    className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1 cursor-pointer ${
-                      stockFilter === 'all'
-                        ? 'bg-neutral-950 text-white shadow-xs font-bold'
-                        : 'text-neutral-600 hover:text-neutral-900'
-                    }`}
-                  >
-                    <span>Tất cả</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      stockFilter === 'all' ? 'bg-neutral-800 text-amber-300' : 'bg-neutral-200 text-neutral-600'
-                    }`}>
-                      {totalCount}
-                    </span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => setStockFilter('in_stock')}
@@ -357,19 +351,18 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setStockFilter('out_of_stock')}
+                    onClick={() => setStockFilter('all')}
                     className={`px-3 py-1.5 rounded-full transition-all duration-200 flex items-center gap-1 cursor-pointer ${
-                      stockFilter === 'out_of_stock'
-                        ? 'bg-rose-600 text-white shadow-xs font-bold'
+                      stockFilter === 'all'
+                        ? 'bg-neutral-950 text-white shadow-xs font-bold'
                         : 'text-neutral-600 hover:text-neutral-900'
                     }`}
-                    title="Chỉ hiển thị sản phẩm đã hết hàng"
                   >
-                    <span>Hết hàng</span>
+                    <span>Tất cả</span>
                     <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      stockFilter === 'out_of_stock' ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-800'
+                      stockFilter === 'all' ? 'bg-neutral-800 text-amber-300' : 'bg-neutral-200 text-neutral-600'
                     }`}>
-                      {outOfStockCount}
+                      {totalCount}
                     </span>
                   </button>
                 </div>

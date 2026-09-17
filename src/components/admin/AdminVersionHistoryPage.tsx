@@ -34,6 +34,7 @@ import {
   Cloud,
   CloudUpload
 } from 'lucide-react';
+import { checkAndRunAutoBackup } from '../../utils/autoBackup';
 
 interface AdminVersionHistoryPageProps {
   products: Product[];
@@ -228,25 +229,14 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
     }
   };
 
-  // Check auto-backup schedule
+  // Check auto-backup schedule automatically
   useEffect(() => {
-    if (!schedule.enabled || isLoading || isCreatingBackup) return;
-
-    const intervalHours = schedule.intervalHours || 6;
-    const intervalMs = intervalHours * 60 * 60 * 1000;
-
-    let shouldRun = false;
-    if (schedule.lastBackupAt) {
-      const lastTime = new Date(schedule.lastBackupAt).getTime();
-      if (!isNaN(lastTime) && Date.now() - lastTime >= intervalMs) {
-        shouldRun = true;
+    checkAndRunAutoBackup().then((didBackup) => {
+      if (didBackup) {
+        loadBackupsAndSchedule();
       }
-    }
-
-    if (shouldRun && products.length > 0) {
-      performBackup('auto', `Sao lưu định kỳ mỗi ${intervalHours} giờ`);
-    }
-  }, [schedule.enabled, schedule.intervalHours, schedule.lastBackupAt, isLoading, products.length, isCreatingBackup]);
+    });
+  }, []);
 
   // Handle Save Schedule Settings
   const handleSaveSchedule = async (newSchedule: BackupScheduleConfig) => {

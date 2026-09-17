@@ -350,17 +350,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   {collectionsCount}
                 </span>
               </button>
-
-              <button
-                onClick={() => onSwitchTab('bank_account')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'bank_account'
-                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Tài khoản ngân hàng</span>
-              </button>
             </div>
 
             {/* SECTION 5: SAO LƯU & BACKUP */}
