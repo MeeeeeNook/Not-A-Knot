@@ -452,6 +452,34 @@ export interface SiteContentConfig {
     tiktok?: string;
     zalo?: string;
   };
+  maintenanceConfig?: MaintenanceConfig;
+}
+
+export interface MaintenanceConfig {
+  enabled: boolean;
+  title: string;
+  message: string;
+  estimatedEndTime?: string;
+  // Action Button
+  showButton: boolean;
+  buttonText: string;
+  buttonUrl: string;
+  // Clickable Image (stored as Base64 or external url - 100% independent of Firebase Storage)
+  showImage: boolean;
+  imageBase64?: string;
+  imageAlt?: string;
+  imageUrlTarget?: string;
+  // Automatic Redirect
+  autoRedirect?: boolean;
+  autoRedirectSeconds?: number;
+  autoRedirectUrl?: string;
+  // Emergency Contacts
+  emergencyContactText?: string;
+  emergencyContactPhone?: string;
+  emergencyContactZalo?: string;
+  // Audit metadata
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface VersionBackup {

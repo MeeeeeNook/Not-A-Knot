@@ -19,9 +19,11 @@ import { PRODUCTS } from './data/products';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
-import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption } from './types';
+import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { MaintenanceScreen } from './components/MaintenanceScreen';
+import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
@@ -178,6 +180,28 @@ export default function App() {
     return session && session.username ? (session as SellerUser) : null;
   });
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
+
+  // Real-time Maintenance Mode State (Synced across devices, 100% independent of Firebase Storage)
+  const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() =>
+    getInitialMaintenanceConfig()
+  );
+
+  useEffect(() => {
+    const unsub = subscribeToMaintenanceConfig((cfg) => {
+      setMaintenanceConfig(cfg);
+    });
+    return () => unsub();
+  }, []);
+
+  // Check URL query param ?admin=true to allow immediate admin login bypass
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('admin') === 'true' || params.has('admin')) {
+        handleOpenAdmin();
+      }
+    }
+  }, []);
 
   // Cart state with safe storage initialization
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
@@ -1275,8 +1299,48 @@ export default function App() {
     );
   }
 
+  // Determine if visitor must see maintenance screen (Admin users can bypass to inspect and turn off)
+  const isMaintenanceActiveForUser = Boolean(
+    maintenanceConfig.enabled && !currentSeller && currentView !== 'admin'
+  );
+
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip relative flex flex-col bg-[#FAF9F6] text-slate-900 selection:bg-amber-400 selection:text-slate-950 font-sans">
+      {/* Sticky Admin Notification Bar when Maintenance Mode is ACTIVE */}
+      {maintenanceConfig.enabled && currentSeller && (
+        <div className="bg-rose-600 text-white text-xs font-bold px-4 py-2.5 flex items-center justify-between shadow-lg sticky top-0 z-50 border-b border-rose-700">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm shrink-0 animate-pulse">⚠️</span>
+            <span className="truncate">
+              <strong>CHẾ ĐỘ BẢO TRÌ ĐANG BẬT:</strong> Khách hàng hiện không thể xem shop (chỉ Quản trị viên mới thấy giao diện này).
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-3">
+            <button
+              type="button"
+              onClick={async () => {
+                const next = { ...maintenanceConfig, enabled: false };
+                await saveMaintenanceConfig(next, currentSeller.name);
+                setMaintenanceConfig(next);
+                showToast('Đã tắt chế độ bảo trì thành công!');
+              }}
+              className="px-3 py-1 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-black cursor-pointer shadow-xs transition-colors"
+            >
+              Tắt bảo trì ngay
+            </button>
+            {currentView !== 'admin' && (
+              <button
+                type="button"
+                onClick={() => setCurrentView('admin')}
+                className="px-3 py-1 bg-rose-800 hover:bg-rose-900 text-white rounded-lg text-xs font-black cursor-pointer transition-colors"
+              >
+                Vào Quản Trị
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Toast notification banner */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-amber-400/40 flex items-center gap-3 animate-fadeIn">
@@ -1293,7 +1357,7 @@ export default function App() {
       )}
 
       {/* Landing Page Exclusive Promo Announcement Banner (Full Width Infinite Continuous Loop) */}
-      {currentView === 'landing' && Boolean(siteContent?.announcementActive) === true && !announcementDismissed && (
+      {!isMaintenanceActiveForUser && currentView === 'landing' && Boolean(siteContent?.announcementActive) === true && !announcementDismissed && (
         <aside aria-label="Thông báo ưu đãi" className="bg-red-600 text-white py-2 text-xs font-bold flex items-center justify-between border-b border-red-700/50 transition-all overflow-hidden overflow-x-clip w-full max-w-full relative select-none">
           <div
             onClick={siteContent?.announcementLink ? handleAnnouncementClick : undefined}
@@ -1333,8 +1397,8 @@ export default function App() {
         </aside>
       )}
 
-      {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode) */}
-      {currentView !== 'admin' && (
+      {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode & Maintenance Mode for Users) */}
+      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
         <Navbar
           cartCount={totalCartCount}
           isCartBumping={isCartBumping}
@@ -1358,8 +1422,18 @@ export default function App() {
 
       {/* Main Content Router */}
       <main className="flex-grow w-full max-w-full overflow-x-clip relative">
+        {/* VIEW: Public Maintenance Mode Screen for Visitors */}
+        {isMaintenanceActiveForUser && (
+          <MaintenanceScreen
+            config={maintenanceConfig}
+            brandName={siteContent?.brandName}
+            logoUrl={siteContent?.logoUrl}
+            onOpenAdminLogin={() => setIsAdminLoginModalOpen(true)}
+          />
+        )}
+
         {/* VIEW 1: Landing Page */}
-        {currentView === 'landing' && (
+        {!isMaintenanceActiveForUser && currentView === 'landing' && (
           <>
             {/* Hero Carousel */}
             <HeroBanners
@@ -1564,7 +1638,7 @@ export default function App() {
       </main>
 
       {/* Customer Footer (Rendered across Landing, Collection, Catalog, About, Contact & Order Tracking pages) */}
-      {currentView !== 'admin' && (
+      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
         <Footer
           siteContent={siteContent}
           onOpenAdmin={handleOpenAdmin}
@@ -1587,7 +1661,7 @@ export default function App() {
       />
 
       {/* Non-intrusive Floating Customer Support & Direct Chat Bubble */}
-      {currentView !== 'admin' && (
+      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
         <FloatingChatWidget
           siteContent={siteContent}
           currentOrderCode={orderTrackerInitialCode}

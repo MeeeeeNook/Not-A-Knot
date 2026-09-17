@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronsLeft, ArrowLeft } from 'lucide-react';
+import { ChevronsLeft, ArrowLeft, Wrench } from 'lucide-react';
 import { SellerUser, SiteContentConfig } from '../../types';
 
 export type AdminTabType =
@@ -19,7 +19,8 @@ export type AdminTabType =
   | 'version_history'
   | 'logs'
   | 'backup'
-  | 'firebase';
+  | 'firebase'
+  | 'maintenance';
 
 interface AdminSidebarProps {
   activeTab: AdminTabType;
@@ -38,6 +39,7 @@ interface AdminSidebarProps {
   categoriesCount: number;
   collectionsCount: number;
   sellersCount: number;
+  isMaintenanceActive?: boolean;
   onBackToStore: () => void;
   onLogout?: () => void;
   onOpenSwitchSellerModal: () => void;
@@ -60,6 +62,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   categoriesCount,
   collectionsCount,
   sellersCount,
+  isMaintenanceActive = false,
   onBackToStore,
   onLogout,
   onOpenSwitchSellerModal
@@ -441,6 +444,29 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               >
                 <span>Firebase Settings</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-2xs shrink-0" title="Firebase Online" />
+              </button>
+
+              <button
+                onClick={() => onSwitchTab('maintenance')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'maintenance'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Wrench className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Maintenance mode</span>
+                </div>
+                {isMaintenanceActive ? (
+                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-rose-500 text-white animate-pulse shadow-xs">
+                    Đang bật
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                    Tắt
+                  </span>
+                )}
               </button>
             </div>
           </nav>

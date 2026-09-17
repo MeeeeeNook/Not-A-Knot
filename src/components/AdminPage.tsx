@@ -25,7 +25,16 @@ import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
+import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
+import {
+  MaintenanceConfig
+} from '../types';
+import {
+  getInitialMaintenanceConfig,
+  saveMaintenanceConfig,
+  subscribeToMaintenanceConfig
+} from '../utils/maintenanceManager';
 import { exportOrdersWithImageOption } from '../utils/excelImageExporter';
 import { 
   formatOrderDateWithoutSeconds, 
@@ -121,7 +130,8 @@ export type AdminTabType =
   | 'version_history'
   | 'logs'
   | 'backup'
-  | 'firebase';
+  | 'firebase'
+  | 'maintenance';
 
 export const AdminPage: React.FC<AdminPageProps> = ({
   products,
@@ -252,6 +262,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Bulk Selection & Editing Modal States
+  // Maintenance mode configuration state and real-time synchronization
+  const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() =>
+    getInitialMaintenanceConfig()
+  );
+
+  useEffect(() => {
+    const unsub = subscribeToMaintenanceConfig((cfg) => {
+      setMaintenanceConfig(cfg);
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSaveMaintenanceConfig = async (newCfg: MaintenanceConfig) => {
+    const res = await saveMaintenanceConfig(newCfg, currentSeller?.name || 'Quản trị viên');
+    setMaintenanceConfig(newCfg);
+    if (!res.cloudSynced && res.error) {
+      showAdminToast(`Đã lưu cục bộ an toàn (Cảnh báo: ${res.error})`);
+    } else {
+      showAdminToast('Đã lưu và cập nhật cấu hình bảo trì thành công!');
+    }
+  };
+
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
   const [tableZoom, setTableZoom] = useState<number>(100);
@@ -2932,6 +2964,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         categoriesCount={localCategories.length}
         collectionsCount={localCollections.length}
         sellersCount={sellers.length}
+        isMaintenanceActive={maintenanceConfig.enabled}
         onBackToStore={onBackToStore}
         onLogout={onLogout}
         onOpenSwitchSellerModal={() => {
@@ -7776,6 +7809,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'logs' && (
           <AdminLogsPage isRootAdmin={isRootAdmin} />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: MAINTENANCE MODE */}
+        {/* ======================================================== */}
+        {activeTab === 'maintenance' && (
+          <AdminMaintenanceTab
+            maintenanceConfig={maintenanceConfig}
+            onSave={handleSaveMaintenanceConfig}
+            onNotify={showAdminToast}
+            brandName={siteContent?.brandName}
+            logoUrl={siteContent?.logoUrl}
+          />
         )}
 
           </>

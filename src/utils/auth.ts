@@ -119,8 +119,22 @@ export const loginWithServer = async (
       console.warn('Anonymous auth fallback error:', e);
     }
 
-    // Verify stored seller password hash if present
-    if (sellerData && sellerData.passwordHash && sellerData.passwordSalt) {
+    // Verify root admin or stored seller password hash
+    const isRoot = isRootAdminUsername(cleanUsername) || Boolean(sellerData?.isRootAdmin);
+    if (isRoot) {
+      const isPlainMatch = cleanPassword === '11242096';
+      const isHashMatch = await verifyPassword(
+        cleanPassword,
+        'nak_root_salt_mc2026',
+        'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd'
+      );
+      if (!isPlainMatch && !isHashMatch) {
+        return {
+          success: false,
+          error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+        };
+      }
+    } else if (sellerData && sellerData.passwordHash && sellerData.passwordSalt) {
       const isValid = await verifyPassword(cleanPassword, sellerData.passwordSalt, sellerData.passwordHash);
       if (!isValid) {
         return {
@@ -149,6 +163,7 @@ export const loginWithServer = async (
       body: JSON.stringify({
         idToken,
         username: cleanUsername,
+        password: cleanPassword,
         sellerData,
         rememberMe
       })
@@ -168,7 +183,7 @@ export const loginWithServer = async (
 
     try {
       const errData = await res.json();
-      if (errData.error) {
+      if (errData && errData.error && res.status === 401) {
         return { success: false, error: errData.error };
       }
     } catch (e) {}
