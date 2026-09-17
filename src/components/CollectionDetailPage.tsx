@@ -235,7 +235,10 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
     };
 
     calculateCountdown();
-    const interval = setInterval(calculateCountdown, 1000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      calculateCountdown();
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 

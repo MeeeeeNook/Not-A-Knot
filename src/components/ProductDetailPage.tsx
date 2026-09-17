@@ -31,6 +31,7 @@ import {
 import { trackGA4ViewItem, trackGA4PageView } from '../utils/analytics';
 import { resolveAssetUrl } from '../firebase';
 import { useProductSEO } from '../utils/seo';
+import { buildProductGalleryImages, findGalleryImageIndex, isSameImageUrl } from '../utils/imageUtils';
 
 interface ProductDetailPageProps {
   product: Product;
@@ -186,19 +187,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
   }, [product?.id]);
 
-  // Gallery images strictly reflecting the product's uploaded images
+  // Gallery images strictly reflecting the product's uploaded images and color variant images
   const images = useMemo(() => {
-    const rawList = product.images && product.images.length > 0 ? product.images : [product.image];
-    const filtered = rawList.filter((img) => typeof img === 'string' && img.trim().length > 0);
-    const resolved = filtered.map((img) => resolveAssetUrl(img));
-    return resolved.length > 0 ? resolved : ['/assets/bracelet.jpg'];
-  }, [product.images, product.image]);
+    return buildProductGalleryImages(product);
+  }, [product.images, product.image, product.colorOptions]);
 
   const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);
 
   const productCompareItems: CompareItem[] = useMemo(() => {
     return images.map((img, i) => {
-      const matchingColor = product.colorOptions?.find((c) => c.image === img);
+      const matchingColor = product.colorOptions?.find((c) => c.image && isSameImageUrl(c.image, img));
       return {
         id: `prod-img-${i}`,
         title: matchingColor ? `${product.name} (${matchingColor.name})` : `${product.name} - Ảnh ${i + 1}`,
@@ -212,10 +210,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Reset state when product changes
   useEffect(() => {
-    const initCol = product.colorOptions?.[0]?.name || product.availableColors?.[0];
-    const initImg = product.colorOptions?.[0]?.image;
+    const inStockColor = product.colorOptions?.find((c) => c.stock === undefined || c.stock > 0);
+    const initCol = inStockColor ? inStockColor.name : (product.colorOptions?.[0]?.name || product.availableColors?.[0]);
+    const initImg = inStockColor ? inStockColor.image : product.colorOptions?.[0]?.image;
 
-    setActiveImageIdx(0);
     setQuantity(1);
     setSelectedColor(initCol);
     setSelectedColorImage(initImg);
@@ -228,6 +226,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setIsAdded(false);
     setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (initImg) {
+      const initIdx = findGalleryImageIndex(images, initImg);
+      setActiveImageIdx(initIdx > -1 ? initIdx : 0);
+    } else {
+      setActiveImageIdx(0);
+    }
 
     if (product) {
       trackGA4ViewItem(product);
@@ -284,7 +289,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const selectImage = useCallback((idx: number) => {
     setActiveImageIdx(idx);
-  }, []);
+    const targetImg = images[idx];
+    if (targetImg && product.colorOptions && product.colorOptions.length > 0) {
+      const matchingColor = product.colorOptions.find((c) => c.image && isSameImageUrl(c.image, targetImg));
+      if (matchingColor && (matchingColor.stock === undefined || matchingColor.stock > 0)) {
+        setSelectedColor(matchingColor.name);
+        setSelectedColorImage(matchingColor.image);
+      }
+    }
+  }, [images, product.colorOptions]);
 
   const prevImage = useCallback(() => {
     paginate(-1);
@@ -351,9 +364,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Color selection with automatic image link preview
   const handleSelectColor = (colorOpt: ProductColorOption) => {
     setSelectedColor(colorOpt.name);
-    if (colorOpt.image) {
+    if (colorOpt.image && colorOpt.image.trim()) {
       setSelectedColorImage(colorOpt.image);
-      const imgIdx = images.indexOf(colorOpt.image);
+      const imgIdx = findGalleryImageIndex(images, colorOpt.image);
       if (imgIdx > -1) {
         setActiveImageIdx(imgIdx);
       }

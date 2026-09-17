@@ -54,7 +54,11 @@ export const AdminAnalyticsDashboard: React.FC<AdminAnalyticsDashboardProps> = (
   useEffect(() => {
     const handleFocus = () => setAnalytics(getInternalAnalytics());
     window.addEventListener('focus', handleFocus);
-    const timer = setInterval(() => setAnalytics(getInternalAnalytics()), 5000);
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        setAnalytics(getInternalAnalytics());
+      }
+    }, 20000);
     return () => {
       window.removeEventListener('focus', handleFocus);
       clearInterval(timer);

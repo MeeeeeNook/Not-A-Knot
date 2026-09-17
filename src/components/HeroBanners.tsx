@@ -14,6 +14,9 @@ interface HeroBannersProps {
   onOpenAbout?: () => void;
 }
 
+// In-memory cache to prevent re-analyzing images repeatedly and wasting canvas memory/CPU
+const slideLuminanceCache = new Map<string, { isBright: boolean; ratio: number | null }>();
+
 export const HeroBanners: React.FC<HeroBannersProps> = ({
   banners = HERO_BANNERS,
   slides,
@@ -76,9 +79,11 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   useEffect(() => {
     if (!isAutoPlay || activeSlides.length <= 1) return;
     const interval = setInterval(() => {
+      // Pause slide animation if the tab is inactive / hidden in browser
+      if (typeof document !== 'undefined' && document.hidden) return;
       setDirection(1);
       setCurrentIndex((prev) => (prev + 1) % activeSlides.length);
-    }, 6000);
+    }, 6500);
     return () => clearInterval(interval);
   }, [isAutoPlay, activeSlides.length]);
 
@@ -96,6 +101,14 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       return;
     }
 
+    // Check cached luminance & ratio first to avoid duplicate image loading & canvas allocations
+    if (slideLuminanceCache.has(activeImgSrc)) {
+      const cached = slideLuminanceCache.get(activeImgSrc)!;
+      setIsBrightBg(cached.isBright);
+      setImageNaturalRatio(cached.ratio);
+      return;
+    }
+
     let isMounted = true;
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -104,8 +117,10 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     img.onload = () => {
       if (!isMounted) return;
       try {
+        let computedRatio: number | null = null;
         if (img.naturalWidth && img.naturalHeight) {
-          setImageNaturalRatio(img.naturalWidth / img.naturalHeight);
+          computedRatio = img.naturalWidth / img.naturalHeight;
+          setImageNaturalRatio(computedRatio);
         }
 
         const canvas = document.createElement('canvas');
@@ -148,19 +163,27 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
         const effectiveBrightness = hideOverlay ? avgBrightness : avgBrightness * (1 - overlayOp * 0.7);
 
         // Threshold of 120 (0-255) classifies background as bright/light vs dark
-        setIsBrightBg(effectiveBrightness > 120);
+        const isBright = effectiveBrightness > 120;
+        setIsBrightBg(isBright);
+
+        // Cache result
+        slideLuminanceCache.set(activeImgSrc, { isBright, ratio: computedRatio });
       } catch {
-        // In case of CORS or canvas error, fallback based on image URL heuristic if possible or default to dark
+        // In case of CORS or canvas error, fallback to dark
         setIsBrightBg(false);
+        slideLuminanceCache.set(activeImgSrc, { isBright: false, ratio: null });
       }
     };
 
     img.onerror = () => {
       if (isMounted) setIsBrightBg(false);
+      slideLuminanceCache.set(activeImgSrc, { isBright: false, ratio: null });
     };
 
     return () => {
       isMounted = false;
+      img.onload = null;
+      img.onerror = null;
     };
   }, [
     currentSlide?.bgImage,

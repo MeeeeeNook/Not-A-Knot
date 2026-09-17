@@ -250,8 +250,9 @@ export function useAdminPresence(currentSeller: SellerUser | null): AdminPresenc
     // 1. Initial sync upon admin login / session mount
     syncPresenceAndIp(true);
 
-    // 2. Periodic heartbeat every 40 seconds
+    // 2. Periodic heartbeat (only when tab is active to preserve CPU and battery)
     const heartbeatInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const nowIso = new Date().toISOString();
       updateSellerPresence(sellerId, {
         lastSeenAt: nowIso,
@@ -266,7 +267,7 @@ export function useAdminPresence(currentSeller: SellerUser | null): AdminPresenc
           isOnline: true
         }));
       }
-    }, 40000);
+    }, 45000);
 
     // 3. Tab focus / Visibility change handler to quickly restore online state
     const handleVisibilityChange = () => {

@@ -751,9 +751,6 @@ export function recordPageTimeSpent(path: string, seconds: number) {
   current.viewCount = Math.max(current.viewCount || 1, state.pathViews?.[path] || 1);
   state.pathDurations[path] = current;
 
-  // Also add to global session duration
-  state.totalSessionDurationSeconds = (state.totalSessionDurationSeconds || 0) + seconds;
-
   saveInternalAnalytics(state);
 }
 

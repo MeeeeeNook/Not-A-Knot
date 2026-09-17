@@ -906,14 +906,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Periodic background auto-poll every 15s for 100% data sync guarantee across devices
+    // Periodic background auto-poll for data sync guarantee across devices (only when tab is active)
     const autoSyncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       loadOrders();
       loadMessagesCount();
-    }, 15000);
+    }, 35000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        loadOrders();
+        loadMessagesCount();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(autoSyncInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribeOrders();
       unsubscribeMessages();
       window.removeEventListener('nak_order_created', handleOrderCreated);

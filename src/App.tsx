@@ -375,9 +375,13 @@ export default function App() {
 
   // Periodic server-side auto-backup check (triggers background backup if due whenever any user/admin is online)
   useEffect(() => {
-    checkAndRunAutoBackup().catch(() => {});
-    const timer = setInterval(() => {
+    if (typeof document !== 'undefined' && !document.hidden) {
       checkAndRunAutoBackup().catch(() => {});
+    }
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        checkAndRunAutoBackup().catch(() => {});
+      }
     }, 5 * 60 * 1000);
     return () => clearInterval(timer);
   }, []);
@@ -426,21 +430,21 @@ export default function App() {
   useEffect(() => {
     let sessionSeconds = 0;
     const interval = setInterval(() => {
-      // If user tab is visible, record engagement
-      if (document.visibilityState === 'visible') {
-        sessionSeconds += 5;
-        recordSessionHeartbeat(5);
+      // If user tab is visible and active, record engagement
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !document.hidden) {
+        sessionSeconds += 20;
+        recordSessionHeartbeat(20);
         
         // Track time spent on the current page hash
         const currentHash = window.location.hash || '#home';
-        recordPageTimeSpent(currentHash, 5);
+        recordPageTimeSpent(currentHash, 20);
         
-        // Every 30 seconds, ping GA4 user_engagement event
-        if (sessionSeconds % 30 === 0) {
+        // Every 60 seconds, ping GA4 user_engagement event
+        if (sessionSeconds % 60 === 0) {
           trackGA4Engagement(sessionSeconds);
         }
       }
-    }, 5000);
+    }, 20000);
 
     return () => clearInterval(interval);
   }, []);
@@ -638,7 +642,7 @@ export default function App() {
 
     // H. Background silent periodic sync (ensures latest stock and changes without any user button click)
     const periodicTimer = setInterval(() => {
-      if (!isMounted) return;
+      if (!isMounted || (typeof document !== 'undefined' && document.hidden)) return;
       fetchProductsFromFirestore().then((latest) => {
         if (isMounted && latest && latest.length > 0) {
           setProducts((prev) => {
@@ -650,7 +654,7 @@ export default function App() {
           });
         }
       }).catch(() => {});
-    }, 25000);
+    }, 60000);
 
     return () => {
       isMounted = false;
