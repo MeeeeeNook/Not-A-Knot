@@ -426,15 +426,14 @@ function normalizeText(text: string): string {
 
 /**
  * Shipping fee calculation rules:
- * - Hà Nội + Hai Bà Trưng: 0đ (Freeship)
- * - Hà Nội + các quận/huyện khác: 5.000đ
+ * - Toàn bộ Hà Nội: 0đ (Freeship)
  * - Tỉnh / Thành phố khác trên toàn quốc: 20.000đ
  */
 export interface ShippingCalculationResult {
   fee: number;
   isFree: boolean;
   isPending?: boolean;
-  tier: 'pending' | 'hbt_freeship' | 'hanoi_standard' | 'nationwide';
+  tier: 'pending' | 'hanoi_freeship' | 'nationwide';
   title: string;
 }
 
@@ -450,29 +449,16 @@ export function calculateShippingFee(province?: string, district?: string): Ship
   }
 
   const normProvince = normalizeText(province);
-  const normDistrict = normalizeText(district);
 
   const isHanoi = normProvince.includes('ha noi') || normProvince.includes('hanoi') || normProvince === 'hn';
 
   if (isHanoi) {
-    const isHaiBaTrung = normDistrict.includes('hai ba trung') || normDistrict.includes('haibatrung') || normDistrict.includes('hbt');
-
-    if (isHaiBaTrung) {
-      return {
-        fee: 0,
-        isFree: true,
-        isPending: false,
-        tier: 'hbt_freeship',
-        title: '0đ'
-      };
-    }
-
     return {
-      fee: 5000,
-      isFree: false,
+      fee: 0,
+      isFree: true,
       isPending: false,
-      tier: 'hanoi_standard',
-      title: '5.000đ'
+      tier: 'hanoi_freeship',
+      title: '0đ'
     };
   }
 

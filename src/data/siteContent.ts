@@ -102,7 +102,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     {
       id: 'faq-5',
       q: 'Chính sách phí vận chuyển như thế nào?',
-      a: 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng tại quận Hai Bà Trưng, Hà Nội. Phí vận chuyển 5.000đ áp dụng cho các quận huyện còn lại tại Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.'
+      a: 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.'
     }
   ],
 
@@ -153,7 +153,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   footerDescription: 'Xưởng chế tác phụ kiện Paracord 550 và đồ EDC thủ công tại Hà Nội. Đóng gói hộp giấy trang trọng, bảo hành chi tiết khoen, charm, bùa, phụ kiện hoặc dây.',
   copyrightText: '© 2026 NOT A KNOT. All rights reserved. Thủ công từ Việt Nam.',
   warrantyPolicy: 'Sản phẩm không có size. Có bảo hành chi tiết đối với khoen, charm, bùa, phụ kiện, hoặc dây. Đóng gói trong hộp giấy trang trọng.',
-  shippingPolicy: 'Miễn phí giao hàng (0đ) tại quận Hai Bà Trưng, Hà Nội. Phí vận chuyển 5.000đ cho các quận huyện Hà Nội khác. Phí vận chuyển đồng giá 20.000đ toàn quốc.',
+  shippingPolicy: 'Miễn phí giao hàng (0đ) trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ toàn quốc.',
   socialLinks: {
     facebook: 'https://www.facebook.com/profile.php?id=61593591390851',
     messenger: 'https://m.me/61593591390851',
