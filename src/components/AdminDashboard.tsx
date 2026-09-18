@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Product, CategoryItem, SellerUser } from '../types';
 import { StoredOrder } from '../firebase';
 import { deduplicateSellers } from '../utils/auth';
-import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart, ExternalLink, BarChart3 } from 'lucide-react';
+import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart, ExternalLink, BarChart3, EyeOff } from 'lucide-react';
 
 const SLICE_COLORS = [
   '#2563EB', // Blue
@@ -530,6 +530,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [filteredOrders]);
 
   // 11. Best Selling Products Ranking
+  // Only shows products that have sales (quantitySold > 0) in the chosen timeframe (e.g. 7 days, 30 days).
+  // Products that are marked as hidden on the website ARE shown if they have sales in this timeframe.
+  // Products with 0 sales in the chosen timeframe are NOT shown.
   const topProductsRanking = useMemo(() => {
     const prodMap: Record<
       string,
@@ -542,9 +545,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         totalRevenue: number;
         ordersCount: number;
         stock: number;
+        isHidden?: boolean;
       }
     > = {};
 
+    // 1. Initialize map from known products (both active and hidden)
     products.forEach((p) => {
       prodMap[p.id] = {
         id: p.id,
@@ -555,9 +560,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         totalRevenue: 0,
         ordersCount: 0,
         stock: p.stock ?? 15,
+        isHidden: p.isHidden === true || String(p.isHidden) === 'true',
       };
     });
 
+    // 2. Accumulate sales from orders in the current timeframe
     validOrders.forEach((ord) => {
       if (ord.itemDetails && ord.itemDetails.length > 0) {
         const productsInOrder = new Set<string>();
@@ -566,9 +573,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           if (prodMap[it.productId]) {
             targetId = it.productId;
           } else {
-            const found = products.find((p) => p.name === it.productName);
+            const found = products.find((p) => p.name === it.productName || p.id === it.productId);
             if (found && prodMap[found.id]) {
               targetId = found.id;
+            } else if (it.productId) {
+              targetId = it.productId;
+              prodMap[targetId] = {
+                id: it.productId,
+                name: it.productName || 'Sản phẩm',
+                image: it.image,
+                price: it.price || 0,
+                quantitySold: 0,
+                totalRevenue: 0,
+                ordersCount: 0,
+                stock: 0,
+                isHidden: true,
+              };
             }
           }
 
@@ -587,21 +607,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     });
 
-    return Object.values(prodMap).sort((a, b) => {
-      if (productRankingSortBy === 'revenue') {
-        return b.totalRevenue - a.totalRevenue || b.quantitySold - a.quantitySold;
-      }
-      if (productRankingSortBy === 'quantity') {
-        return b.quantitySold - a.quantitySold || b.totalRevenue - a.totalRevenue;
-      }
-      if (productRankingSortBy === 'orders') {
-        return b.ordersCount - a.ordersCount || b.totalRevenue - a.totalRevenue;
-      }
-      return 0;
-    });
+    // 3. Only return products that have sales in this chosen timeframe (quantitySold > 0)
+    return Object.values(prodMap)
+      .filter((p) => p.quantitySold > 0)
+      .sort((a, b) => {
+        if (productRankingSortBy === 'revenue') {
+          return b.totalRevenue - a.totalRevenue || b.quantitySold - a.quantitySold;
+        }
+        if (productRankingSortBy === 'quantity') {
+          return b.quantitySold - a.quantitySold || b.totalRevenue - a.totalRevenue;
+        }
+        if (productRankingSortBy === 'orders') {
+          return b.ordersCount - a.ordersCount || b.totalRevenue - a.totalRevenue;
+        }
+        return 0;
+      });
   }, [validOrders, products, productRankingSortBy]);
 
   // 12. Category Breakdown
+  // Shows categories with sales in the current timeframe (count > 0 || revenue > 0)
   const categoryRevenueMetrics = useMemo(() => {
     const catMap: Record<string, { label: string; revenue: number; count: number }> = {};
 
@@ -618,16 +642,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ord.itemDetails.forEach((it) => {
           const prod = products.find((p) => p.id === it.productId || p.name === it.productName);
           const catId = prod?.category || it.category || 'other';
-          if (catMap[catId]) {
-            catMap[catId].revenue += it.price * it.quantity;
-            catMap[catId].count += it.quantity;
+          if (!catMap[catId]) {
+            const catObj = categories.find((c) => c.id === catId);
+            catMap[catId] = {
+              label: catObj?.label || (catId === 'event_0209' ? 'Quốc Khánh 02.09' : catId),
+              revenue: 0,
+              count: 0
+            };
           }
+          catMap[catId].revenue += it.price * it.quantity;
+          catMap[catId].count += it.quantity;
         });
       }
     });
 
     return Object.entries(catMap)
       .map(([id, data]) => ({ id, ...data }))
+      .filter((cat) => cat.count > 0 || cat.revenue > 0)
       .sort((a, b) => b.revenue - a.revenue);
   }, [validOrders, categories, products]);
 
@@ -960,7 +991,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Xếp Hạng Sản Phẩm
             </h4>
             <span className="text-[11px] text-slate-500 font-medium">
-              Sắp xếp theo {productRankingSortBy === 'revenue' ? 'doanh thu' : productRankingSortBy === 'quantity' ? 'số lượng bán' : 'số đơn hàng chứa sản phẩm'}
+              Chỉ hiển thị sản phẩm có phát sinh lượt bán • Sắp xếp theo {productRankingSortBy === 'revenue' ? 'doanh thu' : productRankingSortBy === 'quantity' ? 'số lượng bán' : 'số đơn hàng chứa sản phẩm'}
             </span>
           </div>
 
@@ -1022,65 +1053,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {topProductsRanking.slice(0, 10).map((prod, idx) => (
-                <tr key={prod.id} className="hover:bg-slate-50">
-                  <td className="p-2.5 font-bold text-slate-900">
-                    <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
-                      idx === 0 ? 'bg-amber-400 text-slate-950 shadow-2xs' : idx === 1 ? 'bg-slate-200 text-slate-800' : idx === 2 ? 'bg-amber-200 text-amber-900' : 'text-slate-600'
-                    }`}>
-                      {idx + 1}
-                    </span>
-                  </td>
-                  <td className="p-2.5">
-                    <div className="flex items-center gap-2">
-                      {prod.image && (
-                        <img
-                          src={prod.image}
-                          alt={prod.name}
-                          className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0"
-                        />
-                      )}
-                      <div>
-                        <span className="font-bold text-slate-900 text-xs block">{prod.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{prod.id}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-2.5 whitespace-nowrap text-slate-700">
-                    {prod.price.toLocaleString('vi-VN')}đ
-                  </td>
-                  <td className="p-2.5 text-center whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded font-bold text-xs ${
-                      productRankingSortBy === 'quantity' ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 font-black' : 'bg-slate-100 text-slate-800'
-                    }`}>
-                      {prod.quantitySold} cái
-                    </span>
-                  </td>
-                  <td className="p-2.5 text-center whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded font-bold text-xs ${
-                      productRankingSortBy === 'orders' ? 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-300 font-black' : 'bg-slate-100 text-slate-800'
-                    }`}>
-                      {prod.ordersCount} đơn
-                    </span>
-                  </td>
-                  <td className={`p-2.5 whitespace-nowrap font-bold ${
-                    productRankingSortBy === 'revenue' ? 'text-emerald-700 bg-emerald-50/60 font-black' : 'text-slate-900'
-                  }`}>
-                    {prod.totalRevenue.toLocaleString('vi-VN')}đ
-                  </td>
-                  <td className="p-2.5 text-right whitespace-nowrap">
-                    {prod.stock > 0 ? (
-                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                        Còn {prod.stock}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
-                        Hết hàng
-                      </span>
-                    )}
+              {topProductsRanking.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                    Chưa có sản phẩm nào phát sinh lượt bán trong khoảng thời gian này.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                topProductsRanking.slice(0, 10).map((prod, idx) => (
+                  <tr key={prod.id} className="hover:bg-slate-50">
+                    <td className="p-2.5 font-bold text-slate-900">
+                      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[11px] font-bold ${
+                        idx === 0 ? 'bg-amber-400 text-slate-950 shadow-2xs' : idx === 1 ? 'bg-slate-200 text-slate-800' : idx === 2 ? 'bg-amber-200 text-amber-900' : 'text-slate-600'
+                      }`}>
+                        {idx + 1}
+                      </span>
+                    </td>
+                    <td className="p-2.5">
+                      <div className="flex items-center gap-2">
+                        {prod.image && (
+                          <img
+                            src={prod.image}
+                            alt={prod.name}
+                            className="w-8 h-8 rounded object-cover border border-slate-200 shrink-0"
+                          />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 text-xs block">{prod.name}</span>
+                            {prod.isHidden && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-slate-100 text-slate-500 border border-slate-200 shrink-0" title="Sản phẩm đang ẩn trên website bán hàng">
+                                Đã ẩn
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono">{prod.id}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-2.5 whitespace-nowrap text-slate-700">
+                      {prod.price.toLocaleString('vi-VN')}đ
+                    </td>
+                    <td className="p-2.5 text-center whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded font-bold text-xs ${
+                        productRankingSortBy === 'quantity' ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 font-black' : 'bg-slate-100 text-slate-800'
+                      }`}>
+                        {prod.quantitySold} cái
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-center whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded font-bold text-xs ${
+                        productRankingSortBy === 'orders' ? 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-300 font-black' : 'bg-slate-100 text-slate-800'
+                      }`}>
+                        {prod.ordersCount} đơn
+                      </span>
+                    </td>
+                    <td className={`p-2.5 whitespace-nowrap font-bold ${
+                      productRankingSortBy === 'revenue' ? 'text-emerald-700 bg-emerald-50/60 font-black' : 'text-slate-900'
+                    }`}>
+                      {prod.totalRevenue.toLocaleString('vi-VN')}đ
+                    </td>
+                    <td className="p-2.5 text-right whitespace-nowrap">
+                      {prod.stock > 0 ? (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                          Còn {prod.stock}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
+                          Hết hàng
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -1093,30 +1139,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             Doanh Thu Theo Danh Mục
           </h4>
           <span className="text-xs text-slate-500 font-medium">
-            {categories.length} danh mục
+            {categoryRevenueMetrics.length} danh mục
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {categoryRevenueMetrics.map((cat) => (
-            <div
-              key={cat.id}
-              className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-center justify-between gap-2"
-            >
-              <div className="min-w-0">
-                <span className="font-bold text-slate-900 text-xs truncate block">{cat.label}</span>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Đã bán: <strong>{cat.count} cái</strong>
-                </span>
+        {categoryRevenueMetrics.length === 0 ? (
+          <div className="p-6 text-center text-slate-500 text-xs">
+            Chưa có danh mục nào phát sinh doanh thu trong khoảng thời gian này.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {categoryRevenueMetrics.map((cat) => (
+              <div
+                key={cat.id}
+                className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-900 text-xs truncate block">{cat.label}</span>
+                  <span className="text-[11px] text-slate-500 block mt-0.5">
+                    Đã bán: <strong>{cat.count} cái</strong>
+                  </span>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-bold text-slate-900 text-xs block">
+                    {cat.revenue.toLocaleString('vi-VN')}đ
+                  </span>
+                </div>
               </div>
-              <div className="text-right shrink-0">
-                <span className="font-bold text-slate-900 text-xs block">
-                  {cat.revenue.toLocaleString('vi-VN')}đ
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Row 6: Seller Ranking & Contribution Donut Chart */}
