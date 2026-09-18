@@ -69,6 +69,30 @@ import {
   getProductsFromIDB
 } from './utils/storageHelper';
 
+const CURRENT_HANOI_SHIPPING_POLICY = 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.';
+
+function migrateLegacyShippingPolicy(content: SiteContentConfig): SiteContentConfig {
+  const legacyPolicyPattern = /Hai Bà Trưng|5\.000\s*đ|các quận huyện Hà Nội khác/i;
+  const faqs = Array.isArray(content.faqs)
+    ? content.faqs.map((faq) => {
+        const isShippingFaq = /phí vận chuyển|chính sách vận chuyển/i.test(faq.q || '');
+        if (isShippingFaq && legacyPolicyPattern.test(faq.a || '')) {
+          return { ...faq, a: CURRENT_HANOI_SHIPPING_POLICY };
+        }
+        return faq;
+      })
+    : content.faqs;
+
+  return {
+    ...content,
+    shippingPolicy:
+      !content.shippingPolicy || legacyPolicyPattern.test(content.shippingPolicy)
+        ? CURRENT_HANOI_SHIPPING_POLICY
+        : content.shippingPolicy,
+    ...(faqs ? { faqs } : {})
+  };
+}
+
 export default function App() {
   // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page)
   const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart'>('landing');
@@ -158,7 +182,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          const merged = { ...DEFAULT_SITE_CONTENT, ...parsed };
+          const merged = migrateLegacyShippingPolicy({ ...DEFAULT_SITE_CONTENT, ...parsed });
           if (Array.isArray(merged.customElements)) {
             merged.customElements = merged.customElements.filter(
               (e: any) => e?.type !== 'guarantee' && e?.id !== 'elem-guarantee-1' && e?.id !== 'elem-faq-1'
@@ -542,8 +566,9 @@ export default function App() {
           safeStorageSetItem('nak_collections', JSON.stringify(sorted));
         }
         if (cloudSite) {
-          setSiteContent(cloudSite);
-          safeStorageSetItem('nak_site_content', JSON.stringify(cloudSite));
+          const migratedCloudSite = migrateLegacyShippingPolicy(cloudSite);
+          setSiteContent(migratedCloudSite);
+          safeStorageSetItem('nak_site_content', JSON.stringify(migratedCloudSite));
         }
       } catch (err) {
         console.warn('Initial cloud fetch notice:', err);
@@ -599,8 +624,9 @@ export default function App() {
     const unsubContent = subscribeToSiteContentFromFirestore((realtimeContent) => {
       if (!isMounted) return;
       if (realtimeContent) {
-        setSiteContent(realtimeContent);
-        safeStorageSetItem('nak_site_content', JSON.stringify(realtimeContent));
+        const migratedRealtimeContent = migrateLegacyShippingPolicy(realtimeContent);
+        setSiteContent(migratedRealtimeContent);
+        safeStorageSetItem('nak_site_content', JSON.stringify(migratedRealtimeContent));
       }
     });
 
@@ -619,7 +645,7 @@ export default function App() {
           } else if (type === 'collections' && Array.isArray(data)) {
             setCollections(data);
           } else if (type === 'siteContent' && data) {
-            setSiteContent(data);
+            setSiteContent(migrateLegacyShippingPolicy(data));
           }
         };
       } catch {}
@@ -635,7 +661,7 @@ export default function App() {
       } else if (e.key === 'nak_collections' && e.newValue) {
         try { setCollections(JSON.parse(e.newValue)); } catch {}
       } else if (e.key === 'nak_site_content' && e.newValue) {
-        try { setSiteContent(JSON.parse(e.newValue)); } catch {}
+        try { setSiteContent(migrateLegacyShippingPolicy(JSON.parse(e.newValue))); } catch {}
       }
     };
     window.addEventListener('storage', handleStorageChange);
