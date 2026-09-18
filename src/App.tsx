@@ -27,7 +27,6 @@ import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintena
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
-import { checkAndRunAutoBackup } from './utils/autoBackup';
 import { useAdminPresence } from './hooks/useAdminPresence';
 
 // Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
@@ -397,18 +396,29 @@ export default function App() {
     };
   }, []);
 
-  // Periodic server-side auto-backup check (triggers background backup if due whenever any user/admin is online)
+  // Backups run only while staff are using the visible admin dashboard.
   useEffect(() => {
-    if (typeof document !== 'undefined' && !document.hidden) {
-      checkAndRunAutoBackup().catch(() => {});
-    }
-    const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && !document.hidden) {
-        checkAndRunAutoBackup().catch(() => {});
+    if (!currentSeller?.id || currentView !== 'admin') return;
+    let cancelled = false;
+    const checkBackup = async () => {
+      if (cancelled || document.hidden) return;
+      try {
+        const { checkAndRunAutoBackup } = await import('./utils/autoBackup');
+        if (!cancelled && !document.hidden) await checkAndRunAutoBackup();
+      } catch (err) {
+        console.warn('Auto-backup check failed:', err);
       }
-    }, 5 * 60 * 1000);
-    return () => clearInterval(timer);
-  }, []);
+    };
+    void checkBackup();
+    const timer = setInterval(() => { void checkBackup(); }, 5 * 60 * 1000);
+    const handleVisibility = () => { void checkBackup(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [currentSeller?.id, currentView]);
 
   // Listen to browser hash changes (Back / Forward buttons) & track GA4 page views
   useEffect(() => {
@@ -510,7 +520,7 @@ export default function App() {
   }, [isAdminLoginModalOpen, currentSeller]);
 
   // Online presence, public IP detection (ipapi.co) and heartbeat for active admin/seller
-  useAdminPresence(currentSeller);
+  useAdminPresence(currentView === 'admin' ? currentSeller : null);
 
   // Cross-tab / Multi-device Instant Broadcast Synchronization Helper
   const broadcastStoreChange = (type: 'products' | 'categories' | 'collections' | 'siteContent', data: any) => {
@@ -666,22 +676,6 @@ export default function App() {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // H. Background silent periodic sync (ensures latest stock and changes without any user button click)
-    const periodicTimer = setInterval(() => {
-      if (!isMounted || (typeof document !== 'undefined' && document.hidden)) return;
-      fetchProductsFromFirestore().then((latest) => {
-        if (isMounted && latest && latest.length > 0) {
-          setProducts((prev) => {
-            if (JSON.stringify(prev) !== JSON.stringify(latest)) {
-              safeStorageSetItem('nak_custom_products', JSON.stringify(latest));
-              return latest;
-            }
-            return prev;
-          });
-        }
-      }).catch(() => {});
-    }, 60000);
-
     return () => {
       isMounted = false;
       unsubProducts();
@@ -690,7 +684,6 @@ export default function App() {
       unsubContent();
       if (syncChannel) syncChannel.close();
       window.removeEventListener('storage', handleStorageChange);
-      clearInterval(periodicTimer);
     };
   }, []);
 
