@@ -2717,58 +2717,63 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
 };
 
 export const fetchSellerByUsername = async (username: string): Promise<SellerUser | null> => {
-  try {
-    const clean = (username || '').trim().toLowerCase();
-    if (!clean) return null;
-    const sellerId = `seller-${clean.replace(/[^a-z0-9]/g, '')}`;
+  const clean = (username || '').trim().toLowerCase();
+  if (!clean) return null;
+  const sellerId = `seller-${clean.replace(/[^a-z0-9]/g, '')}`;
 
-    // 1. Direct fetch by standard doc ID
-    const docRef = doc(db, 'sellers', sellerId);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      return {
-        id: snap.id,
-        username: data.username || clean,
-        name: data.name || clean,
-        isRootAdmin: !!data.isRootAdmin,
-        role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
-        isActive: data.isActive !== false,
-        createdAt: data.createdAt || new Date().toISOString(),
-        avatarColor: data.avatarColor || '#B41C1A',
-        phone: data.phone || '',
-        ...data,
-        passwordHash: '',
-        passwordSalt: ''
-      } as SellerUser;
-    }
+  const fetchInternal = async (): Promise<SellerUser | null> => {
+    try {
+      // 1. Direct fetch by standard doc ID
+      const docRef = doc(db, 'sellers', sellerId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          id: snap.id,
+          username: data.username || clean,
+          name: data.name || clean,
+          isRootAdmin: !!data.isRootAdmin,
+          role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: data.isActive !== false,
+          createdAt: data.createdAt || new Date().toISOString(),
+          avatarColor: data.avatarColor || '#B41C1A',
+          phone: data.phone || '',
+          ...data,
+          passwordHash: data.passwordHash || '',
+          passwordSalt: data.passwordSalt || ''
+        } as SellerUser;
+      }
 
-    // 2. Query collection by username field
-    const colRef = collection(db, 'sellers');
-    const q = query(colRef, where('username', '==', clean), limit(1));
-    const querySnap = await getDocs(q);
-    if (!querySnap.empty) {
-      const docSnap = querySnap.docs[0];
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        username: data.username || clean,
-        name: data.name || clean,
-        isRootAdmin: !!data.isRootAdmin,
-        role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
-        isActive: data.isActive !== false,
-        createdAt: data.createdAt || new Date().toISOString(),
-        avatarColor: data.avatarColor || '#B41C1A',
-        phone: data.phone || '',
-        ...data,
-        passwordHash: '',
-        passwordSalt: ''
-      } as SellerUser;
+      // 2. Query collection by username field
+      const colRef = collection(db, 'sellers');
+      const q = query(colRef, where('username', '==', clean), limit(1));
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        const docSnap = querySnap.docs[0];
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          username: data.username || clean,
+          name: data.name || clean,
+          isRootAdmin: !!data.isRootAdmin,
+          role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: data.isActive !== false,
+          createdAt: data.createdAt || new Date().toISOString(),
+          avatarColor: data.avatarColor || '#B41C1A',
+          phone: data.phone || '',
+          ...data,
+          passwordHash: data.passwordHash || '',
+          passwordSalt: data.passwordSalt || ''
+        } as SellerUser;
+      }
+    } catch (err) {
+      console.warn('fetchSellerByUsername warning:', err);
     }
-  } catch (err) {
-    console.warn('fetchSellerByUsername warning:', err);
-  }
-  return null;
+    return null;
+  };
+
+  const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+  return Promise.race([fetchInternal(), timeoutPromise]);
 };
 
 export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> => {

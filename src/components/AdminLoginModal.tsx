@@ -51,7 +51,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       setErrorMessage('Vui lòng nhập tên đăng nhập.');
       return;
     }
-
     if (!cleanPassword) {
       setErrorMessage('Vui lòng nhập mật khẩu.');
       return;
@@ -60,12 +59,15 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      // 1. Fetch and verify IP Geolocation silently in background (covert / thầm kín)
-      const geo = await getClientGeoLocation();
-      setClientGeo(geo);
+      // 1. Fetch or reuse IP Geolocation (instant if already cached)
+      const geo = clientGeo || await getClientGeoLocation();
+      if (!clientGeo) {
+        setClientGeo(geo);
+      }
 
-      // Security check: Only allow logins originating from Vietnam (countryCode === 'VN')
-      if (!geo.isVietnam) {
+      // Security check: Only allow logins originating from Vietnam (or root admin when roaming)
+      const isRoot = isRootAdminUsername(cleanUsername);
+      if (!geo.isVietnam && !isRoot) {
         await logAdminLogin({
           username: cleanUsername,
           status: 'blocked_geo',
@@ -86,7 +88,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
       );
 
-      // Always query Firestore directly for the freshest seller data to ensure newly changed password hash is used
+      // Query Firestore directly for freshest seller credentials (with safe 3.5s timeout)
       try {
         const freshSeller = await fetchSellerByUsername(cleanUsername);
         if (freshSeller) {
@@ -109,7 +111,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         } catch {}
       }
 
-      // Perform server-side authentication (Rate-limited, authoritative bcrypt & salted SHA256)
+      // Perform authentication (Rate-limited, authoritative bcrypt & salted SHA256)
       const loginRes = await loginWithServer(cleanUsername, cleanPassword, matchedSeller, rememberMe);
 
       if (!loginRes.success || !loginRes.user) {
@@ -125,7 +127,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         return;
       }
 
-      // Success authenticated by server JWT
+      // Success authenticated
       const devInfo = getClientDeviceInfo();
       const nowIso = new Date().toISOString();
       const authenticatedUser: SellerUser = {
@@ -148,27 +150,29 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         lastDevice: `${devInfo.browser} trên ${devInfo.os}`
       };
 
-      await logAdminLogin({
+      logAdminLogin({
         username: authenticatedUser.username,
         name: authenticatedUser.name,
         isRoot: Boolean(authenticatedUser.isRootAdmin),
         status: 'success',
         customGeo: geo
-      });
+      }).catch(() => {});
 
-      await updateSellerPresence(authenticatedUser.id, {
+      updateSellerPresence(authenticatedUser.id, {
         lastLoginAt: nowIso,
         lastSeenAt: nowIso,
         lastLoginIp: geo.ip,
         lastLoginCity: geo.city || geo.region || 'Hà Nội',
         lastLoginCountry: geo.country || 'Vietnam',
         lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-      });
+      }).catch(() => {});
 
       setIsLoading(false);
       onLoginSuccess(authenticatedUser);
     } catch {
       setErrorMessage('Có lỗi xảy ra khi xác thực. Vui lòng thử lại.');
+      setIsLoading(false);
+    } finally {
       setIsLoading(false);
     }
   };

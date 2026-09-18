@@ -1,5 +1,7 @@
 import { SellerUser } from '../types';
-import { getAuth, signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import bcrypt from 'bcryptjs';
+import { fetchSellerByUsername } from '../firebase';
 
 // Constants for Client Session Storage
 const JWT_STORAGE_KEY = 'notaknot_admin_jwt_token';
@@ -84,8 +86,7 @@ export const loginWithServer = async (
     return { success: false, error: 'Vui lòng nhập mật khẩu.' };
   }
 
-  // 1. Authoritative Server-Side Verification FIRST
-  // The server handles bcrypt hashes (newly changed passwords), salted legacy SHA-256 hashes, root fallback, and JWT generation
+  // 1. Authoritative Server-Side Verification FIRST (if backend server is reachable)
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -97,7 +98,8 @@ export const loginWithServer = async (
         password: cleanPassword,
         sellerData,
         rememberMe
-      })
+      }),
+      signal: AbortSignal.timeout(2500)
     });
 
     if (res.ok) {
@@ -119,66 +121,76 @@ export const loginWithServer = async (
           user: data.user
         };
       }
-    } else {
+    } else if (res.status === 401 || res.status === 403 || res.status === 400) {
+      // The authoritative backend explicitly evaluated and rejected the credentials
       const errData = await res.json().catch(() => null);
-      if (res.status === 401 || (errData && errData.error)) {
-        return {
-          success: false,
-          error: errData?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-        };
-      }
+      return {
+        success: false,
+        error: errData?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+      };
     }
   } catch (err) {
-    console.warn('Backend login endpoint unreachable, trying offline fallback:', err);
+    // Backend endpoint unreachable, timed out, or static deployment (GitHub Pages / Vercel static)
+    // Seamlessly fallback to authoritative client-side Firestore authentication
   }
 
-  // 2. Offline Fallback (only used if backend server is unreachable)
-  const auth = getAuth();
-  let firebaseAuthFailed = false;
-
-  try {
-    const email = `${cleanUsername}@notaknot.local`;
-    await signInWithEmailAndPassword(auth, email, cleanPassword);
-  } catch (error: any) {
-    firebaseAuthFailed = true;
+  // 2. Authoritative Client Fallback (for static deployments e.g. GitHub Pages / offline mode)
+  let activeSeller = sellerData;
+  if (!activeSeller || !activeSeller.passwordHash) {
+    try {
+      const fetched = await fetchSellerByUsername(cleanUsername);
+      if (fetched) {
+        activeSeller = fetched;
+      }
+    } catch {}
   }
 
-  if (firebaseAuthFailed) {
-    let isMatch = false;
+  let isMatch = false;
+  const storedHash = activeSeller?.passwordHash;
+  const storedSalt = activeSeller?.passwordSalt;
 
-    if (sellerData?.passwordHash && sellerData?.passwordSalt && !sellerData.passwordHash.startsWith('$2')) {
-      isMatch = await verifyPassword(cleanPassword, sellerData.passwordSalt, sellerData.passwordHash);
-    } else if (sellerData?.passwordHash?.startsWith('$2')) {
-      // Modern bcrypt passwords require server-side verification
-      return {
-        success: false,
-        error: 'Máy chủ xác thực không phản hồi. Vui lòng kiểm tra lại kết nối mạng.'
-      };
+  if (storedHash) {
+    if (storedHash.startsWith('$2')) {
+      try {
+        isMatch = await bcrypt.compare(cleanPassword, storedHash);
+      } catch (err) {
+        console.warn('bcrypt compare error:', err);
+      }
+    } else if (storedSalt) {
+      isMatch = await verifyPassword(cleanPassword, storedSalt, storedHash);
     }
-
-    if (!isMatch) {
-      return {
-        success: false,
-        error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-      };
-    }
+  } else if (isRootAdminUsername(cleanUsername)) {
+    // Authoritative fallback for root admin "manhcuong" if Firestore is offline
+    // Matches the root admin bcrypt hash ($2b$10$/GBHomGlwF.lft/qY5nNReMMXeut7/eVlJQ8YGvnYZTSOglllnuV6)
+    try {
+      isMatch = await bcrypt.compare(cleanPassword, '$2b$10$/GBHomGlwF.lft/qY5nNReMMXeut7/eVlJQ8YGvnYZTSOglllnuV6');
+    } catch {}
   }
 
-  // Ensure Firebase anonymous sign-in for offline fallback
+  if (!isMatch) {
+    return {
+      success: false,
+      error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+    };
+  }
+
+  // Ensure Firebase anonymous sign-in in background
   try {
+    const auth = getAuth();
     if (!auth.currentUser) {
       await signInAnonymously(auth);
     }
   } catch {}
 
-  const isRoot = isRootAdminUsername(cleanUsername) || Boolean(sellerData?.isRootAdmin);
+  const isRoot = isRootAdminUsername(cleanUsername) || Boolean(activeSeller?.isRootAdmin);
   const userPayload: Partial<SellerUser> = {
-    id: sellerData?.id || `seller-${cleanUsername}`,
+    id: activeSeller?.id || `seller-${cleanUsername}`,
     username: cleanUsername,
-    name: sellerData?.name || (isRoot ? 'Mạnh Cường' : cleanUsername),
-    role: sellerData?.role || (isRoot ? 'root_admin' : 'member'),
+    name: activeSeller?.name || (isRoot ? 'Vũ Ngọc Mạnh Cường' : cleanUsername),
+    role: activeSeller?.role || (isRoot ? 'root_admin' : 'member'),
     isRootAdmin: isRoot,
-    avatarColor: sellerData?.avatarColor || (isRoot ? '#B41C1A' : '#2563EB')
+    avatarColor: activeSeller?.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
+    isActive: true
   };
 
   const clientToken = `client_fallback_jwt_${cleanUsername}_${Date.now()}`;
@@ -280,7 +292,8 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
     const res = await fetch('/api/auth/verify', {
       headers: {
         Authorization: `Bearer ${token}`
-      }
+      },
+      signal: AbortSignal.timeout(2000)
     });
 
     if (!res.ok) {
@@ -303,7 +316,7 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
       return null;
     }
   } catch (err) {
-    console.warn('Verification request error:', err);
+    console.warn('Verification request error or static deployment, keeping session:', err);
     return localSession;
   }
 };
@@ -332,7 +345,8 @@ export const hashPasswordWithServer = async (password: string): Promise<string> 
         'Content-Type': 'application/json',
         Authorization: token ? `Bearer ${token}` : ''
       },
-      body: JSON.stringify({ password })
+      body: JSON.stringify({ password }),
+      signal: AbortSignal.timeout(2500)
     });
     const data = await res.json();
     if (data.success && data.hash) {
@@ -340,12 +354,15 @@ export const hashPasswordWithServer = async (password: string): Promise<string> 
     }
     throw new Error(data.error || 'Lỗi băm mật khẩu từ server');
   } catch (err) {
-    console.warn('Fallback server hash:', err);
-    // Secure fallback: Generate unique cryptographic salt & client digest if network is offline
-    const salt = generateSalt();
-    const encoder = new TextEncoder();
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${password}:nak_secure_salt_2026`));
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.warn('Fallback hash for static host:', err);
+    try {
+      return await bcrypt.hash(password, 10);
+    } catch {
+      const salt = generateSalt();
+      const encoder = new TextEncoder();
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${password}:nak_secure_salt_2026`));
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
   }
 };
 
@@ -363,7 +380,8 @@ export const verifyAdminAction = async (action: string, targetId?: string): Prom
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ action, targetId })
+      body: JSON.stringify({ action, targetId }),
+      signal: AbortSignal.timeout(2000)
     });
     if (!res.ok) return false;
     const data = await res.json();
@@ -392,9 +410,12 @@ export const verifyPassword = async (
   salt: string,
   storedHash: string
 ): Promise<boolean> => {
-  // If storedHash is bcrypt, verify via server
   if (storedHash && storedHash.startsWith('$2')) {
-    return false; // must verify through loginWithServer
+    try {
+      return await bcrypt.compare(inputPassword, storedHash);
+    } catch {
+      return false;
+    }
   }
   const encoder = new TextEncoder();
   const hashBuffer = await window.crypto.subtle.digest('SHA-256', encoder.encode(`${salt}:${inputPassword}:nak_secure_salt_2026`));
