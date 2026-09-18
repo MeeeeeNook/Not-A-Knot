@@ -4,7 +4,8 @@ import { SellerUser } from '../types';
 import { loginWithServer, ROOT_ADMIN_USERNAME, isRootAdminUsername, hashUsername } from '../utils/auth';
 import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
-import { updateSellerPresence } from '../firebase';
+import { updateSellerPresence, fetchSellerByUsername } from '../firebase';
+import { safeStorageGetItem } from '../utils/storageHelper';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -81,11 +82,34 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
       // Find seller in list (supports matching by plain username or hashed username)
       const cleanUsernameHash = await hashUsername(cleanUsername);
-      const matchedSeller = sellers.find(
+      let matchedSeller = sellers.find(
         (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
       );
 
-      // Perform server-side authentication (Rate-limited, never exposes hash or compares on client)
+      // Always query Firestore directly for the freshest seller data to ensure newly changed password hash is used
+      try {
+        const freshSeller = await fetchSellerByUsername(cleanUsername);
+        if (freshSeller) {
+          matchedSeller = freshSeller;
+        }
+      } catch (e) {
+        console.warn('Could not fetch fresh seller from Firestore:', e);
+      }
+
+      // If still not found, check local storage
+      if (!matchedSeller) {
+        try {
+          const cached = safeStorageGetItem('nak_sellers_list');
+          if (cached) {
+            const list: SellerUser[] = JSON.parse(cached);
+            matchedSeller = list.find(
+              (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
+            );
+          }
+        } catch {}
+      }
+
+      // Perform server-side authentication (Rate-limited, authoritative bcrypt & salted SHA256)
       const loginRes = await loginWithServer(cleanUsername, cleanPassword, matchedSeller, rememberMe);
 
       if (!loginRes.success || !loginRes.user) {

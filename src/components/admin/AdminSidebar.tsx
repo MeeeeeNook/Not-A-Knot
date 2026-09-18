@@ -4,7 +4,6 @@ import { SellerUser, SiteContentConfig } from '../../types';
 
 export type AdminTabType =
   | 'dashboard'
-  | 'analytics'
   | 'orders'
   | 'manual_order'
   | 'vouchers'
@@ -151,26 +150,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>Bảng điều khiển</span>
-              </button>
-
-              <button
-                onClick={() => onSwitchTab('analytics')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'analytics'
-                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Truy cập & GA4</span>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                    activeTab === 'analytics'
-                      ? 'bg-black/10 text-slate-950 border-black/15'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                  }`}
-                >
-                  GA4 Live
-                </span>
               </button>
             </div>
 

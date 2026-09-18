@@ -722,7 +722,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       className="min-h-screen bg-[#FAF8F5] text-neutral-900 font-sans pb-24"
     >
       {/* Top Breadcrumb & Navigation Bar */}
-      <div className="bg-white border-b border-neutral-200/80 sticky top-14 z-20 shadow-2xs">
+      <div className="bg-white/95 backdrop-blur-md border-b border-neutral-200/80 sticky top-14 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           <button
             onClick={onBack}
@@ -759,25 +759,50 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
               onClick={() => setProductCompareModalOpen(true)}
-              className="relative aspect-square w-full sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-xs group select-none touch-pan-y mx-auto cursor-zoom-in"
+              className="relative aspect-square w-full sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-xs group select-none touch-pan-y mx-auto cursor-zoom-in isolate"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Zoom & Compare Overlay Button (Positioned safely inside frame) */}
+              {/* Promo / Discount Badge (Positioned safely inside top-left of image frame) */}
+              {(() => {
+                const hasOrig = product.originalPrice && product.originalPrice > product.price;
+                const pct = hasOrig 
+                  ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+                  : 0;
+                const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
+
+                if (badgeText) {
+                  return (
+                    <div className="absolute top-2.5 left-2.5 z-10 bg-rose-600 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-md max-w-[45%] truncate pointer-events-none border border-white/20">
+                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
+                    </div>
+                  );
+                }
+                if (product.isEvent0209) {
+                  return (
+                    <div className="absolute top-2.5 left-2.5 z-10 bg-brand-red text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-xl shadow-md max-w-[45%] truncate pointer-events-none border border-white/20">
+                      Bản giới hạn 02.09
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Zoom & Compare Overlay Button (Positioned safely inside top-right of image frame) */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setProductCompareModalOpen(true);
                 }}
-                className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
+                className="absolute top-2.5 right-2.5 z-10 px-2.5 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 active:scale-95 max-w-[45%]"
                 title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
               >
-                <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Phóng to & So sánh</span>
-                <span className="sm:hidden">Phóng to</span>
+                <ZoomIn className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="hidden sm:inline truncate">Phóng to & So sánh</span>
+                <span className="sm:hidden truncate">Phóng to</span>
               </button>
 
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
@@ -817,7 +842,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               {images.length > 1 && (
                 <>
                   {/* Left arrow button */}
-                  <div className="absolute left-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -834,7 +859,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </div>
 
                   {/* Right arrow button */}
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
                     <button
                       type="button"
                       onClick={(e) => {

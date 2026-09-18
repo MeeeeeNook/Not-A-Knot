@@ -1029,11 +1029,22 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           {/* Change Password Inline Trigger */}
                           <button
                             type="button"
-                            onClick={() => { alert('Tính năng đổi mật khẩu trên ứng dụng đã bị vô hiệu hóa vì lý do bảo mật. Vui lòng đổi mật khẩu trong Firebase Console (Authentication).'); }}
-                            className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                            onClick={() => {
+                              if (isChangingPassword) {
+                                setPasswordTargetSellerId(null);
+                                setNewPasswordInput('');
+                              } else {
+                                handleStartPasswordChange(seller);
+                              }
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
+                              isChangingPassword
+                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                            }`}
                             title="Đổi mật khẩu"
                           >
-                            <Key className="w-3.5 h-3.5 text-amber-700" />
+                            <Key className={`w-3.5 h-3.5 ${isChangingPassword ? 'text-white' : 'text-amber-700'}`} />
                             <span>Đổi MK</span>
                           </button>
 

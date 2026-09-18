@@ -8,7 +8,6 @@ import { COLLECTIONS_DATA } from '../data/collections';
 import { DEFAULT_SITE_CONTENT } from '../data/siteContent';
 import { AdminManualOrderForm } from './AdminManualOrderForm';
 import { AdminDashboard } from './AdminDashboard';
-import { AdminAnalyticsDashboard } from './AdminAnalyticsDashboard';
 import { AdminOrderDetailsModal } from './AdminOrderDetailsModal';
 import { AdminEditOrderModal } from './AdminEditOrderModal';
 import { AdminReceiptUploadModal } from './AdminReceiptUploadModal';
@@ -117,7 +116,6 @@ interface AdminPageProps {
 
 export type AdminTabType =
   | 'dashboard'
-  | 'analytics'
   | 'orders'
   | 'manual_order'
   | 'vouchers'
@@ -2915,8 +2913,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     switch (activeTab) {
       case 'dashboard':
         return 'Tổng quan';
-      case 'analytics':
-        return 'Truy cập & GA4';
       case 'orders':
         return 'Đơn hàng';
       case 'manual_order':
@@ -5860,16 +5856,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             sellers={sellers}
             onNavigateToOrders={() => handleSwitchTab('orders')}
             onNavigateToManualOrder={() => handleSwitchTab('manual_order')}
-          />
-        )}
-
-        {/* ======================================================== */}
-        {/* TAB: INTERNAL ANALYTICS & GA4 DASHBOARD */}
-        {/* ======================================================== */}
-        {activeTab === 'analytics' && (
-          <AdminAnalyticsDashboard
-            products={products}
-            orders={activeOrders}
           />
         )}
 

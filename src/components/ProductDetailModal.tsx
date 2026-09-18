@@ -322,8 +322,33 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="bg-neutral-50 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-neutral-200">
             <div 
               onClick={() => setCompareModalOpen(true)}
-              className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in"
+              className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in isolate"
             >
+              {/* Promo / Discount Badge safely inside top-left of image frame */}
+              {(() => {
+                const hasOrig = product.originalPrice && product.originalPrice > product.price;
+                const pct = hasOrig 
+                  ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
+                  : 0;
+                const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
+
+                if (badgeText) {
+                  return (
+                    <div className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-md z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
+                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
+                    </div>
+                  );
+                }
+                if (product.isEvent0209) {
+                  return (
+                    <div className="absolute top-2.5 left-2.5 bg-brand-red text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-xl shadow-sm z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
+                      Bản giới hạn 02.09
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               {/* Zoom & Compare Overlay Button */}
               <button
                 type="button"
@@ -331,11 +356,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   e.stopPropagation();
                   setCompareModalOpen(true);
                 }}
-                className="absolute top-2.5 right-2.5 z-20 px-2 sm:px-2.5 py-1 bg-black/60 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 hover:scale-105"
+                className="absolute top-2.5 right-2.5 z-10 px-2 sm:px-2.5 py-1 bg-black/60 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 active:scale-95 max-w-[45%]"
                 title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
               >
-                <ZoomIn className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Phóng to</span>
+                <ZoomIn className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="hidden sm:inline truncate">Phóng to</span>
               </button>
 
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
@@ -366,7 +391,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <>
                   {/* Left edge hover zone */}
                   <div
-                    className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 z-20 flex items-center justify-start pl-2.5 group/edge-left cursor-pointer select-none"
+                    className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 z-10 flex items-center justify-start pl-2.5 group/edge-left cursor-pointer select-none"
                     onClick={() => paginate(-1)}
                     title="Ảnh trước"
                   >
@@ -384,7 +409,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
                   {/* Right edge hover zone */}
                   <div
-                    className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 z-20 flex items-center justify-end pr-2.5 group/edge-right cursor-pointer select-none"
+                    className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 z-10 flex items-center justify-end pr-2.5 group/edge-right cursor-pointer select-none"
                     onClick={() => paginate(1)}
                     title="Ảnh sau"
                   >
@@ -401,17 +426,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   </div>
                 </>
               )}
-
-              {/* Promo Badge on top left of image */}
-              {product.discountBadge ? (
-                <div className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-md z-10 max-w-[85%] truncate">
-                  {product.discountBadge}
-                </div>
-              ) : product.isEvent0209 ? (
-                <div className="absolute top-2.5 left-2.5 bg-brand-red text-white text-xs font-semibold px-2.5 py-1 rounded-lg shadow-sm z-10">
-                  Bản giới hạn 02.09
-                </div>
-              ) : null}
             </div>
 
             {/* Thumbnail switcher */}

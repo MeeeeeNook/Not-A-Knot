@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Product, CategoryItem, SellerUser } from '../types';
 import { StoredOrder } from '../firebase';
 import { deduplicateSellers } from '../utils/auth';
-import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart } from 'lucide-react';
+import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart, ExternalLink, BarChart3 } from 'lucide-react';
 
 const SLICE_COLORS = [
   '#2563EB', // Blue
@@ -1397,6 +1397,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
         </div>
+      </div>
+
+      {/* Google Analytics 4 Dashboard External Link Button */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent p-5 rounded-2xl border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-900">
+            <BarChart3 className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 tracking-tight">Google Analytics 4</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/80">
+                G-G8Z5Z8R1CF
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Theo dõi realtime khách truy cập, lưu lượng truy cập, tỷ lệ chuyển đổi và hành vi người dùng trên Google Analytics chính thức.
+            </p>
+          </div>
+        </div>
+
+        <a
+          href="https://analytics.google.com/analytics/web/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-sm hover:shadow transition-all shrink-0 cursor-pointer"
+        >
+          <span>Mở Google Analytics</span>
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
       </div>
 
     </div>

@@ -1,4 +1,5 @@
 import { SellerUser } from '../types';
+import { getAuth, signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 
 // Constants for Client Session Storage
 const JWT_STORAGE_KEY = 'notaknot_admin_jwt_token';
@@ -83,77 +84,8 @@ export const loginWithServer = async (
     return { success: false, error: 'Vui lòng nhập mật khẩu.' };
   }
 
-  const auth = getAuth();
-  let idToken = '';
-  let firebaseAuthFailed = false;
-
-  // 1. Try Firebase Email/Password sign-in
-  try {
-    const email = `${cleanUsername}@notaknot.local`;
-    const userCredential = await signInWithEmailAndPassword(auth, email, cleanPassword);
-    idToken = await userCredential.user.getIdToken();
-  } catch (error: any) {
-    console.warn('Firebase email/password auth error:', error?.code || error);
-    firebaseAuthFailed = true;
-
-    // If explicit wrong password for existing account
-    if (error.code === 'auth/wrong-password') {
-      return {
-        success: false,
-        error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-      };
-    }
-  }
-
-  // 2. If Email/Password auth failed/disabled, verify against Firestore seller record or root admin credentials
-  if (firebaseAuthFailed || !idToken) {
-    // Acquire Firebase anonymous token if possible so Firestore client has an active session
-    try {
-      if (!auth.currentUser) {
-        const anon = await signInAnonymously(auth);
-        idToken = await anon.user.getIdToken();
-      } else {
-        idToken = await auth.currentUser.getIdToken();
-      }
-    } catch (e) {
-      console.warn('Anonymous auth fallback error:', e);
-    }
-
-    // Verify root admin or stored seller password hash
-    const isRoot = isRootAdminUsername(cleanUsername) || Boolean(sellerData?.isRootAdmin);
-    if (isRoot) {
-      const isPlainMatch = cleanPassword === '11242096';
-      const isHashMatch = await verifyPassword(
-        cleanPassword,
-        'nak_root_salt_mc2026',
-        'edccde77eea289ae456b004d35b9abebba544bf3d21979848600ba2966f162cd'
-      );
-      if (!isPlainMatch && !isHashMatch) {
-        return {
-          success: false,
-          error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-        };
-      }
-    } else if (sellerData && sellerData.passwordHash && sellerData.passwordSalt) {
-      const isValid = await verifyPassword(cleanPassword, sellerData.passwordSalt, sellerData.passwordHash);
-      if (!isValid) {
-        return {
-          success: false,
-          error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
-        };
-      }
-    } else {
-      // Basic sanity check for initial default accounts or root admin
-      if (cleanPassword.length < 4) {
-        return {
-          success: false,
-          error: 'Mật khẩu tối thiểu 4 ký tự.'
-        };
-      }
-    }
-  }
-
-  // 3. Issue server JWT token via /api/auth/login if backend is available
+  // 1. Authoritative Server-Side Verification FIRST
+  // The server handles bcrypt hashes (newly changed passwords), salted legacy SHA-256 hashes, root fallback, and JWT generation
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -161,7 +93,6 @@ export const loginWithServer = async (
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        idToken,
         username: cleanUsername,
         password: cleanPassword,
         sellerData,
@@ -173,25 +104,73 @@ export const loginWithServer = async (
       const data = await res.json();
       if (data.success && data.token && data.user) {
         saveAdminSession(data.token, data.user, rememberMe);
+
+        // Asynchronously ensure Firebase client is authenticated anonymously if needed
+        try {
+          const auth = getAuth();
+          if (!auth.currentUser) {
+            await signInAnonymously(auth);
+          }
+        } catch {}
+
         return {
           success: true,
           token: data.token,
           user: data.user
         };
       }
-    }
-
-    try {
-      const errData = await res.json();
-      if (errData && errData.error && res.status === 401) {
-        return { success: false, error: errData.error };
+    } else {
+      const errData = await res.json().catch(() => null);
+      if (res.status === 401 || (errData && errData.error)) {
+        return {
+          success: false,
+          error: errData?.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+        };
       }
-    } catch (e) {}
+    }
   } catch (err) {
-    console.warn('Backend login endpoint unavailable, creating secure client session:', err);
+    console.warn('Backend login endpoint unreachable, trying offline fallback:', err);
   }
 
-  // 4. Fallback client session
+  // 2. Offline Fallback (only used if backend server is unreachable)
+  const auth = getAuth();
+  let firebaseAuthFailed = false;
+
+  try {
+    const email = `${cleanUsername}@notaknot.local`;
+    await signInWithEmailAndPassword(auth, email, cleanPassword);
+  } catch (error: any) {
+    firebaseAuthFailed = true;
+  }
+
+  if (firebaseAuthFailed) {
+    let isMatch = false;
+
+    if (sellerData?.passwordHash && sellerData?.passwordSalt && !sellerData.passwordHash.startsWith('$2')) {
+      isMatch = await verifyPassword(cleanPassword, sellerData.passwordSalt, sellerData.passwordHash);
+    } else if (sellerData?.passwordHash?.startsWith('$2')) {
+      // Modern bcrypt passwords require server-side verification
+      return {
+        success: false,
+        error: 'Máy chủ xác thực không phản hồi. Vui lòng kiểm tra lại kết nối mạng.'
+      };
+    }
+
+    if (!isMatch) {
+      return {
+        success: false,
+        error: 'Tên đăng nhập hoặc mật khẩu không chính xác.'
+      };
+    }
+  }
+
+  // Ensure Firebase anonymous sign-in for offline fallback
+  try {
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+    }
+  } catch {}
+
   const isRoot = isRootAdminUsername(cleanUsername) || Boolean(sellerData?.isRootAdmin);
   const userPayload: Partial<SellerUser> = {
     id: sellerData?.id || `seller-${cleanUsername}`,
@@ -569,5 +548,5 @@ export const deduplicateSellers = (list: SellerUser[]): SellerUser[] => {
     });
   }
   return result;
-};import { getAuth, signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+};
 
