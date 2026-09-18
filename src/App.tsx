@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Navbar } from './components/Navbar';
 import { HeroBanners } from './components/HeroBanners';
 import { LandingProductsCollection } from './components/LandingProductsCollection';
@@ -1697,6 +1698,9 @@ export default function App() {
         items={flyingCartItems}
         onItemComplete={handleFlyingItemComplete}
       />
+
+      {/* Vercel Speed Insights */}
+      <SpeedInsights />
     </div>
   );
 }
