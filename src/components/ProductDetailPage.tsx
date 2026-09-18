@@ -1343,26 +1343,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           {/* Tab 2: Chính sách Phí vận chuyển */}
           {activeTab === 'shipping' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
                     <Truck className="w-4 h-4 text-emerald-600" />
-                    <span>Quận Hai Bà Trưng</span>
+                    <span>Toàn bộ Hà Nội</span>
                   </div>
                   <div className="text-base font-black text-emerald-600 font-mono">0đ (Miễn phí ship)</div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Miễn phí giao hàng cho tất cả đơn hàng tại địa chỉ quận Hai Bà Trưng, Hà Nội.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
-                    <Truck className="w-4 h-4 text-amber-700" />
-                    <span>Các quận huyện Hà Nội</span>
-                  </div>
-                  <div className="text-base font-black text-amber-700 font-mono">5.000đ</div>
-                  <p className="text-neutral-600 leading-relaxed">
-                    Áp dụng mức phí 5.000đ cho tất cả các quận, huyện còn lại thuộc khu vực Hà Nội.
+                    Miễn phí giao hàng cho tất cả đơn hàng tại Hà Nội, bao gồm toàn bộ các quận, huyện và thị xã.
                   </p>
                 </div>
 
