@@ -78,8 +78,16 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         sections = DEFAULT_SITE_CONTENT.landingProductSections || [];
       }
     }
+    const cleanFooterDesc =
+      !base.footerDescription ||
+      /Paracord|EDC|bảo hành nút thắt/i.test(base.footerDescription) ||
+      !base.footerDescription.includes('Kinh tế Quốc dân')
+        ? DEFAULT_SITE_CONTENT.footerDescription
+        : base.footerDescription;
+
     return {
       ...base,
+      footerDescription: cleanFooterDesc,
       landingProductSections: sections,
       landingProducts: sections[0] || base.landingProducts
     };

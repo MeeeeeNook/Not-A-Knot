@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -25,8 +25,10 @@ import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
+import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
+import { ensureGmailDomain } from '../utils/emailService';
 import {
   MaintenanceConfig
 } from '../types';
@@ -132,7 +134,8 @@ export type AdminTabType =
   | 'logs'
   | 'backup'
   | 'firebase'
-  | 'maintenance';
+  | 'maintenance'
+  | 'email';
 
 export const AdminPage: React.FC<AdminPageProps> = ({
   products,
@@ -164,8 +167,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Switch tab with simulated enterprise loading transition
   const handleSwitchTab = (tab: AdminTabType) => {
-    if (tab === 'sellers' && !isRootAdmin) {
-      alert('Chỉ Admin Gốc mới có quyền truy cập trang Quản trị.');
+    if ((tab === 'sellers' || tab === 'email' || tab === 'maintenance') && !isRootAdmin) {
+      alert('Chỉ Root Admin mới có quyền truy cập mục Quản trị này.');
       return;
     }
     if (tab === activeTab && !isAddingNew && !isAddingCategory) return;
@@ -290,6 +293,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [tableZoom, setTableZoom] = useState<number>(100);
   const [editingOrder, setEditingOrder] = useState<StoredOrder | null>(null);
   const [receiptPromptModal, setReceiptPromptModal] = useState<{ order: StoredOrder; isPromptOnPaid?: boolean } | null>(null);
+  const [sendEmailOrderModal, setSendEmailOrderModal] = useState<{ order: StoredOrder; email: string; isSending: boolean } | null>(null);
+
+  const handleOpenSendEmailModal = (order: StoredOrder) => {
+    const rawEmail = (order as any).email || (order as any).customerEmail || '';
+    const initialEmail = rawEmail ? ensureGmailDomain(rawEmail) : '';
+    setSendEmailOrderModal({
+      order,
+      email: initialEmail,
+      isSending: false
+    });
+  };
+
+  const handleConfirmSendOrderEmail = async () => {
+    if (!sendEmailOrderModal) return;
+    const targetEmail = ensureGmailDomain(sendEmailOrderModal.email);
+    if (!targetEmail) {
+      showAdminToast('Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+    setSendEmailOrderModal((prev) => prev ? { ...prev, email: targetEmail, isSending: true } : null);
+    try {
+      const res = await fetch('/api/email/send-order-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderData: sendEmailOrderModal.order,
+          recipientEmail: targetEmail,
+          isManualAdmin: true
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showAdminToast(`Đã gửi email xác nhận đơn #${sendEmailOrderModal.order.id} tới ${targetEmail}!`);
+        setSendEmailOrderModal(null);
+      } else {
+        showAdminToast(data.error || 'Không thể gửi email lúc này');
+        setSendEmailOrderModal((prev) => prev ? { ...prev, isSending: false } : null);
+      }
+    } catch (err: any) {
+      showAdminToast(err.message || 'Lỗi kết nối máy chủ');
+      setSendEmailOrderModal((prev) => prev ? { ...prev, isSending: false } : null);
+    }
+  };
   const [orderContextMenu, setOrderContextMenu] = useState<{ x: number; y: number; order: StoredOrder } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -3038,6 +3084,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Sao lưu & Phục hồi';
       case 'sellers':
         return 'Quản trị viên';
+      case 'email':
+        return 'Cài đặt Email & SMTP';
+      case 'maintenance':
+        return 'Chế độ bảo trì (Maintenance)';
       case 'logs':
         return 'System Log';
       case 'vouchers':
@@ -6006,15 +6056,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB 3: QUẢN LÝ NGƯỜI BÁN & ĐỘI NGŨ (9 THÀNH VIÊN) */}
+        {/* TAB 3: QUẢN LÝ NGƯỜI BÁN & ĐỘI NGŨ (CHỈ ROOT ADMIN) */}
         {/* ======================================================== */}
         {activeTab === 'sellers' && (
-          <AdminSellersManager
-            sellers={sellers}
-            orders={activeOrders}
-            currentAdmin={currentSeller || (sellers[0] || null)}
-            onUpdateSellers={handleUpdateSellers}
-          />
+          isRootAdmin ? (
+            <AdminSellersManager
+              sellers={sellers}
+              orders={activeOrders}
+              currentAdmin={currentSeller || (sellers[0] || null)}
+              onUpdateSellers={handleUpdateSellers}
+            />
+          ) : null
         )}
 
         {/* ======================================================== */}
@@ -6886,6 +6938,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
 
+                              {/* Gửi email (Chỉ Root Admin) */}
+                              {isRootAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSendEmailModal(ord)}
+                                  className="p-2 text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 cursor-pointer"
+                                  title="Gửi email đơn hàng"
+                                >
+                                  <Mail className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
                               {/* Chi tiết */}
                               <button
                                 type="button"
@@ -7388,6 +7452,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               onClick={(e) => e.stopPropagation()}
                             >
                               <div className="flex items-center justify-center gap-1.5">
+                                {/* Gửi email (Chỉ Root Admin) */}
+                                {isRootAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSendEmailModal(ord)}
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg border border-amber-200 transition-colors cursor-pointer"
+                                    title="Gửi email đơn hàng"
+                                    aria-label="Gửi email đơn hàng"
+                                  >
+                                    <Mail className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => setInspectingOrder(ord)}
@@ -7540,6 +7616,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <span>Chi tiết</span>
                     <span className="text-[10px] text-slate-400 font-normal">Sửa & In</span>
                   </button>
+
+                  {isRootAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleOpenSendEmailModal(orderContextMenu.order);
+                        setOrderContextMenu(null);
+                      }}
+                      className="w-full px-3.5 py-1.5 text-left font-bold text-amber-800 hover:bg-amber-50 flex items-center justify-between transition-colors cursor-pointer"
+                    >
+                      <span>Gửi email đơn hàng</span>
+                      <Mail className="w-3.5 h-3.5 text-amber-600" />
+                    </button>
+                  )}
                 </div>
 
                 {/* 2. Chọn nhiều */}
@@ -8030,16 +8120,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB: MAINTENANCE MODE */}
+        {/* TAB: CÀI ĐẶT EMAIL (CHỈ ROOT ADMIN) */}
+        {/* ======================================================== */}
+        {activeTab === 'email' && (
+          isRootAdmin ? (
+            <AdminEmailSettingsPage onNotify={showAdminToast} />
+          ) : null
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: MAINTENANCE MODE (CHỈ ROOT ADMIN) */}
         {/* ======================================================== */}
         {activeTab === 'maintenance' && (
-          <AdminMaintenanceTab
-            maintenanceConfig={maintenanceConfig}
-            onSave={handleSaveMaintenanceConfig}
-            onNotify={showAdminToast}
-            brandName={siteContent?.brandName}
-            logoUrl={siteContent?.logoUrl}
-          />
+          isRootAdmin ? (
+            <AdminMaintenanceTab
+              maintenanceConfig={maintenanceConfig}
+              onSave={handleSaveMaintenanceConfig}
+              onNotify={showAdminToast}
+              brandName={siteContent?.brandName}
+              logoUrl={siteContent?.logoUrl}
+            />
+          ) : null
         )}
 
           </>
@@ -8127,6 +8228,96 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           onSave={handleSaveEditedOrder}
           onSaved={handleSaveEditedOrder}
         />
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: ROOT ADMIN SEND ORDER CONFIRMATION EMAIL */}
+      {/* ======================================================== */}
+      {sendEmailOrderModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setSendEmailOrderModal(null)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white p-6 rounded-3xl border border-slate-200 shadow-2xl space-y-4 animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2 text-slate-900">
+                <Mail className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-bold">Gửi Email Đơn Hàng #{sendEmailOrderModal.order.id}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSendEmailOrderModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-slate-500 block mb-0.5">Khách hàng:</span>
+                <p className="font-bold text-slate-800">
+                  {sendEmailOrderModal.order.name || sendEmailOrderModal.order.customerName || 'Khách vãng lai'} • {sendEmailOrderModal.order.phone || 'Chưa có SĐT'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-medium mb-1">
+                  Địa chỉ email người nhận:
+                </label>
+                <input
+                  type="email"
+                  value={sendEmailOrderModal.email}
+                  onChange={(e) =>
+                    setSendEmailOrderModal((prev) => (prev ? { ...prev, email: e.target.value } : null))
+                  }
+                  onBlur={() => {
+                    setSendEmailOrderModal((prev) =>
+                      prev && prev.email ? { ...prev, email: ensureGmailDomain(prev.email) } : prev
+                    );
+                  }}
+                  placeholder="Nhập email nhận đơn (ví dụ: abc hoặc abc@gmail.com)..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white focus:border-amber-500 focus:outline-none"
+                />
+                <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50/80 border border-amber-200/80 rounded-lg px-2.5 py-1.5 font-medium flex items-center gap-1">
+                  <span>💡 Tự động điền <strong className="font-bold">@gmail.com</strong> nếu không nhập tên miền (ví dụ: gõ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc</code> ➔ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc@gmail.com</code>).</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSendEmailOrderModal(null)}
+                disabled={sendEmailOrderModal.isSending}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSendOrderEmail}
+                disabled={sendEmailOrderModal.isSending}
+                className="px-4 py-2 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {sendEmailOrderModal.isSending ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang gửi...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Gửi Email Ngay</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ======================================================== */}

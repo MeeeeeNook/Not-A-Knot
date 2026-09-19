@@ -87,6 +87,9 @@ import {
 
 const CURRENT_HANOI_SHIPPING_POLICY = 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.';
 
+const CURRENT_PROJECT_DISCLAIMER_FOOTER =
+  'Not A Knot - Even More.\nNot A Knot cùng hệ thống website và các kênh truyền thông liên quan là dự án học tập và bài tập nhóm thuộc khuôn khổ môn Quản trị tác nghiệp Thương mại điện tử - Đại học Kinh tế Quốc dân. Dự án được triển khai hoàn toàn nhằm mục đích nghiên cứu, thực hành môn học và không mang tính chất kinh doanh thương mại.';
+
 function migrateLegacyShippingPolicy(content: SiteContentConfig): SiteContentConfig {
   const legacyPolicyPattern = /Hai Bà Trưng|5\.000\s*đ|các quận huyện Hà Nội khác/i;
   const faqs = Array.isArray(content.faqs)
@@ -99,8 +102,14 @@ function migrateLegacyShippingPolicy(content: SiteContentConfig): SiteContentCon
       })
     : content.faqs;
 
+  const isOldParacordFooter =
+    !content.footerDescription ||
+    /Paracord|EDC|bảo hành nút thắt/i.test(content.footerDescription) ||
+    !content.footerDescription.includes('Kinh tế Quốc dân');
+
   return {
     ...content,
+    footerDescription: isOldParacordFooter ? CURRENT_PROJECT_DISCLAIMER_FOOTER : content.footerDescription,
     shippingPolicy:
       !content.shippingPolicy || legacyPolicyPattern.test(content.shippingPolicy)
         ? CURRENT_HANOI_SHIPPING_POLICY

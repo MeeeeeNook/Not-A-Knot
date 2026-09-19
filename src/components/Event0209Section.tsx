@@ -394,6 +394,9 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
                 placeholder="Ví dụ: Giao giờ hành chính, gọi trước..."
                 className="w-full px-4 py-3 bg-neutral-800/80 border border-neutral-700 rounded-xl text-white placeholder-neutral-500 text-sm focus:outline-none focus:border-white transition-colors"
               />
+              <p className="mt-2 text-xs text-neutral-400 leading-normal">
+                Thông tin của bạn được bảo mật và chỉ được thu thập nhằm phục vụ mục đích xử lý đơn hàng.
+              </p>
             </div>
 
             {/* Error Message */}

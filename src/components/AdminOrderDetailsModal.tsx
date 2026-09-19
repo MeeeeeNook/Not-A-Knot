@@ -10,7 +10,7 @@ import {
   copyOrderSlipToClipboard
 } from '../utils/printOrderSlip';
 import { LoadingImage } from './LoadingImage';
-import { sendOrderConfirmationEmail } from '../utils/emailService';
+import { sendOrderConfirmationEmail, ensureGmailDomain } from '../utils/emailService';
 
 interface AdminOrderDetailsModalProps {
   order: StoredOrder;
@@ -42,13 +42,13 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   };
 
   const handleSendOrderEmail = async () => {
-    let targetEmail = order.email || (order as any).customerEmail;
-    if (!targetEmail || !targetEmail.includes('@')) {
-      const input = window.prompt('Nhập địa chỉ email khách hàng (hoặc email quản trị) để nhận hóa đơn xác nhận:', order.email || '');
-      if (!input || !input.trim().includes('@')) {
+    let targetEmail = ensureGmailDomain(order.email || (order as any).customerEmail || '');
+    if (!targetEmail) {
+      const input = window.prompt('Nhập địa chỉ email khách hàng (ví dụ: abc ➔ abc@gmail.com):', order.email || '');
+      if (!input || !input.trim()) {
         return;
       }
-      targetEmail = input.trim();
+      targetEmail = ensureGmailDomain(input.trim());
     }
 
     setIsSendingEmail(true);

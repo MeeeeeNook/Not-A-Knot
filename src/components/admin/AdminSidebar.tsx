@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronsLeft, ArrowLeft, Wrench } from 'lucide-react';
+import { ChevronsLeft, ArrowLeft, Wrench, Mail, ShieldAlert } from 'lucide-react';
 import { SellerUser, SiteContentConfig } from '../../types';
 
 export type AdminTabType =
@@ -20,7 +20,8 @@ export type AdminTabType =
   | 'logs'
   | 'backup'
   | 'firebase'
-  | 'maintenance';
+  | 'maintenance'
+  | 'email';
 
 interface AdminSidebarProps {
   activeTab: AdminTabType;
@@ -428,7 +429,27 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 </span>
               </button>
 
-              {isRootAdmin && (
+              <button
+                onClick={() => onSwitchTab('firebase')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'firebase'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <span>Firebase Settings</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-2xs shrink-0" title="Firebase Online" />
+              </button>
+            </div>
+
+            {/* SECTION 6: QUẢN TRỊ (CHỈ ROOT ADMIN MỚI CÓ QUYỀN TRUY CẬP) */}
+            {isRootAdmin && (
+              <div className="space-y-1 pt-2 border-t border-slate-200/80">
+                <div className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  QUẢN TRỊ
+                </div>
+
+                {/* Page 1: Quản trị (Sellers / Users Manager) */}
                 <button
                   onClick={() => onSwitchTab('sellers')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -448,43 +469,56 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     {sellersCount}
                   </span>
                 </button>
-              )}
 
-              <button
-                onClick={() => onSwitchTab('firebase')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'firebase'
-                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <span>Firebase Settings</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-2xs shrink-0" title="Firebase Online" />
-              </button>
+                {/* Page 2: Email Settings */}
+                <button
+                  onClick={() => onSwitchTab('email')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'email'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Email</span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                      activeTab === 'email'
+                        ? 'bg-black/10 text-slate-950 border-black/15'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                    }`}
+                  >
+                    SMTP
+                  </span>
+                </button>
 
-              <button
-                onClick={() => onSwitchTab('maintenance')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'maintenance'
-                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Wrench className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Maintenance mode</span>
-                </div>
-                {isMaintenanceActive ? (
-                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-rose-500 text-white animate-pulse shadow-xs">
-                    Đang bật
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                    Tắt
-                  </span>
-                )}
-              </button>
-            </div>
+                {/* Page 3: Maintenance mode */}
+                <button
+                  onClick={() => onSwitchTab('maintenance')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'maintenance'
+                      ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Maintenance mode</span>
+                  </div>
+                  {isMaintenanceActive ? (
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-rose-500 text-white animate-pulse shadow-xs">
+                      Đang bật
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                      Tắt
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </nav>
         </div>
 

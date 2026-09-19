@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
-import { sendOrderConfirmationEmail } from '../utils/emailService';
+import { sendOrderConfirmationEmail, ensureGmailDomain } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
   trackGA4Purchase,
@@ -116,6 +116,60 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [placedTotal, setPlacedTotal] = useState<number>(0);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Customer Email Option on Success Screen (Toggleable via Admin Settings)
+  const [showEmailOption, setShowEmailOption] = useState<boolean>(true);
+  const [successEmailInput, setSuccessEmailInput] = useState<string>('');
+  const [isSendingSuccessEmail, setIsSendingSuccessEmail] = useState<boolean>(false);
+  const [isSuccessEmailSent, setIsSuccessEmailSent] = useState<boolean>(false);
+  const [successEmailError, setSuccessEmailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (step === 'success') {
+      fetch('/api/email/settings')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.settings) {
+            setShowEmailOption(Boolean(data.settings.customerOrderEmailOption));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [step]);
+
+  const handleSendSuccessEmail = async () => {
+    const formattedEmail = ensureGmailDomain(successEmailInput);
+    if (!formattedEmail) {
+      setSuccessEmailError('Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+    if (!placedOrder) return;
+
+    setSuccessEmailInput(formattedEmail);
+    setIsSendingSuccessEmail(true);
+    setSuccessEmailError(null);
+    try {
+      const res = await fetch('/api/email/send-order-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderData: placedOrder,
+          recipientEmail: formattedEmail,
+          isCustomerRequest: true
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSuccessEmailSent(true);
+      } else {
+        setSuccessEmailError(data.error || 'Không thể gửi email lúc này.');
+      }
+    } catch (err: any) {
+      setSuccessEmailError(err.message || 'Lỗi mạng khi gửi email.');
+    } finally {
+      setIsSendingSuccessEmail(false);
+    }
+  };
 
   // Bank Configuration
   const bankConfig = siteContent?.bankAccount || {
@@ -370,23 +424,34 @@ export const CartPage: React.FC<CartPageProps> = ({
     const trackingCode = generateTrackingNumber();
     const currentOrderTotal = grandTotal;
 
-    const itemDetails = availableCartItems.map((item) => ({
-      productId: item.product.id,
-      productName: item.product.name,
-      category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
-      quantity: item.quantity,
-      selectedColor: item.selectedColor,
-      selectedCharm: item.selectedCharm,
-      selectedCharmPrice: item.selectedCharmPrice,
-      selectedCharms: item.selectedCharms,
-      selectedOmamoris: item.selectedOmamoris,
-      selectedOmamoriPrice: item.selectedOmamoriPrice,
-      selectedKhoen: item.selectedKhoen,
-      selectedKhoenPrice: item.selectedKhoenPrice,
-      selectedSize: item.selectedSize,
-      customNote: item.customNote
-    }));
+    const itemDetails = availableCartItems.map((item) => {
+      const pImage =
+        item.selectedColorImage ||
+        item.product.colorOptions?.find((c: any) => c.name === item.selectedColor)?.image ||
+        item.product.image ||
+        (item.product.images && item.product.images[0]) ||
+        '';
+
+      return {
+        productId: item.product.id,
+        productName: item.product.name,
+        category: item.product.category,
+        imageUrl: pImage,
+        image: pImage,
+        price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
+        quantity: item.quantity,
+        selectedColor: item.selectedColor,
+        selectedCharm: item.selectedCharm,
+        selectedCharmPrice: item.selectedCharmPrice,
+        selectedCharms: item.selectedCharms,
+        selectedOmamoris: item.selectedOmamoris,
+        selectedOmamoriPrice: item.selectedOmamoriPrice,
+        selectedKhoen: item.selectedKhoen,
+        selectedKhoenPrice: item.selectedKhoenPrice,
+        selectedSize: item.selectedSize,
+        customNote: item.customNote
+      };
+    });
 
     const orderData: StoredOrder = {
       id: trackingCode,
@@ -396,8 +461,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       name: cleanName,
       customerName: cleanName,
       phone: cleanPhone,
-      email: customerEmail.trim() || undefined,
-      customerEmail: customerEmail.trim() || undefined,
+      email: customerEmail.trim() ? ensureGmailDomain(customerEmail) : undefined,
+      customerEmail: customerEmail.trim() ? ensureGmailDomain(customerEmail) : undefined,
       address: fullAddress,
       province: cleanProvince,
       district: cleanDistrict,
@@ -852,6 +917,9 @@ export const CartPage: React.FC<CartPageProps> = ({
                           placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi giao..."
                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-400 focus:outline-hidden transition-colors"
                         />
+                        <p className="mt-2 text-xs text-slate-400 leading-normal">
+                          Thông tin của bạn được bảo mật và chỉ được thu thập nhằm phục vụ mục đích xử lý đơn hàng.
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1036,6 +1104,53 @@ export const CartPage: React.FC<CartPageProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Optional: Gửi thông tin đơn hàng qua Email (Tối giản, không description, toggleable) */}
+              {showEmailOption && (
+                <div className="mt-5 max-w-md mx-auto">
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <input
+                      type="email"
+                      value={successEmailInput}
+                      onChange={(e) => {
+                        setSuccessEmailInput(e.target.value);
+                        if (successEmailError) setSuccessEmailError(null);
+                      }}
+                      onBlur={() => {
+                        if (successEmailInput) {
+                          setSuccessEmailInput(ensureGmailDomain(successEmailInput));
+                        }
+                      }}
+                      disabled={isSendingSuccessEmail || isSuccessEmailSent}
+                      placeholder="Nhập email nhận đơn (ví dụ: abc ➔ abc@gmail.com)..."
+                      className="w-full sm:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-slate-400 focus:outline-none disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendSuccessEmail}
+                      disabled={isSendingSuccessEmail || isSuccessEmailSent}
+                      className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
+                        isSuccessEmailSent
+                          ? 'bg-emerald-600 text-white cursor-default'
+                          : 'bg-slate-900 hover:bg-slate-800 active:bg-black text-white disabled:opacity-50'
+                      }`}
+                    >
+                      {isSendingSuccessEmail ? (
+                        'Đang gửi...'
+                      ) : isSuccessEmailSent ? (
+                        '✓ Đã gửi email'
+                      ) : (
+                        'Gửi thông tin đơn hàng qua Email'
+                      )}
+                    </button>
+                  </div>
+                  {successEmailError && (
+                    <p className="text-[11px] text-rose-600 mt-1.5 text-center font-medium">
+                      {successEmailError}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ========================================================= */}
@@ -1227,7 +1342,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-400 block text-xs">Số điện thoại:</span>
-                  <span className="font-mono font-bold text-slate-900">{placedOrder.phone}</span>
+                  <span className="font-mono font-bold text-slate-900 block mt-0.5">{placedOrder.phone}</span>
                 </div>
                 <div className="sm:col-span-2">
                   <span className="text-slate-400 block text-xs">Địa chỉ nhận:</span>
@@ -1236,21 +1351,66 @@ export const CartPage: React.FC<CartPageProps> = ({
               </div>
 
               {/* Items List */}
-              <div className="space-y-2 pt-4 border-t border-slate-100">
+              <div className="space-y-3 pt-4 border-t border-slate-100">
                 {placedOrder.itemDetails && placedOrder.itemDetails.length > 0 ? (
-                  placedOrder.itemDetails.map((it, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        <span className="font-bold text-slate-900">{it.productName}</span>
-                        <span className="text-slate-500">(x{it.quantity})</span>
-                        {it.selectedSize && <span className="text-slate-400">[{it.selectedSize}]</span>}
+                  placedOrder.itemDetails.map((it, idx) => {
+                    const optionLines: string[] = [];
+                    if (it.selectedSize) optionLines.push(`Kích thước (Size): ${it.selectedSize}`);
+                    if (it.selectedColor) optionLines.push(`Màu sắc: ${it.selectedColor}`);
+                    if (it.selectedCharms && it.selectedCharms.length > 0) {
+                      optionLines.push(`Charm: ${it.selectedCharms.map((c: any) => c.name).join(', ')}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')} đ)` : ''}`);
+                    } else if (it.selectedCharm) {
+                      const charmName = typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : it.selectedCharm;
+                      optionLines.push(`Charm: ${charmName}${it.selectedCharmPrice ? ` (+${it.selectedCharmPrice.toLocaleString('vi-VN')} đ)` : ''}`);
+                    }
+                    if (it.selectedOmamoris && it.selectedOmamoris.length > 0) {
+                      optionLines.push(`Bùa Omamori: ${it.selectedOmamoris.map((o: any) => o.name).join(', ')}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')} đ)` : ''}`);
+                    } else if (it.selectedOmamori) {
+                      const omamoriName = typeof it.selectedOmamori === 'object' ? (it.selectedOmamori as any).name : it.selectedOmamori;
+                      optionLines.push(`Bùa Omamori: ${omamoriName}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')} đ)` : ''}`);
+                    }
+                    if (it.selectedKhoen) {
+                      optionLines.push(`Khoen móc: ${it.selectedKhoen}${it.selectedKhoenPrice ? ` (+${it.selectedKhoenPrice.toLocaleString('vi-VN')} đ)` : ''}`);
+                    }
+                    if (it.customNote) {
+                      optionLines.push(`Ghi chú riêng: ${it.customNote}`);
+                    }
+
+                    const itemImg = it.imageUrl || it.image || '';
+                    return (
+                      <div key={idx} className="p-3 bg-white rounded-xl border border-slate-200/80 shadow-xs text-xs">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            {itemImg ? (
+                              <img
+                                src={itemImg}
+                                alt={it.productName}
+                                className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                              />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                            )}
+                            <div>
+                              <div className="font-bold text-slate-900 text-sm">{it.productName}</div>
+                              <span className="text-slate-500 font-semibold text-xs">Số lượng: x{it.quantity}</span>
+                            </div>
+                          </div>
+                          <span className="font-mono font-bold text-slate-900 text-sm whitespace-nowrap">
+                            {((it.price || 0) * it.quantity).toLocaleString('vi-VN')} đ
+                          </span>
+                        </div>
+                        {optionLines.length > 0 && (
+                          <div className="mt-2.5 p-2.5 rounded-lg bg-amber-50/70 border border-amber-200/60 border-l-4 border-l-amber-500 space-y-1">
+                            {optionLines.map((line, lIdx) => (
+                              <div key={lIdx} className="text-amber-950 text-xs font-medium leading-relaxed">
+                                {line}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <span className="font-mono font-bold text-slate-800">
-                        {((it.price || 0) * it.quantity).toLocaleString('vi-VN')}đ
-                      </span>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : Array.isArray(placedOrder.items) ? (
                   placedOrder.items.map((it, idx) => (
                     <div key={idx} className="text-xs text-slate-700">
@@ -1291,7 +1451,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                 className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-4 h-4 text-amber-400" />
-                <span>Nhắn Messenger</span>
+                <span>Hỗ trợ qua Messenger</span>
               </a>
             </div>
 

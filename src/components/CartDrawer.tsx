@@ -988,6 +988,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         placeholder="Ví dụ: Giao giờ hành chính, gọi trước khi giao..."
                         className="w-full px-4 py-3 bg-white border border-neutral-300 hover:border-neutral-400 focus:border-neutral-950 rounded-xl text-sm text-neutral-950 font-medium placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-neutral-950 transition-colors shadow-2xs"
                       />
+                      <p className="mt-2 text-xs text-neutral-400 leading-normal">
+                        Thông tin của bạn được bảo mật và chỉ được thu thập nhằm phục vụ mục đích xử lý đơn hàng.
+                      </p>
                     </div>
                   </div>
 

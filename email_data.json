@@ -1,0 +1,57 @@
+{
+  "settings": {
+    "notifyAdminOnNewOrder": false,
+    "customerOrderEmailOption": true,
+    "adminNotificationEmail": "noreply.notaknot@gmail.com"
+  },
+  "sentLogs": [
+    {
+      "id": "mail-1789833865888-8grqc",
+      "timestamp": 1789833865888,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "orderCode": "NAK-260919-2620",
+      "type": "customer_confirmation",
+      "status": "sent"
+    },
+    {
+      "id": "mail-1789834475388-6kn9i",
+      "timestamp": 1789834475388,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "orderCode": "NAK-260919-6470",
+      "type": "manual_admin",
+      "status": "sent"
+    },
+    {
+      "id": "mail-1789835846171-xa3ci",
+      "timestamp": 1789835846171,
+      "recipient": "manhcuong2006ht@gmai.com",
+      "orderCode": "NAK-260919-6470",
+      "type": "manual_admin",
+      "status": "sent"
+    },
+    {
+      "id": "mail-1789835859282-5vfgd",
+      "timestamp": 1789835859282,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "orderCode": "NAK-260919-6470",
+      "type": "manual_admin",
+      "status": "sent"
+    },
+    {
+      "id": "mail-1789836398033-glfwb",
+      "timestamp": 1789836398033,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "orderCode": "NAK-260919-6470",
+      "type": "manual_admin",
+      "status": "sent"
+    },
+    {
+      "id": "mail-1789836948593-jc0n9",
+      "timestamp": 1789836948593,
+      "recipient": "test@example.com",
+      "orderCode": "NAK-TEST-999",
+      "type": "customer_confirmation",
+      "status": "sent"
+    }
+  ]
+}

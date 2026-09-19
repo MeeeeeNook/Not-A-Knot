@@ -44,14 +44,21 @@ export const hashUsername = async (username: string): Promise<string> => {
 
 export const isRootAdminUsername = (username: string): boolean => {
   const clean = (username || '').trim().toLowerCase();
-  return clean === ROOT_ADMIN_USERNAME;
+  return clean === ROOT_ADMIN_USERNAME || clean === 'nhunhuhao71@gmail.com' || clean === 'noreply.notaknot@gmail.com';
 };
 
 export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
   if (user.isRootAdmin || user.role === 'root_admin') return true;
   const u = (user.username || '').trim().toLowerCase();
-  return u === ROOT_ADMIN_USERNAME;
+  const email = ((user as any).email || '').trim().toLowerCase();
+  return (
+    u === ROOT_ADMIN_USERNAME ||
+    u === 'nhunhuhao71@gmail.com' ||
+    u === 'noreply.notaknot@gmail.com' ||
+    email === 'nhunhuhao71@gmail.com' ||
+    email === 'noreply.notaknot@gmail.com'
+  );
 };
 
 // ----------------------------------------------------

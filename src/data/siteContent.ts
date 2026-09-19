@@ -150,7 +150,8 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
 
   customElements: [],
 
-  footerDescription: 'Xưởng chế tác phụ kiện handmade và đồ thủ công tại Hà Nội. Đóng gói hộp giấy trang trọng, bảo hành chi tiết khoen, charm, bùa, phụ kiện hoặc dây.',
+  footerDescription:
+    'Not A Knot - Even More.\nNot A Knot cùng hệ thống website và các kênh truyền thông liên quan là dự án học tập và bài tập nhóm thuộc khuôn khổ môn Quản trị tác nghiệp Thương mại điện tử - Đại học Kinh tế Quốc dân. Dự án được triển khai hoàn toàn nhằm mục đích nghiên cứu, thực hành môn học và không mang tính chất kinh doanh thương mại.',
   copyrightText: '© 2026 NOT A KNOT. All rights reserved. Thủ công từ Việt Nam.',
   warrantyPolicy: 'Sản phẩm không có size. Có bảo hành chi tiết đối với khoen, charm, bùa, phụ kiện, hoặc dây. Đóng gói trong hộp giấy trang trọng.',
   shippingPolicy: 'Miễn phí giao hàng (0đ) trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ toàn quốc.',
@@ -159,7 +160,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     messenger: 'https://m.me/61593591390851',
     instagram: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
     threads: 'https://www.threads.com/@notaknot.handmade?igshid=NTc4MTIwNjQ2YQ==',
-    tiktok: 'https://www.tiktok.com/@notaknot.handmade',
+    tiktok: '',
     zalo: ''
   }
 };

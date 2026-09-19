@@ -654,11 +654,11 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                     onChange={(e) => setStatus(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
                   >
-                    <option value="Chờ xác nhận">Bước 1: Chờ xác nhận (Tiếp nhận đơn)</option>
-                    <option value="Đã xác nhận">Bước 2: Đã xác nhận (Xác nhận số đo)</option>
-                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất (Đang đan thủ công)</option>
-                    <option value="Đang giao hàng">Bước 4: Đang giao hàng (Bàn giao bưu tá)</option>
-                    <option value="Đơn hàng giao thành công">Bước 5: Đơn hàng giao thành công (Kích hoạt bảo hành)</option>
+                    <option value="Chờ xác nhận">Bước 1: Chờ xác nhận</option>
+                    <option value="Đã xác nhận">Bước 2: Đã xác nhận</option>
+                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất</option>
+                    <option value="Đang giao hàng">Bước 4: Đang giao hàng</option>
+                    <option value="Đơn hàng giao thành công">Bước 5: Đơn hàng giao thành công</option>
                     <option value="Đã hủy">Đã hủy đơn hàng</option>
                   </select>
                 </div>

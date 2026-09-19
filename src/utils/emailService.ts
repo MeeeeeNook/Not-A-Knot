@@ -1,5 +1,23 @@
 import { StoredOrder } from '../firebase';
 
+/**
+ * Ensures an email address has a valid domain.
+ * If there is no domain or no @ sign (e.g. "abc" or "abc@"), automatically appends "@gmail.com".
+ * If an @ symbol with a domain already exists (e.g. "abc@gmail.com" or "abc@yahoo.com"), leaves it as is.
+ */
+export function ensureGmailDomain(email: string): string {
+  if (!email) return '';
+  const trimmed = email.trim();
+  if (!trimmed) return '';
+  if (!trimmed.includes('@')) {
+    return `${trimmed}@gmail.com`;
+  }
+  if (trimmed.endsWith('@')) {
+    return `${trimmed}gmail.com`;
+  }
+  return trimmed;
+}
+
 export interface EmailDeliveryResult {
   success: boolean;
   mode?: 'sent_real_email' | 'simulated_preview';
