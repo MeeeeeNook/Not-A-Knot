@@ -87,8 +87,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Voucher states
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
-  const [voucherDiscountAmount, setVoucherDiscountAmount] = useState<number>(0);
-  const [isFreeShippingVoucher, setIsFreeShippingVoucher] = useState<boolean>(false);
+  const [shippingVoucher, setShippingVoucher] = useState<Voucher | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
   const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
@@ -126,23 +125,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     0
   );
 
-  // Recalculate voucher discount whenever subtotal or availableVouchers changes
+  // Validate each slot independently against the original merchandise subtotal.
+  const discountResult = appliedVoucher
+    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+  const shippingResult = shippingVoucher
+    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+  const voucherDiscountAmount = discountResult?.isValid && discountResult.voucher?.type === 'percent'
+    ? discountResult.discountAmount : 0;
+  const isFreeShippingVoucher = Boolean(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship');
+  const selectedVouchers = [
+    ...(discountResult?.isValid && discountResult.voucher?.type === 'percent' ? [discountResult.voucher] : []),
+    ...(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship' ? [shippingResult.voucher] : [])
+  ];
+
   useEffect(() => {
-    if (appliedVoucher) {
-      const res = validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee);
-      if (res.isValid) {
-        setVoucherDiscountAmount(res.discountAmount);
-        setIsFreeShippingVoucher(res.isFreeShipping);
-        setVoucherError(null);
-      } else {
-        setAppliedVoucher(null);
-        setVoucherDiscountAmount(0);
-        setIsFreeShippingVoucher(false);
-        setVoucherError(res.message || 'Voucher không còn thỏa điều kiện.');
-        setVoucherSuccessMsg(null);
-      }
+    const invalidDiscount = appliedVoucher && (!discountResult?.isValid || discountResult.voucher?.type !== 'percent');
+    const invalidShipping = shippingVoucher && (!shippingResult?.isValid || shippingResult.voucher?.type !== 'freeship');
+    if (invalidDiscount) setAppliedVoucher(null);
+    if (invalidShipping) setShippingVoucher(null);
+    if (invalidDiscount || invalidShipping) {
+      setVoucherError('Một mã không còn đủ điều kiện và đã được gỡ. Các mã hợp lệ khác được giữ lại.');
+      setVoucherSuccessMsg(null);
     }
-  }, [subtotal, shippingFee, appliedVoucher, availableVouchers]);
+  }, [subtotal, shippingFee, appliedVoucher, shippingVoucher, availableVouchers]);
+
 
   // Track view_cart in GA4 when drawer opens with items
   useEffect(() => {
@@ -177,17 +183,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setVoucherError(res.message || 'Mã voucher không hợp lệ.');
       return;
     }
-    setAppliedVoucher(res.voucher);
-    setVoucherDiscountAmount(res.discountAmount);
-    setIsFreeShippingVoucher(res.isFreeShipping);
+    const occupied = res.voucher.type === 'freeship' ? shippingVoucher : appliedVoucher;
+    if (occupied) {
+      setVoucherError(occupied.code.toUpperCase() === code
+        ? 'Mã này đã được áp dụng.'
+        : 'Chỉ được dùng 1 mã giảm giá và 1 mã freeship. Hãy gỡ mã cùng loại trước.');
+      return;
+    }
+    if (res.voucher.type === 'freeship') setShippingVoucher(res.voucher);
+    else setAppliedVoucher(res.voucher);
+    setVoucherInput('');
     setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
     trackGA4ApplyCoupon(res.voucher.code, res.discountAmount);
   };
 
-  const handleRemoveVoucher = () => {
-    setAppliedVoucher(null);
-    setVoucherDiscountAmount(0);
-    setIsFreeShippingVoucher(false);
+  const handleRemoveVoucher = (type: Voucher['type']) => {
+    if (type === 'freeship') setShippingVoucher(null);
+    else setAppliedVoucher(null);
     setVoucherInput('');
     setVoucherError(null);
     setVoucherSuccessMsg(null);
@@ -372,9 +384,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       district: district.trim(),
       detailedAddress: detailedAddress.trim(),
       shippingFee: contactMethod === 'facebook' ? 0 : effectiveShippingFee,
-      voucherCode: appliedVoucher?.code || undefined,
+      voucherCode: selectedVouchers.map((voucher) => voucher.code).join(' + ') || undefined,
       voucherDiscountAmount: voucherDiscountAmount > 0 ? voucherDiscountAmount : undefined,
-      voucherType: appliedVoucher?.type || undefined,
+      voucherType: selectedVouchers.find((voucher) => voucher.type === 'percent')?.type || selectedVouchers[0]?.type || undefined,
       note: note ? `${note} (Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})` : `(Liên hệ qua: ${contactMethod === 'facebook' ? 'Facebook Messenger' : 'Form Website'})`,
       items: formattedItems,
       itemDetails,
@@ -981,45 +993,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <span>Mã giảm giá / Ưu đãi</span>
                     </div>
 
-                    {appliedVoucher ? (
-                      <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-amber-300 shadow-2xs">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-black text-xs text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                            {appliedVoucher.code}
-                          </span>
-                          <span className="text-xs font-bold text-emerald-700">
-                            {isFreeShippingVoucher ? 'Freeship 0đ' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleRemoveVoucher}
-                          className="text-xs font-bold text-neutral-400 hover:text-rose-600 px-2 py-1 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        >
-                          Xóa
-                        </button>
+                    <p className="text-xs text-slate-600">Có thể dùng cùng lúc 1 mã giảm giá + 1 mã freeship.</p>
+                    {selectedVouchers.map((voucher) => (
+                      <div key={voucher.type} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
+                        <span className="font-mono font-bold text-xs break-all">{voucher.code}</span>
+                        <span className="text-xs text-emerald-700">
+                          {voucher.type === 'freeship' ? 'Miễn phí vận chuyển' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
+                        </span>
+                        <button type="button" onClick={() => handleRemoveVoucher(voucher.type)}
+                          aria-label={`Gỡ mã ${voucher.code}`} className="text-xs text-rose-600 px-2 py-1">Xóa</button>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={voucherInput}
-                          onChange={(e) => {
-                            setVoucherInput(e.target.value.toUpperCase());
-                            setVoucherError(null);
-                          }}
-                          placeholder="Nhập mã voucher (VD: KNOT10)"
-                          className="flex-1 px-3 py-2 bg-white border border-neutral-300 focus:border-neutral-950 rounded-xl text-xs font-mono uppercase font-bold text-neutral-950 placeholder:font-sans placeholder:font-normal focus:outline-none shadow-2xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleApplyVoucher}
-                          className="px-3.5 py-2 bg-neutral-950 hover:bg-neutral-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer shrink-0"
-                        >
-                          Áp dụng
-                        </button>
-                      </div>
-                    )}
+                    ))}
+                    <div className="flex items-center gap-2">
+                      <input type="text" value={voucherInput}
+                        onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null); }}
+                        placeholder="Nhập mã giảm giá hoặc freeship"
+                        aria-label="Mã giảm giá hoặc freeship"
+                        className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs uppercase" />
+                      <button type="button" onClick={handleApplyVoucher}
+                        className="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs">Áp dụng</button>
+                    </div>
 
                     {voucherError && (
                       <p className="text-[11px] font-bold text-rose-600">{voucherError}</p>
