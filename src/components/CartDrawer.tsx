@@ -27,6 +27,7 @@ import {
   Tag
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
+import { sendOrderConfirmationEmail } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
   trackGA4Purchase,
@@ -430,6 +431,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
     try {
       await saveOrderToFirestore(orderData);
+      // Asynchronously trigger order confirmation email
+      sendOrderConfirmationEmail(orderData).catch((e) => {
+        console.warn('[CartDrawer] Email notification background notice:', e);
+      });
     } catch (err: any) {
       console.error('Lỗi khi lưu đơn hàng lên Firebase:', err);
       alert(`Không thể kết nối máy chủ để lưu đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);

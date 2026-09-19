@@ -28,10 +28,12 @@ import {
   RefreshCw,
   Clock,
   Ticket,
-  Tag
+  Tag,
+  Mail
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
+import { sendOrderConfirmationEmail } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
   trackGA4Purchase,
@@ -98,6 +100,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   // Form Fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
   const [detailedAddress, setDetailedAddress] = useState('');
@@ -393,6 +396,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       name: cleanName,
       customerName: cleanName,
       phone: cleanPhone,
+      email: customerEmail.trim() || undefined,
+      customerEmail: customerEmail.trim() || undefined,
       address: fullAddress,
       province: cleanProvince,
       district: cleanDistrict,
@@ -418,6 +423,11 @@ export const CartPage: React.FC<CartPageProps> = ({
     try {
       await saveOrderToFirestore(orderData);
       setSubmissionStep('confirmed');
+
+      // Dispatch order confirmation email asynchronously
+      sendOrderConfirmationEmail(orderData).catch((e) => {
+        console.warn('[CartPage] Email notification background notice:', e);
+      });
 
       // Save to local storage for instant offline access
       try {

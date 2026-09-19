@@ -691,6 +691,8 @@ export interface StoredOrder {
   createdAt?: string;
   name?: string;
   customerName?: string;
+  email?: string;
+  customerEmail?: string;
   phone: string;
   address: string;
   province?: string;

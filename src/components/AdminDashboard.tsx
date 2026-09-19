@@ -1,8 +1,30 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Product, CategoryItem, SellerUser } from '../types';
 import { StoredOrder } from '../firebase';
 import { deduplicateSellers } from '../utils/auth';
-import { Award, UserCheck, TrendingUp, Users, ShoppingBag, ArrowUpDown, ArrowUp, ArrowDown, PieChart, ExternalLink, BarChart3, EyeOff } from 'lucide-react';
+import { 
+  Award, 
+  UserCheck, 
+  TrendingUp, 
+  Users, 
+  ShoppingBag, 
+  ArrowUpDown, 
+  ArrowUp, 
+  ArrowDown, 
+  PieChart, 
+  ExternalLink, 
+  BarChart3, 
+  EyeOff,
+  Calendar,
+  Filter,
+  X,
+  ChevronDown,
+  Globe,
+  Layers,
+  RotateCcw,
+  SlidersHorizontal
+} from 'lucide-react';
+import { AdminHeatmapSection } from './AdminHeatmapSection';
 
 const SLICE_COLORS = [
   '#2563EB', // Blue
@@ -85,14 +107,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onNavigateToOrders,
   onNavigateToManualOrder
 }) => {
-  const [timeRange, setTimeRange] = useState<'all' | 'today' | '7days' | '30days' | 'this_month'>('all');
+  const [timeRange, setTimeRange] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'custom'>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [showDatePopover, setShowDatePopover] = useState<boolean>(false);
+  const datePopoverRef = useRef<HTMLDivElement>(null);
+
   const [selectedSellerFilter, setSelectedSellerFilter] = useState<string>('all');
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [productRankingSortBy, setProductRankingSortBy] = useState<'revenue' | 'quantity' | 'orders'>('revenue');
 
   type SellerSortField = 'rank' | 'name' | 'orderCount' | 'totalRevenue' | 'percent';
   const [sellerSortField, setSellerSortField] = useState<SellerSortField>('totalRevenue');
   const [sellerSortOrder, setSellerSortOrder] = useState<'asc' | 'desc'>('desc');
   const [hoveredSellerKey, setHoveredSellerKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (datePopoverRef.current && !datePopoverRef.current.contains(e.target as Node)) {
+        setShowDatePopover(false);
+      }
+    };
+    if (showDatePopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDatePopover]);
+
+  const applyDatePreset = (preset: 'today' | 'yesterday' | '7days' | '30days' | 'this_month' | 'last_month' | 'all') => {
+    const today = new Date();
+    const formatYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+      const dStr = formatYMD(today);
+      setDateFrom(dStr);
+      setDateTo(dStr);
+      setTimeRange('today');
+    } else if (preset === 'yesterday') {
+      const y = new Date(today);
+      y.setDate(y.getDate() - 1);
+      const dStr = formatYMD(y);
+      setDateFrom(dStr);
+      setDateTo(dStr);
+      setTimeRange('yesterday');
+    } else if (preset === '7days') {
+      const past = new Date(today);
+      past.setDate(past.getDate() - 6);
+      setDateFrom(formatYMD(past));
+      setDateTo(formatYMD(today));
+      setTimeRange('7days');
+    } else if (preset === '30days') {
+      const past = new Date(today);
+      past.setDate(past.getDate() - 29);
+      setDateFrom(formatYMD(past));
+      setDateTo(formatYMD(today));
+      setTimeRange('30days');
+    } else if (preset === 'this_month') {
+      const first = new Date(today.getFullYear(), today.getMonth(), 1);
+      setDateFrom(formatYMD(first));
+      setDateTo(formatYMD(today));
+      setTimeRange('this_month');
+    } else if (preset === 'last_month') {
+      const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const last = new Date(today.getFullYear(), today.getMonth(), 0);
+      setDateFrom(formatYMD(first));
+      setDateTo(formatYMD(last));
+      setTimeRange('last_month');
+    } else {
+      setDateFrom('');
+      setDateTo('');
+      setTimeRange('all');
+    }
+  };
+
+  const formatDisplayDateRange = (from: string, to: string, currentRange: string) => {
+    const formatYMDToDM = (ymd: string) => {
+      if (!ymd) return '';
+      const [y, m, d] = ymd.split('-');
+      return `${d}/${m}/${y}`;
+    };
+    if (from && to) {
+      if (from === to) return formatYMDToDM(from);
+      return `${formatYMDToDM(from)} - ${formatYMDToDM(to)}`;
+    }
+    if (from) return `Từ ${formatYMDToDM(from)}`;
+    if (to) return `Đến ${formatYMDToDM(to)}`;
+    if (currentRange === 'today') return 'Hôm nay';
+    if (currentRange === 'yesterday') return 'Hôm qua';
+    if (currentRange === '7days') return '7 ngày qua';
+    if (currentRange === '30days') return '30 ngày qua';
+    if (currentRange === 'this_month') return 'Tháng này';
+    if (currentRange === 'last_month') return 'Tháng trước';
+    return 'Lọc theo ngày';
+  };
+
+  const isAnyFilterActive = 
+    timeRange !== 'all' || 
+    dateFrom !== '' || 
+    dateTo !== '' || 
+    selectedSellerFilter !== 'all' || 
+    selectedSourceFilter !== 'all' || 
+    selectedCategoryFilter !== 'all';
+
+  const resetAllFilters = () => {
+    setTimeRange('all');
+    setDateFrom('');
+    setDateTo('');
+    setSelectedSellerFilter('all');
+    setSelectedSourceFilter('all');
+    setSelectedCategoryFilter('all');
+  };
 
   const handleSellerSort = (field: SellerSortField) => {
     if (sellerSortField === field) {
@@ -103,44 +235,118 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Filter orders by time range
+  // Helper to get consistent timestamp
+  const getOrderTimestamp = (ord: StoredOrder): number => {
+    if (ord.createdAt) {
+      const t = new Date(ord.createdAt).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    if (ord.date) {
+      const str = String(ord.date).trim();
+      const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (dmyMatch) {
+        const d = parseInt(dmyMatch[1], 10);
+        const m = parseInt(dmyMatch[2], 10) - 1;
+        const y = parseInt(dmyMatch[3], 10);
+        return new Date(y, m, d).getTime();
+      }
+      const t = new Date(str).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    return 0;
+  };
+
+  // Filter orders by time range and custom dates
   const timeFilteredOrders = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+
+    const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+    const yesterdayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999).getTime();
+
     const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
     const thirtyDaysAgo = now.getTime() - 30 * 24 * 60 * 60 * 1000;
+
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime();
+
+    let fromTime = 0;
+    let toTime = 0;
+    if (dateFrom) {
+      fromTime = new Date(`${dateFrom}T00:00:00`).getTime();
+    }
+    if (dateTo) {
+      toTime = new Date(`${dateTo}T23:59:59.999`).getTime();
+    }
 
     return orders.filter((ord) => {
-      let orderTime = 0;
-      if (ord.createdAt) {
-        orderTime = new Date(ord.createdAt).getTime();
-      } else if (ord.date) {
-        orderTime = new Date(ord.date).getTime();
-      }
-
+      const orderTime = getOrderTimestamp(ord);
       if (isNaN(orderTime) || orderTime === 0) return true;
+
+      // Custom explicit date range takes top precedence if set
+      if (dateFrom || dateTo) {
+        if (fromTime && toTime) {
+          return orderTime >= fromTime && orderTime <= toTime;
+        }
+        if (fromTime) return orderTime >= fromTime;
+        if (toTime) return orderTime <= toTime;
+      }
 
       switch (timeRange) {
         case 'today':
-          return orderTime >= todayStart;
+          return orderTime >= todayStart && orderTime <= todayEnd;
+        case 'yesterday':
+          return orderTime >= yesterdayStart && orderTime <= yesterdayEnd;
         case '7days':
           return orderTime >= sevenDaysAgo;
         case '30days':
           return orderTime >= thirtyDaysAgo;
         case 'this_month':
           return orderTime >= monthStart;
+        case 'last_month':
+          return orderTime >= lastMonthStart && orderTime <= lastMonthEnd;
         case 'all':
         default:
           return true;
       }
     });
-  }, [orders, timeRange]);
+  }, [orders, timeRange, dateFrom, dateTo]);
+
+  // Filter by Source and Category on teamValidOrders
+  const sourceAndCategoryFilteredOrders = useMemo(() => {
+    return timeFilteredOrders.filter((ord) => {
+      // Source filter
+      if (selectedSourceFilter !== 'all') {
+        const rawSrc = (ord.source || '').toLowerCase().trim();
+        if (selectedSourceFilter === 'website') {
+          if (rawSrc !== 'website') return false;
+        } else if (selectedSourceFilter === 'social_media') {
+          if (!['mạng xã hội', 'facebook', 'tiktok', 'instagram', 'zalo', 'shopee'].includes(rawSrc)) return false;
+        } else if (selectedSourceFilter === 'direct') {
+          if (!['trực tiếp', 'direct', 'pos', 'thủ công', 'manual'].includes(rawSrc) && rawSrc !== '') return false;
+        }
+      }
+
+      // Category filter
+      if (selectedCategoryFilter !== 'all') {
+        const hasMatchingCat = ord.itemDetails?.some((it) => {
+          if (it.category === selectedCategoryFilter) return true;
+          const prod = products.find((p) => p.id === it.productId || p.name === it.productName);
+          return prod?.category === selectedCategoryFilter;
+        });
+        if (!hasMatchingCat) return false;
+      }
+
+      return true;
+    });
+  }, [timeFilteredOrders, selectedSourceFilter, selectedCategoryFilter, products]);
 
   // Valid orders before seller filtering (for team-wide seller ranking)
   const teamValidOrders = useMemo(() => {
-    return timeFilteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
-  }, [timeFilteredOrders]);
+    return sourceAndCategoryFilteredOrders.filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy');
+  }, [sourceAndCategoryFilteredOrders]);
 
   // Overall Team Gross Revenue (excluding shipping fees)
   const teamGrossRevenue = useMemo(() => {
@@ -364,9 +570,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Filter orders by selected seller (if a seller is chosen)
   const filteredOrders = useMemo(() => {
-    if (selectedSellerFilter === 'all') return timeFilteredOrders;
+    if (selectedSellerFilter === 'all') return sourceAndCategoryFilteredOrders;
 
-    return timeFilteredOrders.filter((ord) => {
+    return sourceAndCategoryFilteredOrders.filter((ord) => {
       const isLockedSource = ord.source === 'website' || ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo' || ord.source === 'shopee';
       const sName = ord.sellerName ? ord.sellerName.toLowerCase().trim() : '';
 
@@ -374,7 +580,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return ord.source === 'website' || (!ord.sellerId && (!sName || sName === 'website' || sName.includes('tự động')));
       }
       if (selectedSellerFilter === 'social_media') {
-        return ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo';
+        return ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo' || ord.source === 'shopee';
       }
 
       if (isLockedSource) return false;
@@ -388,7 +594,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )
       );
     });
-  }, [timeFilteredOrders, selectedSellerFilter, sellers]);
+  }, [sourceAndCategoryFilteredOrders, selectedSellerFilter, sellers]);
 
   // Valid orders for active view
   const validOrders = useMemo(() => {
@@ -665,58 +871,248 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div id="admin-dashboard-section" className="space-y-5">
       
-      {/* Top Controls & Time Range & Seller Filter */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900">
-              Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh
-            </h3>
-            {selectedSellerFilter !== 'all' && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                Đang xem: {sellers.find(s => s.username === selectedSellerFilter || s.id === selectedSellerFilter)?.name || selectedSellerFilter}
-              </span>
-            )}
+      {/* Top Controls & Comprehensive Filters */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3.5">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-bold text-slate-900">
+                Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh
+              </h3>
+              {selectedSellerFilter !== 'all' && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold inline-flex items-center gap-1">
+                  <UserCheck className="w-3 h-3 text-amber-600" />
+                  {sellers.find(s => s.username === selectedSellerFilter || s.id === selectedSellerFilter)?.name || (selectedSellerFilter === 'website' ? 'Website' : selectedSellerFilter === 'social_media' ? 'Mạng xã hội' : selectedSellerFilter)}
+                </span>
+              )}
+              {selectedSourceFilter !== 'all' && (
+                <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-900 border border-sky-300 text-[10px] font-bold inline-flex items-center gap-1">
+                  <Globe className="w-3 h-3 text-sky-600" />
+                  {selectedSourceFilter === 'website' ? 'Nguồn Website' : selectedSourceFilter === 'social_media' ? 'Nguồn Mạng xã hội' : 'Nguồn Trực tiếp'}
+                </span>
+              )}
+              {selectedCategoryFilter !== 'all' && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-900 border border-purple-300 text-[10px] font-bold inline-flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-purple-600" />
+                  {categories.find(c => c.id === selectedCategoryFilter)?.label || selectedCategoryFilter}
+                </span>
+              )}
+              {(dateFrom || dateTo) && (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-bold inline-flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-emerald-600" />
+                  {formatDisplayDateRange(dateFrom, dateTo, timeRange)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và theo từng nhân sự bán hàng
+            </p>
           </div>
-          <p className="text-xs text-slate-500">
-            Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và theo từng nhân sự bán hàng
-          </p>
+
+          {/* Reset button if any filter is applied */}
+          {isAnyFilterActive && (
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Đặt lại toàn bộ bộ lọc về mặc định"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Đặt lại bộ lọc</span>
+            </button>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Filters Row */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
           {/* Seller Filter Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200 text-xs">
-            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+          <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+            <UserCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
             <select
               value={selectedSellerFilter}
               onChange={(e) => setSelectedSellerFilter(e.target.value)}
-              className="bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer"
+              className="bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer max-w-[160px] sm:max-w-none"
             >
-              <option value="all">Toàn bộ nhóm (Tất cả người bán)</option>
+              <option value="all">Tất cả người bán</option>
               {deduplicateSellers(sellers).map((s, sIdx) => (
                 <option key={`dashboard-seller-opt-${s.id || s.username}-${sIdx}`} value={s.username}>
                   Người bán: {s.name}
                 </option>
               ))}
-              <option value="website">Kênh trực tuyến (Website)</option>
+              <option value="website">Kênh tự động (Website)</option>
+              <option value="social_media">Mạng xã hội (Facebook, TikTok...)</option>
             </select>
           </div>
 
+          {/* Source Filter Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+            <Globe className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <select
+              value={selectedSourceFilter}
+              onChange={(e) => setSelectedSourceFilter(e.target.value)}
+              className="bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả nguồn đơn</option>
+              <option value="website">Kênh Website</option>
+              <option value="social_media">Mạng xã hội</option>
+              <option value="direct">Trực tiếp (Tại quầy/Nhập tay)</option>
+            </select>
+          </div>
+
+          {/* Category Filter Selector */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
+            <Layers className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <select
+              value={selectedCategoryFilter}
+              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              className="bg-transparent border-none text-slate-800 font-bold text-xs focus:outline-none cursor-pointer max-w-[140px] sm:max-w-none"
+            >
+              <option value="all">Tất cả danh mục</option>
+              {categories.map((c) => (
+                <option key={`dashboard-cat-opt-${c.id}`} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date Picker Popover Button */}
+          <div className="relative" ref={datePopoverRef}>
+            <button
+              type="button"
+              onClick={() => setShowDatePopover((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                dateFrom || dateTo || timeRange === 'custom'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-xs'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Calendar className={`w-3.5 h-3.5 ${dateFrom || dateTo ? 'text-emerald-600' : 'text-slate-500'}`} />
+              <span>
+                {dateFrom || dateTo ? formatDisplayDateRange(dateFrom, dateTo, timeRange) : 'Tùy chọn ngày'}
+              </span>
+              <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />
+            </button>
+
+            {/* Date Popover Menu */}
+            {showDatePopover && (
+              <div className="absolute left-0 sm:right-0 sm:left-auto mt-1 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-3.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-100">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-600" />
+                    Lọc theo khoảng ngày
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowDatePopover(false)}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded-md hover:bg-slate-100"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Quick Presets inside Popover */}
+                <div className="grid grid-cols-3 gap-1 mb-3">
+                  {[
+                    { id: 'today', label: 'Hôm nay' },
+                    { id: 'yesterday', label: 'Hôm qua' },
+                    { id: '7days', label: '7 ngày qua' },
+                    { id: '30days', label: '30 ngày qua' },
+                    { id: 'this_month', label: 'Tháng này' },
+                    { id: 'last_month', label: 'Tháng trước' },
+                  ].map((preset) => (
+                    <button
+                      key={`popover-preset-${preset.id}`}
+                      type="button"
+                      onClick={() => {
+                        applyDatePreset(preset.id as any);
+                        setShowDatePopover(false);
+                      }}
+                      className={`px-1.5 py-1 text-[11px] font-semibold rounded border transition-colors text-center ${
+                        timeRange === preset.id && !dateFrom
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Date Inputs */}
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                      Từ ngày:
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => {
+                        setDateFrom(e.target.value);
+                        setTimeRange('custom');
+                      }}
+                      className="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-slate-800 text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                      Đến ngày:
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => {
+                        setDateTo(e.target.value);
+                        setTimeRange('custom');
+                      }}
+                      className="w-full text-xs px-2 py-1.5 rounded-lg border border-slate-200 focus:outline-none focus:border-slate-800 text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 mt-3 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom('');
+                      setDateTo('');
+                      setTimeRange('all');
+                      setShowDatePopover(false);
+                    }}
+                    className="text-xs text-rose-600 hover:underline font-semibold"
+                  >
+                    Xóa ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDatePopover(false)}
+                    className="px-3 py-1 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                  >
+                    Xác nhận
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Time Filter Pills */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 overflow-x-auto">
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 overflow-x-auto max-w-full">
             {[
               { id: 'today', label: 'Hôm nay' },
+              { id: 'yesterday', label: 'Hôm qua' },
               { id: '7days', label: '7 ngày' },
               { id: '30days', label: '30 ngày' },
               { id: 'this_month', label: 'Tháng này' },
+              { id: 'last_month', label: 'Tháng trước' },
               { id: 'all', label: 'Tất cả' }
             ].map((t) => (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setTimeRange(t.id as any)}
-                className={`px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap transition-all ${
-                  timeRange === t.id
+                onClick={() => applyDatePreset(t.id as any)}
+                className={`px-2.5 py-1 rounded text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  timeRange === t.id && !dateFrom && !dateTo
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                 }`}
@@ -1450,6 +1846,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         </div>
       </div>
+
+      {/* Sales Activity & Regional Heatmap */}
+      <AdminHeatmapSection orders={teamValidOrders.length > 0 ? teamValidOrders : orders} />
 
       {/* Google Analytics 4 Dashboard External Link Button */}
       <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent p-5 rounded-2xl border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">

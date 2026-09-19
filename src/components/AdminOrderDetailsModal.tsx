@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send } from 'lucide-react';
 import {
   printOrderSlipDirectly,
   openOrderPrintTab,
@@ -10,6 +10,7 @@ import {
   copyOrderSlipToClipboard
 } from '../utils/printOrderSlip';
 import { LoadingImage } from './LoadingImage';
+import { sendOrderConfirmationEmail } from '../utils/emailService';
 
 interface AdminOrderDetailsModalProps {
   order: StoredOrder;
@@ -33,10 +34,46 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   const printRef = useRef<HTMLDivElement>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const showToast = (msg: string) => {
     setPrintSuccessToast(msg);
     setTimeout(() => setPrintSuccessToast(null), 3500);
+  };
+
+  const handleSendOrderEmail = async () => {
+    let targetEmail = order.email || (order as any).customerEmail;
+    if (!targetEmail || !targetEmail.includes('@')) {
+      const input = window.prompt('Nhập địa chỉ email khách hàng (hoặc email quản trị) để nhận hóa đơn xác nhận:', order.email || '');
+      if (!input || !input.trim().includes('@')) {
+        return;
+      }
+      targetEmail = input.trim();
+    }
+
+    setIsSendingEmail(true);
+    showToast('Đang tạo và gửi email xác nhận đơn hàng...');
+    try {
+      const payload: StoredOrder = {
+        ...order,
+        email: targetEmail,
+        customerEmail: targetEmail
+      };
+      const res = await sendOrderConfirmationEmail(payload);
+      if (res.success) {
+        if (res.mode === 'sent_real_email') {
+          showToast(`Đã gửi email hóa đơn thành công tới: ${targetEmail}!`);
+        } else {
+          showToast(`Hóa đơn email đã được ghi nhận thành công (Chế độ xem trước: ${targetEmail})`);
+        }
+      } else {
+        showToast(`Không thể gửi email: ${res.error || 'Lỗi không xác định'}`);
+      }
+    } catch (err: any) {
+      showToast(`Lỗi gửi email: ${err.message || 'Lỗi mạng'}`);
+    } finally {
+      setIsSendingEmail(false);
+    }
   };
 
   const handlePrintSlip = () => {
@@ -152,6 +189,17 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
               <button
                 type="button"
+                onClick={handleSendOrderEmail}
+                disabled={isSendingEmail}
+                className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                title="Gửi email hóa đơn xác nhận đơn hàng cho khách hoặc quản trị viên"
+              >
+                <Mail className="w-3.5 h-3.5 text-amber-700" />
+                <span>{isSendingEmail ? 'Đang gửi...' : 'Gửi Email'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={onClose}
                 className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-xs transition-colors cursor-pointer"
               >
@@ -175,6 +223,12 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               <div className="text-slate-800 font-semibold">
                 SĐT: {order.phone || 'Chưa cung cấp SĐT'}
               </div>
+              {(order.email || (order as any).customerEmail) && (
+                <div className="text-slate-600 text-[11px] flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-slate-400" />
+                  <span>Email: {order.email || (order as any).customerEmail}</span>
+                </div>
+              )}
               {(() => {
                 const isLockedSource = order.source === 'website' || order.source === 'mạng xã hội' || order.source === 'facebook' || order.source === 'tiktok' || order.source === 'instagram' || order.source === 'zalo' || order.source === 'shopee';
                 if (isLockedSource) {

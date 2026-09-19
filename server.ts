@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
+import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
@@ -14,6 +15,40 @@ import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit } f
 const JWT_SECRET: string = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-development-only-replace-in-prod';
 if (!process.env.ADMIN_JWT_SECRET && !process.env.JWT_SECRET) {
   console.warn("WARNING: ADMIN_JWT_SECRET environment variable is missing. Using fallback for development.");
+}
+
+// SMTP / Email Delivery Secrets
+const SMTP_HOST: string = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT: number = Number(process.env.SMTP_PORT) || 465;
+const SMTP_SECURE: boolean = process.env.SMTP_SECURE !== 'false' && (SMTP_PORT === 465 || !process.env.SMTP_PORT);
+const SMTP_USER: string = (process.env.SMTP_USER || '').trim();
+const SMTP_PASS: string = (process.env.SMTP_PASS || '').trim();
+const SMTP_FROM: string = process.env.SMTP_FROM || '"NOT A KNOT" <notaknothandmade@gmail.com>';
+const ADMIN_NOTIFICATION_EMAIL: string = (process.env.ADMIN_NOTIFICATION_EMAIL || 'nhunhuhao71@gmail.com').trim();
+
+// Lazy transporter creation (fails gracefully if credentials not provided)
+let mailTransporter: any = null;
+function getMailTransporter(): any {
+  if (!mailTransporter && SMTP_USER && SMTP_PASS) {
+    try {
+      mailTransporter = nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_SECURE,
+        auth: {
+          user: SMTP_USER,
+          pass: SMTP_PASS
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    } catch (e) {
+      console.warn('[Email Service] Failed to initialize SMTP transporter:', e);
+      mailTransporter = null;
+    }
+  }
+  return mailTransporter;
 }
 
 const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || 'AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI';
@@ -431,6 +466,321 @@ async function startServer() {
       },
       verifiedAt: new Date().toISOString()
     });
+  });
+
+  // ----------------------------------------------------
+  // EMAIL NOTIFICATION & ORDER CONFIRMATION API
+  // ----------------------------------------------------
+
+  /**
+   * Helper: Generate a pristine, responsive HTML order receipt email
+   */
+  const generateOrderEmailHtml = (order: any): string => {
+    const orderCode = order.id || order.trackingNumber || 'NAK-ORDER';
+    const customerName = order.customerName || order.name || 'Quý khách';
+    const phone = order.phone || 'Chưa cung cấp';
+    const address = order.address || 'Tại xưởng NOT A KNOT';
+    const note = order.note ? String(order.note).trim() : '';
+    const dateStr = order.date || new Date().toLocaleString('vi-VN');
+    const paymentMethodLabel =
+      order.paymentMethod === 'bank_transfer' || order.paymentMethod === 'vietqr'
+        ? 'Chuyển khoản VietQR'
+        : order.paymentMethod === 'cash'
+        ? 'Tiền mặt'
+        : 'Thu hộ COD khi nhận hàng';
+    const paymentStatusLabel = order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu tiền / COD';
+
+    const items = Array.isArray(order.itemDetails) && order.itemDetails.length > 0
+      ? order.itemDetails
+      : Array.isArray(order.items)
+      ? order.items.map((it: any) => (typeof it === 'string' ? { productName: it, quantity: 1, price: 0 } : it))
+      : [];
+
+    const totalAmount = Number(order.totalPrice || order.totalAmount || 0);
+    const shippingFee = Number(order.shippingFee || 0);
+    const discountAmount = Number(order.discountAmount || order.voucherDiscountAmount || 0);
+    const subtotal = Math.max(0, totalAmount - shippingFee + discountAmount);
+
+    const trackingUrl = `https://www.notaknot.id.vn/#tracker?code=${encodeURIComponent(orderCode)}`;
+
+    const itemsRows = items.map((item: any) => {
+      const pName = item.productName || item.name || 'Phụ kiện thủ công';
+      const qty = item.quantity || 1;
+      const uPrice = Number(item.price || item.unitPrice || 0);
+      const rowTotal = uPrice > 0 ? (uPrice * qty).toLocaleString('vi-VN') + 'đ' : '-';
+
+      const extras = [];
+      if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
+      if (item.selectedCharm) extras.push(`Charm: ${item.selectedCharm}`);
+      if (item.selectedOmamori) extras.push(`Bùa Omamori: ${item.selectedOmamori}`);
+      if (item.selectedKhoen) extras.push(`Khoen: ${item.selectedKhoen}`);
+      if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
+      if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
+
+      const variantDetail = extras.length > 0
+        ? `<div style="font-size:11px;color:#64748b;margin-top:2px;">${extras.join(' • ')}</div>`
+        : '';
+
+      return `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+          <td style="padding:10px 8px;vertical-align:top;">
+            <div style="font-weight:600;color:#0f172a;font-size:13px;">${pName}</div>
+            ${variantDetail}
+          </td>
+          <td style="padding:10px 8px;text-align:center;font-size:13px;color:#334155;vertical-align:top;">x${qty}</td>
+          <td style="padding:10px 8px;text-align:right;font-size:13px;color:#0f172a;font-weight:600;vertical-align:top;">${rowTotal}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html lang="vi">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Xác nhận đơn hàng #${orderCode} - NOT A KNOT</title>
+      </head>
+      <body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.5;">
+        <div style="max-width:600px;margin:20px auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+          
+          <!-- Header with Brand Accent -->
+          <div style="background:#B41C1A;background:linear-gradient(135deg, #B41C1A 0%, #831210 100%);padding:28px 24px;text-align:center;color:#ffffff;">
+            <h1 style="margin:0;font-size:22px;letter-spacing:1px;font-weight:800;text-transform:uppercase;">NOT A KNOT</h1>
+            <p style="margin:4px 0 0;font-size:12px;opacity:0.9;letter-spacing:0.5px;">Xưởng Phụ Kiện Thủ Công Độc Bản</p>
+            <div style="display:inline-block;background:rgba(255,255,255,0.2);backdrop-filter:blur(4px);padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;margin-top:14px;">
+              MÃ ĐƠN HÀNG: #${orderCode}
+            </div>
+          </div>
+
+          <!-- Greeting Card -->
+          <div style="padding:24px;">
+            <p style="margin:0 0 12px;font-size:14px;">Xin chào <strong>${customerName}</strong>,</p>
+            <p style="margin:0 0 18px;font-size:13px;color:#475569;line-height:1.6;">
+              Cảm ơn bạn đã tin tưởng và đặt hàng tại <strong>NOT A KNOT</strong>! Mỗi sản phẩm vòng tay và phụ kiện thủ công đều được chúng mình hoàn thiện tỉ mỉ bằng tay trước khi đóng gói gửi đến bạn.
+            </p>
+
+            <!-- Customer & Delivery Summary Box -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:20px;">
+              <div style="font-size:12px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;">
+                Thông Tin Giao Hàng
+              </div>
+              <div style="font-size:12px;color:#334155;line-height:1.7;">
+                <div><strong>Người nhận:</strong> ${customerName} • <strong>SĐT:</strong> ${phone}</div>
+                <div><strong>Địa chỉ:</strong> ${address}</div>
+                <div><strong>Thời gian đặt:</strong> ${dateStr}</div>
+                <div><strong>Hình thức:</strong> ${paymentMethodLabel} (<span style="color:#b45309;font-weight:600;">${paymentStatusLabel}</span>)</div>
+                ${note ? `<div style="margin-top:4px;color:#b41c1a;"><strong>Ghi chú:</strong> ${note}</div>` : ''}
+              </div>
+            </div>
+
+            <!-- Items Table -->
+            <div style="margin-bottom:20px;">
+              <div style="font-size:12px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+                Chi Tiết Sản Phẩm Đặt Mua
+              </div>
+              <table style="width:100%;border-collapse:collapse;text-align:left;">
+                <thead>
+                  <tr style="background:#f1f5f9;border-bottom:1px solid #cbd5e1;font-size:11px;color:#475569;text-transform:uppercase;">
+                    <th style="padding:8px;border-radius:6px 0 0 6px;">Sản phẩm</th>
+                    <th style="padding:8px;text-align:center;">SL</th>
+                    <th style="padding:8px;text-align:right;border-radius:0 6px 6px 0;">Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsRows}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Total Calculation -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:24px;font-size:13px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:#64748b;">
+                <span>Tạm tính tiền hàng:</span>
+                <span style="font-weight:600;color:#0f172a;">${subtotal.toLocaleString('vi-VN')}đ</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:#64748b;">
+                <span>Phí vận chuyển:</span>
+                <span style="font-weight:600;color:#0f172a;">${shippingFee > 0 ? `${shippingFee.toLocaleString('vi-VN')}đ` : 'Miễn phí'}</span>
+              </div>
+              ${discountAmount > 0 ? `
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;color:#16a34a;font-weight:600;">
+                <span>Giảm giá (Voucher):</span>
+                <span>-${discountAmount.toLocaleString('vi-VN')}đ</span>
+              </div>` : ''}
+              <div style="display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:6px;font-size:15px;font-weight:800;color:#B41C1A;">
+                <span>TỔNG THANH TOÁN:</span>
+                <span>${totalAmount.toLocaleString('vi-VN')}đ</span>
+              </div>
+            </div>
+
+            <!-- Action Button -->
+            <div style="text-align:center;margin-bottom:24px;">
+              <a href="${trackingUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:700;letter-spacing:0.3px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+                Tra Cứu Trạng Thái Đơn Hàng &gt;
+              </a>
+            </div>
+
+            <!-- Guarantee Note -->
+            <div style="border-top:1px dashed #cbd5e1;padding-top:16px;font-size:11px;color:#64748b;line-height:1.6;text-align:center;">
+              🛡️ <strong>Chính sách NOT A KNOT:</strong> Bảo hành chốt khóa trọn đời • Hỗ trợ đổi trả miễn phí trong 7 ngày nếu lỗi gia công.<br>
+              Nếu cần hỗ trợ gấp, vui lòng liên hệ Zalo / Hotline hoặc email: <a href="mailto:notaknothandmade@gmail.com" style="color:#B41C1A;text-decoration:none;">notaknothandmade@gmail.com</a>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div style="background:#f1f5f9;padding:16px 24px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+            © ${new Date().getFullYear()} NOT A KNOT Handmade Studio. Mọi quyền được bảo lưu.<br>
+            Website: <a href="https://www.notaknot.id.vn" style="color:#64748b;text-decoration:underline;">https://www.notaknot.id.vn</a>
+          </div>
+
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  /**
+   * GET /api/email/status
+   * Checks whether the SMTP email subsystem is active and configured
+   */
+  app.get('/api/email/status', (_req: Request, res: Response) => {
+    const isConfigured = Boolean(SMTP_USER && SMTP_PASS);
+    const maskedUser = SMTP_USER ? SMTP_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Chưa cấu hình';
+    res.json({
+      configured: isConfigured,
+      smtpHost: SMTP_HOST,
+      smtpPort: SMTP_PORT,
+      smtpSecure: SMTP_SECURE,
+      configuredUser: maskedUser,
+      adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL,
+      mode: isConfigured ? 'live_smtp' : 'simulated_preview'
+    });
+  });
+
+  /**
+   * POST /api/email/send-order-confirmation
+   * Dispatches order confirmation email to customer (if email provided)
+   * and sends an admin order alert to the shop owner.
+   */
+  app.post('/api/email/send-order-confirmation', async (req: Request, res: Response) => {
+    try {
+      const order = req.body?.orderData || req.body;
+      if (!order || (!order.id && !order.trackingNumber)) {
+        return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ.' });
+      }
+
+      const orderCode = order.id || order.trackingNumber;
+      const customerEmail = typeof order.email === 'string' && order.email.includes('@')
+        ? order.email.trim()
+        : typeof order.customerEmail === 'string' && order.customerEmail.includes('@')
+        ? order.customerEmail.trim()
+        : null;
+
+      const htmlContent = generateOrderEmailHtml(order);
+      const subject = `[NOT A KNOT] Xác nhận đơn hàng #${orderCode} - ${order.customerName || order.name || 'Quý khách'}`;
+
+      const transporter = getMailTransporter();
+
+      // Collect recipients
+      const recipients: string[] = [];
+      if (customerEmail) recipients.push(customerEmail);
+      if (ADMIN_NOTIFICATION_EMAIL && !recipients.includes(ADMIN_NOTIFICATION_EMAIL)) {
+        recipients.push(ADMIN_NOTIFICATION_EMAIL);
+      }
+
+      if (transporter) {
+        // Send real email via SMTP
+        await transporter.sendMail({
+          from: SMTP_FROM,
+          to: customerEmail || ADMIN_NOTIFICATION_EMAIL,
+          bcc: customerEmail && ADMIN_NOTIFICATION_EMAIL !== customerEmail ? ADMIN_NOTIFICATION_EMAIL : undefined,
+          subject,
+          html: htmlContent
+        });
+
+        console.log(`[Email Service] Successfully sent real order email for #${orderCode} to:`, recipients.join(', '));
+        return res.json({
+          success: true,
+          mode: 'sent_real_email',
+          recipients,
+          orderCode,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Simulated / preview mode: logged cleanly to console without failing checkout
+        console.log(`[Email Service] [Preview Mode] Order notification generated for #${orderCode}. Target recipients: ${recipients.join(', ') || 'Admin'}`);
+        return res.json({
+          success: true,
+          mode: 'simulated_preview',
+          message: 'Đã tạo nội dung email hóa đơn thành công và ghi nhận vào hệ thống (Chế độ xem trước: cấu hình SMTP_USER và SMTP_PASS trong biến môi trường để gửi thực tế).',
+          recipients,
+          orderCode,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (err: any) {
+      console.error('[Email Service] Error in send-order-confirmation:', err);
+      // Even if email fails, return 200 with error notice so customer's order placement is not blocked!
+      return res.json({
+        success: false,
+        error: err.message || 'Không thể gửi email lúc này',
+        fallbackLogged: true
+      });
+    }
+  });
+
+  /**
+   * POST /api/email/test-delivery
+   * Admin-only or setup endpoint to verify SMTP delivery
+   */
+  app.post('/api/email/test-delivery', async (req: Request, res: Response) => {
+    try {
+      const { targetEmail } = req.body;
+      const destination = (targetEmail || ADMIN_NOTIFICATION_EMAIL).trim();
+
+      if (!destination || !destination.includes('@')) {
+        return res.status(400).json({ error: 'Địa chỉ email nhận test không hợp lệ.' });
+      }
+
+      const transporter = getMailTransporter();
+      if (!transporter) {
+        return res.json({
+          success: false,
+          configured: false,
+          message: `Chưa cấu hình thông tin đăng nhập SMTP (SMTP_USER và SMTP_PASS). Hệ thống đang chạy ở chế độ xem trước (Simulated Mode). Email test tới ${destination} đã được mô phỏng.`
+        });
+      }
+
+      await transporter.sendMail({
+        from: SMTP_FROM,
+        to: destination,
+        subject: '[NOT A KNOT] Thử nghiệm kết nối hệ thống Email thành công!',
+        html: `
+          <div style="font-family:sans-serif;padding:20px;max-width:500px;border:1px solid #e2e8f0;border-radius:12px;">
+            <h2 style="color:#B41C1A;margin-top:0;">NOT A KNOT Handmade Studio</h2>
+            <p>Xin chào quản trị viên,</p>
+            <p>Hệ thống gửi thư tự động (SMTP) của website NOT A KNOT đã được kết nối thành công và sẵn sàng gửi email xác nhận đơn hàng cho khách!</p>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0;" />
+            <p style="font-size:12px;color:#64748b;">Thời gian kiểm tra: ${new Date().toLocaleString('vi-VN')}</p>
+          </div>
+        `
+      });
+
+      return res.json({
+        success: true,
+        configured: true,
+        destination,
+        message: `Đã gửi thành công email thử nghiệm đến ${destination}!`
+      });
+    } catch (err: any) {
+      console.error('[Email Service] Test delivery failed:', err);
+      return res.status(500).json({
+        success: false,
+        error: err.message || 'Lỗi khi gửi email thử nghiệm qua SMTP.'
+      });
+    }
   });
 
   // ----------------------------------------------------
