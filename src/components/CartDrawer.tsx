@@ -993,7 +993,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <span>Mã giảm giá / Ưu đãi</span>
                     </div>
 
-                    <p className="text-xs text-slate-600">Có thể dùng cùng lúc 1 mã giảm giá + 1 mã freeship.</p>
                     {selectedVouchers.map((voucher) => (
                       <div key={voucher.type} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
                         <span className="font-mono font-bold text-xs break-all">{voucher.code}</span>
