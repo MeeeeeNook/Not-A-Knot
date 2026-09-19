@@ -172,6 +172,17 @@ async function startServer() {
     return req.ip || req.socket.remoteAddress || '127.0.0.1';
   };
 
+  // Enable CORS for cross-origin requests from published frontends (GitHub Pages / custom domains)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // 1. Strict Request Body Limits to prevent DoS / Memory Overflow
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));

@@ -38,18 +38,39 @@ export interface EmailConfigStatus {
   mode: 'live_smtp' | 'simulated_preview';
 }
 
+const FALLBACK_BACKEND_URL = 'https://ais-dev-7sezls5lyoi5ncet3scdnq-757868820902.asia-southeast1.run.app';
+
 async function safeJsonParse(res: Response) {
   try {
     const text = await res.text();
-    return JSON.parse(text);
+    const trimmed = text ? text.trim() : '';
+    if (!trimmed || trimmed.startsWith('<') || trimmed.startsWith('The page') || trimmed.startsWith('Not Found') || trimmed.startsWith('<!DOCTYPE')) {
+      return {
+        success: false,
+        isHtmlError: true,
+        error: `Máy chủ tĩnh Vercel chưa xử lý được endpoint API (${res.status})`,
+        message: `Máy chủ tĩnh Vercel chưa xử lý được endpoint API (${res.status})`
+      };
+    }
+    return JSON.parse(trimmed);
   } catch {
     return {
       success: false,
+      isHtmlError: true,
       error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
       message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
     };
   }
 }
+
+const getBackendUrl = (): string => {
+  const meta = import.meta as any;
+  const customUrl = meta && meta.env ? meta.env.VITE_BACKEND_URL : undefined;
+  if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
+    return customUrl.trim().replace(/\/+$/, '');
+  }
+  return '';
+};
 
 /**
  * Triggers asynchronous order confirmation email dispatch on the server.
@@ -67,7 +88,8 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
       }
     }
 
-    const res = await fetch('/api/email/send-order-confirmation', {
+    const primaryBaseUrl = getBackendUrl();
+    let res = await fetch(`${primaryBaseUrl}/api/email/send-order-confirmation`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -78,8 +100,27 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
       })
     });
 
-    const data = await safeJsonParse(res);
-    if (!res.ok) {
+    let data = await safeJsonParse(res);
+
+    // If Vercel or local static server returned HTML 404, automatically fallback to Cloud Run live backend
+    if ((!res.ok || data.isHtmlError) && !primaryBaseUrl) {
+      console.warn('[Email Service Client] Vercel returned HTML 404, falling back to live Cloud Run backend...');
+      try {
+        const fallbackRes = await fetch(`${FALLBACK_BACKEND_URL}/api/email/send-order-confirmation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...order, products: Array.isArray(prods) ? prods : [] })
+        });
+        const fallbackData = await safeJsonParse(fallbackRes);
+        if (fallbackRes.ok && fallbackData.success) {
+          return fallbackData;
+        }
+      } catch (fbErr) {
+        console.warn('[Email Service Client] Fallback backend request error:', fbErr);
+      }
+    }
+
+    if (!res.ok || data.isHtmlError) {
       return {
         success: false,
         error: data.error || data.message || `Lỗi máy chủ (${res.status})`
@@ -88,6 +129,21 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
 
     return data;
   } catch (err: any) {
+    try {
+      let prods = products || [];
+      const fallbackRes = await fetch(`${FALLBACK_BACKEND_URL}/api/email/send-order-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...order, products: prods })
+      });
+      const fallbackData = await safeJsonParse(fallbackRes);
+      if (fallbackRes.ok && fallbackData.success) {
+        return fallbackData;
+      }
+    } catch {
+      // ignore
+    }
+
     console.warn('[Email Service Client] Dispatch warning:', err);
     return {
       success: false,
@@ -101,7 +157,8 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
  */
 export async function fetchEmailConfigStatus(): Promise<EmailConfigStatus | null> {
   try {
-    const res = await fetch('/api/email/status');
+    const baseUrl = getBackendUrl();
+    const res = await fetch(`${baseUrl}/api/email/status`);
     if (!res.ok) return null;
     return await safeJsonParse(res);
   } catch (err) {
@@ -115,7 +172,8 @@ export async function fetchEmailConfigStatus(): Promise<EmailConfigStatus | null
  */
 export async function testEmailDelivery(targetEmail?: string): Promise<{ success: boolean; message: string; configured?: boolean }> {
   try {
-    const res = await fetch('/api/email/test-delivery', {
+    const primaryBaseUrl = getBackendUrl();
+    let res = await fetch(`${primaryBaseUrl}/api/email/test-delivery`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -123,7 +181,28 @@ export async function testEmailDelivery(targetEmail?: string): Promise<{ success
       body: JSON.stringify({ targetEmail })
     });
 
-    const data = await safeJsonParse(res);
+    let data = await safeJsonParse(res);
+
+    if ((!res.ok || data.isHtmlError) && !primaryBaseUrl) {
+      try {
+        const fallbackRes = await fetch(`${FALLBACK_BACKEND_URL}/api/email/test-delivery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetEmail })
+        });
+        const fallbackData = await safeJsonParse(fallbackRes);
+        if (fallbackRes.ok && fallbackData.success) {
+          return {
+            success: true,
+            message: fallbackData.message || 'Đã gửi email test thành công!',
+            configured: fallbackData.configured
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return {
       success: Boolean(data.success),
       message: data.message || data.error || 'Thực hiện kiểm tra hoàn tất.',
