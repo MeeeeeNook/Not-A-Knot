@@ -1092,7 +1092,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                   required
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Ví dụ: Anh Quân (Quân Paracord)"
+                  placeholder="Ví dụ: Anh Quân (Quân Handmade)"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-slate-800"
                 />
               </div>

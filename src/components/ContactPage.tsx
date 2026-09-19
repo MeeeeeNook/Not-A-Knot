@@ -99,7 +99,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
             Liên Hệ & Giao Lưu
           </h1>
           <p className="text-slate-600 text-sm leading-relaxed max-w-2xl">
-            Để đặt hàng mẫu vòng Paracord theo kích thước riêng, phối màu theo sở thích hoặc gửi yêu cầu tư vấn, bạn có thể nhắn tin trực tiếp qua các mạng xã hội hoặc để lại lời nhắn dưới đây.
+            Để đặt hàng mẫu vòng handmade theo kích thước riêng, phối màu theo sở thích hoặc gửi yêu cầu tư vấn, bạn có thể nhắn tin trực tiếp qua các mạng xã hội hoặc để lại lời nhắn dưới đây.
           </p>
         </div>
 

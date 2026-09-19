@@ -21,8 +21,8 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
   const defaultFaqs = [
     {
       id: 'faq-1',
-      q: 'Dây Paracord có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
-      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt/mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
+      q: 'Dây đan thủ công có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
+      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng chất liệu dây đan cao cấp chịu lực, bền bỉ. Lớp vỏ bện ngoài kháng nước, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
     },
     {
       id: 'faq-2',

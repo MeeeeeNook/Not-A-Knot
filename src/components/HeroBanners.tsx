@@ -54,7 +54,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       tag: 'Bộ Sưu Tập Đặc Biệt',
       title: 'NOT A KNOT',
       highlight: 'Sợi Dây Kể Chuyện',
-      subtitle: 'Từng nút thắt paracord đều mang một câu chuyện độc bản.',
+      subtitle: 'Từng nút thắt thủ công đều mang một câu chuyện độc bản.',
       bgImage: '/assets/hero-bg.jpg',
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
@@ -354,6 +354,8 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                   }
                 };
 
+                const isFirstSlide = currentIndex === 0;
+
                 if (fitMode === 'contain') {
                   return (
                     <div className={`absolute inset-0 w-full h-full ${isBrightBg ? 'bg-white' : 'bg-slate-950'} flex items-center justify-center overflow-hidden transition-colors duration-300`}>
@@ -362,12 +364,17 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         alt=""
                         aria-hidden="true"
                         onError={handleImgError}
+                        loading="lazy"
+                        decoding="async"
                         className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
                       />
                       <img
                         src={validSrc}
                         alt={altText}
                         onError={handleImgError}
+                        loading={isFirstSlide ? "eager" : "lazy"}
+                        fetchPriority={isFirstSlide ? "high" : "low"}
+                        decoding="async"
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
                           transform: `scale(${zoom / 100})`,
@@ -383,6 +390,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                       src={validSrc}
                       alt={altText}
                       onError={handleImgError}
+                      loading={isFirstSlide ? "eager" : "lazy"}
+                      fetchPriority={isFirstSlide ? "high" : "low"}
+                      decoding="async"
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
                         objectPosition: `${posX}% ${posY}%`,
@@ -397,6 +407,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                     src={validSrc}
                     alt={altText}
                     onError={handleImgError}
+                    loading={isFirstSlide ? "eager" : "lazy"}
+                    fetchPriority={isFirstSlide ? "high" : "low"}
+                    decoding="async"
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{
                       objectPosition: `${posX}% ${posY}%`,
@@ -424,7 +437,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                       s.bgPositionY ?? 50,
                       s.bgZoom ?? 100,
                       s.bgFit || 'cover',
-                      s.title || 'NOT A KNOT Banner'
+                      s.title ? `${s.title} - ${s.highlight || s.subtitle || 'NOT A KNOT Phụ Kiện Handmade'}` : 'NOT A KNOT - Phụ Kiện Handmade Thủ Công'
                     )}
                   </div>
 

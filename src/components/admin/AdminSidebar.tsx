@@ -13,6 +13,7 @@ export type AdminTabType =
   | 'site_editor'
   | 'bank_account'
   | 'banners'
+  | 'seo_audit'
   | 'products'
   | 'categories'
   | 'version_history'
@@ -38,6 +39,7 @@ interface AdminSidebarProps {
   categoriesCount: number;
   collectionsCount: number;
   sellersCount: number;
+  seoIssuesCount?: number;
   isMaintenanceActive?: boolean;
   onBackToStore: () => void;
   onLogout?: () => void;
@@ -61,6 +63,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   categoriesCount,
   collectionsCount,
   sellersCount,
+  seoIssuesCount = 0,
   isMaintenanceActive = false,
   onBackToStore,
   onLogout,
@@ -331,6 +334,40 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 >
                   {collectionsCount}
                 </span>
+              </button>
+
+              <button
+                onClick={() => onSwitchTab('seo_audit')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'seo_audit'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>SEO & Quét Thẻ Meta</span>
+                </div>
+                {seoIssuesCount > 0 ? (
+                  <span
+                    className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${
+                      activeTab === 'seo_audit'
+                        ? 'bg-black/10 text-slate-950 border-black/15'
+                        : 'bg-rose-100 text-rose-800 border-rose-200 font-mono animate-pulse'
+                    }`}
+                  >
+                    {seoIssuesCount} lỗi
+                  </span>
+                ) : (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
+                      activeTab === 'seo_audit'
+                        ? 'bg-black/10 text-slate-950 border-black/15'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                    }`}
+                  >
+                    SEO
+                  </span>
+                )}
               </button>
             </div>
 

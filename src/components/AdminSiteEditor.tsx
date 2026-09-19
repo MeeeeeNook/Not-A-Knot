@@ -242,12 +242,12 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
       newSec.title = 'BEST SELLERS';
       newSec.badgeText = 'HOT';
     } else if (presetKey === 'bracelets') {
-      newSec.title = 'VÒNG TAY PARACORD';
-      newSec.badgeText = 'PARACORD';
+      newSec.title = 'VÒNG TAY HANDMADE';
+      newSec.badgeText = 'HANDMADE';
       newSec.filterCategory = 'vong-tay';
     } else if (presetKey === 'keychains') {
-      newSec.title = 'MÓC KHÓA & EDC';
-      newSec.badgeText = 'EDC';
+      newSec.title = 'MÓC KHÓA HANDMADE';
+      newSec.badgeText = 'HANDMADE';
       newSec.filterCategory = 'moc-khoa';
     } else if (presetKey === 'limited') {
       newSec.title = 'LIMITED EDITION';

@@ -29,7 +29,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
             Nghệ Thuật Nút Thắt & Phong Cách
           </h2>
           <p className="text-neutral-500 text-xs sm:text-base mt-3 leading-relaxed">
-            Mỗi thiết kế tại NOT A KNOT được sinh ra từ niềm đam mê chất liệu Paracord 550 siêu bền và tư duy thẩm mỹ tối giản, tinh tế.
+            Mỗi thiết kế tại NOT A KNOT được sinh ra từ niềm đam mê chế tác thủ công siêu bền và tư duy thẩm mỹ tối giản, tinh tế.
           </p>
         </div>
 
@@ -49,7 +49,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                 20/10 Yêu Thương
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed mb-6">
-                Những nút thắt Paracord kết hợp charm bạc và ngọc nữ tính, đi kèm hộp quà nắp nam châm và thiệp viết tay trang trọng.
+                Những nút thắt đan tay kết hợp charm bạc và ngọc nữ tính, đi kèm hộp quà nắp nam châm và thiệp viết tay trang trọng.
               </p>
             </div>
 
@@ -99,7 +99,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                 Charm Bracelet Collection
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed mb-6">
-                Các mẫu vòng phối hạt charm 12 Cung Hoàng Đạo và charm ký tự đúc sắc nét trên nền Paracord bện kép bền bỉ.
+                Các mẫu vòng phối hạt charm 12 Cung Hoàng Đạo và charm ký tự đúc sắc nét trên nền dây đan bện kép bền bỉ.
               </p>
             </div>
 
@@ -136,7 +136,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
             </div>
           </div>
 
-          {/* Card 3: Everyday Wear & Paracord 550 */}
+          {/* Card 3: Everyday Wear */}
           <div className="bg-gradient-to-b from-stone-100 to-white rounded-3xl p-6 sm:p-8 border border-neutral-200 flex flex-col justify-between group hover:shadow-lg transition-all duration-300">
             <div>
               <div className="w-10 h-10 rounded-2xl bg-neutral-900 text-white flex items-center justify-center mb-4 shadow-sm">
@@ -146,10 +146,10 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                 Tối Giản & Bền Bỉ
               </span>
               <h3 className="text-xl sm:text-2xl font-bold text-neutral-950 mb-2">
-                Everyday Wear & Paracord 550
+                Everyday Wear
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed mb-6">
-                Những mẫu vòng tay, móc khóa EDC chịu lực 250kg, chống nước tuyệt đối, phù hợp đi làm, đi chơi hay hoạt động dã ngoại.
+                Những mẫu vòng tay, móc khóa handmade đan tay tỉ mỉ, chống nước, phù hợp đi làm, đi chơi hay hoạt động ngoài trời.
               </p>
             </div>
 
@@ -213,7 +213,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
           <div className="mt-8 pt-8 border-t border-neutral-800 flex flex-wrap items-center justify-center gap-6 text-xs text-neutral-400">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Chính Hãng Paracord 550 7 Lõi</span>
+              <span>Chế Tác Thủ Công Tinh Xảo</span>
             </span>
             <span>•</span>
             <span>Đan Thủ Công Theo Số Đo</span>

@@ -67,6 +67,23 @@ import {
   evictDisposableStorageSpace,
   getProductsFromIDB
 } from './utils/storageHelper';
+import {
+  resetDefaultSEO,
+  setCatalogSEO,
+  setAboutSEO,
+  setContactSEO,
+  setOrderTrackerSEO,
+  setCartSEO,
+  setAdminSEO
+} from './utils/seo';
+import {
+  findProductBySlugOrId,
+  getProductSlug,
+  getCollectionSlug,
+  resolveCollectionId,
+  resolveCategoryId,
+  slugify
+} from './utils/slugify';
 
 const CURRENT_HANOI_SHIPPING_POLICY = 'Miễn phí giao hàng (0đ) cho tất cả đơn hàng trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ áp dụng cho các tỉnh thành khác trên toàn quốc.';
 
@@ -158,6 +175,14 @@ export default function App() {
   const productsRef = useRef<Product[]>(products);
   useEffect(() => {
     productsRef.current = products;
+    if (pendingHashProductRef.current && products.length > 0) {
+      const targetId = pendingHashProductRef.current;
+      const found = findProductBySlugOrId(products, targetId);
+      if (found) {
+        setSelectedProduct(found);
+        pendingHashProductRef.current = null;
+      }
+    }
   }, [products]);
 
   // Publicly visible products (filtered to exclude hidden items or items in hidden categories on storefront)
@@ -267,10 +292,14 @@ export default function App() {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Pending target refs for asynchronous direct link resolution (e.g. from SEO / QR codes)
+  const pendingHashProductRef = useRef<string | null>(null);
+  const pendingHashCollectionRef = useRef<string | null>(null);
+
   // ========================================================
   // HASH-BASED ROUTING SYSTEM
   // Supports: #home, #products, #product-detail, #cart, #checkout,
-  //           #collection, #about, #contact, #admin
+  //           #collection, #about, #contact, #admin, #tracker
   // ========================================================
   const syncStateFromHash = useCallback((hashString: string) => {
     const rawHash = hashString.replace(/^#\/?/, '');
@@ -317,7 +346,7 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'tracking' || pathPart === 'order-tracker' || pathPart === 'tra-cuu') {
+    if (pathPart === 'tracking' || pathPart === 'tracker' || pathPart === 'order-tracker' || pathPart === 'tra-cuu' || pathPart === 'kiem-tra-don-hang') {
       const code = params.get('code');
       if (code) {
         setOrderTrackerInitialCode(code);
@@ -333,22 +362,37 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'products' || pathPart === 'catalog') {
+    if (pathPart === 'products' || pathPart === 'catalog' || pathPart === 'san-pham') {
       setCurrentView('catalog');
       const cat = params.get('category');
       if (cat) {
-        setSelectedCategory(cat);
+        setSelectedCategory(resolveCategoryId(cat, categories));
       }
       setIsCartOpen(false);
       return;
     }
 
-    if (pathPart === 'product-detail' || pathPart.startsWith('product/')) {
-      const prodId = params.get('id') || pathPart.replace('product/', '');
-      if (prodId) {
-        const found = productsRef.current.find((p) => p.id === prodId);
+    if (pathPart.startsWith('category/') || pathPart.startsWith('danh-muc/')) {
+      const rawCat = pathPart.replace(/^(category|danh-muc)\//, '');
+      setCurrentView('catalog');
+      if (rawCat) {
+        setSelectedCategory(resolveCategoryId(rawCat, categories));
+      }
+      setIsCartOpen(false);
+      return;
+    }
+
+    if (pathPart === 'product-detail' || pathPart.startsWith('product/') || pathPart.startsWith('product-') || pathPart.startsWith('san-pham/')) {
+      const prodIdentifier = params.get('id') || pathPart.replace(/^(product|san-pham)[\/-]/, '');
+      if (prodIdentifier) {
+        const found = findProductBySlugOrId(productsRef.current, prodIdentifier);
         if (found) {
           setSelectedProduct(found);
+          setCurrentView('product-detail');
+          pendingHashProductRef.current = null;
+        } else {
+          // If products haven't loaded from Firestore yet, queue it
+          pendingHashProductRef.current = prodIdentifier;
           setCurrentView('product-detail');
         }
       }
@@ -356,12 +400,20 @@ export default function App() {
       return;
     }
 
-    if (pathPart.startsWith('collection/') || pathPart.startsWith('collection-')) {
-      const colId = pathPart.replace(/^collection[\/-]/, '');
-      if (colId) {
-        setActiveCollectionId(colId);
-        setCurrentView('collection');
-      }
+    if (pathPart === 'event_0209' || pathPart === 'event-0209' || pathPart === 'hao-khi-0209') {
+      setActiveCollectionId('event_0209');
+      setCurrentView('collection');
+      setIsCartOpen(false);
+      return;
+    }
+
+    if (pathPart.startsWith('collection/') || pathPart.startsWith('collection-') || pathPart.startsWith('bo-suu-tap/') || pathPart === 'collection' || pathPart === 'collections' || pathPart === 'bo-suu-tap') {
+      const rawCol = params.get('id') || pathPart.replace(/^(collection(s)?|bo-suu-tap)[\/-]?/, '');
+      const targetColId = resolveCollectionId(rawCol || 'event_0209', collections);
+      setActiveCollectionId(targetColId);
+      setCurrentView('collection');
+      pendingHashCollectionRef.current = targetColId;
+      setIsCartOpen(false);
       return;
     }
 
@@ -459,6 +511,26 @@ export default function App() {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [syncStateFromHash]);
+
+  // Synchronize Canonical tags, Meta Titles, and Meta Descriptions across all app views
+  useEffect(() => {
+    if (currentView === 'landing') {
+      resetDefaultSEO();
+    } else if (currentView === 'catalog') {
+      const activeCat = categories.find((c) => c.id === selectedCategory);
+      setCatalogSEO(activeCat ? activeCat.name : undefined, selectedCategory);
+    } else if (currentView === 'about') {
+      setAboutSEO();
+    } else if (currentView === 'contact') {
+      setContactSEO();
+    } else if (currentView === 'order-tracker') {
+      setOrderTrackerSEO(orderTrackerInitialCode);
+    } else if (currentView === 'cart') {
+      setCartSEO();
+    } else if (currentView === 'admin') {
+      setAdminSEO();
+    }
+  }, [currentView, selectedCategory, categories, orderTrackerInitialCode]);
 
   // Track session engagement duration and time on page (heartbeat)
   useEffect(() => {
@@ -1120,16 +1192,19 @@ export default function App() {
 
   // Navigation Handlers with Hash Updates
   const handleSelectCollection = (collectionId: string) => {
+    const matchedCol = collections.find((c) => c.id === collectionId);
+    const colSlug = getCollectionSlug(collectionId, matchedCol?.title);
     setActiveCollectionId(collectionId);
     setCurrentView('collection');
-    window.location.hash = `#collection/${collectionId}`;
+    window.location.hash = `#collection/${colSlug}`;
     scrollToPageBeginning();
   };
 
   const handleOpenAllCatalog = (categoryId: string = 'all') => {
     setSelectedCategory(categoryId);
     setCurrentView('catalog');
-    window.location.hash = categoryId !== 'all' ? `#products?category=${categoryId}` : '#products';
+    const catSlug = slugify(categoryId);
+    window.location.hash = categoryId !== 'all' ? `#products?category=${catSlug}` : '#products';
     scrollToPageBeginning();
   };
 
@@ -1239,7 +1314,8 @@ export default function App() {
     }
     setSelectedProduct(p);
     setCurrentView('product-detail');
-    window.location.hash = `#product/${p.id}`;
+    const slug = getProductSlug(p);
+    window.location.hash = `#product/${slug}`;
     scrollToPageBeginning();
   };
 
@@ -1247,7 +1323,9 @@ export default function App() {
     setSelectedProduct(null);
     if (previousView === 'collection' && activeCollectionId && activeCollectionId !== 'all') {
       setCurrentView('collection');
-      window.location.hash = `#collection/${activeCollectionId}`;
+      const matchedCol = collections.find((c) => c.id === activeCollectionId);
+      const colSlug = getCollectionSlug(activeCollectionId, matchedCol?.title);
+      window.location.hash = `#collection/${colSlug}`;
     } else if (previousView === 'landing') {
       handleNavigateLanding();
     } else if (previousView === 'about') {
@@ -1257,7 +1335,8 @@ export default function App() {
     } else {
       // Default to catalog (Trang Sản Phẩm)
       setCurrentView('catalog');
-      window.location.hash = selectedCategory && selectedCategory !== 'all' ? `#products?category=${selectedCategory}` : '#products';
+      const catSlug = slugify(selectedCategory || 'all');
+      window.location.hash = selectedCategory && selectedCategory !== 'all' ? `#products?category=${catSlug}` : '#products';
     }
     scrollToPageBeginning();
   };
@@ -1397,7 +1476,7 @@ export default function App() {
                     <div key={itemIdx} className="flex items-center gap-3 px-8 sm:px-12">
                       <Sparkles className="w-3.5 h-3.5 flex-shrink-0 text-amber-300 animate-pulse" />
                       <span className="tracking-wide">
-                        {siteContent?.announcementText || 'Ưu đãi đặt trước BST Mới: Tặng kèm móc khóa Paracord EDC cao cấp cho đơn từ 299k!'}
+                        {siteContent?.announcementText || 'Ưu đãi đặt trước BST Mới: Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!'}
                       </span>
                       <span className="text-white/40 font-normal px-2">✦</span>
                     </div>
@@ -1664,8 +1743,10 @@ export default function App() {
       {currentView !== 'admin' && !isMaintenanceActiveForUser && (
         <Footer
           siteContent={siteContent}
+          categories={categories}
           onOpenAdmin={handleOpenAdmin}
           onSelectCollection={handleSelectCollection}
+          onSelectCategory={(catId) => handleOpenAllCatalog(catId)}
           onOpenAllCatalog={() => handleOpenAllCatalog('all')}
           onOpenAbout={handleOpenAbout}
           onOpenContact={handleOpenContact}

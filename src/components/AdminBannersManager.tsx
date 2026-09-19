@@ -485,7 +485,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                   type="text"
                   value={formSubtitle}
                   onChange={(e) => setFormSubtitle(e.target.value)}
-                  placeholder="Ví dụ: Kỷ vật phụ kiện Paracord thủ công..."
+                  placeholder="Ví dụ: Kỷ vật phụ kiện handmade thủ công..."
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:bg-white"
                 />
               </div>
@@ -1115,7 +1115,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                         </h4>
 
                         <p className="text-[11px] text-neutral-300 line-clamp-1">
-                          {col.subtitle || 'Dây dù paracord 550lb chuẩn quân nhu chịu lực 250kg.'}
+                          {col.subtitle || 'Chế tác đan tay thủ công tỉ mỉ, độ bền cao.'}
                         </p>
 
                         <div className="pt-1">

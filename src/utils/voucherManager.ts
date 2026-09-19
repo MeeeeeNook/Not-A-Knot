@@ -58,8 +58,47 @@ export async function verifyVoucherIntegrity(voucher: Voucher): Promise<boolean>
   return expected === voucher.encryptedData;
 }
 
+export const DEFAULT_INITIAL_VOUCHERS: Omit<Voucher, 'encryptedData'>[] = [
+  {
+    id: 'voucher-knot10',
+    code: 'KNOT10',
+    type: 'percent',
+    discountPercent: 10,
+    minOrderValue: 100000,
+    maxDiscountAmount: 50000,
+    startDate: '2026-01-01',
+    endDate: '2027-12-31',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'voucher-freeship',
+    code: 'FREESHIP',
+    type: 'freeship',
+    discountPercent: 0,
+    minOrderValue: 150000,
+    maxDiscountAmount: 30000,
+    startDate: '2026-01-01',
+    endDate: '2027-12-31',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  },
+  {
+    id: 'voucher-naknew',
+    code: 'NAKNEW',
+    type: 'percent',
+    discountPercent: 15,
+    minOrderValue: 80000,
+    maxDiscountAmount: 40000,
+    startDate: '2026-01-01',
+    endDate: '2027-12-31',
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00.000Z'
+  }
+];
+
 /**
- * Fetch all vouchers (with local cache fallback)
+ * Fetch all vouchers (with local cache fallback and defaults)
  */
 export async function getVouchers(): Promise<Voucher[]> {
   try {
@@ -81,11 +120,28 @@ export async function getVouchers(): Promise<Voucher[]> {
   try {
     const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
     if (local) {
-      return JSON.parse(local) as Voucher[];
+      const parsed = JSON.parse(local) as Voucher[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
     }
   } catch {}
 
-  return [];
+  // Generate initial presets with signed encryption
+  const seeded: Voucher[] = [];
+  for (const raw of DEFAULT_INITIAL_VOUCHERS) {
+    const encrypted = await generateVoucherEncryption(raw);
+    seeded.push({
+      ...raw,
+      encryptedData: encrypted
+    });
+  }
+
+  try {
+    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(seeded));
+  } catch {}
+
+  return seeded;
 }
 
 /**

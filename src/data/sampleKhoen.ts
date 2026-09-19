@@ -1,7 +1,7 @@
 import { ProductKhoenOption } from '../types';
 
 /**
- * Standard preset Khoen (Clasps & Rings) for Paracord Keychains & Accessories.
+ * Standard preset Khoen (Clasps & Rings) for Handmade Keychains & Accessories.
  * Rendered as lightweight, responsive SVG data URIs for instantaneous crisp loading.
  */
 

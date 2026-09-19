@@ -96,7 +96,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       if (!p.isHidden && p.category && !hiddenCategoryIds.has(p.category) && !catMap.has(p.category)) {
         catMap.set(p.category, {
           id: p.category,
-          label: p.category.replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim() || 'Vòng Tay Paracord',
+          label: p.category.replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim() || 'Vòng Tay Handmade',
           highlightColor: '#475569'
         });
       }

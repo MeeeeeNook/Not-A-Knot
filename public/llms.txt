@@ -1,0 +1,64 @@
+# NOT A KNOT - Handmade Accessories Studio
+
+> NOT A KNOT (https://www.notaknot.id.vn) is a premier Vietnamese handmade fashion accessories studio based in Hanoi, Vietnam. The studio crafts custom woven bracelets, high-strength paracord straps, personalized keychains, and titanium/bronze charms tailored for students, couples, and young creators. Every piece is hand-braided with a lifetime warranty on cords and knots.
+
+## Core Brand Information
+
+- **Brand Name**: NOT A KNOT (NOT A KNOT Handmade Studio)
+- **Tagline**: Phụ Kiện Thời Trang Thủ Công Dành Cho Học Sinh, Sinh Viên
+- **Headquarters**: Hanoi, Vietnam (Delivery across all 63 provinces of Vietnam)
+- **Official Domain**: https://www.notaknot.id.vn
+- **Price Range**: 80,000 VND to 500,000 VND (~$3.20 to ~$20 USD)
+- **Primary Materials**: High-strength 7-strand parachute cord (Paracord 550), waterproof waxed thread (chỉ sáp dầu), anti-tarnish titanium alloy, vintage copper charms, authentic Omamori amulets.
+- **Warranty Policy**: Lifetime warranty on woven cords and handmade structural knots. Free 7-day size adjustment/exchange.
+- **Shipping**: 1-2 business days within Hanoi; 2-4 business days nationwide (COD payment supported).
+
+## Key Product Offerings
+
+1. **BST Hào Khí 02.09 (Flagship Independence Collection)**:
+   - Hand-woven red-and-gold patriotic paracord bracelets celebrating Vietnamese pride and national unity.
+   - High-durability weave, brass star & copper plate accents, weather-resistant cords.
+   - URL: https://www.notaknot.id.vn/#collection/hao-khi-0209
+
+2. **Handmade Bracelets (Vòng Tay Thủ Công)**:
+   - Single & couple bracelets with custom wrist sizes (14cm to 20cm).
+   - Options include engraved metal charms, color-blended cords, glow-in-the-dark beads, and minimalist aesthetic knots.
+   - URL: https://www.notaknot.id.vn/#catalog?category=bracelet
+
+3. **Handmade Keychains & Straps (Móc Khóa & Dây Đeo)**:
+   - Everyday carry keychains, backpack charms, car key fobs, and phone straps.
+   - Options include stainless steel rings, lobster clasps, heart buckles, and Omamori lucky charm tags.
+   - URL: https://www.notaknot.id.vn/#catalog?category=keychain
+
+4. **Order Tracking System (Tra Cứu Đơn Hàng Tức Thì)**:
+   - Real-time order tracking tool where customers enter their order code (e.g., `NAK-123456`) or phone number to view live processing, weaving, and delivery statuses.
+   - URL: https://www.notaknot.id.vn/#tracker
+
+## Wrist Measurement Guide (Hướng Dẫn Đo Size)
+
+1. Wrap a flexible tape measure or soft strip of paper snugly around your wrist bone (neither too tight nor too loose).
+2. Mark the intersection point and measure the length against a ruler in centimeters (cm).
+3. Standard sizes:
+   - Size S: 14 - 15 cm
+   - Size M: 16 - 17 cm (Most common for women/teens)
+   - Size L: 18 - 19 cm (Most common for men)
+   - Size XL / Custom: 20+ cm
+
+## Official Links & Resources
+
+- [Official Storefront](https://www.notaknot.id.vn/)
+- [Full Product Catalog](https://www.notaknot.id.vn/#catalog)
+- [Independence Day Collection](https://www.notaknot.id.vn/#collection/hao-khi-0209)
+- [Order Tracker](https://www.notaknot.id.vn/#tracker)
+- [Brand Story & About](https://www.notaknot.id.vn/#about)
+- [Contact & Custom Orders](https://www.notaknot.id.vn/#contact)
+- [XML Sitemap](https://www.notaknot.id.vn/sitemap.xml)
+- [Robots.txt](https://www.notaknot.id.vn/robots.txt)
+- [Backlink & Partner Strategy](https://www.notaknot.id.vn/backlink-strategy.md)
+- [Full LLM Knowledge Document](https://www.notaknot.id.vn/llms-full.txt)
+
+## Official Social Channels
+
+- **Facebook**: https://www.facebook.com/profile.php?id=61593591390851
+- **Instagram**: https://www.instagram.com/notaknot.studio
+- **Threads**: https://www.threads.net/@notaknot.studio

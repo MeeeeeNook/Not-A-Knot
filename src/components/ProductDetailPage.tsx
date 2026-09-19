@@ -8,6 +8,7 @@ import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
+import { ShareProductModal } from './ShareProductModal';
 import { LoadingImage } from './LoadingImage';
 import {
   ChevronLeft,
@@ -15,6 +16,7 @@ import {
   ShoppingBag,
   Check,
   Share2,
+  QrCode,
   ArrowLeft,
   Plus,
   AlertCircle,
@@ -31,6 +33,7 @@ import {
 import { trackGA4ViewItem, trackGA4PageView } from '../utils/analytics';
 import { resolveAssetUrl } from '../firebase';
 import { useProductSEO } from '../utils/seo';
+import { getProductSlug } from '../utils/slugify';
 import { buildProductGalleryImages, findGalleryImageIndex, isSameImageUrl } from '../utils/imageUtils';
 
 interface ProductDetailPageProps {
@@ -141,6 +144,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const [isAdded, setIsAdded] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [quickAddedId, setQuickAddedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'return_warranty' | 'shipping'>('return_warranty');
 
@@ -569,12 +573,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   };
 
   const handleShare = () => {
-    const url = window.location.origin + window.location.pathname + `#product/${product.id}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
-    }
+    setIsShareModalOpen(true);
   };
 
   const handleQuickAddRecommended = (e: React.MouseEvent, prod: Product) => {
@@ -646,7 +645,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     if (match) return match.label;
     if (product.category === 'event_0209') return 'Quốc Khánh 02.09';
     if (product.category === 'event_2010') return 'Phụ Nữ 20.10';
-    if (product.category === 'bracelets') return 'Bản Đan Paracord EDC';
+    if (product.category === 'bracelets') return 'Vòng Tay Handmade';
     if (product.category === 'back_to_school') return 'Back 2 School';
     if (product.category && product.category.trim().length > 0) {
       return product.category.replace(/^(BST|Bộ\s+sưu\s+tập)\s+/i, '').trim();
@@ -734,17 +733,17 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <span className="hidden sm:inline font-normal text-neutral-500">• {backLabel || 'Danh mục sản phẩm'}</span>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <span className="text-xs font-semibold text-neutral-500 hidden sm:inline">
               {categoryName}
             </span>
             <button
-              onClick={handleShare}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors cursor-pointer active:scale-95"
-              title="Sao chép link sản phẩm"
+              onClick={() => setIsShareModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors cursor-pointer active:scale-95 border border-neutral-200/60 shadow-2xs"
+              title="Chia sẻ sản phẩm"
             >
-              <Share2 className="w-3.5 h-3.5" />
-              <span>{copiedLink ? 'Đã sao chép!' : 'Chia sẻ'}</span>
+              <Share2 className="w-3.5 h-3.5 text-slate-800" />
+              <span>Chia sẻ</span>
             </button>
           </div>
         </div>
@@ -947,11 +946,20 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="lg:col-span-7 xl:col-span-7 space-y-5">
             <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 border border-neutral-200/90 shadow-xs space-y-4 sm:space-y-6">
               
-              {/* Product Title */}
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight">
+              {/* Product Title & Quick Share */}
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight flex-1">
                   {product.name}
                 </h1>
+                <button
+                  type="button"
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-slate-200/80 shadow-2xs active:scale-95"
+                  title="Chia sẻ sản phẩm"
+                >
+                  <Share2 className="w-4 h-4 text-slate-800" />
+                  <span className="hidden sm:inline">Chia sẻ</span>
+                </button>
               </div>
 
               {/* Price & Sales Row */}
@@ -1832,6 +1840,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           }
           return images[activeImageIdx] === item.image;
         }}
+      />
+
+      {/* Share Product & QR Code Modal */}
+      <ShareProductModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        product={product}
+        categoryName={categoryName}
       />
     </motion.div>
   );

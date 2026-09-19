@@ -132,7 +132,7 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
       subtitle: 'Mô tả ngắn gọn về tinh thần và sự độc đáo của bộ sưu tập...',
       story: 'Chia sẻ câu chuyện thương hiệu và nguồn cảm hứng chế tác nên bộ sưu tập này...',
       craftDetails: [
-        'Dây Paracord 550 cao cấp chịu tải trọng lớn',
+        'Chất liệu dây đan cao cấp chịu tải trọng lớn',
         'Đan thủ công 100% từng nút thắt tỉ mỉ',
         'Phụ kiện charm hợp kim không gỉ sáng bóng'
       ],
@@ -480,7 +480,7 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
                     handleChange('description', e.target.value);
                     if (!formData.story) handleChange('story', e.target.value);
                   }}
-                  placeholder="Nhập mô tả giới thiệu bộ sưu tập (ví dụ: Chào đón mùa tựu trường cùng BST Back To School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt Paracord thủ công năng động...)"
+                  placeholder="Nhập mô tả giới thiệu bộ sưu tập (ví dụ: Chào đón mùa tựu trường cùng BST Back To School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt thủ công năng động...)"
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-amber-500 leading-relaxed"
                 />
               </div>
@@ -491,7 +491,7 @@ export const AdminCollectionPageEditor: React.FC<AdminCollectionPageEditorProps>
                   type="text"
                   value={formData.subtitle}
                   onChange={(e) => handleChange('subtitle', e.target.value)}
-                  placeholder="Kỷ vật phụ kiện Paracord thủ công phiên bản giới hạn..."
+                  placeholder="Kỷ vật phụ kiện thủ công phiên bản giới hạn..."
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-amber-500"
                 />
               </div>

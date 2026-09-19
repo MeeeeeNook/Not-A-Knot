@@ -4,7 +4,7 @@ export const DEFAULT_CATEGORIES: CategoryItem[] = [
   {
     id: 'event_0209',
     label: 'Quốc Khánh 02.09',
-    description: 'Hào Khí Non Sông — Kỷ vật phụ kiện Paracord thủ công 02/09',
+    description: 'Hào Khí Non Sông — Kỷ vật phụ kiện handmade 02/09',
     highlightColor: '#B41C1A',
     badge: '02.09',
     isEvent: true
@@ -19,10 +19,10 @@ export const DEFAULT_CATEGORIES: CategoryItem[] = [
   },
   {
     id: 'bracelets',
-    label: 'Vòng Tay Paracord',
-    description: 'Dây Quân Đội Chịu Tải 250kg & Khóa Kim Loại Sinh Tồn',
+    label: 'Vòng Tay Handmade',
+    description: 'Dây Đan Thủ Công Tinh Xảo & Khóa Kim Loại Cao Cấp',
     highlightColor: '#D97706',
-    badge: 'Tactical'
+    badge: 'Handmade'
   },
   {
     id: 'back_to_school',

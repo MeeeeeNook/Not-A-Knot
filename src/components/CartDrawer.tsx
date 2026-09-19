@@ -549,7 +549,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div>
                         <p className="font-bold text-neutral-950 text-base">Giỏ hàng của bạn đang trống</p>
                         <p className="text-xs text-neutral-600 font-medium mt-1">
-                          Hãy khám phá các bộ sưu tập Paracord thủ công độc bản từ NOT A KNOT.
+                          Hãy khám phá các bộ sưu tập phụ kiện thủ công độc bản từ NOT A KNOT.
                         </p>
                       </div>
                       <button

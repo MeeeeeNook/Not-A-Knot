@@ -78,7 +78,7 @@ export const generateOrderSlipHtml = (
       : `
       <tr>
         <td colspan="4" style="padding:12px;border-bottom:1px solid #e2e8f0;color:#0f172a;">
-          ${Array.isArray(order.items) ? order.items.join(', ') : order.items ? String(order.items) : 'Sản phẩm thủ công Paracord'}
+          ${Array.isArray(order.items) ? order.items.join(', ') : order.items ? String(order.items) : 'Sản phẩm phụ kiện thủ công'}
         </td>
       </tr>
     `;
@@ -283,7 +283,7 @@ export const generateOrderSlipHtml = (
     <div class="header">
       <div>
         <div class="brand">${brandName}</div>
-        <div class="subbrand">Xưởng Đan Vòng & Phụ Kiện Thủ Công Paracord</div>
+        <div class="subbrand">Xưởng Đan Vòng & Phụ Kiện Handmade Thủ Công</div>
         <div style="font-size:12px;color:#1e293b;margin-top:4px;font-weight:700;">Hotline: ${hotline}</div>
       </div>
       <div class="code-box">
@@ -424,7 +424,7 @@ export const generateOrderSlipPlainText = (
       ? order.items.join(', ')
       : order.items
       ? String(order.items)
-      : 'Sản phẩm thủ công Paracord';
+      : 'Sản phẩm phụ kiện thủ công';
 
   return `========================================
 ${brandName} - PHIẾU GIAO NHẬN & ĐƠN HÀNG

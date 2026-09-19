@@ -25,6 +25,7 @@ import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
+import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import {
   MaintenanceConfig
@@ -123,6 +124,7 @@ export type AdminTabType =
   | 'messages'
   | 'site_editor'
   | 'banners'
+  | 'seo_audit'
   | 'products'
   | 'categories'
   | 'version_history'
@@ -1196,7 +1198,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormImages(['/assets/hero-bg.png']);
     setNewImageUrlInput('');
     setFormDiscountBadge('');
-    setFormDetailsText('Dây Paracord 550 Type III 7 lõi chịu lực\nKhóa kim loại titan chống rỉ sét');
+    setFormDetailsText('Dây đan thủ công cao cấp chịu lực\nKhóa kim loại titan chống rỉ sét');
     setFormStock(15);
     setFormInStock(true);
     setFormSoldCount(0);
@@ -1553,11 +1555,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         price: priceNum,
         originalPrice: originalPriceNum,
         category: formCategory,
-        description: formDescription.trim() || 'Mẫu phụ kiện Paracord thủ công độc đáo.',
+        description: formDescription.trim() || 'Mẫu phụ kiện handmade thủ công độc đáo.',
         image: defaultImage,
         images: finalImages,
         discountBadge: formDiscountBadge.trim() || undefined,
-        details: detailsArray.length > 0 ? detailsArray : ['Dây Paracord 550 cao cấp'],
+        details: detailsArray.length > 0 ? detailsArray : ['Dây đan thủ công cao cấp'],
         enableColorSelection: formEnableColorSelection,
         colorOptions: formEnableColorSelection ? formColorOptions : [],
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
@@ -1640,11 +1642,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         price: priceNum,
         originalPrice: originalPriceNum,
         category: formCategory,
-        description: formDescription.trim() || 'Mẫu phụ kiện Paracord thủ công độc quyền từ NOT A KNOT.',
+        description: formDescription.trim() || 'Mẫu phụ kiện handmade thủ công độc quyền từ NOT A KNOT.',
         image: defaultImage,
         images: finalImages,
         discountBadge: formDiscountBadge.trim() || undefined,
-        details: detailsArray.length > 0 ? detailsArray : ['Dây Paracord 550 Type III', 'Khóa kim loại chống gỉ'],
+        details: detailsArray.length > 0 ? detailsArray : ['Dây đan thủ công cao cấp', 'Khóa kim loại chống gỉ'],
         enableColorSelection: formEnableColorSelection,
         colorOptions: formEnableColorSelection ? formColorOptions : [],
         availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
@@ -2909,6 +2911,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     .filter((o) => o.status !== 'cancelled' && o.status !== 'Đã hủy')
     .reduce((sum, o) => sum + Math.max(0, (o.totalPrice || o.totalAmount || 0) - (Number(o.shippingFee) || 0)), 0);
 
+  const seoIssuesCount = useMemo(() => {
+    let count = 0;
+    products.forEach((p) => {
+      if (!p.name?.trim() || !p.description?.trim() || p.description.trim().length < 40) {
+        count++;
+      }
+    });
+    (localCollections || []).forEach((c) => {
+      if (!c.title?.trim() || (!c.description?.trim() && !c.subtitle?.trim())) {
+        count++;
+      }
+    });
+    return count;
+  }, [products, localCollections]);
+
   const getTabDisplayName = (): string => {
     switch (activeTab) {
       case 'dashboard':
@@ -2927,6 +2944,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Danh mục';
       case 'site_editor':
         return 'Sửa giao diện';
+      case 'seo_audit':
+        return 'Kiểm tra & Tối ưu SEO Meta';
       case 'bank_account':
         return 'Tài khoản ngân hàng';
       case 'banners':
@@ -2970,6 +2989,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         categoriesCount={localCategories.length}
         collectionsCount={localCollections.length}
         sellersCount={sellers.length}
+        seoIssuesCount={seoIssuesCount}
         isMaintenanceActive={maintenanceConfig.enabled}
         onBackToStore={onBackToStore}
         onLogout={onLogout}
@@ -3064,6 +3084,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ======================================================== */}
+        {/* TAB: SEO & META AUDIT SCANNER */}
+        {/* ======================================================== */}
+        {activeTab === 'seo_audit' && (
+          <AdminSeoAuditTab
+            products={products}
+            collections={localCollections}
+            categories={localCategories}
+            siteContent={siteContent}
+            onUpdateProducts={onUpdateProducts}
+            onUpdateCollections={(cols) => {
+              setLocalCollections(cols);
+              if (onUpdateCollections) onUpdateCollections(cols);
+            }}
+            onUpdateCategories={(cats) => {
+              setLocalCategories(cats);
+              if (onUpdateCategories) onUpdateCategories(cats);
+            }}
+            onUpdateSiteContent={onUpdateSiteContent}
+            onNotify={showAdminToast}
+          />
+        )}
+
+        {/* ======================================================== */}
         {/* TAB: THÙNG RÁC ĐƠN HÀNG */}
         {/* ======================================================== */}
         {activeTab === 'trash' && (
@@ -3081,7 +3124,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {/* TAB: MÃ GIẢM GIÁ (VOUCHERS) */}
         {/* ======================================================== */}
-        {activeTab === 'vouchers' && <AdminVouchersTab />}
+        {activeTab === 'vouchers' && (
+          <AdminVouchersTab
+            orders={orders}
+            onInspectOrder={(ord) => setInspectingOrder(ord)}
+          />
+        )}
 
         {/* ======================================================== */}
         {/* TAB: VERSION HISTORY (LỊCH SỬ PHIÊN BẢN & AUTO BACKUP) */}
@@ -3335,7 +3383,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           required
                           value={formName}
                           onChange={(e) => setFormName(e.target.value)}
-                          placeholder="Ví dụ: Vòng Tay Paracord 02.09 Hào Khí Non Sông"
+                          placeholder="Ví dụ: Vòng Tay Handmade 02.09 Hào Khí Non Sông"
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
                         />
                       </div>
@@ -3518,7 +3566,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           rows={3}
                           value={formDetailsText}
                           onChange={(e) => setFormDetailsText(e.target.value)}
-                          placeholder="Dây Paracord 550 Type III 7 lõi&#10;Khóa kim loại titan chống gỉ"
+                          placeholder="Dây đan thủ công cao cấp&#10;Khóa kim loại titan chống gỉ"
                           className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white font-mono text-[11px]"
                         />
                       </div>
@@ -5606,7 +5654,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   Danh Mục Sản Phẩm ({localCategories.length})
                 </h3>
                 <p className="text-xs text-slate-600 mt-1 max-w-xl">
-                  Thêm, sửa tên, đổi màu nhận diện, và cập nhật mô tả các Bộ sưu tập Paracord. Các thay đổi sẽ cập nhật tức thì trên toàn bộ Cửa Hàng và Bộ Lọc.
+                  Thêm, sửa tên, đổi màu nhận diện, và cập nhật mô tả các Bộ sưu tập handmade. Các thay đổi sẽ cập nhật tức thì trên toàn bộ Cửa Hàng và Bộ Lọc.
                 </p>
               </div>
 

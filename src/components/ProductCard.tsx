@@ -22,7 +22,7 @@ export const getCategoryLabel = (
   categories?: CategoryItem[],
   collections?: CollectionInfo[]
 ): string => {
-  if (!category || category === 'all') return 'Vòng Tay Paracord';
+  if (!category || category === 'all') return 'Vòng Tay Handmade';
 
   // Check provided collections
   if (collections && collections.length > 0) {
@@ -57,7 +57,7 @@ export const getCategoryLabel = (
     case 'event_2010':
       return 'Nàng Thơ 20.10';
     case 'bracelets':
-      return 'Vòng Tay Paracord';
+      return 'Vòng Tay Handmade';
     case 'back_to_school':
       return 'Back 2 School';
     case 'charm_bracelet':
@@ -65,18 +65,18 @@ export const getCategoryLabel = (
     case 'everyday':
       return 'Everyday Wear';
     case 'keychains':
-      return 'Móc Khóa EDC';
+      return 'Móc Khóa Handmade';
     case 'lanyards':
       return 'Dây Đeo Phụ Kiện';
     default:
       if (category && category.trim().length > 0) {
         const trimmed = category.trim();
         if (/^(bộ sưu tập|bst|bo_suu_tap)$/i.test(trimmed)) {
-          return 'Vòng Tay Paracord';
+          return 'Vòng Tay Handmade';
         }
         return trimmed.replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim();
       }
-      return 'Vòng Tay Paracord';
+      return 'Vòng Tay Handmade';
   }
 };
 
@@ -200,7 +200,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 src={activeHoverSrc}
                 srcSet={hoverSrcSet}
                 sizes={IMAGE_SIZES_PRESETS.productCard}
-                alt={product.name}
+                alt={`${product.name} - Phụ kiện handmade thủ công NOT A KNOT`}
                 custom={direction}
                 variants={cardSlideVariants}
                 initial="enter"
@@ -226,7 +226,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           ) : (
             <LazyProductImage
               src={images[0] || product.image || '/assets/bracelet.jpg'}
-              alt={product.name}
+              alt={`${product.name} - Vòng tay handmade NOT A KNOT`}
               sizes={IMAGE_SIZES_PRESETS.productCard}
               priority={priority}
               className={`w-full h-full object-cover ${isSoldOut ? 'grayscale-[35%]' : ''}`}

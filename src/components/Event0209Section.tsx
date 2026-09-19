@@ -126,7 +126,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
             Hào Khí Non Sông.
           </h2>
           <p className="text-neutral-400 text-base sm:text-lg font-normal leading-relaxed">
-            Kỷ vật thủ công kỷ niệm ngày Tết Độc Lập 02/09/1945. Mỗi nút thắt Paracord là thông điệp tri ân quá khứ hào hùng và khẳng định bản lĩnh hôm nay.
+            Kỷ vật thủ công kỷ niệm ngày Tết Độc Lập 02/09/1945. Mỗi nút thắt handmade là thông điệp tri ân quá khứ hào hùng và khẳng định bản lĩnh hôm nay.
           </p>
         </div>
 
@@ -304,7 +304,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
                     className="w-4 h-4 rounded text-brand-red accent-brand-red cursor-pointer"
                   />
                   <div>
-                    <span className="font-semibold text-xs sm:text-sm text-white block">Vòng Paracord 02/09 Edition</span>
+                    <span className="font-semibold text-xs sm:text-sm text-white block">Vòng Handmade 02/09 Edition</span>
                     <span className="text-neutral-400 text-xs">39.000đ</span>
                   </div>
                 </label>

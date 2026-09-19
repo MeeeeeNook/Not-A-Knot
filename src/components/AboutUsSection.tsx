@@ -19,13 +19,13 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
     window.location.hash = '#about';
   });
   const title = content?.title || 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh';
-  const subtitle = content?.subtitle || 'Xưởng chế tác phụ kiện dây dù Paracord 550 & EDC thủ công hàng đầu tại Việt Nam.';
+  const subtitle = content?.subtitle || 'Xưởng chế tác phụ kiện handmade & thời trang thủ công hàng đầu tại Việt Nam.';
   const storyP1 = content?.storyParagraph1 || 'NOT A KNOT ra đời từ niềm đam mê chế tác thủ công bền bỉ. Tên gọi NOT A KNOT mang thông điệp: mỗi chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần kiên cường, kỷ luật và phong cách cá nhân.';
   const quote = content?.quote || '“Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.”';
 
   const stats = content?.stats || [
     { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
-    { label: 'Chuẩn Paracord 550', value: '100%', desc: '7 lõi dù Type III bền bỉ' },
+    { label: 'Đan Tay Thủ Công', value: '100%', desc: 'Tỉ mỉ & độc bản' },
     { label: 'Bảo Hành Nút Thắt', value: 'Trọn Đời', desc: 'Vệ sinh & đan lại miễn phí' },
     { label: 'Đánh Giá Hài Lòng', value: '4.9/5★', desc: 'Khách hàng toàn quốc' }
   ];

@@ -6,7 +6,7 @@ export const HERO_BANNERS: BannerItem[] = [
     tag: 'PHIÊN BẢN ĐẶC BIỆT 02.09',
     title: 'Hào Khí Non Sông',
     highlight: 'Tự Hào Việt Nam',
-    subtitle: 'Kỷ vật phụ kiện Paracord thủ công phiên bản giới hạn kỷ niệm ngày Quốc khánh.',
+    subtitle: 'Kỷ vật phụ kiện thủ công phiên bản giới hạn kỷ niệm ngày Quốc khánh.',
     bgImage: '/assets/hero-bg.png',
     bgGradient: 'from-black/90 via-black/60 to-transparent',
     categoryLink: 'event_0209',
@@ -19,7 +19,7 @@ export const HERO_BANNERS: BannerItem[] = [
     tag: 'BỘ SƯU TẬP 20/10 — QUÀ TẶNG NÀNG',
     title: 'Nàng Thơ Dịu Dàng',
     highlight: 'Tôn Vinh Phụ Nữ VN',
-    subtitle: 'Sự hòa quyện giữa nét mềm mại của Charm hoa, tone Pastel và độ bền tinh tế của Paracord.',
+    subtitle: 'Sự hòa quyện giữa nét mềm mại của Charm hoa, tone Pastel và nét đẹp thủ công tinh tế.',
     bgImage: '/assets/img_4_NOT_A_KNOT.jpg',
     bgGradient: 'from-rose-950/90 via-pink-950/65 to-transparent',
     categoryLink: 'event_2010',
@@ -65,14 +65,14 @@ export const PRODUCTS: Product[] = [
     "isNew": false,
     "updatedAt": "2026-09-03T07:55:11.100Z",
     "originalPrice": 50000,
-    "description": "Được tết thủ công tỉ mỉ từ dây Paracord siêu bền, điểm nhấn là phù hiệu lá cờ đỏ sao vàng thêu nổi ngay giữa vòng. Một kỷ vật mang tinh thần kiên cường, dành tặng cho những người tự hào là người Việt.",
+    "description": "Được tết thủ công tỉ mỉ từ dây đan siêu bền, điểm nhấn là phù hiệu lá cờ đỏ sao vàng thêu nổi ngay giữa vòng. Một kỷ vật mang tinh thần kiên cường, dành tặng cho những người tự hào là người Việt.",
     "images": [
       "/assets/0209/img_3.jpg"
     ],
-    "name": "Vòng Paracord 02/09 Edition",
+    "name": "Vòng Tay 02/09 Edition",
     "reviewsCount": 168,
     "details": [
-      "Chất liệu: Dây Paracord lõi 5mm",
+      "Chất liệu: Dây đan thủ công cao cấp",
       "Màu sắc: Dây xanh, gắn cờ đỏ sao vàng rực rỡ tượng trưng Quốc kỳ",
       "Độ bền: Chống nước, chống tia UV, không sờn rách"
     ],
@@ -104,7 +104,7 @@ export const PRODUCTS: Product[] = [
     "updatedAt": "2026-09-03T07:55:11.454Z",
     "isEvent0209": false,
     "details": [
-      "Dây Paracord 550 Type III 7 lõi chịu lực",
+      "Dây đan thủ công cao cấp",
       "Khóa kim loại titan chống rỉ sét"
     ],
     "name": "Móc khoá 02/09 — Chú bộ đội"
@@ -113,7 +113,7 @@ export const PRODUCTS: Product[] = [
     "updatedAt": "2026-09-03T07:55:12.081Z",
     "isEvent0209": false,
     "details": [
-      "Dây Paracord 550 Type III 7 lõi chịu lực",
+      "Dây đan thủ công cao cấp",
       "Khóa kim loại titan chống rỉ sét"
     ],
     "name": "Móc khoá 02/09 — Mũ cối",
@@ -140,8 +140,8 @@ export const PRODUCTS: Product[] = [
 export const BRAND_VALUES = [
   {
     icon: 'ShieldCheck',
-    title: 'Paracord 550 Quân Sự',
-    description: 'Chịu tải 250kg với 7 sợi lõi bền bỉ, chống nước, chống tia UV và không sờn rách theo năm tháng.'
+    title: 'Chất Liệu Cao Cấp',
+    description: 'Sợi đan bền bỉ, chống nước, chống tia UV và không sờn rách theo năm tháng.'
   },
   {
     icon: 'Hammer',
@@ -151,7 +151,7 @@ export const BRAND_VALUES = [
   {
     icon: 'Sparkles',
     title: 'Thiết Kế Độc Bản',
-    description: 'Phối màu tinh tế mang đậm tinh thần Việt Nam, phụ kiện EDC thời thượng và cá tính.'
+    description: 'Phối màu tinh tế mang đậm tinh thần nghệ thuật, phụ kiện thời thượng và cá tính.'
   },
   {
     icon: 'RefreshCw',

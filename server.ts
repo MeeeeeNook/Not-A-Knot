@@ -85,6 +85,25 @@ async function startServer() {
   // Enable trust proxy for reverse proxy environment (Google Cloud Run / Nginx)
   app.set('trust proxy', 1);
 
+  // HTTPS Enforcement Middleware (301 Permanent Redirect on Insecure HTTP)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const proto = req.headers['x-forwarded-proto'];
+    const host = req.headers.host || '';
+    const isLocal = !host || host.includes('localhost') || host.includes('127.0.0.1') || host.includes('0.0.0.0');
+
+    // If forwarded proto is http on live/production domain, enforce https redirect
+    if (proto === 'http' && !isLocal) {
+      return res.redirect(301, `https://${host}${req.originalUrl || req.url}`);
+    }
+
+    // Set Strict-Transport-Security (HSTS) Header
+    if (!isLocal) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    }
+
+    next();
+  });
+
   // Helper to extract reliable client IP behind reverse proxy / Nginx
   const getClientIpKey = (req: Request): string => {
     const forwarded = req.headers['x-forwarded-for'];
@@ -412,6 +431,82 @@ async function startServer() {
       },
       verifiedAt: new Date().toISOString()
     });
+  });
+
+  // ----------------------------------------------------
+  // SEO STATIC FILES (robots.txt & sitemap.xml)
+  // ----------------------------------------------------
+  app.get('/robots.txt', (_req, res) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours
+    const robotsPath = path.join(process.cwd(), 'public', 'robots.txt');
+    if (fs.existsSync(robotsPath)) {
+      return res.sendFile(robotsPath);
+    }
+    const distRobotsPath = path.join(process.cwd(), 'dist', 'robots.txt');
+    if (fs.existsSync(distRobotsPath)) {
+      return res.sendFile(distRobotsPath);
+    }
+    return res.send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: https://www.notaknot.id.vn/sitemap.xml\n`);
+  });
+
+  app.get('/sitemap.xml', (_req, res) => {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours
+    const sitemapPath = path.join(process.cwd(), 'public', 'sitemap.xml');
+    if (fs.existsSync(sitemapPath)) {
+      return res.sendFile(sitemapPath);
+    }
+    const distSitemapPath = path.join(process.cwd(), 'dist', 'sitemap.xml');
+    if (fs.existsSync(distSitemapPath)) {
+      return res.sendFile(distSitemapPath);
+    }
+    return res.status(404).send('Sitemap not found');
+  });
+
+  // ----------------------------------------------------
+  // LLMS.TXT & AI CRAWLER SPECIFICATIONS
+  // ----------------------------------------------------
+  app.get('/llms.txt', (_req, res) => {
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const filePath = path.join(process.cwd(), 'public', 'llms.txt');
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+    const distPath = path.join(process.cwd(), 'dist', 'llms.txt');
+    if (fs.existsSync(distPath)) {
+      return res.sendFile(distPath);
+    }
+    return res.status(404).send('# NOT A KNOT - LLMs.txt not found');
+  });
+
+  app.get('/llms-full.txt', (_req, res) => {
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const filePath = path.join(process.cwd(), 'public', 'llms-full.txt');
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+    const distPath = path.join(process.cwd(), 'dist', 'llms-full.txt');
+    if (fs.existsSync(distPath)) {
+      return res.sendFile(distPath);
+    }
+    return res.status(404).send('# NOT A KNOT - Full LLMs.txt not found');
+  });
+
+  app.get('/backlink-strategy.md', (_req, res) => {
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const filePath = path.join(process.cwd(), 'public', 'backlink-strategy.md');
+    if (fs.existsSync(filePath)) {
+      return res.sendFile(filePath);
+    }
+    const distPath = path.join(process.cwd(), 'dist', 'backlink-strategy.md');
+    if (fs.existsSync(distPath)) {
+      return res.sendFile(distPath);
+    }
+    return res.status(404).send('# NOT A KNOT - Backlink Strategy not found');
   });
 
   // ----------------------------------------------------

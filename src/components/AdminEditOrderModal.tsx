@@ -70,7 +70,7 @@ interface AdminEditOrderModalProps {
 const PROGRESS_STEPS = [
   { step: 1, id: 'received', label: 'Tiếp nhận đơn', desc: 'Đã nhận yêu cầu đan dây', status: 'Chờ xác nhận', icon: Package },
   { step: 2, id: 'confirmed', label: 'Xác nhận đơn', desc: 'Đã chốt mẫu charm & chi tiết', status: 'Đã xác nhận', icon: CheckCircle2 },
-  { step: 3, id: 'crafting', label: 'Đang đan Paracord', desc: 'Nghệ nhân thắt dây thủ công', status: 'Knot đang được sản xuất', icon: Hammer },
+  { step: 3, id: 'crafting', label: 'Đang đan thủ công', desc: 'Nghệ nhân thắt dây thủ công', status: 'Knot đang được sản xuất', icon: Hammer },
   { step: 4, id: 'shipping', label: 'Đang giao hàng', desc: 'Đã bàn giao cho bưu tá', status: 'Đang giao hàng', icon: Truck },
   { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Kích hoạt bảo hành trọn đời', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
 ];
@@ -158,7 +158,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     return [
       {
         productId: 'custom-1',
-        productName: 'Vòng Paracord Thủ Công',
+        productName: 'Vòng Tay Handmade',
         price: 39000,
         quantity: 1,
         selectedSize: '16cm',
@@ -656,7 +656,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                   >
                     <option value="Chờ xác nhận">Bước 1: Chờ xác nhận (Tiếp nhận đơn)</option>
                     <option value="Đã xác nhận">Bước 2: Đã xác nhận (Xác nhận số đo)</option>
-                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất (Đang đan Paracord)</option>
+                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất (Đang đan thủ công)</option>
                     <option value="Đang giao hàng">Bước 4: Đang giao hàng (Bàn giao bưu tá)</option>
                     <option value="Đơn hàng giao thành công">Bước 5: Đơn hàng giao thành công (Kích hoạt bảo hành)</option>
                     <option value="Đã hủy">Đã hủy đơn hàng</option>
@@ -751,7 +751,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         type="text"
                         value={customAddName}
                         onChange={(e) => setCustomAddName(e.target.value)}
-                        placeholder="VD: Vòng Paracord 02/09 Edition"
+                        placeholder="VD: Vòng Handmade 02/09 Edition"
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
                       />
                     </div>

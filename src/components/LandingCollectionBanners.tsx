@@ -31,7 +31,7 @@ export const LandingCollectionBanners: React.FC<LandingCollectionBannersProps> =
             Bộ Sưu Tập NOT A KNOT
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Mỗi bộ sưu tập là một câu chuyện riêng biệt, kết tinh từ niềm đam mê dây dù Paracord 550 chuẩn quân đội và nghệ thuật đan tay thủ công tỉ mỉ.
+            Mỗi bộ sưu tập là một câu chuyện riêng biệt, kết tinh từ niềm đam mê chế tác phụ kiện và nghệ thuật đan tay thủ công tỉ mỉ.
           </p>
         </div>
 

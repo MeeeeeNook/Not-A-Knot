@@ -425,7 +425,7 @@ export function cleanFirestoreData<T>(obj: T): T {
 /**
  * High-Fidelity Base64 Image Processor & Compressor.
  * - Uses high-quality bicubic smoothing (ctx.imageSmoothingQuality = 'high')
- * - Preserves sharp paracord weave details, charms and vibrant colors
+ * - Preserves sharp handmade weave details, charms and vibrant colors
  * - Supports high-density WebP output with JPEG fallback
  * - Safe for Firestore document size limits while maintaining 1400px HD resolution
  */
@@ -1104,7 +1104,7 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
           ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
           : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
         description: data.description || '',
-        details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây Paracord 550 cao cấp'],
+        details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây đan thủ công cao cấp'],
         availableColors: data.availableColors,
         availableSizes: data.availableSizes,
         enableColorSelection: !!data.enableColorSelection,
@@ -1179,7 +1179,7 @@ export const subscribeToProductsFromFirestore = (
               ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
               : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
             description: data.description || '',
-            details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây Paracord 550 cao cấp'],
+            details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây đan thủ công cao cấp'],
             availableColors: data.availableColors,
             availableSizes: data.availableSizes,
             enableColorSelection: !!data.enableColorSelection,

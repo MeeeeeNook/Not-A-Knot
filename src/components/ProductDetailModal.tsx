@@ -471,9 +471,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   : product.category === 'everyday'
                   ? 'Everyday Wear — Đeo Hàng Ngày'
                   : product.category === 'bracelets'
-                  ? 'Vòng Tay Paracord 550'
+                  ? 'Vòng Tay Handmade'
                   : product.category === 'keychains'
-                  ? 'Móc Khóa EDC'
+                  ? 'Móc Khóa Handmade'
                   : product.category === 'lanyards'
                   ? 'Dây Đeo Phụ Kiện'
                   : 'Phụ Kiện Thủ Công'}

@@ -611,7 +611,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                     NOT A KNOT
                   </h2>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Xưởng Đan Vòng & Phụ Kiện Thủ Công Paracord
+                    Xưởng Đan Vòng & Phụ Kiện Handmade Thủ Công
                   </p>
                   <p className="text-[11px] text-slate-500">
                     Hotline: 0987 654 321
@@ -689,7 +689,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                     ) : (
                       <tr>
                         <td colSpan={4} className="p-2.5 text-slate-800">
-                          {Array.isArray(order.items) ? order.items.join(', ') : order.items ? String(order.items) : 'Sản phẩm thủ công Paracord'}
+                          {Array.isArray(order.items) ? order.items.join(', ') : order.items ? String(order.items) : 'Sản phẩm phụ kiện handmade'}
                         </td>
                       </tr>
                     )}

@@ -111,7 +111,7 @@ export const THEME_PRESETS = [
 
 export const SAMPLE_BANNERS = [
   { name: 'Nàng Thơ Pastel', url: '/assets/img_4_NOT_A_KNOT.jpg' },
-  { name: 'Paracord EDC Survival', url: '/assets/bracelet.jpg' },
+  { name: 'Handmade Survival EDC', url: '/assets/bracelet.jpg' },
   { name: 'Hào Khí Quốc Khánh', url: '/assets/hero-bg.png' },
   { name: 'Phong Cách Tựu Trường', url: 'https://images.unsplash.com/photo-1577401239170-897942555fb3?auto=format&fit=crop&w=1200&q=80' },
   { name: 'Phụ Kiện Thủ Công Tinh Tế', url: 'https://images.unsplash.com/photo-1611591475883-9b8192376e10?auto=format&fit=crop&w=1200&q=80' }
@@ -678,7 +678,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
             </h2>
             <div className="w-16 h-1 bg-[#DDB652] mx-auto mb-8 rounded-full"></div>
             <p className="text-base sm:text-xl text-neutral-700 leading-relaxed font-medium">
-              {currentCollection.story || 'Cảm hứng từ những trang sử vàng hào hùng, bộ sưu tập 02/09 của NOT A KNOT mang trong mình tinh thần "Độc Lập - Tự Do - Hạnh Phúc". Từng nút thắt Paracord thủ công tỉ mỉ không chỉ là trang sức, mà còn là một kỷ vật kết nối quá khứ với hiện tại, tôn vinh tình yêu tổ quốc cháy bỏng.'}
+              {currentCollection.story || 'Cảm hứng từ những trang sử vàng hào hùng, bộ sưu tập 02/09 của NOT A KNOT mang trong mình tinh thần "Độc Lập - Tự Do - Hạnh Phúc". Từng nút thắt thủ công tỉ mỉ không chỉ là trang sức, mà còn là một kỷ vật kết nối quá khứ với hiện tại, tôn vinh tình yêu tổ quốc cháy bỏng.'}
             </p>
           </div>
         </section>
@@ -1015,7 +1015,9 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
             <div className="max-w-2xl mx-auto my-6 rounded-3xl overflow-hidden shadow-xl border border-inherit">
               <img 
                 src={displayBannerImage} 
-                alt={currentCollection.title} 
+                alt={`Bộ sưu tập ${stripBstPrefix(currentCollection.title)} - NOT A KNOT phụ kiện handmade`}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-56 sm:h-72 object-cover"
               />
             </div>
@@ -1093,7 +1095,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Nhập mô tả cho bộ sưu tập Back To School (ví dụ: Chào đón mùa tựu trường cùng BST Back To School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt Paracord thủ công năng động, sắc màu thời trang cùng bạn đồng hành trên mỗi chặng đường học tập...)"
+                  placeholder="Nhập mô tả cho bộ sưu tập Back To School (ví dụ: Chào đón mùa tựu trường cùng BST Back To School từ NOT A KNOT! Mang phong cách trẻ trung, bền bỉ với những nút thắt đan tay thủ công năng động, sắc màu thời trang cùng bạn đồng hành trên mỗi chặng đường học tập...)"
                   rows={4}
                   className={`w-full p-3.5 rounded-2xl border text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all ${
                     isDark

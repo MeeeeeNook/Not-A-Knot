@@ -169,7 +169,7 @@ const generatePrintHtml = (order: StoredOrder, hotline: string, brandName: strin
     <div class="header">
       <div>
         <div class="brand">${brandName}</div>
-        <div class="subbrand">Xưởng Đan Vòng & Phụ Kiện Thủ Công Paracord</div>
+        <div class="subbrand">Xưởng Đan Vòng & Phụ Kiện Handmade Thủ Công</div>
         <div style="font-size:12px;color:#1e293b;margin-top:4px;font-weight:700;">Hotline: ${hotline}</div>
       </div>
       <div class="code-box">
@@ -817,7 +817,7 @@ Cam kết bảo hành chốt khóa trọn đời!
       },
       {
         id: 'crafting',
-        label: 'Đang đan Paracord',
+        label: 'Đang đan thủ công',
         desc: 'Nghệ nhân thắt dây thủ công',
         icon: Hammer,
         isDone: ['Knot đang được sản xuất', 'Đang giao hàng', 'Đơn hàng giao thành công'].includes(norm),
@@ -1669,7 +1669,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                       {brandName}
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Tiệm Đan Vòng Thủ Công & Phụ Kiện Paracord
+                      Tiệm Đan Vòng Thủ Công & Phụ Kiện Handmade
                     </p>
                     <p className="text-xs text-slate-500">
                       Hotline: {hotline}

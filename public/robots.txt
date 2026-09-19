@@ -1,7 +1,49 @@
-# robots.txt for NOT A KNOT
+# robots.txt for NOT A KNOT - Handmade Accessories Studio
+# Website: https://www.notaknot.id.vn/
+
 User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/
 
+# AI Crawlers & LLMs documentation
+# See https://www.notaknot.id.vn/llms.txt for model context and machine-readable instructions
+User-agent: GPTBot
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /assets/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+User-agent: Applebot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+# Sitemaps & Machine-readable specifications
 Sitemap: https://www.notaknot.id.vn/sitemap.xml
+

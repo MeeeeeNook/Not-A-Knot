@@ -2,8 +2,8 @@ import { SiteContentConfig } from '../types';
 
 export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   brandName: 'NOT A KNOT',
-  brandTagline: 'Xưởng Chế Tác Phụ Kiện Paracord & EDC Thủ Công',
-  announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa Paracord EDC cao cấp cho đơn từ 299k!',
+  brandTagline: 'Xưởng Chế Tác Phụ Kiện Handmade Thủ Công',
+  announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!',
   announcementLink: '#products',
   announcementActive: false,
   phone: '079 655 5636',
@@ -25,7 +25,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       tag: 'Phiên Bản Giới Hạn 2026',
       title: 'Đan Dệt Bản Lĩnh & Phong Cách',
       highlight: 'Sự Kết Hợp Độc Bản',
-      subtitle: 'Mỗi mắt đan Paracord 550 được thắt thủ công tỉ mỉ bằng tay với độ hoàn thiện cao nhất.',
+      subtitle: 'Mỗi sản phẩm phụ kiện được thắt thủ công tỉ mỉ bằng tay với độ hoàn thiện cao nhất.',
       bgImage: '/assets/bracelet.jpg',
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
@@ -34,12 +34,12 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     },
     {
       id: 'slide-2',
-      tag: 'Everyday Carry Collection',
-      title: 'Phụ Kiện EDC Chuẩn Sinh Tồn',
+      tag: 'Everyday Collection',
+      title: 'Phụ Kiện Handmade Thời Thượng',
       highlight: 'Chất Lượng Vượt Trội',
-      subtitle: 'Dây dù chuẩn Type III chịu tải 250kg kết hợp khóa titan & inox 316L siêu bền không gỉ.',
+      subtitle: 'Dây đan cao cấp chịu lực tốt kết hợp khóa titan & inox 316L siêu bền không gỉ.',
       bgImage: '/assets/img_3.jpg',
-      buttonText: 'Xem sản phẩm EDC',
+      buttonText: 'Xem sản phẩm',
       categoryLink: 'keychains',
       order: 2,
       isActive: true
@@ -81,8 +81,8 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   faqs: [
     {
       id: 'faq-1',
-      q: 'Dây Paracord có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
-      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng dây Paracord 550 chuẩn Type III với 7 lõi dù quân sự. Lớp vỏ bện ngoài kháng nước ngọt và nước mặn, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
+      q: 'Dây đan handmade có bị xù lông, phai màu hay ẩm mốc khi đi mưa hoặc tắm không?',
+      a: 'Hoàn toàn không. 100% sản phẩm tại NOT A KNOT sử dụng sợi đan cao cấp tuyển chọn. Lớp vỏ bện kháng nước, nhanh ráo nước, không xù lông và giữ màu sắc nguyên bản theo thời gian.'
     },
     {
       id: 'faq-2',
@@ -109,13 +109,13 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   aboutSection: {
     badge: 'Về Chúng Tôi',
     title: 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh',
-    subtitle: 'Xưởng chế tác phụ kiện dây dù Paracord 550 và EDC thủ công tại Hà Nội.',
+    subtitle: 'Xưởng chế tác phụ kiện handmade thủ công tại Hà Nội.',
     storyParagraph1: 'NOT A KNOT ra đời từ niềm đam mê chế tác thủ công bền bỉ. Tên gọi NOT A KNOT mang thông điệp: mỗi chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần kiên cường, kỷ luật và phong cách cá nhân.',
-    storyParagraph2: 'Chúng tôi tuyển chọn dây dù Paracord 550 chuẩn Type III với 7 lõi dù quân sự chịu tải 250kg, kết hợp cùng khóa titan và inox 316L đúc nguyên khối chống gỉ sét. Sản phẩm được đóng gói trang trọng trong hộp giấy.',
+    storyParagraph2: 'Chúng tôi tuyển chọn chất liệu đan thủ công cao cấp bền chắc, kết hợp cùng khóa titan và inox 316L đúc nguyên khối chống gỉ sét. Sản phẩm được đóng gói trang trọng trong hộp giấy.',
     quote: 'Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.',
     stats: [
       { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
-      { label: 'Chuẩn Paracord 550', value: '100%', desc: '7 lõi dù Type III bền bỉ' },
+      { label: 'Chuẩn Thủ Công Cao Cấp', value: '100%', desc: 'Chất liệu bền bỉ' },
       { label: 'Bảo Hành Chi Tiết', value: 'Dài Hạn', desc: 'Khoen, charm, bùa, dây' },
       { label: 'Độ Hài Lòng', value: '100%', desc: 'Khách hàng toàn quốc' }
     ],
@@ -128,8 +128,8 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
       },
       {
         id: 'val-2',
-        title: 'Dây Paracord 550 Chuẩn 7 Lõi',
-        desc: 'Chịu tải 250kg, chống mài mòn, không xơ xước và không phai màu khi tiếp xúc với nước.',
+        title: 'Chất Liệu Đan Cao Cấp',
+        desc: 'Chịu lực tốt, chống mài mòn, không xơ xước và không phai màu khi tiếp xúc với nước.',
         icon: 'ShieldCheck'
       },
       {
@@ -150,7 +150,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
 
   customElements: [],
 
-  footerDescription: 'Xưởng chế tác phụ kiện Paracord 550 và đồ EDC thủ công tại Hà Nội. Đóng gói hộp giấy trang trọng, bảo hành chi tiết khoen, charm, bùa, phụ kiện hoặc dây.',
+  footerDescription: 'Xưởng chế tác phụ kiện handmade và đồ thủ công tại Hà Nội. Đóng gói hộp giấy trang trọng, bảo hành chi tiết khoen, charm, bùa, phụ kiện hoặc dây.',
   copyrightText: '© 2026 NOT A KNOT. All rights reserved. Thủ công từ Việt Nam.',
   warrantyPolicy: 'Sản phẩm không có size. Có bảo hành chi tiết đối với khoen, charm, bùa, phụ kiện, hoặc dây. Đóng gói trong hộp giấy trang trọng.',
   shippingPolicy: 'Miễn phí giao hàng (0đ) trên toàn bộ Hà Nội. Phí vận chuyển đồng giá 20.000đ toàn quốc.',

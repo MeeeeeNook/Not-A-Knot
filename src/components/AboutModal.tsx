@@ -28,7 +28,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-white tracking-tight">Về Chúng Tôi · NOT A KNOT</h2>
-              <p className="text-[11px] text-neutral-400">Xưởng Chế Tác Phụ Kiện Paracord & EDC Thủ Công</p>
+              <p className="text-[11px] text-neutral-400">Xưởng Chế Tác Phụ Kiện Handmade Thủ Công</p>
             </div>
           </div>
 
@@ -49,7 +49,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({
               Câu Chuyện & Tinh Thần Thương Hiệu
             </h3>
             <p>
-              NOT A KNOT là xưởng chế tác thủ công chuyên sâu về các dòng phụ kiện dây dù Paracord 550 và phụ kiện EDC tại Việt Nam.
+              NOT A KNOT là xưởng chế tác thủ công chuyên sâu về các dòng phụ kiện handmade, vòng tay và phụ kiện thời trang tại Việt Nam.
             </p>
             <p>
               Tên gọi <strong className="text-amber-300 font-semibold">NOT A KNOT</strong> mang ý nghĩa: một chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần bền bỉ và bản lĩnh của người mang nó.
@@ -71,10 +71,10 @@ export const AboutModal: React.FC<AboutModalProps> = ({
             <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1.5">
               <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
                 <ShieldCheck className="w-4 h-4 flex-shrink-0" />
-                <span>Dây Paracord 550 Chuẩn</span>
+                <span>Dây Đan Cao Cấp Bền Bỉ</span>
               </div>
               <p className="text-neutral-400 text-[11px]">
-                Dây dù Type III lõi 7 sợi tiêu chuẩn chịu tải 250kg, chống mài mòn, không xơ xước, không phai màu khi tiếp xúc với nước.
+                Sợi dây cao cấp dẻo dai, chống mài mòn, không xơ xước, không phai màu khi tiếp xúc với nước sinh hoạt.
               </p>
             </div>
 
