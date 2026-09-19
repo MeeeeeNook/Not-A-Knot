@@ -109,8 +109,13 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
     }
 
     // If primary endpoint succeeded and returned valid JSON (not HTML error)
-    if (res && res.ok && data && !data.isHtmlError) {
-      return data;
+    if (res && data && !data.isHtmlError) {
+      if (res.ok && data.success) {
+        return data;
+      }
+      if (data.error || data.message) {
+        return { success: false, error: data.error || data.message };
+      }
     }
 
     // Fallback: If Vercel static host returned HTML or network error, call Cloud Run backend directly
@@ -123,28 +128,27 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
       });
       const fallbackData = await safeJsonParse(fallbackRes);
       if (!fallbackData.isHtmlError) {
-        return fallbackData;
+        if (fallbackRes.ok && fallbackData.success) {
+          return fallbackData;
+        }
+        return {
+          success: false,
+          error: fallbackData.error || fallbackData.message || 'Lỗi từ máy chủ khi gửi email.'
+        };
       }
     } catch (fbErr) {
       console.warn('[Email Service Client] Fallback backend request error:', fbErr);
     }
 
-    // If both primary and fallback returned HTML/error, return friendly result
-    if (data && !data.isHtmlError && data.error) {
-      return { success: false, error: data.error };
-    }
-
     return {
-      success: true,
-      mode: 'sent_real_email',
-      message: `Đã gửi yêu cầu email xác nhận đơn #${order.id || order.trackingNumber} thành công!`
+      success: false,
+      error: (data && data.error) || 'Không thể gửi email lúc này. Vui lòng kiểm tra lại cấu hình Vercel hoặc mạng.'
     };
   } catch (err: any) {
-    console.warn('[Email Service Client] Dispatch warning:', err);
+    console.warn('[Email Service Client] Dispatch error:', err);
     return {
-      success: true,
-      mode: 'sent_real_email',
-      message: `Đã ghi nhận yêu cầu gửi email xác nhận đơn #${order.id || order.trackingNumber}.`
+      success: false,
+      error: err.message || 'Lỗi mạng khi gửi yêu cầu email.'
     };
   }
 }
@@ -211,13 +215,13 @@ export async function testEmailDelivery(targetEmail?: string): Promise<{ success
     }
 
     return {
-      success: true,
-      message: `Đã kích hoạt gửi email kiểm tra tới ${targetEmail || 'hộp thư hệ thống'}.`
+      success: false,
+      message: (data && (data.error || data.message)) || 'Không thể kết nối dịch vụ email lúc này.'
     };
   } catch (err: any) {
     return {
-      success: true,
-      message: err.message || 'Thao tác kiểm tra hoàn tất.'
+      success: false,
+      message: err.message || 'Thao tác kiểm tra không thành công.'
     };
   }
 }
