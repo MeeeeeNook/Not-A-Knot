@@ -24,6 +24,16 @@ interface EmailSettings {
   adminNotificationEmail: string;
 }
 
+interface EmailLogEntry {
+  id: string;
+  timestamp: number;
+  recipient: string;
+  orderCode?: string;
+  type: 'admin_notification' | 'customer_confirmation' | 'manual_admin' | 'test';
+  status: 'sent' | 'simulated' | 'error';
+  createdAt?: string;
+}
+
 interface EmailStats {
   today: number;
   thisWeek: number;
@@ -60,6 +70,10 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
     dailyLimit: 500
   });
 
+  const [logs, setLogs] = useState<EmailLogEntry[]>([]);
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [logFilter, setLogFilter] = useState<'all' | 'customer_confirmation' | 'admin_notification' | 'manual_admin' | 'test'>('all');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
@@ -81,6 +95,24 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
         message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
       };
+    }
+  };
+
+  const fetchLogs = async () => {
+    setIsLogsLoading(true);
+    try {
+      const res = await fetch('/api/email/logs');
+      if (res.ok) {
+        const data = await parseJsonResponse(res);
+        if (data.success && Array.isArray(data.logs)) {
+          setLogs(data.logs);
+          if (data.stats) setStats(data.stats);
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi khi tải nhật ký email:', err);
+    } finally {
+      setIsLogsLoading(false);
     }
   };
 
@@ -111,6 +143,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
           }
         }
       }
+      await fetchLogs();
     } catch (err) {
       console.error('Lỗi tải cài đặt Email:', err);
     } finally {
@@ -209,8 +242,10 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         });
         if (data.stats) setStats(data.stats);
         if (onNotify) onNotify('Gửi email test thành công!');
+        await fetchLogs();
       } else {
         setTestResult({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });
+        await fetchLogs();
       }
     } catch (err: any) {
       setTestResult({ type: 'error', message: err.message || 'Lỗi kết nối máy chủ' });
@@ -566,6 +601,168 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
             )}
           </div>
         </div>
+      </div>
+
+      {/* ---------------------------------------------------- */}
+      {/* FIRESTORE EMAIL LOGS TABLE SECTION                   */}
+      {/* ---------------------------------------------------- */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-slate-700" />
+            <h3 className="text-sm font-bold text-slate-900">
+              Nhật Ký Gửi Email (<span className="text-emerald-600 font-mono">Firestore email_logs</span>)
+            </h3>
+            <span className="text-xs px-2 py-0.5 bg-slate-100 font-semibold text-slate-600 rounded-full">
+              {logs.length} bản ghi
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs font-medium text-slate-600">
+              <button
+                type="button"
+                onClick={() => setLogFilter('all')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${logFilter === 'all' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'}`}
+              >
+                Tất cả ({logs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter('customer_confirmation')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${logFilter === 'customer_confirmation' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'}`}
+              >
+                Xác nhận đơn
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter('manual_admin')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${logFilter === 'manual_admin' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'}`}
+              >
+                Thủ công
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter('test')}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${logFilter === 'test' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'}`}
+              >
+                Test
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchLogs}
+              disabled={isLogsLoading}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+              title="Cập nhật nhật ký từ Firestore"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLogsLoading ? 'animate-spin text-amber-600' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {isLogsLoading && logs.length === 0 ? (
+          <div className="py-8 text-center space-y-2">
+            <RefreshCw className="w-5 h-5 animate-spin mx-auto text-slate-400" />
+            <p className="text-xs text-slate-500">Đang tải nhật ký gửi email từ Firestore...</p>
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+            <Mail className="w-6 h-6 mx-auto text-slate-300 stroke-[1.5]" />
+            <p>Chưa có nhật ký gửi email nào trong bộ nhớ / Firestore.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border border-slate-100 rounded-xl">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
+                  <th className="py-2.5 px-3">Thời gian</th>
+                  <th className="py-2.5 px-3">Người nhận</th>
+                  <th className="py-2.5 px-3">Loại thư</th>
+                  <th className="py-2.5 px-3">Mã đơn</th>
+                  <th className="py-2.5 px-3">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {logs
+                  .filter((log) => logFilter === 'all' || log.type === logFilter)
+                  .map((log) => {
+                    const formattedTime = new Date(log.timestamp || log.createdAt || Date.now()).toLocaleString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    });
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-slate-600 whitespace-nowrap text-[11px]">
+                          {formattedTime}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium text-slate-900 font-mono">
+                          {log.recipient}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {log.type === 'customer_confirmation' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60">
+                              Xác nhận đơn
+                            </span>
+                          )}
+                          {log.type === 'admin_notification' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">
+                              Thông báo Admin
+                            </span>
+                          )}
+                          {log.type === 'manual_admin' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
+                              Gửi thủ công
+                            </span>
+                          )}
+                          {log.type === 'test' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                              Thử nghiệm
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">
+                          {log.orderCode ? (
+                            <span className="px-1.5 py-0.5 bg-slate-100 rounded font-semibold text-slate-800">
+                              #{log.orderCode}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {log.status === 'sent' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span>Thành công</span>
+                            </span>
+                          )}
+                          {log.status === 'simulated' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600">
+                              <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                              <span>Mô phỏng</span>
+                            </span>
+                          )}
+                          {log.status === 'error' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600">
+                              <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                              <span>Lỗi</span>
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

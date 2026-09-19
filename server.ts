@@ -147,8 +147,8 @@ async function startServer() {
     const host = req.headers.host || '';
     const isLocal = !host || host.includes('localhost') || host.includes('127.0.0.1') || host.includes('0.0.0.0');
 
-    // If forwarded proto is http on live/production domain, enforce https redirect
-    if (proto === 'http' && !isLocal) {
+    // If forwarded proto is http on live/production domain, enforce https redirect (never redirect /api routes or POST/PUT/DELETE requests)
+    if (proto === 'http' && !isLocal && !req.path.startsWith('/api') && req.method === 'GET') {
       return res.redirect(301, `https://${host}${req.originalUrl || req.url}`);
     }
 
@@ -791,6 +791,25 @@ async function startServer() {
       stats,
       mode: isConfigured ? 'live_smtp' : 'simulated_preview'
     });
+  });
+
+  /**
+   * GET /api/email/logs
+   * Returns email logs synchronized with Firestore
+   */
+  app.get('/api/email/logs', async (_req: Request, res: Response) => {
+    try {
+      await syncEmailDataWithFirestore().catch(() => {});
+      const logs = [...emailStore.sentLogs].sort((a, b) => b.timestamp - a.timestamp);
+      const stats = calculateEmailStats();
+      return res.json({
+        success: true,
+        logs,
+        stats
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Lỗi khi lấy nhật ký email' });
+    }
   });
 
   /**

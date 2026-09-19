@@ -199,6 +199,14 @@
       "type": "test",
       "status": "sent",
       "createdAt": "2026-09-19T19:02:43.864Z"
+    },
+    {
+      "id": "mail-1789844834736-1ox70",
+      "timestamp": 1789844834736,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "type": "test",
+      "status": "sent",
+      "createdAt": "2026-09-19T19:07:14.736Z"
     }
   ]
 }
