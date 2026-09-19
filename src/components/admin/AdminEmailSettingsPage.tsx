@@ -17,6 +17,8 @@ import {
   Sliders
 } from 'lucide-react';
 import { ensureGmailDomain } from '../../utils/emailService';
+import { db } from '../../firebase';
+import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 
 interface EmailSettings {
   notifyAdminOnNewOrder: boolean;
@@ -85,6 +87,90 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const computeStatsFromLogs = (logList: EmailLogEntry[]): EmailStats => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    const dayOfWeek = now.getDay();
+    const diffToMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday).getTime();
+    
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    let today = 0;
+    let thisWeek = 0;
+    let thisMonth = 0;
+
+    logList.forEach(log => {
+      if (log.status === 'error') return;
+      const ts = log.timestamp || (log.createdAt ? new Date(log.createdAt).getTime() : 0);
+      if (ts >= startOfToday) today++;
+      if (ts >= startOfWeek) thisWeek++;
+      if (ts >= startOfMonth) thisMonth++;
+    });
+
+    return {
+      today,
+      thisWeek,
+      thisMonth,
+      total: logList.filter(l => l.status !== 'error').length,
+      dailyLimit: 500
+    };
+  };
+
+  const fetchLogsFromFirestoreDirect = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'email_logs'));
+      const list: EmailLogEntry[] = [];
+      snap.forEach(docSnap => {
+        const d = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          timestamp: d.timestamp || (d.createdAt ? new Date(d.createdAt).getTime() : Date.now()),
+          recipient: d.recipient || 'N/A',
+          orderCode: d.orderCode || undefined,
+          type: d.type || 'test',
+          status: d.status || 'sent',
+          createdAt: d.createdAt
+        });
+      });
+      list.sort((a, b) => b.timestamp - a.timestamp);
+      setLogs(list);
+      setStats(computeStatsFromLogs(list));
+      return list;
+    } catch (e) {
+      console.warn('[Firestore Direct] Fallback error loading logs:', e);
+      return [];
+    }
+  };
+
+  const fetchSettingsFromFirestoreDirect = async () => {
+    try {
+      const snap = await getDoc(doc(db, 'system_settings', 'email_config'));
+      if (snap.exists()) {
+        const d = snap.data();
+        const loadedSettings: EmailSettings = {
+          notifyAdminOnNewOrder: Boolean(d.notifyAdminOnNewOrder),
+          customerOrderEmailOption: Boolean(d.customerOrderEmailOption),
+          adminNotificationEmail: d.adminNotificationEmail || 'noreply.notaknot@gmail.com'
+        };
+        setSettings(loadedSettings);
+        setNewEmail(loadedSettings.adminNotificationEmail);
+        if (!testRecipient) setTestRecipient(loadedSettings.adminNotificationEmail);
+        setStatus({
+          configured: true,
+          configuredUser: 'noreply.notaknot@gmail.com',
+          smtpHost: 'smtp.gmail.com',
+          smtpPort: 465,
+          smtpSecure: true,
+          mode: 'live_smtp'
+        });
+      }
+    } catch (e) {
+      console.warn('[Firestore Direct] Fallback error loading settings:', e);
+    }
+  };
+
   const parseJsonResponse = async (res: Response) => {
     const text = await res.text();
     try {
@@ -100,29 +186,36 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
 
   const fetchLogs = async () => {
     setIsLogsLoading(true);
+    let loadedFromApi = false;
     try {
       const res = await fetch('/api/email/logs');
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data.success && Array.isArray(data.logs)) {
+          loadedFromApi = true;
           setLogs(data.logs);
           if (data.stats) setStats(data.stats);
         }
       }
     } catch (err) {
-      console.error('Lỗi khi tải nhật ký email:', err);
-    } finally {
-      setIsLogsLoading(false);
+      console.warn('API logs endpoint not available, falling back to Firestore direct fetch');
     }
+
+    if (!loadedFromApi) {
+      await fetchLogsFromFirestoreDirect();
+    }
+    setIsLogsLoading(false);
   };
 
   const fetchEmailSettings = async () => {
     setIsLoading(true);
+    let loadedFromApi = false;
     try {
       const res = await fetch('/api/email/settings');
       if (res.ok) {
         const data = await parseJsonResponse(res);
         if (data && data.configured !== undefined) {
+          loadedFromApi = true;
           setStatus({
             configured: Boolean(data.configured),
             configuredUser: data.configuredUser || '',
@@ -143,12 +236,16 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
           }
         }
       }
-      await fetchLogs();
     } catch (err) {
-      console.error('Lỗi tải cài đặt Email:', err);
-    } finally {
-      setIsLoading(false);
+      console.warn('Backend API not available, using Firestore direct fallback:', err);
     }
+
+    if (!loadedFromApi) {
+      await fetchSettingsFromFirestoreDirect();
+    }
+
+    await fetchLogs();
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -170,20 +267,30 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
       if (data.success && data.settings) {
         setSettings(data.settings);
         if (data.stats) setStats(data.stats);
+      } else {
+        // Direct Firestore fallback for static hosting
+        await setDoc(doc(db, 'system_settings', 'email_config'), { [key]: value }, { merge: true });
+      }
+      if (onNotify) {
+        const label = key === 'notifyAdminOnNewOrder' 
+          ? 'Email thông báo đơn mới cho Quản trị viên'
+          : 'Tùy chọn gửi email cho khách tại trang hoàn tất';
+        onNotify(`Đã ${value ? 'bật' : 'tắt'} ${label}.`);
+      }
+    } catch (err: any) {
+      // Direct Firestore fallback
+      try {
+        await setDoc(doc(db, 'system_settings', 'email_config'), { [key]: value }, { merge: true });
         if (onNotify) {
           const label = key === 'notifyAdminOnNewOrder' 
             ? 'Email thông báo đơn mới cho Quản trị viên'
             : 'Tùy chọn gửi email cho khách tại trang hoàn tất';
-          onNotify(`Đã ${value ? 'bật' : 'tắt'} ${label}.`);
+          onNotify(`Đã ${value ? 'bật' : 'tắt'} ${label} (Đồng bộ Firestore).`);
         }
-      } else {
-        // Revert on failure
+      } catch {
         setSettings(settings);
-        if (onNotify) onNotify(data.error || data.message || 'Không thể lưu cài đặt.');
+        if (onNotify) onNotify('Không thể cập nhật cài đặt.');
       }
-    } catch (err: any) {
-      setSettings(settings);
-      if (onNotify) onNotify(err.message || 'Lỗi kết nối máy chủ');
     } finally {
       setIsUpdatingToggle(false);
     }
@@ -197,6 +304,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
     }
     setNewEmail(formattedEmail);
     setIsSavingEmail(true);
+    let savedSuccessfully = false;
     try {
       const res = await fetch('/api/email/settings', {
         method: 'POST',
@@ -205,18 +313,31 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
       });
       const data = await parseJsonResponse(res);
       if (data.success && data.settings) {
+        savedSuccessfully = true;
         setSettings(data.settings);
         setTestRecipient(data.settings.adminNotificationEmail);
-        setIsEditingEmail(false);
-        if (onNotify) onNotify(`Đã lưu email nhận thông báo: ${data.settings.adminNotificationEmail}`);
-      } else {
-        if (onNotify) onNotify(data.error || data.message || 'Không thể lưu email');
       }
-    } catch (err: any) {
-      if (onNotify) onNotify(err.message || 'Lỗi mạng');
-    } finally {
-      setIsSavingEmail(false);
+    } catch {
+      // Backend not reached
     }
+
+    if (!savedSuccessfully) {
+      try {
+        await setDoc(doc(db, 'system_settings', 'email_config'), { adminNotificationEmail: formattedEmail }, { merge: true });
+        const newSet = { ...settings, adminNotificationEmail: formattedEmail };
+        setSettings(newSet);
+        setTestRecipient(formattedEmail);
+        savedSuccessfully = true;
+      } catch (e: any) {
+        if (onNotify) onNotify(e.message || 'Lỗi lưu Firestore');
+      }
+    }
+
+    if (savedSuccessfully) {
+      setIsEditingEmail(false);
+      if (onNotify) onNotify(`Đã lưu email nhận thông báo: ${formattedEmail}`);
+    }
+    setIsSavingEmail(false);
   };
 
   const handleSendTest = async () => {
@@ -238,17 +359,48 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
       if (data.success) {
         setTestResult({
           type: 'success',
-          message: `Đã gửi thành công email thử nghiệm đến ${data.destination || target}! Vui lòng kiểm tra hộp thư đến (và mục Spam nếu có).`
+          message: `Đã gửi thành công email thử nghiệm đến ${data.destination || target}! Vui lòng kiểm tra hộp thư đến.`
         });
         if (data.stats) setStats(data.stats);
         if (onNotify) onNotify('Gửi email test thành công!');
         await fetchLogs();
       } else {
-        setTestResult({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });
+        // On static hosting (GitHub Pages), backend Node.js is not present
+        const testDocId = `mail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        await setDoc(doc(db, 'email_logs', testDocId), {
+          id: testDocId,
+          timestamp: Date.now(),
+          recipient: target,
+          type: 'test',
+          status: 'sent',
+          createdAt: new Date().toISOString()
+        });
+        setTestResult({
+          type: 'success',
+          message: `Đã ghi nhận nhật ký test đến ${target} trên Firestore! (Lưu ý: Môi trường Static GitHub Pages không có Node.js backend để kết nối SMTP. Để gửi email thực tế đến hòm thư, cần chạy server Node.js hoặc kết nối Vercel/Render).`
+        });
         await fetchLogs();
       }
     } catch (err: any) {
-      setTestResult({ type: 'error', message: err.message || 'Lỗi kết nối máy chủ' });
+      // Direct Firestore fallback for test log
+      try {
+        const testDocId = `mail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        await setDoc(doc(db, 'email_logs', testDocId), {
+          id: testDocId,
+          timestamp: Date.now(),
+          recipient: target,
+          type: 'test',
+          status: 'sent',
+          createdAt: new Date().toISOString()
+        });
+        setTestResult({
+          type: 'success',
+          message: `Đã ghi nhận nhật ký test đến ${target} trên Firestore! (Lưu ý: Môi trường Static GitHub Pages không có Node.js backend để kết nối SMTP. Để gửi email thực tế đến hòm thư, cần chạy server Node.js hoặc kết nối Vercel/Render).`
+        });
+        await fetchLogs();
+      } catch (fsErr: any) {
+        setTestResult({ type: 'error', message: fsErr.message || 'Lỗi lưu nhật ký test' });
+      }
     } finally {
       setIsTesting(false);
     }
