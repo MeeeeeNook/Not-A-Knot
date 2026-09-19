@@ -127,10 +127,15 @@ export const CartPage: React.FC<CartPageProps> = ({
   useEffect(() => {
     if (step === 'success') {
       fetch('/api/email/settings')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.settings) {
-            setShowEmailOption(Boolean(data.settings.customerOrderEmailOption));
+        .then((res) => res.text())
+        .then((text) => {
+          try {
+            const data = JSON.parse(text);
+            if (data && data.settings) {
+              setShowEmailOption(Boolean(data.settings.customerOrderEmailOption));
+            }
+          } catch {
+            // ignore non-json
           }
         })
         .catch(() => {});
@@ -149,20 +154,16 @@ export const CartPage: React.FC<CartPageProps> = ({
     setIsSendingSuccessEmail(true);
     setSuccessEmailError(null);
     try {
-      const res = await fetch('/api/email/send-order-confirmation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderData: placedOrder,
-          recipientEmail: formattedEmail,
-          isCustomerRequest: true
-        })
-      });
-      const data = await res.json();
+      const payload: StoredOrder = {
+        ...placedOrder,
+        email: formattedEmail,
+        customerEmail: formattedEmail
+      };
+      const data = await sendOrderConfirmationEmail(payload);
       if (data.success) {
         setIsSuccessEmailSent(true);
       } else {
-        setSuccessEmailError(data.error || 'Không thể gửi email lúc này.');
+        setSuccessEmailError(data.error || data.message || 'Không thể gửi email lúc này.');
       }
     } catch (err: any) {
       setSuccessEmailError(err.message || 'Lỗi mạng khi gửi email.');

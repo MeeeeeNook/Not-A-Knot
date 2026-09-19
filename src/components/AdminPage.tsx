@@ -28,7 +28,7 @@ import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
-import { ensureGmailDomain } from '../utils/emailService';
+import { ensureGmailDomain, sendOrderConfirmationEmail } from '../utils/emailService';
 import {
   MaintenanceConfig
 } from '../types';
@@ -314,21 +314,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
     setSendEmailOrderModal((prev) => prev ? { ...prev, email: targetEmail, isSending: true } : null);
     try {
-      const res = await fetch('/api/email/send-order-confirmation', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderData: sendEmailOrderModal.order,
-          recipientEmail: targetEmail,
-          isManualAdmin: true
-        })
-      });
-      const data = await res.json();
+      const payload: StoredOrder = {
+        ...sendEmailOrderModal.order,
+        email: targetEmail,
+        customerEmail: targetEmail
+      };
+      const data = await sendOrderConfirmationEmail(payload);
       if (data.success) {
         showAdminToast(`Đã gửi email xác nhận đơn #${sendEmailOrderModal.order.id} tới ${targetEmail}!`);
         setSendEmailOrderModal(null);
       } else {
-        showAdminToast(data.error || 'Không thể gửi email lúc này');
+        showAdminToast(data.error || data.message || 'Không thể gửi email lúc này');
         setSendEmailOrderModal((prev) => prev ? { ...prev, isSending: false } : null);
       }
     } catch (err: any) {

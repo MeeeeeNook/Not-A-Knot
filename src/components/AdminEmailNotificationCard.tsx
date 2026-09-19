@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, CheckCircle2, Send, Edit3, Save, X, RefreshCw, Sparkles, ShieldCheck, KeyRound } from 'lucide-react';
-import { ensureGmailDomain } from '../utils/emailService';
+import { ensureGmailDomain, testEmailDelivery } from '../utils/emailService';
 
 export const AdminEmailNotificationCard: React.FC = () => {
   const [status, setStatus] = useState<{
@@ -22,9 +22,16 @@ export const AdminEmailNotificationCard: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const parseJsonResponse = async (res: Response) => {
-    const text = await res.text();
     try {
-      return JSON.parse(text);
+      const text = await res.text();
+      const trimmed = text ? text.trim() : '';
+      if (!trimmed || trimmed.startsWith('<') || trimmed.startsWith('The page') || trimmed.startsWith('<!DOCTYPE')) {
+        return {
+          success: false,
+          error: `Máy chủ phản hồi không đúng định dạng (${res.status})`
+        };
+      }
+      return JSON.parse(trimmed);
     } catch {
       return {
         success: false,
@@ -116,19 +123,14 @@ export const AdminEmailNotificationCard: React.FC = () => {
     setIsTesting(true);
     setFeedback(null);
     try {
-      const res = await fetch('/api/email/test-delivery', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetEmail: status?.adminNotificationEmail })
-      });
-      const data = await parseJsonResponse(res);
-      if (data.success) {
+      const res = await testEmailDelivery(status?.adminNotificationEmail);
+      if (res.success) {
         setFeedback({
           type: 'success',
-          message: `Đã gửi email kiểm tra thành công tới ${data.destination || status?.adminNotificationEmail}! Vui lòng mở hộp thư kiểm tra.`
+          message: res.message || `Đã gửi email kiểm tra thành công tới ${status?.adminNotificationEmail}!`
         });
       } else {
-        setFeedback({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });
+        setFeedback({ type: 'error', message: res.message || 'Gửi email thử nghiệm không thành công.' });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Lỗi kết nối máy chủ' });
