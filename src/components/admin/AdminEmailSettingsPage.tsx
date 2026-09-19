@@ -71,29 +71,44 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const parseJsonResponse = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
+        message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
+      };
+    }
+  };
+
   const fetchEmailSettings = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/email/settings');
       if (res.ok) {
-        const data = await res.json();
-        setStatus({
-          configured: data.configured,
-          configuredUser: data.configuredUser,
-          smtpHost: data.smtpHost,
-          smtpPort: data.smtpPort,
-          smtpSecure: data.smtpSecure,
-          mode: data.mode
-        });
-        if (data.settings) {
-          setSettings(data.settings);
-          setNewEmail(data.settings.adminNotificationEmail || '');
-          if (!testRecipient) {
-            setTestRecipient(data.settings.adminNotificationEmail || '');
+        const data = await parseJsonResponse(res);
+        if (data && data.configured !== undefined) {
+          setStatus({
+            configured: Boolean(data.configured),
+            configuredUser: data.configuredUser || '',
+            smtpHost: data.smtpHost || '',
+            smtpPort: Number(data.smtpPort) || 465,
+            smtpSecure: Boolean(data.smtpSecure),
+            mode: data.mode || 'simulated_preview'
+          });
+          if (data.settings) {
+            setSettings(data.settings);
+            setNewEmail(data.settings.adminNotificationEmail || '');
+            if (!testRecipient) {
+              setTestRecipient(data.settings.adminNotificationEmail || '');
+            }
           }
-        }
-        if (data.stats) {
-          setStats(data.stats);
+          if (data.stats) {
+            setStats(data.stats);
+          }
         }
       }
     } catch (err) {
@@ -118,7 +133,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [key]: value })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success && data.settings) {
         setSettings(data.settings);
         if (data.stats) setStats(data.stats);
@@ -131,7 +146,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
       } else {
         // Revert on failure
         setSettings(settings);
-        if (onNotify) onNotify(data.error || 'Không thể lưu cài đặt.');
+        if (onNotify) onNotify(data.error || data.message || 'Không thể lưu cài đặt.');
       }
     } catch (err: any) {
       setSettings(settings);
@@ -155,14 +170,14 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminNotificationEmail: formattedEmail })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success && data.settings) {
         setSettings(data.settings);
         setTestRecipient(data.settings.adminNotificationEmail);
         setIsEditingEmail(false);
         if (onNotify) onNotify(`Đã lưu email nhận thông báo: ${data.settings.adminNotificationEmail}`);
       } else {
-        if (onNotify) onNotify(data.error || 'Không thể lưu email');
+        if (onNotify) onNotify(data.error || data.message || 'Không thể lưu email');
       }
     } catch (err: any) {
       if (onNotify) onNotify(err.message || 'Lỗi mạng');
@@ -186,16 +201,16 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetEmail: target })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         setTestResult({
           type: 'success',
-          message: `Đã gửi thành công email thử nghiệm đến ${data.destination}! Vui lòng kiểm tra hộp thư đến (và mục Spam nếu có).`
+          message: `Đã gửi thành công email thử nghiệm đến ${data.destination || target}! Vui lòng kiểm tra hộp thư đến (và mục Spam nếu có).`
         });
         if (data.stats) setStats(data.stats);
         if (onNotify) onNotify('Gửi email test thành công!');
       } else {
-        setTestResult({ type: 'error', message: data.message || 'Gửi email thử nghiệm không thành công.' });
+        setTestResult({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });
       }
     } catch (err: any) {
       setTestResult({ type: 'error', message: err.message || 'Lỗi kết nối máy chủ' });

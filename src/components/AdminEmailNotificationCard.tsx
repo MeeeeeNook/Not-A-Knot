@@ -21,13 +21,28 @@ export const AdminEmailNotificationCard: React.FC = () => {
   const [isTesting, setIsTesting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const parseJsonResponse = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
+        message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
+      };
+    }
+  };
+
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/email/status');
       if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-        setNewEmail(data.adminNotificationEmail || '');
+        const data = await parseJsonResponse(res);
+        if (data && data.configured !== undefined) {
+          setStatus(data);
+          setNewEmail(data.adminNotificationEmail || '');
+        }
       }
     } catch (err) {
       console.error('Failed to load email status:', err);
@@ -53,13 +68,13 @@ export const AdminEmailNotificationCard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newEmail: formattedEmail })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         setStatus((prev) => prev ? { ...prev, adminNotificationEmail: data.adminNotificationEmail } : null);
         setIsEditing(false);
         setFeedback({ type: 'success', message: `Đã đổi email nhận thông báo sang: ${data.adminNotificationEmail}` });
       } else {
-        setFeedback({ type: 'error', message: data.error || 'Không thể cập nhật email' });
+        setFeedback({ type: 'error', message: data.error || data.message || 'Không thể cập nhật email' });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Lỗi mạng' });
@@ -81,14 +96,14 @@ export const AdminEmailNotificationCard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smtpPass: newPass })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         setStatus((prev) => prev ? { ...prev, configured: true, maskedPass: data.maskedPass, mode: 'live_smtp' } : null);
         setIsEditingPass(false);
         setNewPass('');
         setFeedback({ type: 'success', message: data.message || 'Đã cập nhật Mật khẩu ứng dụng Google thành công!' });
       } else {
-        setFeedback({ type: 'error', message: data.error || 'Không thể cập nhật Mật khẩu ứng dụng.' });
+        setFeedback({ type: 'error', message: data.error || data.message || 'Không thể cập nhật Mật khẩu ứng dụng.' });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Lỗi mạng' });
@@ -106,11 +121,11 @@ export const AdminEmailNotificationCard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targetEmail: status?.adminNotificationEmail })
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         setFeedback({
           type: 'success',
-          message: `Đã gửi email kiểm tra thành công tới ${data.destination}! Vui lòng mở hộp thư kiểm tra.`
+          message: `Đã gửi email kiểm tra thành công tới ${data.destination || status?.adminNotificationEmail}! Vui lòng mở hộp thư kiểm tra.`
         });
       } else {
         setFeedback({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });

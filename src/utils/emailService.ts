@@ -38,6 +38,19 @@ export interface EmailConfigStatus {
   mode: 'live_smtp' | 'simulated_preview';
 }
 
+async function safeJsonParse(res: Response) {
+  try {
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch {
+    return {
+      success: false,
+      error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
+      message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
+    };
+  }
+}
+
 /**
  * Triggers asynchronous order confirmation email dispatch on the server.
  * Never throws exceptions, ensuring checkout flows continue unhindered.
@@ -65,15 +78,14 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
       })
     });
 
+    const data = await safeJsonParse(res);
     if (!res.ok) {
-      const errJson = await res.json().catch(() => ({}));
       return {
         success: false,
-        error: errJson.error || `Server status ${res.status}`
+        error: data.error || data.message || `Lỗi máy chủ (${res.status})`
       };
     }
 
-    const data = await res.json();
     return data;
   } catch (err: any) {
     console.warn('[Email Service Client] Dispatch warning:', err);
@@ -91,7 +103,7 @@ export async function fetchEmailConfigStatus(): Promise<EmailConfigStatus | null
   try {
     const res = await fetch('/api/email/status');
     if (!res.ok) return null;
-    return await res.json();
+    return await safeJsonParse(res);
   } catch (err) {
     console.warn('[Email Service Client] Status fetch error:', err);
     return null;
@@ -111,7 +123,7 @@ export async function testEmailDelivery(targetEmail?: string): Promise<{ success
       body: JSON.stringify({ targetEmail })
     });
 
-    const data = await res.json();
+    const data = await safeJsonParse(res);
     return {
       success: Boolean(data.success),
       message: data.message || data.error || 'Thực hiện kiểm tra hoàn tất.',

@@ -606,14 +606,24 @@ async function startServer() {
       const firestoreLogs: EmailLogEntry[] = [];
       logsSnap.forEach((docSnap) => {
         const d = docSnap.data();
+        let ts = Number(d.timestamp);
+        if (isNaN(ts) || !ts) {
+          if (d.createdAt) {
+            ts = new Date(d.createdAt).getTime();
+          }
+        }
+        if (isNaN(ts) || !ts) {
+          ts = Date.now();
+        }
+
         firestoreLogs.push({
           id: d.id || docSnap.id,
-          timestamp: Number(d.timestamp) || Date.now(),
+          timestamp: ts,
           recipient: String(d.recipient || ''),
           orderCode: d.orderCode ? String(d.orderCode) : undefined,
           type: (d.type as any) || 'customer_confirmation',
           status: (d.status as any) || 'sent',
-          createdAt: d.createdAt || new Date().toISOString()
+          createdAt: d.createdAt || new Date(ts).toISOString()
         });
       });
 
@@ -668,7 +678,7 @@ async function startServer() {
       id: `mail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: Date.now(),
       recipient,
-      orderCode,
+      orderCode: orderCode || undefined,
       type,
       status,
       createdAt: new Date().toISOString()
@@ -676,8 +686,20 @@ async function startServer() {
     emailStore.sentLogs.push(entry);
     saveEmailDataLocally();
 
-    // Persist to Firestore asynchronously so stats are globally accurate
-    setDoc(doc(firestoreDb, 'email_logs', entry.id), entry).catch((err) => {
+    // Persist to Firestore asynchronously without undefined properties
+    const firestoreDoc: Record<string, any> = {
+      id: entry.id,
+      timestamp: entry.timestamp,
+      recipient: entry.recipient,
+      type: entry.type,
+      status: entry.status,
+      createdAt: entry.createdAt
+    };
+    if (orderCode) {
+      firestoreDoc.orderCode = orderCode;
+    }
+
+    setDoc(doc(firestoreDb, 'email_logs', entry.id), firestoreDoc).catch((err) => {
       console.warn('[Firestore] Error saving email log to firestore:', err);
     });
   };
@@ -751,7 +773,8 @@ async function startServer() {
    * GET /api/email/settings
    * Returns current SMTP status, toggles configuration, and sending statistics
    */
-  app.get('/api/email/settings', (_req: Request, res: Response) => {
+  app.get('/api/email/settings', async (_req: Request, res: Response) => {
+    await syncEmailDataWithFirestore().catch(() => {});
     const activePass = getSmtpPass();
     const isConfigured = Boolean(SMTP_USER && activePass);
     const maskedUser = SMTP_USER ? SMTP_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Chưa cấu hình';
@@ -848,7 +871,8 @@ async function startServer() {
    * GET /api/email/status
    * Legacy status check endpoint, updated with settings and stats
    */
-  app.get('/api/email/status', (_req: Request, res: Response) => {
+  app.get('/api/email/status', async (_req: Request, res: Response) => {
+    await syncEmailDataWithFirestore().catch(() => {});
     const activePass = getSmtpPass();
     const isConfigured = Boolean(SMTP_USER && activePass);
     const maskedUser = SMTP_USER ? SMTP_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Chưa cấu hình';

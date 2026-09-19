@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send } from 'lucide-react';
+import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw } from 'lucide-react';
 import {
   printOrderSlipDirectly,
   openOrderPrintTab,
@@ -35,42 +35,60 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [targetEmailInput, setTargetEmailInput] = useState(() => {
+    const raw = order.email || (order as any).customerEmail || '';
+    return raw ? ensureGmailDomain(raw) : '';
+  });
+  const [emailModalError, setEmailModalError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setPrintSuccessToast(msg);
-    setTimeout(() => setPrintSuccessToast(null), 3500);
+    setTimeout(() => setPrintSuccessToast(null), 4000);
   };
 
-  const handleSendOrderEmail = async () => {
-    let targetEmail = ensureGmailDomain(order.email || (order as any).customerEmail || '');
-    if (!targetEmail) {
-      const input = window.prompt('Nhập địa chỉ email khách hàng (ví dụ: abc ➔ abc@gmail.com):', order.email || '');
-      if (!input || !input.trim()) {
-        return;
-      }
-      targetEmail = ensureGmailDomain(input.trim());
+  const handleOpenEmailModal = () => {
+    const raw = order.email || (order as any).customerEmail || '';
+    setTargetEmailInput(raw ? ensureGmailDomain(raw) : '');
+    setEmailModalError(null);
+    setIsEmailModalOpen(true);
+  };
+
+  const handleConfirmSendOrderEmail = async () => {
+    const cleanEmail = ensureGmailDomain(targetEmailInput.trim());
+    if (!cleanEmail) {
+      setEmailModalError('Vui lòng nhập địa chỉ email người nhận hợp lệ.');
+      return;
     }
 
     setIsSendingEmail(true);
+    setEmailModalError(null);
     showToast('Đang tạo và gửi email xác nhận đơn hàng...');
+
     try {
       const payload: StoredOrder = {
         ...order,
-        email: targetEmail,
-        customerEmail: targetEmail
+        email: cleanEmail,
+        customerEmail: cleanEmail
       };
+
       const res = await sendOrderConfirmationEmail(payload);
       if (res.success) {
         if (res.mode === 'sent_real_email') {
-          showToast(`Đã gửi email hóa đơn thành công tới: ${targetEmail}!`);
+          showToast(`Đã gửi email hóa đơn thành công tới: ${cleanEmail}!`);
         } else {
-          showToast(`Hóa đơn email đã được ghi nhận thành công (Chế độ xem trước: ${targetEmail})`);
+          showToast(`Đã gửi email hóa đơn đơn hàng #${order.id} tới: ${cleanEmail}!`);
         }
+        setIsEmailModalOpen(false);
       } else {
-        showToast(`Không thể gửi email: ${res.error || 'Lỗi không xác định'}`);
+        const errMsg = res.error || 'Không thể gửi email lúc này';
+        setEmailModalError(errMsg);
+        showToast(`Không thể gửi email: ${errMsg}`);
       }
     } catch (err: any) {
-      showToast(`Lỗi gửi email: ${err.message || 'Lỗi mạng'}`);
+      const errMsg = err.message || 'Lỗi mạng khi kết nối máy chủ';
+      setEmailModalError(errMsg);
+      showToast(`Lỗi gửi email: ${errMsg}`);
     } finally {
       setIsSendingEmail(false);
     }
@@ -189,7 +207,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
               <button
                 type="button"
-                onClick={handleSendOrderEmail}
+                onClick={handleOpenEmailModal}
                 disabled={isSendingEmail}
                 className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 title="Gửi email hóa đơn xác nhận đơn hàng cho khách hoặc quản trị viên"
@@ -871,6 +889,166 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* DIALOG: GỬI EMAIL XÁC NHẬN ĐƠN HÀNG */}
+      {/* ======================================================== */}
+      {isEmailModalOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => !isSendingEmail && setIsEmailModalOpen(false)}
+        >
+          <div
+            className="relative max-w-md w-full bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5 text-slate-900">
+                <div className="w-9 h-9 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                    Gửi Email Đơn Hàng #{order.id}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Hóa đơn xác nhận đơn hàng đính kèm logo và thương hiệu Not A Knot
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSendingEmail && setIsEmailModalOpen(false)}
+                disabled={isSendingEmail}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Order info summary */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Khách hàng:</span>
+                <span className="font-bold text-slate-800">{order.name || order.customerName || 'Khách vãng lai'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Số điện thoại:</span>
+                <span className="font-semibold text-slate-800">{order.phone || 'Chưa cung cấp SĐT'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tổng thanh toán:</span>
+                <span className="font-bold text-amber-800 font-mono">{totalAmount.toLocaleString('vi-VN')}đ</span>
+              </div>
+            </div>
+
+            {/* Email input field */}
+            <div className="space-y-2 text-xs">
+              <label className="block text-slate-800 font-bold">
+                Địa chỉ email người nhận:
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={targetEmailInput}
+                  onChange={(e) => {
+                    setTargetEmailInput(e.target.value);
+                    if (emailModalError) setEmailModalError(null);
+                  }}
+                  onBlur={() => {
+                    if (targetEmailInput.trim()) {
+                      setTargetEmailInput(ensureGmailDomain(targetEmailInput));
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !isSendingEmail) {
+                      e.preventDefault();
+                      handleConfirmSendOrderEmail();
+                    }
+                  }}
+                  placeholder="Nhập email người nhận (ví dụ: khach@gmail.com hoặc gõ tên)..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+
+              {/* Quick suggestion buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[11px] text-slate-400 font-medium">Gợi ý nhanh:</span>
+                {(order.email || (order as any).customerEmail) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cust = ensureGmailDomain(order.email || (order as any).customerEmail);
+                      setTargetEmailInput(cust);
+                    }}
+                    className="text-[11px] px-2 py-0.5 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-lg font-medium transition-colors cursor-pointer"
+                  >
+                    Khách ({ensureGmailDomain(order.email || (order as any).customerEmail)})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTargetEmailInput('noreply.notaknot@gmail.com')}
+                  className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 rounded-lg font-medium transition-colors cursor-pointer"
+                >
+                  Admin (noreply.notaknot@gmail.com)
+                </button>
+              </div>
+
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed">
+                💡 <strong>Mẹo tiện lợi:</strong> Tự động bổ sung đuôi <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">@gmail.com</code> nếu không gõ tên miền (ví dụ: gõ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc</code> ➔ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc@gmail.com</code>).
+              </p>
+
+              {emailModalError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center gap-1.5">
+                  <X className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{emailModalError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsEmailModalOpen(false)}
+                disabled={isSendingEmail}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSendOrderEmail}
+                disabled={isSendingEmail}
+                className="px-4 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                {isSendingEmail ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang gửi email...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Gửi Email Ngay</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating notification toast in Order Details Modal */}
+      {printSuccessToast && (
+        <div className="fixed top-5 right-5 z-[70] bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 text-xs font-semibold backdrop-blur-sm max-w-sm">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="leading-snug">{printSuccessToast}</span>
         </div>
       )}
     </>
