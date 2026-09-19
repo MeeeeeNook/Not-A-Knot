@@ -32,8 +32,8 @@ const BRAND = {
   green: '#2f7d48'
 };
 
-const BODY_FONT = "Arial, Helvetica, sans-serif";
-const DISPLAY_FONT = "Georgia, 'Times New Roman', serif";
+const BODY_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+const DISPLAY_FONT = BODY_FONT;
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -177,7 +177,8 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
   const logoSrc = emailImage(null, '/assets/logo.jpg', 'logo');
   const facebookSrc = emailImage(null, '/assets/icons/facebook.png', 'facebook');
   const instagramSrc = emailImage(null, '/assets/icons/instagram.png', 'instagram');
-  const threadsSrc = emailImage(null, '/assets/icons/threads.png', 'threads');
+  const threadsSrc = emailImage(null, '/assets/email/threads.png', 'threads');
+  const messengerSrc = emailImage(null, '/assets/email/messenger.png', 'messenger');
   const trackingUrl = `${baseUrl}/#tracking?code=${encodeURIComponent(orderCode)}`;
 
   const itemRows = items
@@ -209,7 +210,7 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
 
       const variantLine = variants.length ? variants.join(' • ') : 'Phiên bản tiêu chuẩn';
       const customNote = item?.customNote
-        ? `<div style="padding-top:4px;font-size:11px;line-height:16px;color:${BRAND.muted};">• ${escapeHtml(item.customNote)}</div>`
+        ? `<div style="padding-top:4px;font-size:14px;line-height:21px;color:${BRAND.muted};">• ${escapeHtml(item.customNote)}</div>`
         : '';
 
       return `
@@ -218,13 +219,13 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
             <img src="${escapeHtml(imageSrc)}" width="54" height="54" alt="${escapeHtml(productName)}" style="display:block;width:54px;height:54px;border:1px solid ${BRAND.border};border-radius:10px;object-fit:cover;background:${BRAND.creamStrong};" />
           </td>
           <td valign="top" style="padding:14px 10px;border-bottom:1px solid ${BRAND.border};">
-            <div style="font-size:13px;line-height:19px;font-weight:400;color:${BRAND.ink};">${escapeHtml(productName)}</div>
-            <div style="padding-top:3px;font-size:11px;line-height:16px;color:${BRAND.muted};">Phân loại: <span style="color:${BRAND.burgundy};">${escapeHtml(variantLine)}</span></div>
+            <div style="font-size:16px;line-height:24px;font-weight:400;color:${BRAND.ink};">${escapeHtml(productName)}</div>
+            <div style="padding-top:3px;font-size:14px;line-height:21px;color:${BRAND.muted};">Phân loại: <span style="color:${BRAND.burgundy};">${escapeHtml(variantLine)}</span></div>
             ${customNote}
           </td>
           <td width="95" valign="top" align="right" style="width:95px;padding:14px 0;border-bottom:1px solid ${BRAND.border};white-space:nowrap;">
-            <div style="font-size:10px;line-height:14px;color:${BRAND.muted};">SL: ${quantity}</div>
-            <div style="padding-top:2px;font-size:13px;line-height:18px;font-weight:700;color:${BRAND.burgundy};">${money(rowTotal)}</div>
+            <div style="font-size:13px;line-height:19px;color:${BRAND.muted};">SL: ${quantity}</div>
+            <div style="padding-top:2px;font-size:16px;line-height:23px;font-weight:700;color:${BRAND.burgundy};">${money(rowTotal)}</div>
           </td>
         </tr>`;
     })
@@ -232,7 +233,7 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
 
   const noteBlock = note
     ? `<tr>
-        <td colspan="2" style="padding:12px 14px;background:#ffffff;border:1px solid ${BRAND.border};border-radius:8px;font-family:${BODY_FONT};font-size:11px;line-height:17px;color:${BRAND.muted};">
+        <td colspan="2" style="padding:12px 14px;background:#ffffff;border:1px solid ${BRAND.border};border-radius:8px;font-family:${BODY_FONT};font-size:14px;line-height:22px;color:${BRAND.muted};">
           <strong style="color:${BRAND.burgundy};">Ghi chú đơn hàng:</strong> “${escapeHtml(note)}”
         </td>
       </tr>`
@@ -265,14 +266,14 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
       .hero { padding:24px 18px !important; }
       .hero-logo { width:66px !important; }
       .hero-copy { padding-left:14px !important; }
-      .hero-title { font-size:22px !important; line-height:27px !important; }
+      .hero-title { font-size:24px !important; line-height:30px !important; }
       .content { padding-left:18px !important; padding-right:18px !important; }
       .stack { display:block !important; width:100% !important; box-sizing:border-box !important; }
-      .stack-gap { padding-left:0 !important; padding-top:16px !important; border-left:0 !important; }
+      .stack-gap { padding-left:18px !important; padding-top:16px !important; border-left:0 !important; }
       .cta { display:block !important; width:100% !important; box-sizing:border-box !important; text-align:center !important; margin-top:12px !important; }
       .mobile-left { text-align:left !important; }
       .totals { width:100% !important; }
-      .trust-copy { font-size:10px !important; line-height:14px !important; }
+      .trust-copy { font-size:13px !important; line-height:19px !important; }
     }
   </style>
 </head>
@@ -281,9 +282,9 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:${BRAND.canvas};">
     <tr>
       <td class="shell-pad" align="center" style="padding:22px 12px;">
-        <table class="email-card" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid ${BRAND.border};border-radius:15px;overflow:hidden;">
+        <table class="email-card" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:720px;margin:0 auto;background:#ffffff;border:1px solid ${BRAND.border};border-radius:15px;overflow:hidden;">
           <tr>
-            <td align="center" style="padding:10px 20px;background:${BRAND.burgundy};font-family:${BODY_FONT};font-size:11px;line-height:15px;font-weight:700;color:#ffffff;">
+            <td align="center" style="padding:10px 20px;background:${BRAND.burgundy};font-family:${BODY_FONT};font-size:14px;line-height:20px;font-weight:700;color:#ffffff;">
               Cảm ơn bạn đã đồng hành cùng Not A Knot
             </td>
           </tr>
@@ -296,8 +297,8 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
                     <img src="${logoSrc}" width="70" height="70" alt="Not A Knot" style="display:block;width:70px;height:70px;border-radius:10px;object-fit:cover;background:${BRAND.creamStrong};" />
                   </td>
                   <td class="hero-copy" valign="middle" style="padding-left:18px;">
-                    <h1 class="hero-title" style="margin:0;font-family:${DISPLAY_FONT};font-size:25px;line-height:31px;font-weight:700;color:${BRAND.burgundy};">Đơn hàng của bạn đang được xử lý!</h1>
-                    <p style="margin:5px 0 0;font-family:${BODY_FONT};font-size:12px;line-height:18px;color:${BRAND.muted};">Chúng tôi đã nhận được đơn hàng và đang chuẩn bị các sản phẩm thủ công tinh tế dành riêng cho bạn.</p>
+                    <h1 class="hero-title" style="margin:0;font-family:${DISPLAY_FONT};font-size:28px;line-height:35px;font-weight:700;color:${BRAND.burgundy};">Đơn hàng của bạn đang được xử lý!</h1>
+                    <p style="margin:5px 0 0;font-family:${BODY_FONT};font-size:15px;line-height:23px;color:${BRAND.muted};">Chúng tôi đã nhận được đơn hàng và đang chuẩn bị các sản phẩm thủ công tinh tế dành riêng cho bạn.</p>
                   </td>
                 </tr>
               </table>
@@ -309,11 +310,11 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${BRAND.border};">
                 <tr>
                   <td class="stack mobile-left" valign="middle" style="padding-top:17px;font-family:${BODY_FONT};">
-                    <span style="font-size:11px;line-height:15px;color:${BRAND.muted};">Mã đơn hàng:&nbsp;</span>
-                    <span style="font-family:${BODY_FONT};font-size:20px;line-height:26px;font-weight:700;color:${BRAND.burgundy};">#${escapeHtml(orderCode)}</span>
+                    <span style="font-size:14px;line-height:20px;color:${BRAND.muted};">Mã đơn hàng:&nbsp;</span>
+                    <span style="font-family:${BODY_FONT};font-size:24px;line-height:30px;font-weight:700;color:${BRAND.burgundy};">#${escapeHtml(orderCode)}</span>
                   </td>
                   <td class="stack" align="right" valign="middle" style="padding-top:17px;">
-                    <a class="cta" href="${escapeHtml(trackingUrl)}" style="display:inline-block;padding:11px 20px;background:${BRAND.burgundy};border-radius:7px;font-family:${BODY_FONT};font-size:11px;line-height:14px;font-weight:700;color:#ffffff;text-decoration:none;">TRA CỨU ĐƠN HÀNG</a>
+                    <a class="cta" href="${escapeHtml(trackingUrl)}" style="display:inline-block;padding:11px 20px;background:${BRAND.burgundy};border-radius:7px;font-family:${BODY_FONT};font-size:14px;line-height:19px;font-weight:700;color:#ffffff;text-decoration:none;">TRA CỨU ĐƠN HÀNG</a>
                   </td>
                 </tr>
               </table>
@@ -325,17 +326,18 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.soft};border:1px solid ${BRAND.border};border-radius:12px;">
                 <tr>
                   <td class="stack" width="50%" valign="top" style="width:50%;padding:18px;font-family:${BODY_FONT};">
-                    <div style="padding-bottom:8px;font-size:10px;line-height:14px;letter-spacing:.3px;color:${BRAND.muted};">THÔNG TIN ĐƠN HÀNG</div>
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${BODY_FONT};font-size:11px;line-height:18px;color:${BRAND.ink};">
-                      <tr><td width="78" style="color:${BRAND.muted};">Ngày đặt:</td><td><strong>${escapeHtml(date)}</strong></td></tr>
+                    <div style="padding-bottom:8px;font-size:13px;line-height:19px;letter-spacing:.3px;color:${BRAND.muted};">THÔNG TIN ĐƠN HÀNG</div>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${BODY_FONT};font-size:14px;line-height:23px;color:${BRAND.ink};">
+                      <tr><td width="100" style="color:${BRAND.muted};">Ngày đặt:</td><td><strong>${escapeHtml(date)}</strong></td></tr>
                       <tr><td style="color:${BRAND.muted};">Dự kiến nhận:</td><td><strong>${escapeHtml(estimatedDelivery)}</strong></td></tr>
-                      <tr><td style="color:${BRAND.muted};">Trạng thái:</td><td><span style="display:inline-block;padding:2px 7px;background:${BRAND.creamStrong};border-radius:4px;color:${BRAND.burgundy};font-size:10px;font-weight:700;">${escapeHtml(status)}</span></td></tr>
+                      <tr><td style="color:${BRAND.muted};">Trạng thái:</td><td><span style="display:inline-block;padding:2px 7px;background:${BRAND.creamStrong};border-radius:4px;color:${BRAND.burgundy};font-size:13px;font-weight:700;">${escapeHtml(status)}</span></td></tr>
                     </table>
                   </td>
                   <td class="stack stack-gap" width="50%" valign="top" style="width:50%;padding:18px;font-family:${BODY_FONT};">
-                    <div style="padding-bottom:8px;font-size:10px;line-height:14px;letter-spacing:.3px;color:${BRAND.muted};">ĐỊA CHỈ GIAO HÀNG</div>
-                    <div style="font-size:12px;line-height:18px;font-weight:700;color:${BRAND.ink};">${escapeHtml(customerName)} <span style="font-weight:400;color:${BRAND.muted};">• ${escapeHtml(phone)}</span></div>
-                    <div style="padding-top:3px;font-size:11px;line-height:17px;color:${BRAND.muted};">${escapeHtml(address)}</div>
+                    <div style="padding-bottom:8px;font-size:13px;line-height:19px;letter-spacing:.3px;color:${BRAND.muted};">ĐỊA CHỈ GIAO HÀNG</div>
+                    <div style="font-size:15px;line-height:23px;font-weight:700;color:${BRAND.ink};">${escapeHtml(customerName)}</div>
+                    <div style="padding-top:3px;font-size:15px;line-height:23px;color:${BRAND.muted};">SĐT: ${escapeHtml(phone)}</div>
+                    <div style="padding-top:3px;font-size:14px;line-height:22px;color:${BRAND.muted};">${escapeHtml(address)}</div>
                   </td>
                 </tr>
                 ${noteBlock}
@@ -346,20 +348,19 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
           <tr>
             <td class="content" style="padding:0 28px 24px;font-family:${BODY_FONT};">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-bottom:1px solid ${BRAND.border};"><tr>
-                <td style="padding:0 0 12px;font-family:${BODY_FONT};font-size:14px;line-height:20px;font-weight:700;color:${BRAND.ink};"><span style="color:${BRAND.burgundy};">●</span>&nbsp; Chi tiết đơn hàng</td>
-                <td align="right" style="padding:0 0 12px;"><a href="${escapeHtml(trackingUrl)}" style="display:inline-block;padding:7px 12px;border:1px solid ${BRAND.burgundy};border-radius:5px;font-family:${BODY_FONT};font-size:10px;line-height:14px;color:${BRAND.burgundy};text-decoration:none;">Tra cứu đơn</a></td>
+                <td style="padding:0 0 12px;font-family:${BODY_FONT};font-size:17px;line-height:25px;font-weight:700;color:${BRAND.ink};">Chi tiết đơn hàng</td>
               </tr></table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;font-family:${BODY_FONT};">
-                ${itemRows || `<tr><td style="padding:18px 0;color:${BRAND.muted};font-size:12px;">Chi tiết sản phẩm sẽ được cập nhật trên trang tra cứu đơn hàng.</td></tr>`}
+                ${itemRows || `<tr><td style="padding:18px 0;color:${BRAND.muted};font-size:15px;">Chi tiết sản phẩm sẽ được cập nhật trên trang tra cứu đơn hàng.</td></tr>`}
               </table>
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="right" style="padding-top:14px;">
-              <table class="totals" role="presentation" width="52%" cellpadding="0" cellspacing="0" border="0" style="width:52%;font-family:${BODY_FONT};font-size:11px;line-height:18px;color:${BRAND.ink};">
+              <table class="totals" role="presentation" width="52%" cellpadding="0" cellspacing="0" border="0" style="width:52%;font-family:${BODY_FONT};font-size:14px;line-height:23px;color:${BRAND.ink};">
                 <tr><td style="padding:2px 0;color:${BRAND.muted};">Tạm tính (${totalQuantity} món):</td><td align="right" style="padding:2px 0;font-weight:700;">${money(subtotal)}</td></tr>
                 <tr><td style="padding:2px 0;color:${BRAND.muted};">Phí vận chuyển:</td><td align="right" style="padding:2px 0;font-weight:700;color:${shippingFee === 0 ? BRAND.green : BRAND.ink};">${shippingFee === 0 ? 'MIỄN PHÍ' : money(shippingFee)}</td></tr>
                 ${discountRow}
                 <tr><td style="padding:2px 0;color:${BRAND.muted};">Phương thức thanh toán:</td><td align="right" style="padding:2px 0;font-weight:700;">${escapeHtml(paymentMethod)}</td></tr>
-                <tr><td style="padding:11px 0 0;border-top:1px solid ${BRAND.border};font-size:14px;font-weight:700;">Tổng cộng:</td><td align="right" style="padding:11px 0 0;border-top:1px solid ${BRAND.border};font-family:${BODY_FONT};font-size:17px;font-weight:700;color:${BRAND.burgundy};">${money(totalAmount)}</td></tr>
+                <tr><td style="padding:11px 0 0;border-top:1px solid ${BRAND.border};font-size:17px;font-weight:700;">Tổng cộng:</td><td align="right" style="padding:11px 0 0;border-top:1px solid ${BRAND.border};font-family:${BODY_FONT};font-size:20px;font-weight:700;color:${BRAND.burgundy};">${money(totalAmount)}</td></tr>
               </table>
               </td></tr></table>
             </td>
@@ -370,19 +371,19 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:${BODY_FONT};">
                 <tr>
                   <td width="33.33%" align="center" valign="top" style="width:33.33%;padding:0 7px;">
-                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:17px;line-height:32px;color:${BRAND.burgundy};">◷</div>
-                    <div class="trust-copy" style="padding-top:4px;font-size:11px;line-height:16px;font-weight:700;color:${BRAND.ink};">Hỗ trợ tận tâm</div>
-                    <div class="trust-copy" style="font-size:9px;line-height:13px;color:${BRAND.muted};">08:00–21:00 hằng ngày</div>
+                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:20px;line-height:32px;color:${BRAND.burgundy};">◷</div>
+                    <div class="trust-copy" style="padding-top:4px;font-size:14px;line-height:21px;font-weight:700;color:${BRAND.ink};">Hỗ trợ tận tâm</div>
+                    <div class="trust-copy" style="font-size:12px;line-height:18px;color:${BRAND.muted};">08:00–21:00 hằng ngày</div>
                   </td>
                   <td width="33.33%" align="center" valign="top" style="width:33.33%;padding:0 7px;border-left:1px solid ${BRAND.border};border-right:1px solid ${BRAND.border};">
-                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:17px;line-height:32px;color:${BRAND.burgundy};">✓</div>
-                    <div class="trust-copy" style="padding-top:4px;font-size:11px;line-height:16px;font-weight:700;color:${BRAND.ink};">Thủ công tinh xảo</div>
-                    <div class="trust-copy" style="font-size:9px;line-height:13px;color:${BRAND.muted};">Tỉ mỉ từng mối thắt</div>
+                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:20px;line-height:32px;color:${BRAND.burgundy};">✓</div>
+                    <div class="trust-copy" style="padding-top:4px;font-size:14px;line-height:21px;font-weight:700;color:${BRAND.ink};">Thủ công tinh xảo</div>
+                    <div class="trust-copy" style="font-size:12px;line-height:18px;color:${BRAND.muted};">Tỉ mỉ từng mối thắt</div>
                   </td>
                   <td width="33.33%" align="center" valign="top" style="width:33.33%;padding:0 7px;">
-                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:17px;line-height:32px;color:${BRAND.burgundy};">↻</div>
-                    <div class="trust-copy" style="padding-top:4px;font-size:11px;line-height:16px;font-weight:700;color:${BRAND.ink};">Đổi trả linh hoạt</div>
-                    <div class="trust-copy" style="font-size:9px;line-height:13px;color:${BRAND.muted};">Trong 7 ngày nhận hàng</div>
+                    <div style="width:32px;height:32px;margin:0 auto 5px;border-radius:50%;background:${BRAND.cream};font-size:20px;line-height:32px;color:${BRAND.burgundy};">↻</div>
+                    <div class="trust-copy" style="padding-top:4px;font-size:14px;line-height:21px;font-weight:700;color:${BRAND.ink};">Đổi trả linh hoạt</div>
+                    <div class="trust-copy" style="font-size:12px;line-height:18px;color:${BRAND.muted};">Trong 7 ngày nhận hàng</div>
                   </td>
                 </tr>
               </table>
@@ -390,33 +391,32 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
           </tr>
 
           <tr>
-            <td align="center" style="padding:11px 20px;background:${BRAND.burgundy};font-family:${BODY_FONT};font-size:11px;line-height:16px;color:#ffffff;">
+            <td align="center" style="padding:11px 20px;background:${BRAND.burgundy};font-family:${BODY_FONT};font-size:14px;line-height:21px;color:#ffffff;">
               Cần hỗ trợ gấp về đơn hàng? Hotline / Zalo: <a href="tel:0796555636" style="color:#ffffff;font-weight:700;text-decoration:underline;">079 655 5636</a>
-              &nbsp;|&nbsp; <a href="mailto:noreply.notaknot@gmail.com" style="color:#ffffff;text-decoration:underline;">noreply.notaknot@gmail.com</a>
             </td>
           </tr>
 
           <tr>
             <td align="center" style="padding:25px 24px 18px;background:${BRAND.soft};font-family:${BODY_FONT};">
               <img src="${logoSrc}" width="54" height="54" alt="Not A Knot" style="display:block;width:54px;height:54px;margin:0 auto 8px;border-radius:9px;object-fit:cover;background:${BRAND.creamStrong};" />
-              <div style="font-family:${DISPLAY_FONT};font-size:16px;line-height:21px;font-weight:700;letter-spacing:1.7px;color:${BRAND.burgundy};">NOT A KNOT STUDIO</div>
-              <div style="padding-top:2px;font-family:${DISPLAY_FONT};font-size:10px;line-height:14px;font-style:italic;color:${BRAND.muted};">Even more • Est 2026</div>
+              <div style="font-family:${DISPLAY_FONT};font-size:20px;line-height:26px;font-weight:700;letter-spacing:1.7px;color:${BRAND.burgundy};">NOT A KNOT STUDIO</div>
+              <div style="padding-top:2px;font-family:${DISPLAY_FONT};font-size:13px;line-height:19px;font-style:italic;color:${BRAND.muted};">Even more • Est 2026</div>
 
               <div style="padding:14px 0 12px;">
-                <a href="https://www.facebook.com/profile.php?id=61593591390851" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${facebookSrc}" width="15" height="15" alt="Facebook" style="display:inline-block;vertical-align:middle;width:15px;height:15px;" /></a>
-                <a href="https://www.instagram.com/notaknot.handmade" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${instagramSrc}" width="15" height="15" alt="Instagram" style="display:inline-block;vertical-align:middle;width:15px;height:15px;" /></a>
-                <a href="https://www.threads.com/@notaknot.handmade" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${threadsSrc}" width="15" height="15" alt="Threads" style="display:inline-block;vertical-align:middle;width:15px;height:15px;" /></a>
-                <a href="${baseUrl}" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;font-size:13px;line-height:30px;color:${BRAND.burgundy};text-decoration:none;vertical-align:top;">◎</a>
+                <a href="https://www.facebook.com/profile.php?id=61593591390851" style="display:inline-block;width:38px;height:38px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:38px;text-decoration:none;"><img src="${facebookSrc}" width="20" height="20" alt="Facebook" style="display:inline-block;vertical-align:middle;width:20px;height:20px;" /></a>
+                <a href="https://www.instagram.com/notaknot.handmade" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${instagramSrc}" width="20" height="20" alt="Instagram" style="display:inline-block;vertical-align:middle;width:20px;height:20px;" /></a>
+                <a href="https://m.me/61593591390851" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${messengerSrc}" width="20" height="20" alt="Messenger" style="display:inline-block;vertical-align:middle;width:20px;height:20px;" /></a>
+                <a href="https://www.threads.com/@notaknot.handmade" style="display:inline-block;width:30px;height:30px;margin:0 3px;border:1px solid ${BRAND.border};border-radius:50%;background:#ffffff;line-height:30px;text-decoration:none;"><img src="${threadsSrc}" width="20" height="20" alt="Threads" style="display:inline-block;vertical-align:middle;width:20px;height:20px;" /></a>
               </div>
 
-              <div style="font-size:10px;line-height:16px;color:${BRAND.muted};">
+              <div style="font-size:13px;line-height:21px;color:${BRAND.muted};">
                 Hotline / Zalo hỗ trợ: <strong style="color:${BRAND.burgundy};">079 655 5636</strong><br />
                 Email tự động từ <a href="mailto:noreply.notaknot@gmail.com" style="color:${BRAND.burgundy};text-decoration:none;">noreply.notaknot@gmail.com</a> — vui lòng không phản hồi trực tiếp.<br />
                 Website chính thức: <a href="${baseUrl}" style="color:${BRAND.burgundy};font-weight:700;text-decoration:none;">www.notaknot.id.vn</a><br />
                 © ${options.year || new Date().getFullYear()} NOT A KNOT Studio. Tự hào chế tác thủ công tại Việt Nam.
               </div>
 
-              <div style="margin-top:14px;padding:12px 14px;background:#efe9df;border:1px solid #dfd5c6;border-radius:9px;text-align:left;font-size:9px;line-height:14px;color:${BRAND.muted};">
+              <div style="margin-top:14px;padding:12px 14px;background:#efe9df;border:1px solid #dfd5c6;border-radius:9px;text-align:left;font-size:12px;line-height:19px;color:${BRAND.muted};">
                 <strong style="color:${BRAND.burgundy};">Not A Knot</strong> cùng hệ thống website và các kênh truyền thông liên quan là dự án học tập thuộc khuôn khổ môn Quản trị tác nghiệp Thương mại điện tử – Đại học Kinh tế Quốc dân. Dự án được triển khai nhằm mục đích nghiên cứu, thực hành môn học và không mang tính chất kinh doanh thương mại.
               </div>
             </td>
