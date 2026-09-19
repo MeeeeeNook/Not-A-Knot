@@ -3,7 +3,9 @@ import path from 'path';
 
 export interface OrderEmailAttachment {
   filename: string;
-  path: string;
+  path?: string;
+  content?: Buffer;
+  contentType?: string;
   cid: string;
   contentDisposition: 'inline';
 }
@@ -17,6 +19,7 @@ interface OrderEmailOptions {
   baseUrl?: string;
   publicDir?: string;
   year?: number;
+  products?: any[];
 }
 
 const BRAND = {
@@ -54,35 +57,122 @@ function money(value: unknown): string {
 }
 
 function safeBaseUrl(value?: string): string {
-  const fallback = 'https://www.notaknot.id.vn';
-  if (!value) return fallback;
+  const OFFICIAL_SITE = 'https://www.notaknot.id.vn';
+  if (!value) return OFFICIAL_SITE;
   try {
     const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
     if (url.protocol !== 'https:' || url.username || url.password ||
-        ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return fallback;
+        ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+        url.hostname.includes('run.app') || url.hostname.includes('ai.studio') || url.hostname.includes('google')) {
+      return OFFICIAL_SITE;
+    }
     return url.origin;
   } catch {
-    return fallback;
+    return OFFICIAL_SITE;
   }
 }
 
-function fallbackProductAsset(name: string): string {
-  const normalized = name.toLocaleLowerCase('vi-VN');
-  if (normalized.includes('bộ đội') || normalized.includes('bodoi')) return '/assets/keychain-bodoi.jpg';
-  if (normalized.includes('mũ cối') || normalized.includes('mucoi')) return '/assets/keychain-mucoi.jpg';
-  if (normalized.includes('butterfly')) return '/assets/img_4.jpg';
-  if (normalized.includes('0209') || normalized.includes('02/09')) return '/assets/0209/img_3.jpg';
-  if (normalized.includes('móc') || normalized.includes('khoá') || normalized.includes('keychain')) {
-    return '/assets/keychain-bodoi.jpg';
+function normalizeText(txt: string): string {
+  return String(txt || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function findMatchedProduct(item: any, productsList: any[]): any {
+  if (!item || !Array.isArray(productsList) || productsList.length === 0) return null;
+
+  const productId = String(item.productId || item.id || '').trim();
+  const rawName = String(item.productName || item.name || '').trim();
+  const normName = normalizeText(rawName);
+
+  // 1. By ID
+  if (productId) {
+    const byId = productsList.find((p: any) => p && String(p.id).trim() === productId);
+    if (byId) return byId;
   }
-  return '/assets/bracelet.jpg';
+
+  // 2. By exact name
+  if (rawName) {
+    const byName = productsList.find((p: any) => p && p.name && String(p.name).trim().toLowerCase() === rawName.toLowerCase());
+    if (byName) return byName;
+  }
+
+  // 3. By normalized name
+  if (normName) {
+    const byNorm = productsList.find((p: any) => p && p.name && normalizeText(p.name) === normName);
+    if (byNorm) return byNorm;
+  }
+
+  // 4. By keyword / substring
+  if (normName) {
+    const bySub = productsList.find((p: any) => {
+      if (!p || !p.name) return false;
+      const pNorm = normalizeText(p.name);
+      return pNorm.includes(normName) || normName.includes(pNorm);
+    });
+    if (bySub) return bySub;
+  }
+
+  return null;
+}
+
+function resolveProductCandidate(item: any, matchedProduct: any): string | null {
+  // Priority 1: Variant image specified directly on item
+  if (typeof item?.selectedColorImage === 'string' && item.selectedColorImage.trim() && !item.selectedColorImage.startsWith('data:image/')) {
+    return item.selectedColorImage.trim();
+  }
+
+  // Priority 2: Variant image from matched product colorOptions
+  if (item?.selectedColor && matchedProduct?.colorOptions && Array.isArray(matchedProduct.colorOptions)) {
+    const normColor = normalizeText(item.selectedColor);
+    const colorOpt = matchedProduct.colorOptions.find((c: any) => {
+      if (!c || !c.name) return false;
+      const cNorm = normalizeText(c.name);
+      return cNorm === normColor || cNorm.includes(normColor) || normColor.includes(cNorm);
+    });
+    const colorImg = colorOpt?.image || colorOpt?.img;
+    if (typeof colorImg === 'string' && colorImg.trim() && !colorImg.startsWith('data:image/')) {
+      return colorImg.trim();
+    }
+  }
+
+  // Priority 3: Product image on item
+  const itemImg = (typeof item?.imageUrl === 'string' && item.imageUrl.trim()) ||
+                  (typeof item?.image === 'string' && item.image.trim()) ||
+                  (typeof item?.productImage === 'string' && item.productImage.trim()) || null;
+  if (itemImg && !itemImg.startsWith('data:image/')) {
+    return itemImg;
+  }
+
+  // Priority 4: Product image from matchedProduct
+  const prodImg = (typeof matchedProduct?.image === 'string' && matchedProduct.image.trim()) ||
+                  (typeof matchedProduct?.img === 'string' && matchedProduct.img.trim()) ||
+                  (Array.isArray(matchedProduct?.images) && typeof matchedProduct.images[0] === 'string' && matchedProduct.images[0].trim()) || null;
+  if (prodImg && !prodImg.startsWith('data:image/')) {
+    return prodImg;
+  }
+
+  return null;
+}
+
+function getLocalFallbackAsset(name: string): string | null {
+  const norm = normalizeText(name);
+  if (norm.includes('bo doi') || norm.includes('chu bo doi')) return '/assets/keychain-bodoi.jpg';
+  if (norm.includes('mu coi')) return '/assets/keychain-mucoi.jpg';
+  if (norm.includes('0209') || norm.includes('02/09') || norm.includes('paracord') || norm.includes('co do')) return '/assets/0209/img_3.jpg';
+  if (norm.includes('butterfly') || norm.includes('buom')) return '/assets/img_4.jpg';
+  if (norm.includes('lucky') || norm.includes('luu ly') || norm.includes('knot')) return '/assets/img_1.jpg';
+  if (norm.includes('vong') || norm.includes('khoa') || norm.includes('keychain')) return '/assets/keychain-bodoi.jpg';
+  return null;
 }
 
 /**
  * Builds the customer-facing order email from plain order data.
- * This module deliberately has no Firebase/Firestore imports or database reads.
+ * Embeds images directly as inline attachments (CID) for instant display in all email clients.
  */
-export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptions = {}): OrderEmailResult {
+export async function buildOrderConfirmationEmail(order: any, options: OrderEmailOptions = {}): Promise<OrderEmailResult> {
   const baseUrl = safeBaseUrl(options.baseUrl);
   const publicDir = path.resolve(options.publicDir || path.join(process.cwd(), 'public'));
   const attachments: OrderEmailAttachment[] = [];
@@ -92,7 +182,6 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
     const relativePath = assetPath.replace(/^\/+/, '');
     const absolutePath = path.resolve(publicDir, relativePath);
 
-    // Only attach actual raster images, never arbitrary public files or symlink escapes.
     if (!/\.(?:png|jpe?g|gif|webp)$/i.test(relativePath) ||
         !absolutePath.startsWith(`${publicDir}${path.sep}`)) return '';
     try {
@@ -118,6 +207,45 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
     return `cid:${cid}`;
   };
 
+  const embedRemoteOrLocal = async (sourceUrl: string, label: string): Promise<string> => {
+    if (!sourceUrl) return '';
+
+    // If local path:
+    if (sourceUrl.startsWith('/')) {
+      return inlineAsset(sourceUrl, label);
+    }
+
+    // If HTTP / HTTPS URL:
+    try {
+      const parsed = new URL(sourceUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+
+      const resp = await fetch(parsed.href, { signal: AbortSignal.timeout(6000) });
+      if (!resp.ok) {
+        return parsed.href;
+      }
+
+      const arrayBuf = await resp.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+      const contentType = resp.headers.get('content-type') || 'image/jpeg';
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+
+      const cid = `nak-${label}-${attachments.length + 1}@notaknot.email`;
+      attachments.push({
+        filename: `${label}.${ext}`,
+        content: buffer,
+        contentType,
+        cid,
+        contentDisposition: 'inline'
+      });
+
+      return `cid:${cid}`;
+    } catch (err: any) {
+      console.warn(`[Order Email] Remote image download failed for ${sourceUrl}, falling back:`, err?.message || err);
+      return sourceUrl;
+    }
+  };
+
   const emailImage = (rawValue: unknown, fallback: string, label: string): string => {
     const raw = typeof rawValue === 'string' ? rawValue.trim() : '';
     if (raw) {
@@ -129,7 +257,7 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
           if (localImage) return localImage;
         }
       } catch {
-        // Malformed, session-only, and missing image values use a bundled fallback.
+        // Fallback
       }
     }
     return inlineAsset(fallback, label) || `${baseUrl}${fallback}`;
@@ -181,17 +309,43 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
   const messengerSrc = emailImage(null, '/assets/email/messenger.png', 'messenger');
   const trackingUrl = `${baseUrl}/#tracking?code=${encodeURIComponent(orderCode)}`;
 
-  const itemRows = items
-    .map((item: any, index: number) => {
+  const productsCatalog = Array.isArray(options?.products) && options.products.length > 0
+    ? options.products
+    : (Array.isArray(order?.products) && order.products.length > 0 ? order.products : []);
+
+  const renderedRows = await Promise.all(
+    items.map(async (item: any, index: number) => {
       const productName = String(item?.productName || item?.name || 'Sản phẩm thủ công');
       const quantity = Math.max(1, numberValue(item?.quantity));
       const unitPrice = numberValue(item?.price ?? item?.unitPrice);
       const rowTotal = unitPrice * quantity;
-      const imageSrc = emailImage(
-        item?.imageUrl || item?.image || item?.productImage,
-        fallbackProductAsset(`${productName} ${item?.productId || ''}`),
-        `product-${index + 1}`
-      );
+
+      // 1. Match product in catalog
+      const matchedProduct = findMatchedProduct(item, productsCatalog);
+
+      // 2. Resolve candidate URL or path (prioritizing variant color)
+      let candidate = resolveProductCandidate(item, matchedProduct);
+
+      // 3. Fallback to local bundled asset matching product name
+      if (!candidate) {
+        candidate = getLocalFallbackAsset(productName);
+      }
+
+      // 4. Embed image directly as CID attachment
+      let embeddedSrc = '';
+      if (candidate) {
+        embeddedSrc = await embedRemoteOrLocal(candidate, `item-${index + 1}`);
+      }
+
+      const imageCellHtml = embeddedSrc
+        ? `<img src="${escapeHtml(embeddedSrc)}" width="54" height="54" alt="${escapeHtml(productName)}" style="display:block;width:54px;height:54px;border:1px solid ${BRAND.border};border-radius:10px;object-fit:cover;background:${BRAND.creamStrong};" />`
+        : `<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="54" height="54" style="width:54px;height:54px;border:1px solid ${BRAND.border};border-radius:10px;background:${BRAND.creamStrong};table-layout:fixed;">
+            <tr>
+              <td align="center" valign="middle" style="font-family:${BODY_FONT};font-size:10px;line-height:13px;color:${BRAND.muted};font-weight:500;text-align:center;padding:2px;">
+                Chưa có ảnh
+              </td>
+            </tr>
+          </table>`;
 
       const variants: string[] = [];
       if (item?.selectedColor) variants.push(String(item.selectedColor));
@@ -216,7 +370,7 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
       return `
         <tr>
           <td width="66" valign="top" style="width:66px;padding:14px 0;border-bottom:1px solid ${BRAND.border};">
-            <img src="${escapeHtml(imageSrc)}" width="54" height="54" alt="${escapeHtml(productName)}" style="display:block;width:54px;height:54px;border:1px solid ${BRAND.border};border-radius:10px;object-fit:cover;background:${BRAND.creamStrong};" />
+            ${imageCellHtml}
           </td>
           <td valign="top" style="padding:14px 10px;border-bottom:1px solid ${BRAND.border};">
             <div style="font-size:16px;line-height:24px;font-weight:400;color:${BRAND.ink};">${escapeHtml(productName)}</div>
@@ -229,7 +383,9 @@ export function buildOrderConfirmationEmail(order: any, options: OrderEmailOptio
           </td>
         </tr>`;
     })
-    .join('');
+  );
+
+  const itemRows = renderedRows.join('');
 
   const noteBlock = note
     ? `<tr>

@@ -344,23 +344,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Build structured order payload for Firestore
   const createOrderPayload = (contactMethod: 'system' | 'facebook') => {
     const formattedItems = formatCartItemsText();
-    const itemDetails = cartItems.map(item => ({
-      productId: item.product.id,
-      productName: item.product.name,
-      category: item.product.category,
-      price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
-      quantity: item.quantity,
-      selectedColor: item.selectedColor,
-      selectedCharm: item.selectedCharm,
-      selectedCharmPrice: item.selectedCharmPrice,
-      selectedCharms: item.selectedCharms,
-      selectedOmamoris: item.selectedOmamoris,
-      selectedOmamoriPrice: item.selectedOmamoriPrice,
-      selectedKhoen: item.selectedKhoen,
-      selectedKhoenPrice: item.selectedKhoenPrice,
-      selectedSize: item.selectedSize,
-      customNote: item.customNote
-    }));
+    const itemDetails = cartItems.map(item => {
+      const selectedColorImg = item.selectedColorImage || item.product.colorOptions?.find((c: any) => c.name === item.selectedColor)?.image || '';
+      const mainImg = selectedColorImg || item.product.image || (item.product.images && item.product.images[0]) || '';
+
+      return {
+        productId: item.product.id,
+        productName: item.product.name,
+        category: item.product.category,
+        imageUrl: mainImg,
+        image: mainImg,
+        selectedColorImage: selectedColorImg,
+        price: item.product.price + (item.selectedCharmPrice || 0) + (item.selectedOmamoriPrice || 0) + (item.selectedKhoenPrice || 0),
+        quantity: item.quantity,
+        selectedColor: item.selectedColor,
+        selectedCharm: item.selectedCharm,
+        selectedCharmPrice: item.selectedCharmPrice,
+        selectedCharms: item.selectedCharms,
+        selectedOmamoris: item.selectedOmamoris,
+        selectedOmamoriPrice: item.selectedOmamoriPrice,
+        selectedKhoen: item.selectedKhoen,
+        selectedKhoenPrice: item.selectedKhoenPrice,
+        selectedSize: item.selectedSize,
+        customNote: item.customNote
+      };
+    });
 
     const trackingCode = generateTrackingNumber();
     setCreatedTrackingCode(trackingCode);

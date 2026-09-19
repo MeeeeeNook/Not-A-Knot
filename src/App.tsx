@@ -313,6 +313,14 @@ export default function App() {
   const syncStateFromHash = useCallback((hashString: string) => {
     const rawHash = hashString.replace(/^#\/?/, '');
     if (!rawHash || rawHash === 'home' || rawHash === 'landing') {
+      const searchParams = new URLSearchParams(window.location.search || '');
+      const searchCode = searchParams.get('code') || searchParams.get('tracking') || searchParams.get('order');
+      if (searchCode) {
+        setOrderTrackerInitialCode(searchCode);
+        setCurrentView('order-tracker');
+        setIsCartOpen(false);
+        return;
+      }
       setCurrentView('landing');
       setIsCartOpen(false);
       setSelectedProduct(null);

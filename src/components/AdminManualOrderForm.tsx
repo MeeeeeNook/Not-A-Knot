@@ -588,33 +588,40 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
         return text;
       });
 
-      const itemDetails = orderItems.map((it) => ({
-        productId: it.product.id,
-        productName: it.product.name,
-        category: it.product.category,
-        price: getItemUnitPrice(it),
-        unitPrice: getItemUnitPrice(it),
-        quantity: it.quantity,
-        selectedColor: it.selectedColor,
-        selectedColorImage: it.selectedColorImage,
-        selectedCharm:
-          it.selectedCharms && it.selectedCharms.length > 0
-            ? it.selectedCharms[0].name
-            : it.selectedCharm,
-        selectedCharmImage:
-          it.selectedCharms && it.selectedCharms.length > 0
-            ? it.selectedCharms[0].image
-            : it.selectedCharmImage,
-        selectedCharmPrice: it.selectedCharmPrice,
-        selectedCharms: it.selectedCharms,
-        selectedOmamoris: it.selectedOmamoris,
-        selectedOmamoriPrice: it.selectedOmamoriPrice,
-        selectedKhoen: it.selectedKhoen,
-        selectedKhoenImage: it.selectedKhoenImage,
-        selectedKhoenPrice: it.selectedKhoenPrice,
-        selectedSize: it.selectedSize,
-        customNote: it.customNote
-      }));
+      const itemDetails = orderItems.map((it) => {
+        const selectedColorImg = it.selectedColorImage || it.product.colorOptions?.find((c: any) => c.name === it.selectedColor)?.image || '';
+        const mainImg = selectedColorImg || it.product.image || (it.product.images && it.product.images[0]) || '';
+
+        return {
+          productId: it.product.id,
+          productName: it.product.name,
+          category: it.product.category,
+          imageUrl: mainImg,
+          image: mainImg,
+          price: getItemUnitPrice(it),
+          unitPrice: getItemUnitPrice(it),
+          quantity: it.quantity,
+          selectedColor: it.selectedColor,
+          selectedColorImage: selectedColorImg,
+          selectedCharm:
+            it.selectedCharms && it.selectedCharms.length > 0
+              ? it.selectedCharms[0].name
+              : it.selectedCharm,
+          selectedCharmImage:
+            it.selectedCharms && it.selectedCharms.length > 0
+              ? it.selectedCharms[0].image
+              : it.selectedCharmImage,
+          selectedCharmPrice: it.selectedCharmPrice,
+          selectedCharms: it.selectedCharms,
+          selectedOmamoris: it.selectedOmamoris,
+          selectedOmamoriPrice: it.selectedOmamoriPrice,
+          selectedKhoen: it.selectedKhoen,
+          selectedKhoenImage: it.selectedKhoenImage,
+          selectedKhoenPrice: it.selectedKhoenPrice,
+          selectedSize: it.selectedSize,
+          customNote: it.customNote
+        };
+      });
 
       const finalNote = orderNote.trim();
 

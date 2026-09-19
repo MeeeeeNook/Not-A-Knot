@@ -9,7 +9,7 @@ import rateLimit from 'express-rate-limit';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc } from 'firebase/firestore';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail';
 
 // Server-side Secrets (never exposed to client browser)
@@ -23,14 +23,33 @@ const SMTP_HOST: string = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT: number = Number(process.env.SMTP_PORT) || 465;
 const SMTP_SECURE: boolean = process.env.SMTP_SECURE !== 'false' && (SMTP_PORT === 465 || !process.env.SMTP_PORT);
 const SMTP_USER: string = (process.env.SMTP_USER || 'noreply.notaknot@gmail.com').trim();
-const SMTP_PASS: string = (process.env.SMTP_PASS || '').trim();
+const DEFAULT_FALLBACK_APP_PASS = 'nioymdoezmrflsmr';
 const SMTP_FROM: string = process.env.SMTP_FROM || '"NOT A KNOT" <noreply.notaknot@gmail.com>';
 let ADMIN_NOTIFICATION_EMAIL: string = (process.env.ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com').trim();
+
+function getSmtpPass(): string {
+  const envPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '').trim() : '';
+  if (envPass) return envPass;
+  try {
+    const dataPath = path.join(process.cwd(), 'email_data.json');
+    if (fs.existsSync(dataPath)) {
+      const parsed = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
+      if (parsed?.settings?.smtpPass) {
+        const storePass = String(parsed.settings.smtpPass).replace(/\s+/g, '').trim();
+        if (storePass) return storePass;
+      }
+    }
+  } catch {
+    // Ignore JSON read errors
+  }
+  return DEFAULT_FALLBACK_APP_PASS;
+}
 
 // Lazy transporter creation (fails gracefully if credentials not provided)
 let mailTransporter: any = null;
 function getMailTransporter(): any {
-  if (!mailTransporter && SMTP_USER && SMTP_PASS) {
+  const currentPass = getSmtpPass();
+  if (!mailTransporter && SMTP_USER && currentPass) {
     try {
       mailTransporter = nodemailer.createTransport({
         host: SMTP_HOST,
@@ -38,7 +57,7 @@ function getMailTransporter(): any {
         secure: SMTP_SECURE,
         auth: {
           user: SMTP_USER,
-          pass: SMTP_PASS
+          pass: currentPass
         }
       });
     } catch (e) {
@@ -47,6 +66,10 @@ function getMailTransporter(): any {
     }
   }
   return mailTransporter;
+}
+
+function resetMailTransporter(): void {
+  mailTransporter = null;
 }
 
 const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || 'AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI';
@@ -476,6 +499,7 @@ async function startServer() {
     orderCode?: string;
     type: 'admin_notification' | 'customer_confirmation' | 'manual_admin' | 'test';
     status: 'sent' | 'simulated' | 'error';
+    createdAt?: string;
   }
 
   interface EmailStoreData {
@@ -483,6 +507,8 @@ async function startServer() {
       notifyAdminOnNewOrder: boolean;
       customerOrderEmailOption: boolean;
       adminNotificationEmail: string;
+      smtpPass?: string;
+      updatedAt?: string;
     };
     sentLogs: EmailLogEntry[];
   }
@@ -493,12 +519,13 @@ async function startServer() {
     settings: {
       notifyAdminOnNewOrder: false, // Default OFF per user request
       customerOrderEmailOption: true, // Default ON (toggleable)
-      adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com'
+      adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com',
+      smtpPass: ''
     },
     sentLogs: []
   };
 
-  const loadEmailData = () => {
+  const loadEmailDataLocally = () => {
     try {
       if (fs.existsSync(EMAIL_DATA_PATH)) {
         const raw = fs.readFileSync(EMAIL_DATA_PATH, 'utf-8');
@@ -508,7 +535,8 @@ async function startServer() {
             settings: {
               notifyAdminOnNewOrder: typeof parsed.settings?.notifyAdminOnNewOrder === 'boolean' ? parsed.settings.notifyAdminOnNewOrder : false,
               customerOrderEmailOption: typeof parsed.settings?.customerOrderEmailOption === 'boolean' ? parsed.settings.customerOrderEmailOption : true,
-              adminNotificationEmail: parsed.settings?.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL
+              adminNotificationEmail: parsed.settings?.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL,
+              smtpPass: parsed.settings?.smtpPass || ''
             },
             sentLogs: Array.isArray(parsed.sentLogs) ? parsed.sentLogs : []
           };
@@ -516,23 +544,119 @@ async function startServer() {
         }
       }
     } catch (e) {
-      console.warn('[Email Store] Could not load email_data.json:', e);
+      console.warn('[Email Store] Could not load local email_data.json:', e);
     }
   };
 
-  const saveEmailData = () => {
+  const saveEmailDataLocally = () => {
     try {
-      // Keep only last 1000 logs to prevent file bloat
       if (emailStore.sentLogs.length > 1000) {
         emailStore.sentLogs = emailStore.sentLogs.slice(-1000);
       }
       fs.writeFileSync(EMAIL_DATA_PATH, JSON.stringify(emailStore, null, 2), 'utf-8');
     } catch (e) {
-      console.error('[Email Store] Error saving email_data.json:', e);
+      console.error('[Email Store] Error saving local email_data.json:', e);
     }
   };
 
-  loadEmailData();
+  loadEmailDataLocally();
+
+  // Synchronize email settings and counts with Firestore
+  const persistEmailSettingsToFirestore = async () => {
+    try {
+      const configRef = doc(firestoreDb, 'system_settings', 'email_config');
+      await setDoc(configRef, {
+        notifyAdminOnNewOrder: emailStore.settings.notifyAdminOnNewOrder,
+        customerOrderEmailOption: emailStore.settings.customerOrderEmailOption,
+        adminNotificationEmail: emailStore.settings.adminNotificationEmail,
+        smtpPass: emailStore.settings.smtpPass || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (err) {
+      console.warn('[Email Store] Warning: Failed to persist email settings to Firestore:', err);
+    }
+  };
+
+  const syncEmailDataWithFirestore = async () => {
+    try {
+      // 1. Sync settings from Firestore
+      const configRef = doc(firestoreDb, 'system_settings', 'email_config');
+      const configSnap = await getDoc(configRef);
+      if (configSnap.exists()) {
+        const data = configSnap.data();
+        if (typeof data.notifyAdminOnNewOrder === 'boolean') {
+          emailStore.settings.notifyAdminOnNewOrder = data.notifyAdminOnNewOrder;
+        }
+        if (typeof data.customerOrderEmailOption === 'boolean') {
+          emailStore.settings.customerOrderEmailOption = data.customerOrderEmailOption;
+        }
+        if (data.adminNotificationEmail && typeof data.adminNotificationEmail === 'string') {
+          emailStore.settings.adminNotificationEmail = data.adminNotificationEmail.trim();
+          ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
+        }
+        if (data.smtpPass && typeof data.smtpPass === 'string' && data.smtpPass.trim()) {
+          emailStore.settings.smtpPass = data.smtpPass.trim();
+        }
+      } else {
+        await persistEmailSettingsToFirestore();
+      }
+
+      // 2. Sync email logs from Firestore
+      const logsSnap = await getDocs(collection(firestoreDb, 'email_logs'));
+      const firestoreLogs: EmailLogEntry[] = [];
+      logsSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        firestoreLogs.push({
+          id: d.id || docSnap.id,
+          timestamp: Number(d.timestamp) || Date.now(),
+          recipient: String(d.recipient || ''),
+          orderCode: d.orderCode ? String(d.orderCode) : undefined,
+          type: (d.type as any) || 'customer_confirmation',
+          status: (d.status as any) || 'sent',
+          createdAt: d.createdAt || new Date().toISOString()
+        });
+      });
+
+      // Merge logs without duplicates
+      const logMap = new Map<string, EmailLogEntry>();
+      for (const log of emailStore.sentLogs) {
+        logMap.set(log.id, log);
+      }
+      for (const fLog of firestoreLogs) {
+        logMap.set(fLog.id, fLog);
+      }
+
+      // Upload any local logs that were not yet in Firestore
+      for (const localLog of emailStore.sentLogs) {
+        if (!firestoreLogs.some((fl) => fl.id === localLog.id)) {
+          try {
+            await setDoc(doc(firestoreDb, 'email_logs', localLog.id), {
+              id: localLog.id,
+              timestamp: localLog.timestamp,
+              recipient: localLog.recipient,
+              orderCode: localLog.orderCode || null,
+              type: localLog.type,
+              status: localLog.status,
+              createdAt: localLog.createdAt || new Date(localLog.timestamp).toISOString()
+            });
+          } catch {
+            // Ignore individual write errors
+          }
+        }
+      }
+
+      emailStore.sentLogs = Array.from(logMap.values()).sort((a, b) => a.timestamp - b.timestamp);
+      saveEmailDataLocally();
+      console.log(`[Email Store] Successfully synchronized with Firestore: ${emailStore.sentLogs.length} total email records.`);
+    } catch (err) {
+      console.warn('[Email Store] Firestore email sync failed (using local data):', err);
+    }
+  };
+
+  // Perform initial cloud sync
+  syncEmailDataWithFirestore().catch((err) => {
+    console.warn('[Email Store] Initial cloud sync deferred:', err);
+  });
 
   const recordEmailLog = (
     recipient: string,
@@ -546,10 +670,16 @@ async function startServer() {
       recipient,
       orderCode,
       type,
-      status
+      status,
+      createdAt: new Date().toISOString()
     };
     emailStore.sentLogs.push(entry);
-    saveEmailData();
+    saveEmailDataLocally();
+
+    // Persist to Firestore asynchronously so stats are globally accurate
+    setDoc(doc(firestoreDb, 'email_logs', entry.id), entry).catch((err) => {
+      console.warn('[Firestore] Error saving email log to firestore:', err);
+    });
   };
 
   const calculateEmailStats = () => {
@@ -581,8 +711,19 @@ async function startServer() {
     };
   };
 
-  // ----------------------------------------------------
-  // EMAIL NOTIFICATION & ORDER CONFIRMATION API
+  // Security Helper: Strip any raw secrets before returning settings to the client
+  const getSafeSettings = () => ({
+    notifyAdminOnNewOrder: Boolean(emailStore.settings.notifyAdminOnNewOrder),
+    customerOrderEmailOption: Boolean(emailStore.settings.customerOrderEmailOption),
+    adminNotificationEmail: emailStore.settings.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com',
+    hasCustomPass: Boolean(emailStore.settings.smtpPass)
+  });
+
+  const getMaskedPass = () => {
+    const activePass = getSmtpPass();
+    return activePass ? '••••••••••••••••' : 'Chưa cấu hình';
+  };
+
   // ----------------------------------------------------
   // EMAIL NOTIFICATION & ORDER CONFIRMATION API
   // ----------------------------------------------------
@@ -611,7 +752,8 @@ async function startServer() {
    * Returns current SMTP status, toggles configuration, and sending statistics
    */
   app.get('/api/email/settings', (_req: Request, res: Response) => {
-    const isConfigured = Boolean(SMTP_USER && SMTP_PASS);
+    const activePass = getSmtpPass();
+    const isConfigured = Boolean(SMTP_USER && activePass);
     const maskedUser = SMTP_USER ? SMTP_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Chưa cấu hình';
     const stats = calculateEmailStats();
     res.json({
@@ -620,17 +762,62 @@ async function startServer() {
       smtpPort: SMTP_PORT,
       smtpSecure: SMTP_SECURE,
       configuredUser: maskedUser,
-      settings: emailStore.settings,
+      maskedPass: getMaskedPass(),
+      hasCustomPass: Boolean(emailStore.settings.smtpPass),
+      settings: getSafeSettings(),
       stats,
       mode: isConfigured ? 'live_smtp' : 'simulated_preview'
     });
   });
 
   /**
+   * POST /api/email/update-smtp-pass
+   * Allows updating the 16-character Google App Password (Mật khẩu ứng dụng)
+   */
+  app.post('/api/email/update-smtp-pass', async (req: Request, res: Response) => {
+    try {
+      const { smtpPass } = req.body;
+      if (typeof smtpPass !== 'string' || !smtpPass.trim()) {
+        return res.status(400).json({ error: 'Mật khẩu ứng dụng (App Password) không được để trống.' });
+      }
+      const cleanPass = smtpPass.replace(/\s+/g, '').trim();
+      emailStore.settings.smtpPass = cleanPass;
+      saveEmailDataLocally();
+      await persistEmailSettingsToFirestore();
+      resetMailTransporter();
+
+      const transporter = getMailTransporter();
+      if (!transporter) {
+        return res.status(400).json({ error: 'Không thể khởi tạo transporter SMTP với mật khẩu này.' });
+      }
+
+      try {
+        await transporter.verify();
+        console.log('[Email Service] SMTP verification succeeded with new App Password');
+        return res.json({
+          success: true,
+          maskedPass: '••••••••••••••••',
+          hasCustomPass: true,
+          settings: getSafeSettings(),
+          message: 'Đã cập nhật và xác thực thành công Mật khẩu ứng dụng Google (App Password)!'
+        });
+      } catch (verifyErr: any) {
+        console.error('[Email Service] SMTP verification failed with provided password:', verifyErr);
+        return res.json({
+          success: false,
+          error: `Google SMTP từ chối Mật khẩu ứng dụng (Error: ${verifyErr.message || 'Chưa được chấp nhận'}). Vui lòng tạo Mật khẩu ứng dụng mới tại https://myaccount.google.com/apppasswords`
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Lỗi cập nhật mật khẩu ứng dụng' });
+    }
+  });
+
+  /**
    * POST /api/email/settings
    * Allows updating email toggles and admin notification email
    */
-  app.post('/api/email/settings', (req: Request, res: Response) => {
+  app.post('/api/email/settings', async (req: Request, res: Response) => {
     try {
       const { notifyAdminOnNewOrder, customerOrderEmailOption, adminNotificationEmail } = req.body;
       if (typeof notifyAdminOnNewOrder === 'boolean') {
@@ -643,11 +830,12 @@ async function startServer() {
         emailStore.settings.adminNotificationEmail = adminNotificationEmail.trim();
         ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
       }
-      saveEmailData();
+      saveEmailDataLocally();
+      await persistEmailSettingsToFirestore();
       const stats = calculateEmailStats();
       return res.json({
         success: true,
-        settings: emailStore.settings,
+        settings: getSafeSettings(),
         stats,
         message: 'Đã cập nhật cài đặt email thành công.'
       });
@@ -661,7 +849,8 @@ async function startServer() {
    * Legacy status check endpoint, updated with settings and stats
    */
   app.get('/api/email/status', (_req: Request, res: Response) => {
-    const isConfigured = Boolean(SMTP_USER && SMTP_PASS);
+    const activePass = getSmtpPass();
+    const isConfigured = Boolean(SMTP_USER && activePass);
     const maskedUser = SMTP_USER ? SMTP_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : 'Chưa cấu hình';
     const stats = calculateEmailStats();
     res.json({
@@ -670,8 +859,10 @@ async function startServer() {
       smtpPort: SMTP_PORT,
       smtpSecure: SMTP_SECURE,
       configuredUser: maskedUser,
+      maskedPass: getMaskedPass(),
+      hasCustomPass: Boolean(emailStore.settings.smtpPass),
       adminNotificationEmail: emailStore.settings.adminNotificationEmail,
-      settings: emailStore.settings,
+      settings: getSafeSettings(),
       stats,
       mode: isConfigured ? 'live_smtp' : 'simulated_preview'
     });
@@ -681,19 +872,20 @@ async function startServer() {
    * POST /api/email/update-admin-email
    * Allows dynamically updating the admin notification email address
    */
-  app.post('/api/email/update-admin-email', (req: Request, res: Response) => {
+  app.post('/api/email/update-admin-email', async (req: Request, res: Response) => {
     try {
       const { newEmail } = req.body;
       const formatted = ensureGmailDomain(newEmail);
       if (formatted) {
         emailStore.settings.adminNotificationEmail = formatted;
         ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
-        saveEmailData();
+        saveEmailDataLocally();
+        await persistEmailSettingsToFirestore();
         console.log(`[Email Service] Updated ADMIN_NOTIFICATION_EMAIL to: ${ADMIN_NOTIFICATION_EMAIL}`);
         return res.json({
           success: true,
           adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL,
-          settings: emailStore.settings,
+          settings: getSafeSettings(),
           message: `Đã cập nhật email nhận thông báo thành công: ${ADMIN_NOTIFICATION_EMAIL}`
         });
       }
@@ -763,7 +955,22 @@ async function startServer() {
       }
 
       const reqHost = (req.headers['x-forwarded-host'] as string) || req.headers.host;
-      const email = buildOrderConfirmationEmail(order, { baseUrl: reqHost });
+      let productsList = Array.isArray(req.body?.products) && req.body.products.length > 0
+        ? req.body.products
+        : Array.isArray(order?.products) && order.products.length > 0
+        ? order.products
+        : [];
+
+      if (productsList.length === 0) {
+        try {
+          const snap = await getDocs(collection(firestoreDb, 'products'));
+          productsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch (dbErr) {
+          console.warn('[Server] Error loading products for order email confirmation:', dbErr);
+        }
+      }
+
+      const email = await buildOrderConfirmationEmail(order, { baseUrl: reqHost, products: productsList });
       const subject = `[NOT A KNOT] Xác nhận đơn hàng #${orderCode} - ${order.customerName || order.name || 'Quý khách'}`;
 
       const transporter = getMailTransporter();

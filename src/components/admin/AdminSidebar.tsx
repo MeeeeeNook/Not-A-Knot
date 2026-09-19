@@ -192,15 +192,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>Nhập đơn thủ công</span>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                    activeTab === 'manual_order'
-                      ? 'bg-black/10 text-slate-950 border-black/15'
-                      : 'bg-sky-50 text-sky-700 border-sky-200/60'
-                  }`}
-                >
-                  + Mới
-                </span>
               </button>
 
               <button
@@ -348,7 +339,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <div className="flex items-center gap-1.5">
                   <span>SEO & Quét Thẻ Meta</span>
                 </div>
-                {seoIssuesCount > 0 ? (
+                {seoIssuesCount > 0 && (
                   <span
                     className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border ${
                       activeTab === 'seo_audit'
@@ -357,16 +348,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     }`}
                   >
                     {seoIssuesCount} lỗi
-                  </span>
-                ) : (
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                      activeTab === 'seo_audit'
-                        ? 'bg-black/10 text-slate-950 border-black/15'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                    }`}
-                  >
-                    SEO
                   </span>
                 )}
               </button>
@@ -387,15 +368,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>Sao Lưu & Dữ Liệu</span>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                    activeTab === 'backup'
-                      ? 'bg-black/10 text-slate-950 border-black/15'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                  }`}
-                >
-                  v2.0
-                </span>
               </button>
 
               <button
@@ -418,15 +390,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 }`}
               >
                 <span>System Log</span>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                    activeTab === 'logs'
-                      ? 'bg-black/10 text-slate-950 border-black/15'
-                      : 'bg-rose-50 text-rose-700 border-rose-200/60'
-                  }`}
-                >
-                  Logs
-                </span>
               </button>
 
               <button
@@ -483,15 +446,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     <Mail className="w-3.5 h-3.5 text-slate-500" />
                     <span>Email</span>
                   </div>
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${
-                      activeTab === 'email'
-                        ? 'bg-black/10 text-slate-950 border-black/15'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
-                    }`}
-                  >
-                    SMTP
-                  </span>
                 </button>
 
                 {/* Page 3: Maintenance mode */}

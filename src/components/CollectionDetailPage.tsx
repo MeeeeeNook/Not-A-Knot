@@ -470,6 +470,8 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
     const itemDetails = selectedProds.map(p => ({
       productId: p.id,
       productName: p.name,
+      imageUrl: p.image || (p.images && p.images[0]) || '',
+      image: p.image || (p.images && p.images[0]) || '',
       price: p.price,
       quantity: selectedPreItems[p.id]?.qty || 1
     }));

@@ -106,6 +106,29 @@
         "avatarColor": { "type": "string", "description": "Màu đại diện avatar", "optional": true },
         "phone": { "type": "string", "description": "Số điện thoại", "optional": true }
       }
+    },
+    "EmailLog": {
+      "description": "Nhật ký gửi email xác nhận đơn hàng và thông báo quản trị viên",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh log" },
+        "timestamp": { "type": "number", "description": "Thời gian Unix gửi email" },
+        "recipient": { "type": "string", "description": "Địa chỉ email người nhận" },
+        "orderCode": { "type": "string", "description": "Mã đơn hàng liên quan", "optional": true },
+        "type": { "type": "string", "description": "Loại email (customer_confirmation, admin_notification, manual_admin, test)" },
+        "status": { "type": "string", "description": "Trạng thái (sent, simulated, error)" },
+        "createdAt": { "type": "string", "description": "Thời gian ISO" }
+      }
+    },
+    "SystemSetting": {
+      "description": "Cấu hình hệ thống bao gồm email và thông báo",
+      "fields": {
+        "id": { "type": "string", "description": "Mã cấu hình" },
+        "notifyAdminOnNewOrder": { "type": "boolean", "description": "Bật/tắt email thông báo admin khi có đơn mới" },
+        "customerOrderEmailOption": { "type": "boolean", "description": "Bật/tắt gửi email xác nhận cho khách" },
+        "adminNotificationEmail": { "type": "string", "description": "Email nhận thông báo admin" },
+        "smtpPass": { "type": "string", "description": "Mật khẩu ứng dụng SMTP (lưu bảo mật)", "optional": true },
+        "updatedAt": { "type": "string", "description": "Thời gian cập nhật" }
+      }
     }
   },
   "firestore": {
@@ -152,6 +175,20 @@
     },
     "/sellers/{sellerId}": {
       "schema": "Seller",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/email_logs/{logId}": {
+      "schema": "EmailLog",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/system_settings/{settingId}": {
+      "schema": "SystemSetting",
       "allow": {
         "read": "true",
         "write": "true"

@@ -1,17 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, CheckCircle2, Send, Edit3, Save, X, RefreshCw, Sparkles, ShieldCheck } from 'lucide-react';
+import { Mail, CheckCircle2, Send, Edit3, Save, X, RefreshCw, Sparkles, ShieldCheck, KeyRound } from 'lucide-react';
 import { ensureGmailDomain } from '../utils/emailService';
 
 export const AdminEmailNotificationCard: React.FC = () => {
   const [status, setStatus] = useState<{
     configured: boolean;
     configuredUser: string;
+    maskedPass?: string;
     adminNotificationEmail: string;
     mode: string;
   } | null>(null);
 
   const [isEditing, setIsEditing] = useState(false);
   const [newEmail, setNewEmail] = useState('');
+  const [isEditingPass, setIsEditingPass] = useState(false);
+  const [newPass, setNewPass] = useState('');
+  const [isSavingPass, setIsSavingPass] = useState(false);
+
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -63,6 +68,35 @@ export const AdminEmailNotificationCard: React.FC = () => {
     }
   };
 
+  const handleSaveAppPass = async () => {
+    if (!newPass.trim()) {
+      setFeedback({ type: 'error', message: 'Vui lòng nhập Mật khẩu ứng dụng Google (16 ký tự).' });
+      return;
+    }
+    setIsSavingPass(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/email/update-smtp-pass', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smtpPass: newPass })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatus((prev) => prev ? { ...prev, configured: true, maskedPass: data.maskedPass, mode: 'live_smtp' } : null);
+        setIsEditingPass(false);
+        setNewPass('');
+        setFeedback({ type: 'success', message: data.message || 'Đã cập nhật Mật khẩu ứng dụng Google thành công!' });
+      } else {
+        setFeedback({ type: 'error', message: data.error || 'Không thể cập nhật Mật khẩu ứng dụng.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Lỗi mạng' });
+    } finally {
+      setIsSavingPass(false);
+    }
+  };
+
   const handleSendTest = async () => {
     setIsTesting(true);
     setFeedback(null);
@@ -79,7 +113,7 @@ export const AdminEmailNotificationCard: React.FC = () => {
           message: `Đã gửi email kiểm tra thành công tới ${data.destination}! Vui lòng mở hộp thư kiểm tra.`
         });
       } else {
-        setFeedback({ type: 'error', message: data.message || 'Gửi email thử nghiệm không thành công.' });
+        setFeedback({ type: 'error', message: data.message || data.error || 'Gửi email thử nghiệm không thành công.' });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Lỗi kết nối máy chủ' });
@@ -100,9 +134,13 @@ export const AdminEmailNotificationCard: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-black text-slate-900 tracking-tight">Hệ Thống Email Thông Báo Đơn Hàng</h3>
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                status.configured
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border border-amber-200'
+              }`}>
                 <CheckCircle2 className="w-3 h-3" />
-                Đang Hoạt Động (Google SMTP Live)
+                {status.configured ? 'Đang Hoạt Động (Google SMTP Live)' : 'Chế độ Xem Trước (Chưa nhập App Pass)'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -190,6 +228,69 @@ export const AdminEmailNotificationCard: React.FC = () => {
 
         <div className="text-xs text-slate-500 max-w-sm">
           Mỗi khi khách đặt đơn, hệ thống sẽ tự động gửi email chi tiết đơn hàng tới địa chỉ này. Bạn có thể đổi sang bất kỳ hòm thư nào bất kỳ lúc nào.
+        </div>
+      </div>
+
+      {/* Google App Password (Mật khẩu ứng dụng) Management Row */}
+      <div className="p-3.5 bg-amber-50/50 rounded-xl border border-amber-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 uppercase tracking-wider block">
+            <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+            <span>Mật khẩu ứng dụng Google (Google App Password):</span>
+          </div>
+          {!isEditingPass ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-bold text-slate-800 bg-white px-2.5 py-1 rounded-md border border-amber-200">
+                {status.maskedPass || '••••••••••••••••'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingPass(true);
+                  setNewPass('');
+                  setFeedback(null);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-amber-800 hover:text-amber-900 bg-white hover:bg-amber-100/80 border border-amber-300 rounded-md cursor-pointer transition-colors shadow-2xs"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Cập nhật App Code mới</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={newPass}
+                onChange={(e) => setNewPass(e.target.value)}
+                placeholder="Dán 16 ký tự mật khẩu ứng dụng..."
+                className="px-3 py-1.5 bg-white border border-amber-400 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 min-w-[280px]"
+              />
+              <button
+                type="button"
+                onClick={handleSaveAppPass}
+                disabled={isSavingPass}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-3 h-3" />
+                <span>{isSavingPass ? 'Đang kiểm tra...' : 'Lưu & Kết Nối'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingPass(false);
+                  setNewPass('');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+                <span>Hủy</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="text-[11px] text-amber-900/80 max-w-sm leading-relaxed">
+          Mật khẩu ứng dụng là chuỗi 16 ký tự do Google tạo ra tại <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline font-bold text-amber-950">myaccount.google.com/apppasswords</a>. Nếu Google báo lỗi authentication, bạn có thể tạo mã mới và dán vào đây.
         </div>
       </div>
 

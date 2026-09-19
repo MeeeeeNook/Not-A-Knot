@@ -42,14 +42,27 @@ export interface EmailConfigStatus {
  * Triggers asynchronous order confirmation email dispatch on the server.
  * Never throws exceptions, ensuring checkout flows continue unhindered.
  */
-export async function sendOrderConfirmationEmail(order: StoredOrder): Promise<EmailDeliveryResult> {
+export async function sendOrderConfirmationEmail(order: StoredOrder, products?: any[]): Promise<EmailDeliveryResult> {
   try {
+    let prods = products;
+    if (!prods || !Array.isArray(prods) || prods.length === 0) {
+      try {
+        const saved = localStorage.getItem('nak_custom_products');
+        if (saved) prods = JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+
     const res = await fetch('/api/email/send-order-confirmation', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(order)
+      body: JSON.stringify({
+        ...order,
+        products: Array.isArray(prods) ? prods : []
+      })
     });
 
     if (!res.ok) {
