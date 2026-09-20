@@ -957,13 +957,26 @@ async function startServer() {
    */
   app.post('/api/email/send-order-confirmation', async (req: Request, res: Response) => {
     try {
-      const order = req.body?.orderData || req.body;
+      let body = req.body;
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body);
+        } catch {}
+      }
+      const order = body?.orderData || body;
       if (!order || (!order.id && !order.trackingNumber)) {
         return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ.' });
       }
 
       const orderCode = order.id || order.trackingNumber;
-      const rawExplicit = typeof req.body?.recipientEmail === 'string' ? req.body.recipientEmail : null;
+      const rawExplicit = typeof body?.recipientEmail === 'string' && body.recipientEmail.trim()
+        ? body.recipientEmail
+        : typeof body?.targetEmail === 'string' && body.targetEmail.trim()
+        ? body.targetEmail
+        : typeof body?.email === 'string' && body.email.trim()
+        ? body.email
+        : null;
+
       const explicitRecipient = rawExplicit ? ensureGmailDomain(rawExplicit) : null;
 
       const customerEmail = explicitRecipient || (
@@ -971,6 +984,8 @@ async function startServer() {
           ? ensureGmailDomain(order.email)
           : typeof order.customerEmail === 'string' && order.customerEmail.trim()
           ? ensureGmailDomain(order.customerEmail)
+          : typeof order.recipientEmail === 'string' && order.recipientEmail.trim()
+          ? ensureGmailDomain(order.recipientEmail)
           : null
       );
 
@@ -1029,6 +1044,13 @@ async function startServer() {
 
       const transporter = getMailTransporter();
 
+      const safeAttachments = Array.isArray(email.attachments)
+        ? email.attachments.filter((att: any) => {
+            if (att && att.content && (Buffer.isBuffer(att.content) || typeof att.content === 'string')) return true;
+            return false;
+          })
+        : [];
+
       if (transporter) {
         // Send to each recipient with inline CID logo and hosted images
         for (const target of recipients) {
@@ -1038,7 +1060,7 @@ async function startServer() {
               to: target.email,
               subject,
               html: email.html,
-              attachments: email.attachments
+              attachments: safeAttachments
             });
             recordEmailLog(target.email, target.type, orderCode, 'sent');
           } catch (sendErr: any) {

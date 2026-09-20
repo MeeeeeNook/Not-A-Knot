@@ -225,12 +225,29 @@
       "createdAt": "2026-09-19T19:27:18.112Z"
     },
     {
+      "id": "mail-1789846820760-959aw",
+      "timestamp": 1789846820760,
+      "recipient": "noreply.notaknot@gmail.com",
+      "type": "test",
+      "status": "sent",
+      "createdAt": "2026-09-19T19:40:20.760Z"
+    },
+    {
       "id": "mail-1789846823775-3nwz7",
       "timestamp": 1789846823775,
       "recipient": "manhcuong2006ht@gmail.com",
       "type": "test",
       "status": "sent",
       "createdAt": "2026-09-19T19:40:23.775Z"
+    },
+    {
+      "id": "mail-1789895074186-7k4mr",
+      "timestamp": 1789895074186,
+      "recipient": "manhcuong2006ht@gmail.com",
+      "orderCode": "NAK-260919-6470",
+      "type": "customer_confirmation",
+      "status": "sent",
+      "createdAt": "2026-09-20T09:04:34.186Z"
     }
   ]
 }

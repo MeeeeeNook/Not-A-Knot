@@ -182,29 +182,29 @@ export async function buildOrderConfirmationEmail(order: any, options: OrderEmai
     const relativePath = assetPath.replace(/^\/+/, '');
     const absolutePath = path.resolve(publicDir, relativePath);
 
-    if (!/\.(?:png|jpe?g|gif|webp)$/i.test(relativePath) ||
-        !absolutePath.startsWith(`${publicDir}${path.sep}`)) return '';
+    if (!/\.(?:png|jpe?g|gif|webp)$/i.test(relativePath)) return '';
     try {
-      const realPublicDir = fs.realpathSync(publicDir);
-      const realAssetPath = fs.realpathSync(absolutePath);
-      if (!realAssetPath.startsWith(`${realPublicDir}${path.sep}`) ||
-          !fs.statSync(realAssetPath).isFile()) return '';
+      if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) return '';
+
+      const existingCid = cidByPath.get(absolutePath);
+      if (existingCid) return `cid:${existingCid}`;
+
+      const buffer = fs.readFileSync(absolutePath);
+      const ext = path.extname(absolutePath).toLowerCase().replace('.', '');
+      const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const cid = `nak-${label}-${attachments.length + 1}@notaknot.email`;
+      cidByPath.set(absolutePath, cid);
+      attachments.push({
+        filename: path.basename(absolutePath),
+        content: buffer,
+        contentType,
+        cid,
+        contentDisposition: 'inline'
+      });
+      return `cid:${cid}`;
     } catch {
       return '';
     }
-
-    const existingCid = cidByPath.get(absolutePath);
-    if (existingCid) return `cid:${existingCid}`;
-
-    const cid = `nak-${label}-${attachments.length + 1}@notaknot.email`;
-    cidByPath.set(absolutePath, cid);
-    attachments.push({
-      filename: path.basename(absolutePath),
-      path: absolutePath,
-      cid,
-      contentDisposition: 'inline'
-    });
-    return `cid:${cid}`;
   };
 
   const embedRemoteOrLocal = async (sourceUrl: string, label: string): Promise<string> => {
@@ -212,38 +212,22 @@ export async function buildOrderConfirmationEmail(order: any, options: OrderEmai
 
     // If local path:
     if (sourceUrl.startsWith('/')) {
-      return inlineAsset(sourceUrl, label);
+      const inlined = inlineAsset(sourceUrl, label);
+      if (inlined) return inlined;
+      return `${baseUrl}${sourceUrl}`;
     }
 
     // If HTTP / HTTPS URL:
     try {
       const parsed = new URL(sourceUrl);
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
-
-      const resp = await fetch(parsed.href, { signal: AbortSignal.timeout(6000) });
-      if (!resp.ok) {
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        // Return direct CDN/HTTPS URL immediately without blocking or downloading
         return parsed.href;
       }
-
-      const arrayBuf = await resp.arrayBuffer();
-      const buffer = Buffer.from(arrayBuf);
-      const contentType = resp.headers.get('content-type') || 'image/jpeg';
-      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-
-      const cid = `nak-${label}-${attachments.length + 1}@notaknot.email`;
-      attachments.push({
-        filename: `${label}.${ext}`,
-        content: buffer,
-        contentType,
-        cid,
-        contentDisposition: 'inline'
-      });
-
-      return `cid:${cid}`;
-    } catch (err: any) {
-      console.warn(`[Order Email] Remote image download failed for ${sourceUrl}, falling back:`, err?.message || err);
-      return sourceUrl;
+    } catch {
+      // ignore
     }
+    return '';
   };
 
   const emailImage = (rawValue: unknown, fallback: string, label: string): string => {

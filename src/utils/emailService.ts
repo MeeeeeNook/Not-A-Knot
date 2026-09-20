@@ -88,9 +88,31 @@ export async function sendOrderConfirmationEmail(order: StoredOrder, products?: 
       }
     }
 
+    const targetRecipient = order.email || order.customerEmail || (order as any).recipientEmail || (order as any).targetEmail;
+    const cleanRecipient = targetRecipient ? ensureGmailDomain(targetRecipient) : '';
+
     const payload = {
       ...order,
-      products: Array.isArray(prods) ? prods : []
+      orderData: order,
+      recipientEmail: cleanRecipient,
+      targetEmail: cleanRecipient,
+      email: cleanRecipient,
+      customerEmail: cleanRecipient,
+      products: Array.isArray(prods)
+        ? prods.slice(0, 100).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            image: typeof p.image === 'string' && !p.image.startsWith('data:') ? p.image : undefined,
+            img: typeof p.img === 'string' && !p.img.startsWith('data:') ? p.img : undefined,
+            colorOptions: Array.isArray(p.colorOptions)
+              ? p.colorOptions.map((c: any) => ({
+                  name: c.name,
+                  image: typeof c.image === 'string' && !c.image.startsWith('data:') ? c.image : undefined,
+                  img: typeof c.img === 'string' && !c.img.startsWith('data:') ? c.img : undefined
+                }))
+              : undefined
+          }))
+        : []
     };
 
     const primaryBaseUrl = getBackendUrl();
