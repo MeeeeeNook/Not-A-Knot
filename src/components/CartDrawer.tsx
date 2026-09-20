@@ -1320,7 +1320,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200 text-left text-xs space-y-2">
                           <div className="flex items-center gap-2 text-neutral-950 font-bold">
                             <Truck className="w-4 h-4 text-neutral-800" />
-                            <span>Hình thức thanh toán: COD (Khi nhận hàng)</span>
+                            <span>Hình thức: COD (Khi nhận hàng)</span>
                           </div>
                           <p className="text-neutral-700 font-medium leading-relaxed">
                             Quý khách vui lòng chuẩn bị số tiền <strong>{(confirmedTotalAmount || grandTotal || subtotal).toLocaleString('vi-VN')}đ</strong> để gửi cho Shipper khi đơn hàng giao đến.

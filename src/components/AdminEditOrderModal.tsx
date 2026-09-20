@@ -72,7 +72,7 @@ const PROGRESS_STEPS = [
   { step: 2, id: 'confirmed', label: 'Xác nhận đơn', desc: 'Đã chốt mẫu charm & chi tiết', status: 'Đã xác nhận', icon: CheckCircle2 },
   { step: 3, id: 'crafting', label: 'Đang đan thủ công', desc: 'Nghệ nhân thắt dây thủ công', status: 'Knot đang được sản xuất', icon: Hammer },
   { step: 4, id: 'shipping', label: 'Đang giao hàng', desc: 'Đã bàn giao cho bưu tá', status: 'Đang giao hàng', icon: Truck },
-  { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Kích hoạt bảo hành trọn đời', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
+  { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Đơn hàng đã hoàn tất', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
 ];
 
 export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({

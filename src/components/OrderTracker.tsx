@@ -214,7 +214,7 @@ const generatePrintHtml = (order: StoredOrder, hotline: string, brandName: strin
         <strong style="color:#0f172a;">${statusStr}</strong>
       </div>
       <div class="summary-row">
-        <span>Hình thức thanh toán:</span>
+        <span>Hình thức:</span>
         <strong style="color:#0f172a;">${pMethod}</strong>
       </div>
       <div class="summary-row">
@@ -242,7 +242,7 @@ const generatePrintHtml = (order: StoredOrder, hotline: string, brandName: strin
     </div>
 
     <div class="footer">
-      Cảm ơn bạn đã lựa chọn ${brandName}! Sản phẩm thủ công đan tay được bảo hành chốt khóa trọn đời.
+      Cảm ơn bạn đã lựa chọn ${brandName}! Chúc quý khách một ngày tốt lành.
     </div>
   </div>
   <script>
@@ -312,34 +312,52 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
-  const handleSendEmail = async (order: any) => {
-    let targetEmail = (order.email || order.customerEmail || '').trim();
-    if (!targetEmail) {
-      const promptRes = window.prompt('Nhập địa chỉ email của bạn để nhận thông tin xác nhận đơn hàng:');
-      if (!promptRes || !promptRes.trim()) return;
-      targetEmail = promptRes.trim();
+  // Email modal state for interactive order email dispatch
+  const [emailModalOrder, setEmailModalOrder] = useState<StoredOrder | null>(null);
+  const [emailModalInput, setEmailModalInput] = useState('');
+  const [emailModalMessage, setEmailModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSendEmail = (order: any) => {
+    if (!order) return;
+    setEmailModalOrder(order);
+    setEmailModalInput((order.email || order.customerEmail || '').trim());
+    setEmailModalMessage(null);
+  };
+
+  const handleExecuteSendEmail = async () => {
+    if (!emailModalOrder) return;
+    const cleanEmail = emailModalInput.trim();
+    if (!cleanEmail) {
+      setEmailModalMessage({ type: 'error', text: 'Vui lòng nhập địa chỉ email hợp lệ.' });
+      return;
     }
 
     setIsSendingEmail(true);
-    setPrintSuccessToast('Đang gửi email xác nhận đơn hàng...');
+    setEmailModalMessage(null);
     try {
       const payload = {
-        ...order,
-        id: order.id || order.trackingNumber || `NAK-${Date.now()}`,
-        email: targetEmail,
-        customerEmail: targetEmail
+        ...emailModalOrder,
+        id: emailModalOrder.id || emailModalOrder.trackingNumber || `NAK-${Date.now()}`,
+        email: cleanEmail,
+        customerEmail: cleanEmail,
+        isManualAdmin: true
       } as unknown as StoredOrder;
+      
       const res = await sendOrderConfirmationEmail(payload);
       if (res.success) {
-        setPrintSuccessToast(`✓ Đã gửi email xác nhận thành công tới ${targetEmail}!`);
+        setEmailModalMessage({ type: 'success', text: `✓ Đã gửi email xác nhận thành công tới ${cleanEmail}!` });
+        setPrintSuccessToast(`✓ Đã gửi email xác nhận thành công tới ${cleanEmail}!`);
+        setTimeout(() => {
+          setEmailModalOrder(null);
+          setPrintSuccessToast(null);
+        }, 2200);
       } else {
-        setPrintSuccessToast(`Không thể gửi email: ${res.error || res.message || 'Lỗi gửi thư'}`);
+        setEmailModalMessage({ type: 'error', text: `Lỗi gửi thư: ${res.error || res.message || 'Không thể phản hồi'}` });
       }
     } catch (err: any) {
-      setPrintSuccessToast(`Lỗi mạng khi gửi email: ${err?.message || 'Không kết nối được máy chủ'}`);
+      setEmailModalMessage({ type: 'error', text: `Lỗi kết nối: ${err?.message || 'Không thể kết nối máy chủ'}` });
     } finally {
       setIsSendingEmail(false);
-      setTimeout(() => setPrintSuccessToast(null), 5000);
     }
   };
   const [liveOrders, setLiveOrders] = useState<StoredOrder[]>(allOrders);
@@ -760,7 +778,7 @@ Phương thức: ${order.paymentMethod === 'bank_transfer' && order.source !== '
 ${order.shippingCarrier ? `Vận chuyển: ${order.shippingCarrier} ${order.shippingCode ? `(Mã: ${order.shippingCode})` : ''}\n` : ''}
 ----------------------------------------
 Hotline xưởng: ${hotline}
-Cam kết bảo hành chốt khóa trọn đời!
+Cảm ơn quý khách đã tin tưởng và ủng hộ!
 ========================================`;
   };
 
@@ -868,7 +886,7 @@ Cam kết bảo hành chốt khóa trọn đời!
       {
         id: 'delivered',
         label: 'Giao thành công',
-        desc: 'Kích hoạt bảo hành trọn đời',
+        desc: 'Đơn hàng đã hoàn thành',
         icon: ShieldCheck,
         isDone: norm === 'Đơn hàng giao thành công',
         isCurrent: norm === 'Đơn hàng giao thành công'
@@ -1490,7 +1508,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                       <CreditCard className="w-4 h-4 text-slate-700" />
-                      <span>Thanh toán & Hóa đơn</span>
+                      <span>Hóa đơn</span>
                     </h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-black whitespace-nowrap shrink-0 ${
                       activeOrder.paymentStatus === 'paid'
@@ -1503,7 +1521,7 @@ Cam kết bảo hành chốt khóa trọn đời!
 
                   <div className="space-y-3 text-xs sm:text-sm">
                     <div className="flex items-center justify-between text-slate-700">
-                      <span>Hình thức thanh toán:</span>
+                      <span>Hình thức:</span>
                       <strong className="text-slate-950 font-bold">
                         {activeOrder.paymentMethod === 'bank_transfer' && activeOrder.source !== 'website'
                           ? 'Chuyển khoản VietQR'
@@ -1648,7 +1666,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                       <span>Thanh toán khi nhận hàng (COD)</span>
                     </div>
                     <p className="text-xs text-emerald-900 leading-relaxed">
-                      Quý khách vui lòng chuẩn bị số tiền <strong className="font-bold text-emerald-950">{activeOrderAmount.toLocaleString('vi-VN')}đ</strong> để thanh toán trực tiếp cho nhân viên giao hàng (Shipper) khi nhận và đồng kiểm bưu phẩm.
+                      Quý khách vui lòng chuẩn bị số tiền <strong className="font-bold text-emerald-950">{activeOrderAmount.toLocaleString('vi-VN')}đ</strong> để thanh toán trực tiếp cho nhân viên giao hàng khi nhận hàng.
                     </p>
                   </div>
                 )}
@@ -1673,8 +1691,8 @@ Cam kết bảo hành chốt khóa trọn đời!
 
                 {/* Lifetime Warranty Pledge */}
                 <div className="p-4 rounded-2xl bg-white border border-slate-200/80 flex items-center gap-3 text-xs text-slate-600">
-                  <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
-                  <span>Cam kết bảo hành chốt khóa trọn đời & đồng kiểm khi nhận hàng.</span>
+                  <Sparkles className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>Cảm ơn quý khách đã tin tưởng & lựa chọn sản phẩm thủ công NOT A KNOT.</span>
                 </div>
 
               </div>
@@ -1688,11 +1706,17 @@ Cam kết bảo hành chốt khóa trọn đời!
         {/* PRINT / INVOICE MODAL (OFFICIAL SLIP)                        */}
         {/* ============================================================ */}
         {isPrintModalOpen && activeOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
-            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 flex flex-col">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn cursor-pointer"
+            onClick={() => setIsPrintModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 flex flex-col cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
               
               {/* Modal Top Bar */}
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between no-print">
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between no-print bg-slate-50/50">
                 <div className="flex items-center gap-2">
                   <Printer className="w-5 h-5 text-amber-600" />
                   <h3 className="text-base font-black text-slate-900">
@@ -1702,9 +1726,10 @@ Cam kết bảo hành chốt khóa trọn đời!
                 <button
                   type="button"
                   onClick={() => setIsPrintModalOpen(false)}
-                  className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-600 hover:text-slate-900 transition-all cursor-pointer border border-slate-200 shadow-2xs"
+                  title="Đóng (hoặc nhấn ra ngoài để thoát)"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 stroke-[2.5]" />
                 </button>
               </div>
 
@@ -1825,7 +1850,7 @@ Cam kết bảo hành chốt khóa trọn đời!
                     </div>
                   )}
                   <div className="flex justify-between text-slate-600">
-                    <span>Hình thức thanh toán:</span>
+                    <span>Hình thức:</span>
                     <strong className="text-slate-900">
                       {activeOrder.paymentMethod === 'cod' ? 'Thu hộ COD khi nhận hàng' : 'Chuyển khoản VietQR'}
                     </strong>
@@ -1860,77 +1885,152 @@ Cam kết bảo hành chốt khóa trọn đời!
 
                 {/* Guarantee note */}
                 <div className="text-[11px] text-slate-500 text-center italic border-t border-dashed border-slate-200 pt-3">
-                  Cảm ơn bạn đã lựa chọn Not A Knot! Sản phẩm thủ công được bảo hành chốt khóa trọn đời.
+                  Cảm ơn bạn đã lựa chọn Not A Knot! Chúc quý khách một ngày tốt lành.
                 </div>
               </div>
 
-              {/* Modal Bottom Actions */}
+              {/* Modal Bottom Actions - ONLY 3 CLEAN BUTTONS */}
               <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
-                <span className="text-xs text-slate-600 font-medium">
-                  {printSuccessToast || 'Chọn "In Phiếu" hoặc "Mở Tab In" nếu trình duyệt chặn popup.'}
+                <span className="text-xs text-slate-500 font-medium truncate max-w-xs">
+                  {printSuccessToast || 'Phiếu đơn hàng chính thức'}
                 </span>
 
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const text = generateSlipPlainText(activeOrder);
-                      copyToClipboard(text, 'fullSlip');
-                      setPrintSuccessToast('Đã sao chép toàn bộ thông tin phiếu đơn hàng!');
-                      setTimeout(() => setPrintSuccessToast(null), 3000);
-                    }}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:bg-white text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    title="Sao chép toàn bộ chữ của phiếu"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Sao chép</span>
-                  </button>
-
+                <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+                  {/* 1. Nút Tải file text */}
                   <button
                     type="button"
                     onClick={() => handleDownloadInvoice(activeOrder)}
-                    className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:bg-white text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                    title="Tải hóa đơn văn bản .txt"
+                    className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs whitespace-nowrap"
+                    title="Tải file văn bản chi tiết phiếu đơn hàng (.txt)"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-4 h-4 text-slate-600" />
                     <span>Tải .txt</span>
                   </button>
 
+                  {/* 2. Nút In (Tự động mở tab in chuẩn) */}
                   <button
                     type="button"
                     onClick={() => handleOpenPrintTab(activeOrder)}
-                    className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
-                    title="Mở sang tab mới để in độc lập không bị chặn"
+                    className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-slate-950 text-xs sm:text-sm font-black transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs whitespace-nowrap"
+                    title="In phiếu giao nhận & hóa đơn"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Mở Tab In</span>
+                    <Printer className="w-4 h-4 text-slate-950" />
+                    <span>In Phiếu</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleDirectPrint}
-                    className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer flex items-center justify-center shadow-xs shrink-0"
-                    title="In trực tiếp"
-                  >
-                    <Printer className="w-4 h-4 text-amber-400" />
-                  </button>
-
+                  {/* 3. Nút Email */}
                   <button
                     type="button"
                     onClick={() => activeOrder && handleSendEmail(activeOrder)}
                     disabled={isSendingEmail}
-                    className="p-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 transition-all cursor-pointer flex items-center justify-center shadow-xs shrink-0 disabled:opacity-50"
-                    title="Gửi email xác nhận đơn hàng"
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-black text-white text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 whitespace-nowrap"
+                    title="Gửi email xác nhận thông tin đơn hàng"
                   >
                     {isSendingEmail ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                        <span>Đang gửi...</span>
+                      </>
                     ) : (
-                      <Mail className="w-4 h-4 text-slate-950" />
+                      <>
+                        <Mail className="w-4 h-4 text-amber-400" />
+                        <span>Gửi Email</span>
+                      </>
                     )}
                   </button>
                 </div>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* EMAIL SENDER MODAL */}
+        {emailModalOrder && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn cursor-pointer"
+            onClick={() => !isSendingEmail && setEmailModalOrder(null)}
+          >
+            <div
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 cursor-default animate-scaleUp"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-amber-600" />
+                  <h3 className="text-base font-black text-slate-900">
+                    Nhận Email Xác Nhận Đơn Hàng
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !isSendingEmail && setEmailModalOrder(null)}
+                  className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer border border-slate-200"
+                  title="Đóng"
+                >
+                  <X className="w-4 h-4 stroke-[2.5]" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Nhập địa chỉ email để hệ thống gửi hóa đơn và chi tiết đơn hàng <strong>#{emailModalOrder.trackingNumber || emailModalOrder.id}</strong> tới hộp thư của bạn.
+              </p>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 block">Địa chỉ Email nhận tin:</label>
+                <input
+                  type="email"
+                  value={emailModalInput}
+                  onChange={(e) => setEmailModalInput(e.target.value)}
+                  disabled={isSendingEmail}
+                  placeholder="ví dụ: tenban@gmail.com"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:border-amber-500 focus:outline-none disabled:opacity-60"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleExecuteSendEmail();
+                  }}
+                />
+              </div>
+
+              {emailModalMessage && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold ${
+                    emailModalMessage.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}
+                >
+                  {emailModalMessage.text}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSendingEmail}
+                  onClick={() => setEmailModalOrder(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isSendingEmail}
+                  onClick={handleExecuteSendEmail}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-black text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
+                >
+                  {isSendingEmail ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                      <span>Đang gửi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 text-amber-400" />
+                      <span>Gửi Email Ngay</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}

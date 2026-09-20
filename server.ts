@@ -632,7 +632,7 @@ async function startServer() {
           timestamp: ts,
           recipient: String(d.recipient || ''),
           orderCode: d.orderCode ? String(d.orderCode) : undefined,
-          type: (d.type as any) || 'customer_confirmation',
+          type: d.type === 'test' ? 'manual_admin' : ((d.type as any) || 'customer_confirmation'),
           status: (d.status as any) || 'sent',
           createdAt: d.createdAt || new Date(ts).toISOString()
         });
@@ -1118,7 +1118,7 @@ async function startServer() {
 
       const transporter = getMailTransporter();
       if (!transporter) {
-        recordEmailLog(destination, 'test', undefined, 'simulated');
+        recordEmailLog(destination, 'manual_admin', undefined, 'simulated');
         const stats = calculateEmailStats();
         return res.json({
           success: false,
@@ -1142,7 +1142,7 @@ async function startServer() {
         `
       });
 
-      recordEmailLog(destination, 'test', undefined, 'sent');
+      recordEmailLog(destination, 'manual_admin', undefined, 'sent');
       const stats = calculateEmailStats();
 
       return res.json({

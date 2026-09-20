@@ -328,7 +328,7 @@ export const generateOrderSlipHtml = (
         <strong style="color:#0f172a;">${statusStr}</strong>
       </div>
       <div class="summary-row">
-        <span>Hình thức thanh toán:</span>
+        <span>Hình thức:</span>
         <strong style="color:#0f172a;">${pMethod}</strong>
       </div>
       <div class="summary-row">
@@ -360,7 +360,7 @@ export const generateOrderSlipHtml = (
     </div>
 
     <div class="footer">
-      Cảm ơn bạn đã lựa chọn ${brandName}! Sản phẩm thủ công đan tay được bảo hành chốt khóa trọn đời.
+      Cảm ơn bạn đã lựa chọn ${brandName}! Chúc quý khách một ngày tốt lành.
     </div>
   </div>
 
@@ -450,7 +450,7 @@ Trạng thái: ${order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Ch
 
 ----------------------------------------
 Hotline xưởng: ${hotline}
-Cam kết bảo hành chốt khóa trọn đời!
+Cảm ơn quý khách đã tin tưởng và ủng hộ sản phẩm!
 ========================================`;
 };
 

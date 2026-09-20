@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { ensureGmailDomain } from '../../utils/emailService';
 import { db } from '../../firebase';
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 
 interface EmailSettings {
   notifyAdminOnNewOrder: boolean;
@@ -124,12 +124,18 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
       const list: EmailLogEntry[] = [];
       snap.forEach(docSnap => {
         const d = docSnap.data();
+        let logType: EmailLogEntry['type'] = d.type;
+        if (!logType || logType === 'test') {
+          logType = 'manual_admin';
+          // Auto migrate Firestore record tag to manual_admin
+          updateDoc(doc(db, 'email_logs', docSnap.id), { type: 'manual_admin' }).catch(() => {});
+        }
         list.push({
           id: docSnap.id,
           timestamp: d.timestamp || (d.createdAt ? new Date(d.createdAt).getTime() : Date.now()),
           recipient: d.recipient || 'N/A',
           orderCode: d.orderCode || undefined,
-          type: d.type || 'test',
+          type: logType,
           status: d.status || 'sent',
           createdAt: d.createdAt
         });
@@ -193,7 +199,11 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
         const data = await parseJsonResponse(res);
         if (data.success && Array.isArray(data.logs)) {
           loadedFromApi = true;
-          setLogs(data.logs);
+          const mappedLogs = data.logs.map((l: any) => ({
+            ...l,
+            type: (!l.type || l.type === 'test') ? 'manual_admin' : l.type
+          }));
+          setLogs(mappedLogs);
           if (data.stats) setStats(data.stats);
         }
       }
@@ -371,7 +381,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
           id: testDocId,
           timestamp: Date.now(),
           recipient: target,
-          type: 'test',
+          type: 'manual_admin',
           status: 'sent',
           createdAt: new Date().toISOString()
         });
@@ -389,7 +399,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
           id: testDocId,
           timestamp: Date.now(),
           recipient: target,
-          type: 'test',
+          type: 'manual_admin',
           status: 'sent',
           createdAt: new Date().toISOString()
         });
@@ -793,13 +803,6 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
               >
                 Thủ công
               </button>
-              <button
-                type="button"
-                onClick={() => setLogFilter('test')}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${logFilter === 'test' ? 'bg-white text-slate-900 font-bold shadow-2xs' : 'hover:text-slate-900'}`}
-              >
-                Test
-              </button>
             </div>
 
             <button
@@ -838,7 +841,11 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {logs
-                  .filter((log) => logFilter === 'all' || log.type === logFilter)
+                  .filter((log) => {
+                    if (logFilter === 'all') return true;
+                    if (logFilter === 'manual_admin') return log.type === 'manual_admin' || log.type === 'test';
+                    return log.type === logFilter;
+                  })
                   .map((log) => {
                     const formattedTime = new Date(log.timestamp || log.createdAt || Date.now()).toLocaleString('vi-VN', {
                       hour: '2-digit',
@@ -868,14 +875,9 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
                               Thông báo Admin
                             </span>
                           )}
-                          {log.type === 'manual_admin' && (
+                          {(log.type === 'manual_admin' || log.type === 'test') && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
                               Gửi thủ công
-                            </span>
-                          )}
-                          {log.type === 'test' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                              Thử nghiệm
                             </span>
                           )}
                         </td>
