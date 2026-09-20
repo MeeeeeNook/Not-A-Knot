@@ -96,7 +96,7 @@ const getBackendUrl = (): string => {
  * Triggers asynchronous order confirmation email dispatch on the server.
  * Never throws exceptions, ensuring checkout flows continue unhindered.
  */
-export async function sendOrderConfirmationEmail(order: StoredOrder, products?: any[]): Promise<EmailDeliveryResult> {
+export async function sendOrderConfirmationEmail(order: any, products?: any[]): Promise<EmailDeliveryResult> {
   try {
     let prods = products;
     if (!prods || !Array.isArray(prods) || prods.length === 0) {

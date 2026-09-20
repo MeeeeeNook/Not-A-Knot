@@ -23,7 +23,8 @@ import {
   Sparkles,
   Download,
   AlertCircle,
-  X
+  X,
+  Mail
 } from 'lucide-react';
 import { StoredOrder, SiteContentConfig } from '../types';
 import { 
@@ -36,6 +37,7 @@ import {
 } from '../utils/orderFormatters';
 import { getOrdersFromFirestore, subscribeToOrdersFromFirestore } from '../firebase';
 import { printOrderSlipDirectly } from '../utils/printOrderSlip';
+import { sendOrderConfirmationEmail } from '../utils/emailService';
 
 interface OrderTrackerProps {
   initialTrackingCode?: string;
@@ -308,6 +310,38 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const handleSendEmail = async (order: any) => {
+    let targetEmail = (order.email || order.customerEmail || '').trim();
+    if (!targetEmail) {
+      const promptRes = window.prompt('Nhập địa chỉ email của bạn để nhận thông tin xác nhận đơn hàng:');
+      if (!promptRes || !promptRes.trim()) return;
+      targetEmail = promptRes.trim();
+    }
+
+    setIsSendingEmail(true);
+    setPrintSuccessToast('Đang gửi email xác nhận đơn hàng...');
+    try {
+      const payload = {
+        ...order,
+        id: order.id || order.trackingNumber || `NAK-${Date.now()}`,
+        email: targetEmail,
+        customerEmail: targetEmail
+      } as unknown as StoredOrder;
+      const res = await sendOrderConfirmationEmail(payload);
+      if (res.success) {
+        setPrintSuccessToast(`✓ Đã gửi email xác nhận thành công tới ${targetEmail}!`);
+      } else {
+        setPrintSuccessToast(`Không thể gửi email: ${res.error || res.message || 'Lỗi gửi thư'}`);
+      }
+    } catch (err: any) {
+      setPrintSuccessToast(`Lỗi mạng khi gửi email: ${err?.message || 'Không kết nối được máy chủ'}`);
+    } finally {
+      setIsSendingEmail(false);
+      setTimeout(() => setPrintSuccessToast(null), 5000);
+    }
+  };
   const [liveOrders, setLiveOrders] = useState<StoredOrder[]>(allOrders);
 
   const allOrdersRef = useRef<StoredOrder[]>(allOrders);
@@ -1153,16 +1187,31 @@ Cam kết bảo hành chốt khóa trọn đời!
                     <span className="whitespace-nowrap">{normalizeOrderStatus(activeOrder.status)}</span>
                   </div>
 
-                  {/* Print Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleTriggerPrint(activeOrder)}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center gap-2 shadow-xs hover:shadow-md whitespace-nowrap shrink-0"
-                    title="In phiếu giao nhận và hóa đơn đơn hàng"
-                  >
-                    <Printer className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="whitespace-nowrap">In Phiếu Đơn</span>
-                  </button>
+                  {/* Print & Email Buttons (Icons Only) */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerPrint(activeOrder)}
+                      className="p-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white transition-all cursor-pointer flex items-center justify-center shadow-xs hover:shadow-md shrink-0"
+                      title="In phiếu giao nhận và hóa đơn"
+                    >
+                      <Printer className="w-5 h-5 text-amber-400" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSendEmail(activeOrder)}
+                      disabled={isSendingEmail}
+                      className="p-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 transition-all cursor-pointer flex items-center justify-center shadow-xs hover:shadow-md shrink-0 disabled:opacity-50"
+                      title="Gửi email xác nhận đơn hàng"
+                    >
+                      {isSendingEmail ? (
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <Mail className="w-5 h-5 text-slate-950" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1860,11 +1909,24 @@ Cam kết bảo hành chốt khóa trọn đời!
                   <button
                     type="button"
                     onClick={handleDirectPrint}
-                    className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                    className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white transition-all cursor-pointer flex items-center justify-center shadow-xs shrink-0"
                     title="In trực tiếp"
                   >
                     <Printer className="w-4 h-4 text-amber-400" />
-                    <span>In Phiếu Ngay</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => activeOrder && handleSendEmail(activeOrder)}
+                    disabled={isSendingEmail}
+                    className="p-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 transition-all cursor-pointer flex items-center justify-center shadow-xs shrink-0 disabled:opacity-50"
+                    title="Gửi email xác nhận đơn hàng"
+                  >
+                    {isSendingEmail ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Mail className="w-4 h-4 text-slate-950" />
+                    )}
                   </button>
                 </div>
               </div>

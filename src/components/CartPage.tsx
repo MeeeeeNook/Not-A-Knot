@@ -487,7 +487,13 @@ export const CartPage: React.FC<CartPageProps> = ({
     setSubmissionStep('syncing');
 
     try {
-      await saveOrderToFirestore(orderData);
+      // 10s timeout guard: If order is not acknowledged after 10 seconds, trigger error flow
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT_10S')), 10000)
+      );
+
+      await Promise.race([saveOrderToFirestore(orderData), timeoutPromise]);
+      
       setSubmissionStep('confirmed');
 
       // Dispatch order confirmation email asynchronously
@@ -523,9 +529,9 @@ export const CartPage: React.FC<CartPageProps> = ({
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 700);
     } catch (err: any) {
-      console.error('Lỗi khi lưu đơn hàng lên Firestore:', err);
+      console.error('Lỗi hoặc quá thời gian 10s khi lưu đơn hàng:', err);
       setSubmissionStep('error');
-      setSubmissionError(err?.message || 'Không thể lưu đơn hàng vào hệ thống máy chủ. Quý khách vui lòng thử lại.');
+      setSubmissionError('Sau 10 giây hệ thống chưa ghi nhận được đơn hàng. Quý khách vui lòng tải lại trang và đặt lại. Nếu vẫn còn tiếp diễn, liên lạc chúng tớ để đặt hàng nhé!');
     }
   };
 
@@ -1123,7 +1129,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                         }
                       }}
                       disabled={isSendingSuccessEmail || isSuccessEmailSent}
-                      placeholder="Nhập email nhận đơn (ví dụ: abc ➔ abc@gmail.com)..."
+                      placeholder="Nhập email nhận thông tin đơn hàng..."
                       className="w-full sm:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:border-slate-400 focus:outline-none disabled:opacity-60"
                     />
                     <button
@@ -1515,25 +1521,32 @@ export const CartPage: React.FC<CartPageProps> = ({
                   <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-2 font-display">
                     Chưa Thể Lưu Đơn Hàng
                   </h3>
-                  <p className="text-xs text-rose-700 bg-rose-50 p-3.5 rounded-xl border border-rose-200 mb-5 text-left font-medium">
-                    {submissionError || 'Kết nối máy chủ bị gián đoạn. Đơn hàng chưa được lưu vào hệ thống Not A Knot.'}
-                  </p>
-                  <div className="flex gap-2">
+                  <div className="text-xs text-rose-800 bg-rose-50 p-4 rounded-2xl border border-rose-200 mb-5 text-left leading-relaxed font-medium space-y-2">
+                    <p>
+                      {submissionError || 'Sau 10 giây hệ thống chưa ghi nhận được đơn hàng. Quý khách vui lòng tải lại trang và đặt lại.'}
+                    </p>
+                    <p className="text-slate-700 text-[11px]">
+                      Nếu sự cố vẫn tiếp diễn, vui lòng liên lạc với chúng tớ qua Messenger để được hỗ trợ đặt hàng trực tiếp nhé!
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setIsSubmitting(false)}
-                      className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      onClick={() => window.location.reload()}
+                      className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      Kiểm tra lại thông tin
+                      <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Tải lại trang & đặt lại</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleCheckoutSubmit}
-                      className="flex-1 py-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    <a
+                      href={messengerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Thử lưu lại ngay</span>
-                    </button>
+                      <MessageCircle className="w-4 h-4 text-slate-950" />
+                      <span>Liên hệ Messenger</span>
+                    </a>
                   </div>
                 </>
               )}
