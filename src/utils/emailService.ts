@@ -48,17 +48,34 @@ async function safeJsonParse(res: Response) {
       return {
         success: false,
         isHtmlError: true,
-        error: `Máy chủ tĩnh Vercel chưa xử lý được endpoint API (${res.status})`,
-        message: `Máy chủ tĩnh Vercel chưa xử lý được endpoint API (${res.status})`
+        error: `Máy chủ Vercel chưa xử lý được endpoint (${res.status})`,
+        message: `Máy chủ Vercel chưa xử lý được endpoint (${res.status})`
       };
     }
-    return JSON.parse(trimmed);
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      if (trimmed.includes('FUNCTION_INVOCATION_FAILED')) {
+        return {
+          success: false,
+          isHtmlError: true,
+          error: 'Hàm Vercel Serverless gặp lỗi (FUNCTION_INVOCATION_FAILED). Cần triển khai phiên bản api/email mới lên Vercel.',
+          message: 'Hàm Vercel Serverless gặp lỗi (FUNCTION_INVOCATION_FAILED). Cần triển khai phiên bản api/email mới lên Vercel.'
+        };
+      }
+      return {
+        success: false,
+        isHtmlError: true,
+        error: trimmed.length < 150 ? trimmed : `Máy chủ phản hồi không đúng định dạng (${res.status})`,
+        message: trimmed.length < 150 ? trimmed : `Máy chủ phản hồi không đúng định dạng (${res.status})`
+      };
+    }
   } catch {
     return {
       success: false,
       isHtmlError: true,
-      error: `Máy chủ phản hồi không đúng định dạng (${res.status})`,
-      message: `Máy chủ phản hồi không đúng định dạng (${res.status})`
+      error: `Lỗi kết nối máy chủ (${res.status})`,
+      message: `Lỗi kết nối máy chủ (${res.status})`
     };
   }
 }
@@ -68,6 +85,9 @@ const getBackendUrl = (): string => {
   const customUrl = meta && meta.env ? meta.env.VITE_BACKEND_URL : undefined;
   if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
     return customUrl.trim().replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined' && window.location.hostname === 'notaknot.id.vn') {
+    return 'https://www.notaknot.id.vn';
   }
   return '';
 };
