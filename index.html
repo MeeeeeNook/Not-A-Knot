@@ -88,11 +88,14 @@
       (function() {
         try {
           var origin = 'https://www.notaknot.id.vn';
+          var pathname = window.location.pathname || '';
           var hash = window.location.hash || '';
           var search = window.location.search || '';
           var params = new URLSearchParams(search);
-          var productId = params.get('product') || params.get('id') || (hash.match(/#product\/([^/?&]+)/) ? hash.match(/#product\/([^/?&]+)/)[1] : (hash.match(/#product-detail\?id=([^&]+)/) ? hash.match(/#product-detail\?id=([^&]+)/)[1] : null));
-          var collectionId = params.get('collection') || (hash.match(/#collection\/([^/?&]+)/) ? hash.match(/#collection\/([^/?&]+)/)[1] : null);
+          var pathProd = pathname.match(/^\/product\/([^/?&#]+)/);
+          var pathCol = pathname.match(/^\/collection\/([^/?&#]+)/);
+          var productId = params.get('product') || params.get('id') || (pathProd ? pathProd[1] : null) || (hash.match(/#product\/([^/?&]+)/) ? hash.match(/#product\/([^/?&]+)/)[1] : (hash.match(/#product-detail\?id=([^&]+)/) ? hash.match(/#product-detail\?id=([^&]+)/)[1] : null));
+          var collectionId = params.get('collection') || (pathCol ? pathCol[1] : null) || (hash.match(/#collection\/([^/?&]+)/) ? hash.match(/#collection\/([^/?&]+)/)[1] : null);
 
           function updateMeta(attr, key, val) {
             var el = document.querySelector('meta[' + attr + '="' + key + '"]');
@@ -118,10 +121,9 @@
 
           if (productId) {
             var cleanId = decodeURIComponent(productId);
-            var prodCanonical = origin + '/?product=' + encodeURIComponent(cleanId);
-            var prodOg = origin + '/#product/' + cleanId;
+            var prodCanonical = origin + '/product/' + cleanId;
             updateCanonical(prodCanonical);
-            updateMeta('property', 'og:url', prodOg);
+            updateMeta('property', 'og:url', prodCanonical);
             updateMeta('property', 'og:type', 'product');
             updateMeta('property', 'product:brand', 'NOT A KNOT');
             updateMeta('property', 'product:availability', 'in stock');
@@ -129,26 +131,25 @@
             updateMeta('property', 'product:price:currency', 'VND');
           } else if (collectionId) {
             var cleanCol = decodeURIComponent(collectionId);
-            var colCanonical = origin + '/?collection=' + encodeURIComponent(cleanCol);
-            var colOg = origin + '/#collection/' + cleanCol;
+            var colCanonical = origin + '/collection/' + cleanCol;
             updateCanonical(colCanonical);
-            updateMeta('property', 'og:url', colOg);
+            updateMeta('property', 'og:url', colCanonical);
             updateMeta('property', 'og:type', 'website');
-          } else if (hash.indexOf('about') !== -1 || search.indexOf('page=about') !== -1) {
-            updateCanonical(origin + '/?page=about');
-            updateMeta('property', 'og:url', origin + '/?page=about');
-          } else if (hash.indexOf('contact') !== -1 || search.indexOf('page=contact') !== -1) {
-            updateCanonical(origin + '/?page=contact');
-            updateMeta('property', 'og:url', origin + '/?page=contact');
-          } else if (hash.indexOf('catalog') !== -1 || hash.indexOf('products') !== -1 || search.indexOf('page=catalog') !== -1) {
-            updateCanonical(origin + '/?page=catalog');
-            updateMeta('property', 'og:url', origin + '/?page=catalog');
-          } else if (hash.indexOf('tracker') !== -1 || hash.indexOf('tracking') !== -1 || search.indexOf('page=tracker') !== -1) {
-            updateCanonical(origin + '/?page=tracker');
-            updateMeta('property', 'og:url', origin + '/?page=tracker');
-          } else if (hash.indexOf('cart') !== -1 || search.indexOf('page=cart') !== -1) {
-            updateCanonical(origin + '/?page=cart');
-            updateMeta('property', 'og:url', origin + '/?page=cart');
+          } else if (pathname.indexOf('/about') === 0 || hash.indexOf('about') !== -1 || search.indexOf('page=about') !== -1) {
+            updateCanonical(origin + '/about');
+            updateMeta('property', 'og:url', origin + '/about');
+          } else if (pathname.indexOf('/contact') === 0 || hash.indexOf('contact') !== -1 || search.indexOf('page=contact') !== -1) {
+            updateCanonical(origin + '/contact');
+            updateMeta('property', 'og:url', origin + '/contact');
+          } else if (pathname.indexOf('/products') === 0 || pathname.indexOf('/catalog') === 0 || hash.indexOf('catalog') !== -1 || hash.indexOf('products') !== -1 || search.indexOf('page=catalog') !== -1) {
+            updateCanonical(origin + '/products');
+            updateMeta('property', 'og:url', origin + '/products');
+          } else if (pathname.indexOf('/tracker') === 0 || pathname.indexOf('/tracking') === 0 || hash.indexOf('tracker') !== -1 || hash.indexOf('tracking') !== -1 || search.indexOf('page=tracker') !== -1) {
+            updateCanonical(origin + '/tracker');
+            updateMeta('property', 'og:url', origin + '/tracker');
+          } else if (pathname.indexOf('/cart') === 0 || hash.indexOf('cart') !== -1 || search.indexOf('page=cart') !== -1) {
+            updateCanonical(origin + '/cart');
+            updateMeta('property', 'og:url', origin + '/cart');
           } else {
             updateCanonical(origin + '/');
           }

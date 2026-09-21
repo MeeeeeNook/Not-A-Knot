@@ -120,10 +120,9 @@ export const Footer: React.FC<FooterProps> = ({
             <ul className="space-y-2 text-xs">
               <li>
                 <a
-                  href="#catalog"
+                  href="/products"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.hash = '#catalog';
                     onOpenAllCatalog?.();
                   }}
                   className="hover:text-amber-400 transition-colors inline-block font-medium"
@@ -137,10 +136,9 @@ export const Footer: React.FC<FooterProps> = ({
                   return (
                     <li key={cat.id}>
                       <a
-                        href={`#catalog?category=${catSlug}`}
+                        href={`/products?category=${catSlug}`}
                         onClick={(e) => {
                           e.preventDefault();
-                          window.location.hash = `#catalog?category=${catSlug}`;
                           if (onSelectCategory) {
                             onSelectCategory(cat.id);
                           } else {
@@ -158,10 +156,9 @@ export const Footer: React.FC<FooterProps> = ({
                 <>
                   <li>
                     <a
-                      href="#catalog?category=bracelets"
+                      href="/products?category=bracelets"
                       onClick={(e) => {
                         e.preventDefault();
-                        window.location.hash = '#catalog?category=bracelets';
                         onOpenAllCatalog?.();
                       }}
                       className="hover:text-amber-400 transition-colors inline-block"
@@ -171,10 +168,9 @@ export const Footer: React.FC<FooterProps> = ({
                   </li>
                   <li>
                     <a
-                      href="#catalog?category=keychain"
+                      href="/products?category=keychain"
                       onClick={(e) => {
                         e.preventDefault();
-                        window.location.hash = '#catalog?category=keychain';
                         onOpenAllCatalog?.();
                       }}
                       className="hover:text-amber-400 transition-colors inline-block"
@@ -195,10 +191,9 @@ export const Footer: React.FC<FooterProps> = ({
             <ul className="space-y-2 text-xs">
               <li>
                 <a
-                  href="#tracker"
+                  href="/tracker"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.hash = '#tracker';
                     onOpenOrderTracker?.();
                   }}
                   className="text-amber-400 hover:text-amber-300 font-bold inline-block"
@@ -208,11 +203,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#privacy"
+                  href="/policy/privacy"
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('privacy');
-                    else window.location.hash = '#privacy';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
@@ -221,11 +215,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#terms"
+                  href="/policy/terms"
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('terms');
-                    else window.location.hash = '#terms';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
@@ -234,11 +227,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#returns"
+                  href="/policy/returns"
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('returns');
-                    else window.location.hash = '#returns';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
@@ -247,11 +239,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#shipping-payment"
+                  href="/policy/shipping-payment"
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('shipping_payment');
-                    else window.location.hash = '#shipping-payment';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
@@ -260,11 +251,10 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#transparency"
+                  href="/policy/transparency"
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('transparency');
-                    else window.location.hash = '#transparency';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block text-amber-400/90"
                 >
@@ -283,10 +273,9 @@ export const Footer: React.FC<FooterProps> = ({
               <ul className="space-y-2 text-xs">
                 <li>
                   <a
-                    href="#about"
+                    href="/about"
                     onClick={(e) => {
                       e.preventDefault();
-                      window.location.hash = '#about';
                       onOpenAbout?.();
                     }}
                     className="hover:text-amber-400 transition-colors inline-block"
@@ -296,10 +285,9 @@ export const Footer: React.FC<FooterProps> = ({
                 </li>
                 <li>
                   <a
-                    href="#contact"
+                    href="/contact"
                     onClick={(e) => {
                       e.preventDefault();
-                      window.location.hash = '#contact';
                       onOpenContact?.();
                     }}
                     className="hover:text-amber-400 transition-colors inline-block"
@@ -309,10 +297,9 @@ export const Footer: React.FC<FooterProps> = ({
                 </li>
                 <li>
                   <a
-                    href="#contact"
+                    href="/contact"
                     onClick={(e) => {
                       e.preventDefault();
-                      window.location.hash = '#contact';
                       onOpenContact?.();
                     }}
                     className="hover:text-amber-400 transition-colors inline-block"

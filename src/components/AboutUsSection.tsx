@@ -16,7 +16,8 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
   onOpenAboutPage
 }) => {
   const handleOpenAbout = onOpenFullAbout || onOpenAboutPage || (() => {
-    window.location.hash = '#about';
+    window.history.pushState(null, '', '/about');
+    window.dispatchEvent(new PopStateEvent('popstate'));
   });
   const title = content?.title || 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh';
   const subtitle = content?.subtitle || 'Xưởng chế tác phụ kiện handmade & thời trang thủ công hàng đầu tại Việt Nam.';

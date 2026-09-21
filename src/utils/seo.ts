@@ -219,7 +219,7 @@ export function updateProductSchemaJsonLd(product: Product, categoryName?: strin
   const images = product.images && product.images.length > 0 ? product.images : [product.image];
   const absoluteImages = images.map((img) => getAbsoluteImageUrl(img));
   const productSlug = getProductSlug(product);
-  const productUrl = `${SITE_DOMAIN}/#product/${productSlug}`;
+  const productUrl = `${SITE_DOMAIN}/product/${productSlug}`;
 
   const schemaData = {
     '@context': 'https://schema.org/',
@@ -352,8 +352,8 @@ export function setProductSEO(product: Product, categoryName?: string) {
   const keywords = generateProductKeywords(product, categoryName);
   const imageUrl = getAbsoluteImageUrl(product.image);
   const productSlug = getProductSlug(product);
-  const productUrl = `${SITE_DOMAIN}/#product/${productSlug}`;
-  const productCanonical = `${SITE_DOMAIN}/?product=${encodeURIComponent(productSlug)}`;
+  const productUrl = `${SITE_DOMAIN}/product/${productSlug}`;
+  const productCanonical = `${SITE_DOMAIN}/product/${productSlug}`;
 
   applyPageSEO({
     title,
@@ -378,8 +378,8 @@ export function setProductSEO(product: Product, categoryName?: string) {
   updateProductSchemaJsonLd(product, categoryName);
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    ...(categoryName ? [{ name: categoryName, url: `/#catalog?category=${slugify(product.category || 'all')}` }] : []),
-    { name: product.name, url: `/#product/${productSlug}` }
+    ...(categoryName ? [{ name: categoryName, url: `/products?category=${slugify(product.category || 'all')}` }] : []),
+    { name: product.name, url: `/product/${productSlug}` }
   ]);
 }
 
@@ -399,7 +399,7 @@ export function updateCollectionSchemaJsonLd(collection: CollectionInfo, product
   const bannerImg = collection.bannerImage || collection.bgImage || collection.horizontalImage || collection.productPageBanner || '/assets/logo.jpg';
   const absoluteBanner = getAbsoluteImageUrl(bannerImg);
   const colSlug = getCollectionSlug(collection.id, collection.title);
-  const colUrl = `${SITE_DOMAIN}/#collection/${colSlug}`;
+  const colUrl = `${SITE_DOMAIN}/collection/${colSlug}`;
 
   const schemaData: any = {
     '@context': 'https://schema.org',
@@ -422,7 +422,7 @@ export function updateCollectionSchemaJsonLd(collection: CollectionInfo, product
       itemListElement: productsInCollection.slice(0, 20).map((prod, idx) => ({
         '@type': 'ListItem',
         position: idx + 1,
-        url: `${SITE_DOMAIN}/#product/${getProductSlug(prod)}`,
+        url: `${SITE_DOMAIN}/product/${getProductSlug(prod)}`,
         name: prod.name,
         image: getAbsoluteImageUrl(prod.image)
       }))
@@ -466,7 +466,7 @@ export function setCollectionSEO(collection: CollectionInfo, productsInCollectio
   const bannerImg = collection.bannerImage || collection.bgImage || collection.horizontalImage || collection.productPageBanner || '/assets/logo.jpg';
   const imageUrl = getAbsoluteImageUrl(bannerImg);
   const colSlug = getCollectionSlug(collection.id, collection.title);
-  const colUrl = `${SITE_DOMAIN}/#collection/${colSlug}`;
+  const colUrl = `${SITE_DOMAIN}/collection/${colSlug}`;
 
   applyPageSEO({
     title,
@@ -491,7 +491,7 @@ export function setCollectionSEO(collection: CollectionInfo, productsInCollectio
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
     { name: 'Bộ Sưu Tập', url: '/#collections' },
-    { name: colTitle, url: `/#collection/${colSlug}` }
+    { name: colTitle, url: `/collection/${colSlug}` }
   ]);
 }
 

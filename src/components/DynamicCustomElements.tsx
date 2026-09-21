@@ -21,10 +21,16 @@ export const DynamicCustomElements: React.FC<DynamicCustomElementsProps> = ({
     if (!link) return;
     if (link.startsWith('http://') || link.startsWith('https://')) {
       window.open(link, '_blank', 'noopener,noreferrer');
-    } else if (link.startsWith('#')) {
-      window.location.hash = link;
     } else if (onActionClick) {
       onActionClick(link);
+    } else {
+      const clean = link.startsWith('#') ? '/' + link.replace(/^#\/?/, '') : link;
+      try {
+        window.history.pushState(null, '', clean);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch (e) {
+        window.location.href = clean;
+      }
     }
   };
 

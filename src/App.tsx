@@ -318,8 +318,13 @@ export default function App() {
   // Supports: #home, #products, #product-detail, #cart, #checkout,
   //           #collection, #about, #contact, #admin, #tracker
   // ========================================================
-  const syncStateFromHash = useCallback((hashString: string) => {
-    const rawHash = hashString.replace(/^#\/?/, '');
+  // Unified Location Router: Supports HTML5 History API Clean URLs & Graceful Hash Fallback
+  // ========================================================
+  const syncStateFromLocation = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    const rawPathname = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    const rawHash = (window.location.hash || '').replace(/^#\/?/, '');
     const searchParams = new URLSearchParams(window.location.search || '');
 
     // Support query param ?policy=...
@@ -328,8 +333,29 @@ export default function App() {
       handleOpenPolicy(searchPolicy as PolicyTab);
     }
 
-    if (!rawHash || rawHash === 'home' || rawHash === 'landing') {
-      const searchCode = searchParams.get('code') || searchParams.get('tracking') || searchParams.get('order');
+    // Determine the route path: prefer pathname if non-empty, otherwise hash
+    let routePath = rawPathname;
+    let queryParams = searchParams;
+
+    if (!routePath && rawHash) {
+      const [hPath, hQuery] = rawHash.split('?');
+      routePath = hPath;
+      if (hQuery) {
+        queryParams = new URLSearchParams(hQuery);
+      }
+    }
+
+    // Automatically normalize ugly hash fragments in the browser address bar to clean paths
+    if (window.location.hash) {
+      try {
+        const cleanPath = '/' + (routePath ? routePath : '') + (window.location.search ? window.location.search : '');
+        window.history.replaceState(null, '', cleanPath || '/');
+      } catch (e) {}
+    }
+
+    // 1. Root / Landing
+    if (!routePath || routePath === 'home' || routePath === 'landing') {
+      const searchCode = queryParams.get('code') || queryParams.get('tracking') || queryParams.get('order');
       if (searchCode) {
         setOrderTrackerInitialCode(searchCode);
         setCurrentView('order-tracker');
@@ -338,7 +364,7 @@ export default function App() {
       }
 
       // Check query param navigation for clean SEO URLs
-      const searchProduct = searchParams.get('product') || searchParams.get('id');
+      const searchProduct = queryParams.get('product') || queryParams.get('id');
       if (searchProduct) {
         const found = findProductBySlugOrId(productsRef.current, searchProduct);
         if (found) {
@@ -353,7 +379,7 @@ export default function App() {
         return;
       }
 
-      const searchCollection = searchParams.get('collection');
+      const searchCollection = queryParams.get('collection');
       if (searchCollection) {
         const targetColId = resolveCollectionId(searchCollection, collections);
         setActiveCollectionId(targetColId);
@@ -362,9 +388,13 @@ export default function App() {
         return;
       }
 
-      const searchPage = searchParams.get('page');
+      const searchPage = queryParams.get('page');
       if (searchPage === 'catalog' || searchPage === 'products') {
         setCurrentView('catalog');
+        const cat = queryParams.get('category');
+        if (cat) {
+          setSelectedCategory(resolveCategoryId(cat, categories));
+        }
         setIsCartOpen(false);
         return;
       }
@@ -378,12 +408,12 @@ export default function App() {
         setIsCartOpen(false);
         return;
       }
-      if (searchPage === 'cart') {
+      if (searchPage === 'cart' || searchPage === 'checkout') {
         setCurrentView('cart');
         setIsCartOpen(false);
         return;
       }
-      if (searchPage === 'tracker') {
+      if (searchPage === 'tracker' || searchPage === 'tracking') {
         setCurrentView('order-tracker');
         setIsCartOpen(false);
         return;
@@ -395,33 +425,29 @@ export default function App() {
       return;
     }
 
-    // Parse path and params
-    const [pathPart, queryPart] = rawHash.split('?');
-    const params = new URLSearchParams(queryPart || '');
-
-    // Legal policies tabs
-    if (pathPart === 'privacy' || pathPart === 'bao-mat') {
+    // 2. Direct paths and clean URLs
+    if (routePath === 'privacy' || routePath === 'bao-mat' || routePath === 'policy/privacy') {
       handleOpenPolicy('privacy');
       return;
     }
-    if (pathPart === 'terms' || pathPart === 'dieu-khoan') {
+    if (routePath === 'terms' || routePath === 'dieu-khoan' || routePath === 'policy/terms') {
       handleOpenPolicy('terms');
       return;
     }
-    if (pathPart === 'returns' || pathPart === 'policy' || pathPart === 'doi-tra' || pathPart === 'bao-hanh') {
+    if (routePath === 'returns' || routePath === 'policy' || routePath === 'doi-tra' || routePath === 'bao-hanh' || routePath === 'policy/returns') {
       handleOpenPolicy('returns');
       return;
     }
-    if (pathPart === 'shipping-payment' || pathPart === 'thanh-toan' || pathPart === 'van-chuyen') {
+    if (routePath === 'shipping-payment' || routePath === 'thanh-toan' || routePath === 'van-chuyen' || routePath === 'policy/shipping-payment') {
       handleOpenPolicy('shipping_payment');
       return;
     }
-    if (pathPart === 'transparency' || pathPart === 'minh-bach') {
+    if (routePath === 'transparency' || routePath === 'minh-bach' || routePath === 'policy/transparency') {
       handleOpenPolicy('transparency');
       return;
     }
 
-    if (pathPart === 'admin') {
+    if (routePath === 'admin') {
       const session = getAdminSession();
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
@@ -441,20 +467,20 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'about') {
+    if (routePath === 'about' || routePath === 've-chung-toi') {
       setCurrentView('about');
       setIsCartOpen(false);
       return;
     }
 
-    if (pathPart === 'contact') {
+    if (routePath === 'contact' || routePath === 'lien-he') {
       setCurrentView('contact');
       setIsCartOpen(false);
       return;
     }
 
-    if (pathPart === 'tracking' || pathPart === 'tracker' || pathPart === 'order-tracker' || pathPart === 'tra-cuu' || pathPart === 'kiem-tra-don-hang') {
-      const code = params.get('code');
+    if (routePath === 'tracking' || routePath === 'tracker' || routePath === 'order-tracker' || routePath === 'tra-cuu' || routePath === 'kiem-tra-don-hang') {
+      const code = queryParams.get('code');
       if (code) {
         setOrderTrackerInitialCode(code);
       }
@@ -463,15 +489,15 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'cart' || pathPart === 'checkout' || pathPart === 'gio-hang') {
+    if (routePath === 'cart' || routePath === 'checkout' || routePath === 'gio-hang') {
       setCurrentView('cart');
       setIsCartOpen(false);
       return;
     }
 
-    if (pathPart === 'products' || pathPart === 'catalog' || pathPart === 'san-pham') {
+    if (routePath === 'products' || routePath === 'catalog' || routePath === 'san-pham') {
       setCurrentView('catalog');
-      const cat = params.get('category');
+      const cat = queryParams.get('category');
       if (cat) {
         setSelectedCategory(resolveCategoryId(cat, categories));
       }
@@ -479,8 +505,8 @@ export default function App() {
       return;
     }
 
-    if (pathPart.startsWith('category/') || pathPart.startsWith('danh-muc/')) {
-      const rawCat = pathPart.replace(/^(category|danh-muc)\//, '');
+    if (routePath.startsWith('category/') || routePath.startsWith('danh-muc/')) {
+      const rawCat = routePath.replace(/^(category|danh-muc)\//, '');
       setCurrentView('catalog');
       if (rawCat) {
         setSelectedCategory(resolveCategoryId(rawCat, categories));
@@ -489,8 +515,8 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'product-detail' || pathPart.startsWith('product/') || pathPart.startsWith('product-') || pathPart.startsWith('san-pham/')) {
-      const prodIdentifier = params.get('id') || pathPart.replace(/^(product|san-pham)[\/-]/, '');
+    if (routePath === 'product-detail' || routePath.startsWith('product/') || routePath.startsWith('product-') || routePath.startsWith('san-pham/')) {
+      const prodIdentifier = queryParams.get('id') || routePath.replace(/^(product|san-pham)[\/-]/, '');
       if (prodIdentifier) {
         const found = findProductBySlugOrId(productsRef.current, prodIdentifier);
         if (found) {
@@ -507,15 +533,15 @@ export default function App() {
       return;
     }
 
-    if (pathPart === 'event_0209' || pathPart === 'event-0209' || pathPart === 'hao-khi-0209') {
+    if (routePath === 'event_0209' || routePath === 'event-0209' || routePath === 'hao-khi-0209') {
       setActiveCollectionId('event_0209');
       setCurrentView('collection');
       setIsCartOpen(false);
       return;
     }
 
-    if (pathPart.startsWith('collection/') || pathPart.startsWith('collection-') || pathPart.startsWith('bo-suu-tap/') || pathPart === 'collection' || pathPart === 'collections' || pathPart === 'bo-suu-tap') {
-      const rawCol = params.get('id') || pathPart.replace(/^(collection(s)?|bo-suu-tap)[\/-]?/, '');
+    if (routePath.startsWith('collection/') || routePath.startsWith('collection-') || routePath.startsWith('bo-suu-tap/') || routePath === 'collection' || routePath === 'collections' || routePath === 'bo-suu-tap') {
+      const rawCol = queryParams.get('id') || routePath.replace(/^(collection(s)?|bo-suu-tap)[\/-]?/, '');
       const targetColId = resolveCollectionId(rawCol || 'event_0209', collections);
       setActiveCollectionId(targetColId);
       setCurrentView('collection');
@@ -525,10 +551,8 @@ export default function App() {
     }
 
     // Default fallback
-    if (pathPart === 'home') {
-      setCurrentView('landing');
-    }
-  }, []);
+    setCurrentView('landing');
+  }, [categories, collections, handleOpenPolicy]);
 
   // Initialize anti-inspection, DevTools protection, global client error telemetry & server token verification
   useEffect(() => {
@@ -579,45 +603,50 @@ export default function App() {
     };
   }, [currentSeller?.id, currentView]);
 
-  // Listen to browser hash changes (Back / Forward buttons) & track GA4 page views
+  // Listen to browser popstate and hashchange (Back / Forward buttons) & track GA4 page views
   useEffect(() => {
-    const handleHashChange = () => {
-      const currentHash = window.location.hash || '#home';
-      syncStateFromHash(currentHash);
+    const handleLocationChange = () => {
+      syncStateFromLocation();
       
-      // Determine readable title for GA4 with dynamic product/collection names
+      const currentPath = window.location.pathname + (window.location.search || '');
       let pageTitle = 'Trang Chủ - NOT A KNOT';
-      if (currentHash.includes('#admin')) {
+      if (currentPath.includes('/admin') || window.location.hash.includes('admin')) {
         pageTitle = 'Quản Trị Hệ Thống - NOT A KNOT';
-      } else if (currentHash.includes('#cart') || currentHash.includes('#checkout')) {
+      } else if (currentPath.includes('/cart') || currentPath.includes('/checkout')) {
         pageTitle = 'Giỏ Hàng & Thanh Toán';
-      } else if (currentHash.includes('#products')) {
+      } else if (currentPath.includes('/products') || currentPath.includes('/catalog')) {
         pageTitle = 'Tất Cả Sản Phẩm';
-      } else if (currentHash.includes('#product-detail')) {
-        const urlParams = new URLSearchParams(currentHash.split('?')[1] || '');
-        const prodId = urlParams.get('id');
-        const foundProd = products.find((p) => p.id === prodId);
+      } else if (currentPath.includes('/product/')) {
+        const pathProd = currentPath.match(/\/product\/([^/?&#]+)/);
+        const prodSlug = pathProd ? pathProd[1] : '';
+        const foundProd = findProductBySlugOrId(productsRef.current, prodSlug);
         pageTitle = foundProd ? `${foundProd.name} - Chi Tiết Sản Phẩm` : 'Chi Tiết Sản Phẩm - NOT A KNOT';
-      } else if (currentHash.includes('#collection')) {
-        const urlParams = new URLSearchParams(currentHash.split('?')[1] || '');
-        const colId = urlParams.get('id');
-        const foundCol = collections.find((c) => c.id === colId);
+      } else if (currentPath.includes('/collection/')) {
+        const pathCol = currentPath.match(/\/collection\/([^/?&#]+)/);
+        const colSlug = pathCol ? pathCol[1] : '';
+        const foundCol = collections.find((c) => c.id === colSlug || slugify(c.title) === colSlug);
         pageTitle = foundCol ? `${foundCol.title} - Bộ Sưu Tập` : 'Bộ Sưu Tập - NOT A KNOT';
-      } else if (currentHash.includes('#about')) {
+      } else if (currentPath.includes('/about')) {
         pageTitle = 'Về Chúng Tôi - NOT A KNOT';
-      } else if (currentHash.includes('#contact')) {
+      } else if (currentPath.includes('/contact')) {
         pageTitle = 'Liên Hệ & Showroom';
+      } else if (currentPath.includes('/tracker') || currentPath.includes('/tracking')) {
+        pageTitle = 'Tra Cứu Đơn Hàng';
       }
 
-      trackGA4PageView(currentHash, pageTitle);
+      trackGA4PageView(currentPath || '/', pageTitle);
     };
 
     // Initial check on mount
-    handleHashChange();
+    handleLocationChange();
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [syncStateFromHash]);
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, [syncStateFromLocation, collections]);
 
   // Synchronize Canonical tags, Meta Titles, and Meta Descriptions across all app views
   useEffect(() => {
@@ -1297,41 +1326,47 @@ export default function App() {
     document.body.scrollTop = 0;
   };
 
-  // Navigation Handlers with Hash Updates
+  // Navigation Handlers with Clean HTML5 URLs
+  const navigateTo = useCallback((cleanPath: string) => {
+    try {
+      const currentFull = window.location.pathname + (window.location.search || '');
+      if (currentFull !== cleanPath || window.location.hash) {
+        window.history.pushState(null, '', cleanPath);
+      }
+    } catch (e) {}
+    syncStateFromLocation();
+    scrollToPageBeginning();
+  }, [syncStateFromLocation]);
+
   const handleSelectCollection = (collectionId: string) => {
     const matchedCol = collections.find((c) => c.id === collectionId);
     const colSlug = getCollectionSlug(collectionId, matchedCol?.title);
     setActiveCollectionId(collectionId);
     setCurrentView('collection');
-    window.location.hash = `#collection/${colSlug}`;
-    scrollToPageBeginning();
+    navigateTo(`/collection/${colSlug}`);
   };
 
   const handleOpenAllCatalog = (categoryId: string = 'all') => {
     setSelectedCategory(categoryId);
     setCurrentView('catalog');
     const catSlug = slugify(categoryId);
-    window.location.hash = categoryId !== 'all' ? `#products?category=${catSlug}` : '#products';
-    scrollToPageBeginning();
+    navigateTo(categoryId !== 'all' ? `/products?category=${catSlug}` : '/products');
   };
 
   const handleOpenAbout = () => {
     setCurrentView('about');
-    window.location.hash = '#about';
-    scrollToPageBeginning();
+    navigateTo('/about');
   };
 
   const handleOpenContact = () => {
     setCurrentView('contact');
-    window.location.hash = '#contact';
-    scrollToPageBeginning();
+    navigateTo('/contact');
   };
 
   const handleOpenOrderTracker = (trackingCode?: string) => {
     setOrderTrackerInitialCode(trackingCode || '');
     setCurrentView('order-tracker');
-    window.location.hash = trackingCode ? `#tracking?code=${encodeURIComponent(trackingCode)}` : '#tracking';
-    scrollToPageBeginning();
+    navigateTo(trackingCode ? `/tracker?code=${encodeURIComponent(trackingCode)}` : '/tracker');
   };
 
   const handleHeroSlideNavigation = (target: string) => {
@@ -1340,49 +1375,44 @@ export default function App() {
       window.open(target, '_blank', 'noopener,noreferrer');
       return;
     }
-    if (target.startsWith('#')) {
-      window.location.hash = target;
-      return;
-    }
-    if (target === 'about') {
+    const cleanTarget = target.replace(/^#\/?/, '');
+    if (cleanTarget === 'about') {
       handleOpenAbout();
       return;
     }
-    if (target === 'contact') {
+    if (cleanTarget === 'contact') {
       handleOpenContact();
       return;
     }
-    if (target === 'tracking' || target === 'order-tracker') {
+    if (cleanTarget === 'tracking' || cleanTarget === 'order-tracker' || cleanTarget === 'tracker') {
       handleOpenOrderTracker();
       return;
     }
-    if (target === 'custom-order') {
+    if (cleanTarget === 'custom-order') {
       setCurrentView('custom-order');
-      window.location.hash = '#custom-order';
-      scrollToPageBeginning();
+      navigateTo('/custom-order');
       return;
     }
-    if (target === 'collections') {
+    if (cleanTarget === 'collections') {
       setCurrentView('landing');
-      window.location.hash = '#collections';
+      navigateTo('/');
       const el = document.getElementById('collections-showcase-section');
       el?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
     // Check if target matches any collection
-    const matchedCol = collections.find((c) => c.id === target || c.categoryKey === target);
+    const matchedCol = collections.find((c) => c.id === cleanTarget || c.categoryKey === cleanTarget);
     if (matchedCol) {
       handleSelectCollection(matchedCol.id);
       return;
     }
     // Otherwise route to catalog with the category ID
-    handleOpenAllCatalog(target);
+    handleOpenAllCatalog(cleanTarget);
   };
 
   const handleNavigateLanding = () => {
     setCurrentView('landing');
-    window.location.hash = '#home';
-    scrollToPageBeginning();
+    navigateTo('/');
   };
 
   const handleOpenAdmin = () => {
@@ -1390,8 +1420,7 @@ export default function App() {
     if (session && session.username) {
       setCurrentSeller(session as SellerUser);
       setCurrentView('admin');
-      window.location.hash = '#admin';
-      scrollToPageBeginning();
+      navigateTo('/admin');
     } else {
       setIsAdminLoginModalOpen(true);
     }
@@ -1401,8 +1430,7 @@ export default function App() {
     setCurrentSeller(user);
     setIsAdminLoginModalOpen(false);
     setCurrentView('admin');
-    window.location.hash = '#admin';
-    scrollToPageBeginning();
+    navigateTo('/admin');
     showToast(`Xin chào ${user.name} (@${user.username})!`);
   };
 
@@ -1410,8 +1438,7 @@ export default function App() {
     clearAdminSession();
     setCurrentSeller(null);
     setCurrentView('landing');
-    window.location.hash = '#home';
-    scrollToPageBeginning();
+    navigateTo('/');
     showToast('Đã đăng xuất khỏi tài khoản quản trị.');
   };
 
@@ -1422,8 +1449,7 @@ export default function App() {
     setSelectedProduct(p);
     setCurrentView('product-detail');
     const slug = getProductSlug(p);
-    window.location.hash = `#product/${slug}`;
-    scrollToPageBeginning();
+    navigateTo(`/product/${slug}`);
   };
 
   const handleCloseProductDetail = () => {
@@ -1432,7 +1458,7 @@ export default function App() {
       setCurrentView('collection');
       const matchedCol = collections.find((c) => c.id === activeCollectionId);
       const colSlug = getCollectionSlug(activeCollectionId, matchedCol?.title);
-      window.location.hash = `#collection/${colSlug}`;
+      navigateTo(`/collection/${colSlug}`);
     } else if (previousView === 'landing') {
       handleNavigateLanding();
     } else if (previousView === 'about') {
@@ -1443,16 +1469,14 @@ export default function App() {
       // Default to catalog (Trang Sản Phẩm)
       setCurrentView('catalog');
       const catSlug = slugify(selectedCategory || 'all');
-      window.location.hash = selectedCategory && selectedCategory !== 'all' ? `#products?category=${catSlug}` : '#products';
+      navigateTo(selectedCategory && selectedCategory !== 'all' ? `/products?category=${catSlug}` : '/products');
     }
-    scrollToPageBeginning();
   };
 
   const handleOpenCartDrawer = () => {
     setCurrentView('cart');
     setIsCartOpen(false);
-    window.location.hash = '#cart';
-    scrollToPageBeginning();
+    navigateTo('/cart');
   };
 
   const handleCloseCartDrawer = () => {
@@ -1485,12 +1509,14 @@ export default function App() {
   const handleAnnouncementClick = () => {
     const link = siteContent?.announcementLink?.trim();
     if (!link) return;
-    if (link.startsWith('#')) {
-      window.location.hash = link;
-    } else if (link.startsWith('http://') || link.startsWith('https://')) {
+    if (link.startsWith('http://') || link.startsWith('https://')) {
       window.open(link, '_blank', 'noopener,noreferrer');
+    } else if (link.startsWith('/')) {
+      navigateTo(link);
+    } else if (link.startsWith('#')) {
+      navigateTo('/' + link.replace(/^#\/?/, ''));
     } else {
-      window.location.hash = link;
+      navigateTo('/' + link);
     }
   };
 
