@@ -916,27 +916,27 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
     <div className="min-h-screen bg-[#FAF9F6] text-slate-900 pb-20 pt-6 sm:pt-10 font-sans">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* Back Link */}
-        <div className="mb-6 flex items-center justify-between pb-4 border-b border-slate-200/80">
+        {/* Back Link & Header */}
+        <div className="mb-6 flex items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
           <button
             onClick={onNavigateCatalog}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-amber-700 transition-colors cursor-pointer group"
+            className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-amber-700 transition-colors cursor-pointer group whitespace-nowrap shrink-0"
           >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform shrink-0" />
             <span>Quay lại cửa hàng</span>
           </button>
 
-          <div className="text-xs font-bold text-slate-400">
-            Hệ thống tra cứu đơn xưởng {brandName}
+          <div className="text-xs font-bold text-slate-400 whitespace-nowrap text-right">
+            Tra cứu đơn
           </div>
         </div>
 
         {/* ============================================================ */}
         {/* REFINED SEARCH CONSOLE (ANTI-SLOP: CLEAN & CRAFTED)          */}
         {/* ============================================================ */}
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs mb-8">
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-8 shadow-xs mb-8">
           <div className="max-w-2xl mx-auto text-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
+            <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
               Tra Cứu Tiến Độ Đơn Hàng
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
@@ -953,15 +953,15 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
             className="max-w-2xl mx-auto"
           >
             <div className="relative flex items-center shadow-xs rounded-2xl border-2 border-slate-200 focus-within:border-amber-400 transition-colors bg-white overflow-hidden">
-              <div className="pl-4 text-slate-400">
+              <div className="pl-3 sm:pl-4 text-slate-400">
                 <Search className="w-5 h-5" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Nhập mã đơn NAK, mã vận đơn bưu cục hoặc số điện thoại..."
-                className="w-full px-4 py-3.5 sm:py-4 text-sm font-medium text-slate-900 focus:outline-hidden placeholder:text-slate-400"
+                placeholder="Nhập mã đơn NAK, mã vận đơn hoặc số điện thoại..."
+                className="w-full px-2.5 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-900 focus:outline-hidden placeholder:text-slate-400"
               />
               {searchQuery && (
                 <button
@@ -972,7 +972,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     setMatchedOrders([]);
                     setHasSearched(false);
                   }}
-                  className="p-2 mr-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
                   title="Xóa ô tìm kiếm"
                 >
                   <X className="w-4 h-4" />
@@ -981,12 +981,12 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
               <button
                 type="submit"
                 disabled={isLoading || !searchQuery.trim()}
-                className="mr-2 px-5 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer flex items-center gap-2 flex-shrink-0"
+                className="mr-1.5 sm:mr-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0"
               >
                 {isLoading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Đang tìm...</span>
+                    <span className="hidden sm:inline">Đang tìm...</span>
                   </>
                 ) : (
                   <span>Tra cứu</span>
@@ -1140,51 +1140,18 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
           <div className="space-y-6 animate-fadeIn">
             
             {/* Top Order Card Header */}
-            <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-6 border-b border-slate-100">
-                <div>
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-mono font-black text-xl sm:text-2xl text-slate-950 tracking-wider">
-                      {getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id || '', 'activeCode')}
-                      className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                      title="Sao chép mã đơn"
-                    >
-                      {copiedField === 'activeCode' ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-emerald-700">Đã chép</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Sao chép</span>
-                        </>
-                      )}
-                    </button>
-                    <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-200/60">
-                      {getSourceBadgeConfig(activeOrder.source).label}
-                    </span>
-                  </div>
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs">
+              <div className="pb-5 sm:pb-6 border-b border-slate-100">
+                
+                {/* Row 1 on mobile: Badges (Source + Status) neatly aligned */}
+                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/60 inline-flex items-center gap-1.5 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    {getSourceBadgeConfig(activeOrder.source).label}
+                  </span>
 
-                  <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-400 mt-2.5 flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      {formatOrderDateWithoutSeconds(activeOrder.date || activeOrder.createdAt)}
-                    </span>
-                    <span>•</span>
-                    <span>Khách nhận: <strong className="text-slate-800">{activeOrder.customerName || activeOrder.name}</strong></span>
-                    <span>•</span>
-                    <span>Hotline: <strong className="text-slate-700">{hotline}</strong></span>
-                  </div>
-                </div>
-
-                {/* Status Badge & Actions */}
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <div className={`px-4 py-2.5 rounded-2xl border font-black text-xs sm:text-sm flex items-center gap-2 whitespace-nowrap shrink-0 ${
+                  {/* Status Badge */}
+                  <div className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-xl border font-bold text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công'
                       ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                       : normalizeOrderStatus(activeOrder.status) === 'Đang giao hàng'
@@ -1202,46 +1169,177 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     ) : (
                       <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                     )}
-                    <span className="whitespace-nowrap">{normalizeOrderStatus(activeOrder.status)}</span>
+                    <span>{normalizeOrderStatus(activeOrder.status)}</span>
                   </div>
+                </div>
 
-                  {/* Print & Email Buttons (Icons Only) */}
-                  <div className="flex items-center gap-2 shrink-0">
+                {/* Row 2: Large Order Code & Copy Button */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono font-black text-xl sm:text-3xl text-slate-950 tracking-tight">
+                      {getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => handleTriggerPrint(activeOrder)}
-                      className="p-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white transition-all cursor-pointer flex items-center justify-center shadow-xs hover:shadow-md shrink-0"
-                      title="In phiếu giao nhận và hóa đơn"
+                      onClick={() => copyToClipboard(getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id || '', 'activeCode')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                      title="Sao chép mã đơn"
                     >
-                      <Printer className="w-5 h-5 text-amber-400" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleSendEmail(activeOrder)}
-                      disabled={isSendingEmail}
-                      className="p-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 transition-all cursor-pointer flex items-center justify-center shadow-xs hover:shadow-md shrink-0 disabled:opacity-50"
-                      title="Gửi email xác nhận đơn hàng"
-                    >
-                      {isSendingEmail ? (
-                        <RefreshCw className="w-5 h-5 animate-spin" />
+                      {copiedField === 'activeCode' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">Đã chép</span>
+                        </>
                       ) : (
-                        <Mail className="w-5 h-5 text-slate-950" />
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Sao chép</span>
+                        </>
                       )}
                     </button>
                   </div>
                 </div>
+
+                {/* Row 3: Key Info Grid (Clean structured cards with no awkward wrap or dangling dots) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mt-3.5 pt-3.5 border-t border-slate-100 text-xs text-slate-600">
+                  <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
+                    <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-slate-500">Thời gian:</span>
+                    <strong className="text-slate-900 font-bold ml-auto sm:ml-0 font-mono">
+                      {formatOrderDateWithoutSeconds(activeOrder.date || activeOrder.createdAt)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
+                    <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">👤</span>
+                    <span className="text-slate-500">Khách nhận:</span>
+                    <strong className="text-slate-900 font-bold truncate max-w-[150px] sm:max-w-none ml-auto sm:ml-0">
+                      {activeOrder.customerName || activeOrder.name}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
+                    <Phone className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-slate-500">Hotline:</span>
+                    <a href={`tel:${hotline.replace(/\s+/g, '')}`} className="text-amber-800 hover:underline font-bold font-mono ml-auto sm:ml-0">
+                      {hotline}
+                    </a>
+                  </div>
+                </div>
+
+                {/* Row 4: Action Buttons (Print & Email) - balanced touch targets */}
+                <div className="grid grid-cols-2 gap-2.5 mt-4 pt-3.5 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerPrint(activeOrder)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                    title="In phiếu giao nhận và hóa đơn"
+                  >
+                    <Printer className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="truncate">In phiếu đơn</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendEmail(activeOrder)}
+                    disabled={isSendingEmail}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-500 active:scale-98 text-slate-950 font-bold text-xs sm:text-sm transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
+                    title="Gửi email xác nhận đơn hàng"
+                  >
+                    {isSendingEmail ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                        <span className="truncate">Đang gửi...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-4 h-4 text-slate-950 shrink-0" />
+                        <span className="truncate">Gửi email</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Crafting & Shipping Timeline */}
-              <div className="pt-6">
-                <div className="text-xs font-black uppercase tracking-wider text-slate-800 mb-5 flex items-center gap-2">
+              <div className="pt-5 sm:pt-6">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>Tiến trình chế tác & vận chuyển thủ công</span>
+                  <span>Trạng thái</span>
                 </div>
 
-                {/* Desktop/Tablet Connected Stepper */}
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 relative">
+                {/* MOBILE VIEW: SLEEK CONNECTED VERTICAL STEPPER */}
+                <div className="sm:hidden relative pl-2 pr-1 py-1">
+                  {/* Continuous Vertical Connecting Line */}
+                  <div className="absolute left-[26px] top-6 bottom-6 w-0.5 bg-slate-200 -z-0"></div>
+
+                  <div className="space-y-3 relative z-10">
+                    {getTimelineSteps(activeOrder).map((step, idx) => {
+                      const IconComponent = step.icon;
+                      const isDone = step.isDone;
+                      const isCurrent = step.isCurrent;
+
+                      return (
+                        <div
+                          key={step.id}
+                          className={`flex items-start gap-3 p-3 rounded-2xl border transition-all ${
+                            isCurrent
+                              ? 'bg-amber-50/95 border-amber-400 shadow-sm ring-2 ring-amber-300/60'
+                              : isDone
+                              ? 'bg-white border-slate-200/90 shadow-2xs'
+                              : 'bg-slate-50/70 border-slate-200/60 opacity-80'
+                          }`}
+                        >
+                          {/* Step Icon Node */}
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                            isCurrent
+                              ? 'bg-amber-500 text-slate-950 ring-4 ring-amber-200/70 font-bold shadow-xs'
+                              : isDone
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-200 text-slate-500'
+                          }`}>
+                            {isDone && !isCurrent ? (
+                              <Check className="w-4 h-4 stroke-[3]" />
+                            ) : (
+                              <IconComponent className="w-4 h-4" />
+                            )}
+                          </div>
+
+                          {/* Step Text Info */}
+                          <div className="flex-1 min-w-0 pt-0.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-wider">
+                                Bước 0{idx + 1}
+                              </span>
+                              {isCurrent && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-950 font-black text-[10px] tracking-wide">
+                                  Đang xử lý
+                                </span>
+                              )}
+                              {isDone && !isCurrent && (
+                                <span className="text-emerald-700 font-bold text-[10px] flex items-center gap-0.5">
+                                  <Check className="w-3 h-3" /> Hoàn tất
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className={`text-sm font-black mt-0.5 leading-snug ${
+                              isCurrent ? 'text-amber-950' : isDone ? 'text-slate-950' : 'text-slate-600'
+                            }`}>
+                              {step.label}
+                            </h4>
+                            <p className={`text-xs mt-0.5 leading-relaxed ${
+                              isCurrent ? 'text-amber-900/90' : isDone ? 'text-slate-600' : 'text-slate-400'
+                            }`}>
+                              {step.desc}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* DESKTOP/TABLET VIEW: 5-COLUMN HORIZONTAL STEPPER */}
+                <div className="hidden sm:grid sm:grid-cols-5 gap-3 relative">
                   {getTimelineSteps(activeOrder).map((step, idx) => {
                     const IconComponent = step.icon;
                     const isDone = step.isDone;
@@ -1346,7 +1444,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
               <div className="lg:col-span-7 space-y-6">
                 
                 {/* Handcrafted Items List */}
-                <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs">
+                <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs">
                   <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-4 pb-3 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <ShoppingBag className="w-4 h-4 text-slate-500" />
@@ -1445,7 +1543,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                 </div>
 
                 {/* Customer Delivery Info */}
-                <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs">
+                <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs">
                   <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-4 pb-3 border-b border-slate-100 flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-slate-500" />
                     <span>Địa chỉ & người nhận kiện hàng</span>
@@ -1504,7 +1602,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
               <div className="lg:col-span-5 space-y-6">
                 
                 {/* Payment Overview Card */}
-                <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-7 shadow-xs space-y-4">
+                <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs space-y-4">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                       <CreditCard className="w-4 h-4 text-slate-700" />
