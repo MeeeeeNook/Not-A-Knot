@@ -49,40 +49,15 @@ try {
   // ignore
 }
 
-// Cryptographic XOR-Base64 runtime decoder for database security
-const CIPHER_KEY = 'NAK_DB_SECRET_CIPHER_2026';
-const decodeDbParam = (encodedStr: string): string => {
-  try {
-    const raw = atob(encodedStr);
-    let out = '';
-    for (let i = 0; i < raw.length; i++) {
-      out += String.fromCharCode(raw.charCodeAt(i) ^ CIPHER_KEY.charCodeAt(i % CIPHER_KEY.length));
-    }
-    return out;
-  } catch {
-    return '';
-  }
-};
-
-// Obfuscated database credentials & identifiers (database ID, project ID, API key)
-const ENCRYPTED_CONFIG = {
-  projectId: 'JCg/KyEwJn42NychLXItMyB6Ig==',
-  appId: 'f3t5bHdybmdwe2N0bWU0LDJyI2U6VwIFByh1eT0nc241IHNgdGI6cQ==',
-  apiKey: 'DwgxPhc7GyMidCsPDj4OERcpAiY9fmdGbn9zAAYpMytgdHIKAzsW',
-  authDomain: 'JCg/KyEwJn42NychLXItMyB6Inw5W0JXVC8yLj40MnEwKi4=',
-  firestoreDatabaseId: 'LyhmLDA3OzoqbiAgOTY7OzUlLCoxXURTXSBsfT18em1kcnp/dDJpImRkeHIxclNWBgJjdilrcnpvancga3Ay',
-  storageBucket: 'JCg/KyEwJn42NychLXItMyB6Inw5W0JXVC8yLiwwLS0yIiZ8JCQv',
-  messagingSenderId: 'fHJ4b3V2amt0cms='
-};
-
+// Standard Firebase web configuration
 export const firebaseConfig = {
-  apiKey: decodeDbParam(ENCRYPTED_CONFIG.apiKey),
-  authDomain: decodeDbParam(ENCRYPTED_CONFIG.authDomain),
-  projectId: decodeDbParam(ENCRYPTED_CONFIG.projectId),
-  storageBucket: decodeDbParam(ENCRYPTED_CONFIG.storageBucket),
-  messagingSenderId: decodeDbParam(ENCRYPTED_CONFIG.messagingSenderId),
-  appId: decodeDbParam(ENCRYPTED_CONFIG.appId),
-  firestoreDatabaseId: decodeDbParam(ENCRYPTED_CONFIG.firestoreDatabaseId) || '(default)'
+  apiKey: "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI",
+  authDomain: "jittery-study-nzp2g.firebaseapp.com",
+  projectId: "jittery-study-nzp2g",
+  storageBucket: "jittery-study-nzp2g.firebasestorage.app",
+  messagingSenderId: "23301458119",
+  appId: "1:23301458119:web:f7ee271f42bc11fe0216e2",
+  firestoreDatabaseId: "ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f"
 };
 
 // Initialize Firebase App instance

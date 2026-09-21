@@ -23,6 +23,7 @@ import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, Sel
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { MaintenanceScreen } from './components/MaintenanceScreen';
+import { LegalPoliciesModal, PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
@@ -237,6 +238,13 @@ export default function App() {
     return session && session.username ? (session as SellerUser) : null;
   });
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState<boolean>(false);
+  const [policyModalTab, setPolicyModalTab] = useState<PolicyTab>('privacy');
+
+  const handleOpenPolicy = useCallback((tab: PolicyTab = 'privacy') => {
+    setPolicyModalTab(tab);
+    setIsPolicyModalOpen(true);
+  }, []);
 
   // Real-time Maintenance Mode State (Synced across devices, 100% independent of Firebase Storage)
   const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() =>
@@ -312,8 +320,15 @@ export default function App() {
   // ========================================================
   const syncStateFromHash = useCallback((hashString: string) => {
     const rawHash = hashString.replace(/^#\/?/, '');
+    const searchParams = new URLSearchParams(window.location.search || '');
+
+    // Support query param ?policy=...
+    const searchPolicy = searchParams.get('policy');
+    if (searchPolicy) {
+      handleOpenPolicy(searchPolicy as PolicyTab);
+    }
+
     if (!rawHash || rawHash === 'home' || rawHash === 'landing') {
-      const searchParams = new URLSearchParams(window.location.search || '');
       const searchCode = searchParams.get('code') || searchParams.get('tracking') || searchParams.get('order');
       if (searchCode) {
         setOrderTrackerInitialCode(searchCode);
@@ -321,6 +336,59 @@ export default function App() {
         setIsCartOpen(false);
         return;
       }
+
+      // Check query param navigation for clean SEO URLs
+      const searchProduct = searchParams.get('product') || searchParams.get('id');
+      if (searchProduct) {
+        const found = findProductBySlugOrId(productsRef.current, searchProduct);
+        if (found) {
+          setSelectedProduct(found);
+          setCurrentView('product-detail');
+          pendingHashProductRef.current = null;
+        } else {
+          pendingHashProductRef.current = searchProduct;
+          setCurrentView('product-detail');
+        }
+        setIsCartOpen(false);
+        return;
+      }
+
+      const searchCollection = searchParams.get('collection');
+      if (searchCollection) {
+        const targetColId = resolveCollectionId(searchCollection, collections);
+        setActiveCollectionId(targetColId);
+        setCurrentView('collection');
+        setIsCartOpen(false);
+        return;
+      }
+
+      const searchPage = searchParams.get('page');
+      if (searchPage === 'catalog' || searchPage === 'products') {
+        setCurrentView('catalog');
+        setIsCartOpen(false);
+        return;
+      }
+      if (searchPage === 'about') {
+        setCurrentView('about');
+        setIsCartOpen(false);
+        return;
+      }
+      if (searchPage === 'contact') {
+        setCurrentView('contact');
+        setIsCartOpen(false);
+        return;
+      }
+      if (searchPage === 'cart') {
+        setCurrentView('cart');
+        setIsCartOpen(false);
+        return;
+      }
+      if (searchPage === 'tracker') {
+        setCurrentView('order-tracker');
+        setIsCartOpen(false);
+        return;
+      }
+
       setCurrentView('landing');
       setIsCartOpen(false);
       setSelectedProduct(null);
@@ -330,6 +398,28 @@ export default function App() {
     // Parse path and params
     const [pathPart, queryPart] = rawHash.split('?');
     const params = new URLSearchParams(queryPart || '');
+
+    // Legal policies tabs
+    if (pathPart === 'privacy' || pathPart === 'bao-mat') {
+      handleOpenPolicy('privacy');
+      return;
+    }
+    if (pathPart === 'terms' || pathPart === 'dieu-khoan') {
+      handleOpenPolicy('terms');
+      return;
+    }
+    if (pathPart === 'returns' || pathPart === 'policy' || pathPart === 'doi-tra' || pathPart === 'bao-hanh') {
+      handleOpenPolicy('returns');
+      return;
+    }
+    if (pathPart === 'shipping-payment' || pathPart === 'thanh-toan' || pathPart === 'van-chuyen') {
+      handleOpenPolicy('shipping_payment');
+      return;
+    }
+    if (pathPart === 'transparency' || pathPart === 'minh-bach') {
+      handleOpenPolicy('transparency');
+      return;
+    }
 
     if (pathPart === 'admin') {
       const session = getAdminSession();
@@ -1768,8 +1858,16 @@ export default function App() {
           onOpenAbout={handleOpenAbout}
           onOpenContact={handleOpenContact}
           onOpenOrderTracker={() => handleOpenOrderTracker()}
+          onOpenPolicy={handleOpenPolicy}
         />
       )}
+
+      {/* Transparent Legal & Customer Protection Policies Modal */}
+      <LegalPoliciesModal
+        isOpen={isPolicyModalOpen}
+        onClose={() => setIsPolicyModalOpen(false)}
+        initialTab={policyModalTab}
+      />
 
       {/* Admin Login Authentication Gate Modal */}
       <AdminLoginModal

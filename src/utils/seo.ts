@@ -43,7 +43,9 @@ export function removeMetaTag(attribute: 'name' | 'property', key: string) {
  */
 export function setCanonicalUrl(url: string) {
   if (typeof document === 'undefined') return;
-  const cleanUrl = url.startsWith('http') ? url : `${SITE_DOMAIN}${url.startsWith('/') ? '' : '/'}${url}`;
+  // Canonical URLs must NEVER contain hash fragments (#) according to RFC 6596 and Google Search Central
+  const cleanWithoutHash = (url || '').split('#')[0] || SITE_DOMAIN;
+  const cleanUrl = cleanWithoutHash.startsWith('http') ? cleanWithoutHash : `${SITE_DOMAIN}${cleanWithoutHash.startsWith('/') ? '' : '/'}${cleanWithoutHash}`;
   let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
   if (!link) {
     link = document.createElement('link');
@@ -351,12 +353,13 @@ export function setProductSEO(product: Product, categoryName?: string) {
   const imageUrl = getAbsoluteImageUrl(product.image);
   const productSlug = getProductSlug(product);
   const productUrl = `${SITE_DOMAIN}/#product/${productSlug}`;
+  const productCanonical = `${SITE_DOMAIN}/?product=${encodeURIComponent(productSlug)}`;
 
   applyPageSEO({
     title,
     description,
     keywords,
-    canonicalUrl: productUrl,
+    canonicalUrl: productCanonical,
     ogType: 'product',
     ogImage: imageUrl
   });
@@ -506,8 +509,8 @@ export function setCatalogSEO(categoryName?: string, categoryId?: string) {
     : 'Toàn bộ danh mục vòng tay, móc khoá, charm đồng titan thủ công tinh xảo tại NOT A KNOT. Phù hợp học sinh, sinh viên, bảo hành trọn đời.';
 
   const canonicalUrl = isSpecificCat && categoryId
-    ? `${SITE_DOMAIN}/#catalog?category=${categoryId}`
-    : `${SITE_DOMAIN}/#catalog`;
+    ? `${SITE_DOMAIN}/?page=catalog&category=${encodeURIComponent(categoryId)}`
+    : `${SITE_DOMAIN}/?page=catalog`;
 
   applyPageSEO({
     title,
@@ -520,8 +523,8 @@ export function setCatalogSEO(categoryName?: string, categoryId?: string) {
   removeCollectionSchemaJsonLd();
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Danh Mục Sản Phẩm', url: '/#catalog' },
-    ...(isSpecificCat ? [{ name: categoryName, url: `/#catalog?category=${categoryId}` }] : [])
+    { name: 'Danh Mục Sản Phẩm', url: '/?page=catalog' },
+    ...(isSpecificCat ? [{ name: categoryName, url: `/?page=catalog&category=${categoryId}` }] : [])
   ]);
 }
 
@@ -532,7 +535,7 @@ export function setAboutSEO() {
   applyPageSEO({
     title: 'Về Chúng Tôi - Câu Chuyện Thương Hiệu | NOT A KNOT',
     description: 'Tìm hiểu hành trình sáng tạo của NOT A KNOT - Xưởng thủ công phụ kiện handmade tại Việt Nam. Tinh thần bền bỉ, từng nút thắt tỉ mỉ và đậm chất riêng.',
-    canonicalUrl: `${SITE_DOMAIN}/#about`,
+    canonicalUrl: `${SITE_DOMAIN}/?page=about`,
     ogType: 'article'
   });
 
@@ -540,7 +543,7 @@ export function setAboutSEO() {
   removeCollectionSchemaJsonLd();
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Về Chúng Tôi', url: '/#about' }
+    { name: 'Về Chúng Tôi', url: '/?page=about' }
   ]);
 }
 
@@ -551,7 +554,7 @@ export function setContactSEO() {
   applyPageSEO({
     title: 'Liên Hệ & Hỗ Trợ Khách Hàng | NOT A KNOT',
     description: 'Liên hệ xưởng thủ công NOT A KNOT để được tư vấn kích thước vòng tay, đặt mẫu custom theo yêu cầu hoặc hỗ trợ đơn hàng nhanh chóng qua Zalo, Messenger, Hotline.',
-    canonicalUrl: `${SITE_DOMAIN}/#contact`,
+    canonicalUrl: `${SITE_DOMAIN}/?page=contact`,
     ogType: 'website'
   });
 
@@ -559,7 +562,7 @@ export function setContactSEO() {
   removeCollectionSchemaJsonLd();
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Liên Hệ', url: '/#contact' }
+    { name: 'Liên Hệ', url: '/?page=contact' }
   ]);
 }
 
@@ -578,7 +581,7 @@ export function setOrderTrackerSEO(orderCode?: string) {
   applyPageSEO({
     title,
     description,
-    canonicalUrl: orderCode ? `${SITE_DOMAIN}/#tracker?code=${orderCode}` : `${SITE_DOMAIN}/#tracker`,
+    canonicalUrl: orderCode ? `${SITE_DOMAIN}/?page=tracker&code=${encodeURIComponent(orderCode)}` : `${SITE_DOMAIN}/?page=tracker`,
     ogType: 'website'
   });
 
@@ -586,7 +589,7 @@ export function setOrderTrackerSEO(orderCode?: string) {
   removeCollectionSchemaJsonLd();
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Tra Cứu Đơn Hàng', url: '/#tracker' }
+    { name: 'Tra Cứu Đơn Hàng', url: '/?page=tracker' }
   ]);
 }
 
@@ -597,7 +600,7 @@ export function setCartSEO() {
   applyPageSEO({
     title: 'Giỏ Hàng & Thanh Toán | NOT A KNOT',
     description: 'Xem lại giỏ hàng và đặt mua các phụ kiện handmade thủ công tại NOT A KNOT. Miễn phí vận chuyển nội thành Hà Nội, thanh toán an toàn, bảo hành trọn đời.',
-    canonicalUrl: `${SITE_DOMAIN}/#cart`,
+    canonicalUrl: `${SITE_DOMAIN}/?page=cart`,
     ogType: 'website'
   });
 
@@ -605,7 +608,7 @@ export function setCartSEO() {
   removeCollectionSchemaJsonLd();
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Giỏ Hàng', url: '/#cart' }
+    { name: 'Giỏ Hàng', url: '/?page=cart' }
   ]);
 }
 
@@ -616,7 +619,7 @@ export function setAdminSEO() {
   applyPageSEO({
     title: 'Quản Trị Hệ Thống | NOT A KNOT',
     description: 'Cổng quản trị nội bộ dành cho ban điều hành NOT A KNOT Studio.',
-    canonicalUrl: `${SITE_DOMAIN}/#admin`,
+    canonicalUrl: `${SITE_DOMAIN}/?page=admin`,
     ogType: 'website',
     noindex: true
   });

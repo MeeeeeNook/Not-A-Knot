@@ -152,15 +152,21 @@ async function startServer() {
   // Enable trust proxy for reverse proxy environment (Google Cloud Run / Nginx)
   app.set('trust proxy', 1);
 
-  // HTTPS Enforcement Middleware (301 Permanent Redirect on Insecure HTTP)
+  // HTTPS & Canonical Domain Enforcement Middleware (301 Permanent Redirect)
   app.use((req: Request, res: Response, next: NextFunction) => {
     const proto = req.headers['x-forwarded-proto'];
-    const host = req.headers.host || '';
+    const host = (req.headers.host || '').toLowerCase();
     const isLocal = !host || host.includes('localhost') || host.includes('127.0.0.1') || host.includes('0.0.0.0');
 
-    // If forwarded proto is http on live/production domain, enforce https redirect (never redirect /api routes or POST/PUT/DELETE requests)
+    // 1. Canonical domain redirect: notaknot.id.vn -> www.notaknot.id.vn
+    if (host === 'notaknot.id.vn' && !req.path.startsWith('/api') && req.method === 'GET') {
+      return res.redirect(301, `https://www.notaknot.id.vn${req.originalUrl || req.url}`);
+    }
+
+    // 2. HTTPS enforcement redirect on live domain
     if (proto === 'http' && !isLocal && !req.path.startsWith('/api') && req.method === 'GET') {
-      return res.redirect(301, `https://${host}${req.originalUrl || req.url}`);
+      const canonicalHost = host === 'notaknot.id.vn' ? 'www.notaknot.id.vn' : host;
+      return res.redirect(301, `https://${canonicalHost}${req.originalUrl || req.url}`);
     }
 
     // Set Strict-Transport-Security (HSTS) Header

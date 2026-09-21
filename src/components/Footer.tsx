@@ -13,6 +13,7 @@ interface FooterProps {
   onOpenAbout?: () => void;
   onOpenContact?: () => void;
   onOpenOrderTracker?: () => void;
+  onOpenPolicy?: (tab?: 'privacy' | 'terms' | 'returns' | 'shipping_payment' | 'transparency') => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -24,7 +25,8 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenAllCatalog,
   onOpenAbout,
   onOpenContact,
-  onOpenOrderTracker
+  onOpenOrderTracker,
+  onOpenPolicy
 }) => {
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const tagline = siteContent?.brandTagline || 'Phụ kiện handmade thủ công cao cấp';
@@ -206,26 +208,67 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="#faq"
+                  href="#privacy"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.hash = '#faq';
+                    if (onOpenPolicy) onOpenPolicy('privacy');
+                    else window.location.hash = '#privacy';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
-                  Câu hỏi thường gặp (FAQ)
+                  Chính sách bảo mật dữ liệu
                 </a>
               </li>
               <li>
                 <a
-                  href="#policy"
+                  href="#terms"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.hash = '#policy';
+                    if (onOpenPolicy) onOpenPolicy('terms');
+                    else window.location.hash = '#terms';
+                  }}
+                  className="hover:text-amber-400 transition-colors inline-block"
+                >
+                  Điều khoản sử dụng website
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#returns"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onOpenPolicy) onOpenPolicy('returns');
+                    else window.location.hash = '#returns';
                   }}
                   className="hover:text-amber-400 transition-colors inline-block"
                 >
                   Chính sách bảo hành & đổi trả
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#shipping-payment"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onOpenPolicy) onOpenPolicy('shipping_payment');
+                    else window.location.hash = '#shipping-payment';
+                  }}
+                  className="hover:text-amber-400 transition-colors inline-block"
+                >
+                  Quy định thanh toán & giao hàng
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#transparency"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onOpenPolicy) onOpenPolicy('transparency');
+                    else window.location.hash = '#transparency';
+                  }}
+                  className="hover:text-amber-400 transition-colors inline-block text-amber-400/90"
+                >
+                  Minh bạch dự án (ĐH KTQD)
                 </a>
               </li>
             </ul>

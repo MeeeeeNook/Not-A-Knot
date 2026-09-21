@@ -111,14 +111,17 @@
               el.setAttribute('rel', 'canonical');
               document.head.appendChild(el);
             }
-            el.setAttribute('href', url);
+            // Canonical URLs must NEVER contain hash fragments (#) according to RFC 6596 and Google Search Central
+            var cleanUrl = url.split('#')[0];
+            el.setAttribute('href', cleanUrl);
           }
 
           if (productId) {
             var cleanId = decodeURIComponent(productId);
-            var prodUrl = origin + '/#product/' + cleanId;
-            updateCanonical(prodUrl);
-            updateMeta('property', 'og:url', prodUrl);
+            var prodCanonical = origin + '/?product=' + encodeURIComponent(cleanId);
+            var prodOg = origin + '/#product/' + cleanId;
+            updateCanonical(prodCanonical);
+            updateMeta('property', 'og:url', prodOg);
             updateMeta('property', 'og:type', 'product');
             updateMeta('property', 'product:brand', 'NOT A KNOT');
             updateMeta('property', 'product:availability', 'in stock');
@@ -126,25 +129,26 @@
             updateMeta('property', 'product:price:currency', 'VND');
           } else if (collectionId) {
             var cleanCol = decodeURIComponent(collectionId);
-            var colUrl = origin + '/#collection/' + cleanCol;
-            updateCanonical(colUrl);
-            updateMeta('property', 'og:url', colUrl);
+            var colCanonical = origin + '/?collection=' + encodeURIComponent(cleanCol);
+            var colOg = origin + '/#collection/' + cleanCol;
+            updateCanonical(colCanonical);
+            updateMeta('property', 'og:url', colOg);
             updateMeta('property', 'og:type', 'website');
-          } else if (hash.indexOf('about') !== -1) {
-            updateCanonical(origin + '/#about');
-            updateMeta('property', 'og:url', origin + '/#about');
-          } else if (hash.indexOf('contact') !== -1) {
-            updateCanonical(origin + '/#contact');
-            updateMeta('property', 'og:url', origin + '/#contact');
-          } else if (hash.indexOf('catalog') !== -1 || hash.indexOf('products') !== -1) {
-            updateCanonical(origin + '/#catalog');
-            updateMeta('property', 'og:url', origin + '/#catalog');
-          } else if (hash.indexOf('tracker') !== -1 || hash.indexOf('tracking') !== -1) {
-            updateCanonical(origin + '/#tracker');
-            updateMeta('property', 'og:url', origin + '/#tracker');
-          } else if (hash.indexOf('cart') !== -1) {
-            updateCanonical(origin + '/#cart');
-            updateMeta('property', 'og:url', origin + '/#cart');
+          } else if (hash.indexOf('about') !== -1 || search.indexOf('page=about') !== -1) {
+            updateCanonical(origin + '/?page=about');
+            updateMeta('property', 'og:url', origin + '/?page=about');
+          } else if (hash.indexOf('contact') !== -1 || search.indexOf('page=contact') !== -1) {
+            updateCanonical(origin + '/?page=contact');
+            updateMeta('property', 'og:url', origin + '/?page=contact');
+          } else if (hash.indexOf('catalog') !== -1 || hash.indexOf('products') !== -1 || search.indexOf('page=catalog') !== -1) {
+            updateCanonical(origin + '/?page=catalog');
+            updateMeta('property', 'og:url', origin + '/?page=catalog');
+          } else if (hash.indexOf('tracker') !== -1 || hash.indexOf('tracking') !== -1 || search.indexOf('page=tracker') !== -1) {
+            updateCanonical(origin + '/?page=tracker');
+            updateMeta('property', 'og:url', origin + '/?page=tracker');
+          } else if (hash.indexOf('cart') !== -1 || search.indexOf('page=cart') !== -1) {
+            updateCanonical(origin + '/?page=cart');
+            updateMeta('property', 'og:url', origin + '/?page=cart');
           } else {
             updateCanonical(origin + '/');
           }
