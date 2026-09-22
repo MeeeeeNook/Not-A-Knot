@@ -87,12 +87,12 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
           </div>
 
           {/* Card 2: Charm Bracelet Collection */}
-          <div className="bg-gradient-to-b from-purple-50 to-white rounded-3xl p-6 sm:p-8 border border-purple-200/80 flex flex-col justify-between group hover:shadow-lg transition-all duration-300">
+          <div className="bg-gradient-to-b from-amber-50/70 to-white rounded-3xl p-6 sm:p-8 border border-amber-200/80 flex flex-col justify-between group hover:shadow-lg transition-all duration-300">
             <div>
-              <div className="w-10 h-10 rounded-2xl bg-purple-900 text-white flex items-center justify-center mb-4 shadow-sm">
+              <div className="w-10 h-10 rounded-2xl bg-amber-900 text-white flex items-center justify-center mb-4 shadow-sm">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-purple-800 uppercase tracking-wider block mb-1">
+              <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block mb-1">
                 Biểu Tượng & Ý Nghĩa
               </span>
               <h3 className="text-xl sm:text-2xl font-bold text-neutral-950 mb-2">
@@ -107,7 +107,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
               {charmItem && (
                 <div
                   onClick={() => onOpenProductDetail(charmItem)}
-                  className="bg-white/90 p-3 rounded-2xl border border-purple-100 flex items-center gap-3 cursor-pointer hover:border-purple-300 transition-colors"
+                  className="bg-white/90 p-3 rounded-2xl border border-amber-100 flex items-center gap-3 cursor-pointer hover:border-amber-300 transition-colors"
                 >
                   <LoadingImage
                     src={charmItem.image || '/assets/bracelet.jpg'}
@@ -121,14 +121,14 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   />
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-xs font-bold text-neutral-900 truncate">{charmItem.name}</p>
-                    <p className="text-xs font-semibold text-purple-800 font-mono">{charmItem.price.toLocaleString('vi-VN')}đ</p>
+                    <p className="text-xs font-semibold text-amber-800 font-mono">{charmItem.price.toLocaleString('vi-VN')}đ</p>
                   </div>
                 </div>
               )}
 
               <button
                 onClick={() => onNavigateToCatalog('charm_bracelet')}
-                className="w-full py-3 rounded-full bg-purple-900 hover:bg-purple-950 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
+                className="w-full py-3 rounded-full bg-amber-900 hover:bg-amber-950 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer"
               >
                 <span>Khám phá Vòng Charm</span>
                 <ArrowRight className="w-3.5 h-3.5" />

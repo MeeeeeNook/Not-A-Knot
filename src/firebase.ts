@@ -1107,8 +1107,8 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         isEvent2010: !!data.isEvent2010,
         isBestSeller: !!data.isBestSeller,
         isNew: !!data.isNew,
-        rating: data.rating || 5.0,
-        reviewsCount: data.reviewsCount || 12,
+        rating: typeof data.rating === 'number' ? data.rating : undefined,
+        reviewsCount: typeof data.reviewsCount === 'number' ? data.reviewsCount : 0,
         isHidden: data.isHidden === true || String(data.isHidden) === 'true',
         updatedAt: data.updatedAt || undefined
       } as Product);
@@ -1182,8 +1182,8 @@ export const subscribeToProductsFromFirestore = (
             isEvent2010: !!data.isEvent2010,
             isBestSeller: !!data.isBestSeller,
             isNew: !!data.isNew,
-            rating: data.rating || 5.0,
-            reviewsCount: data.reviewsCount || 12,
+            rating: typeof data.rating === 'number' ? data.rating : undefined,
+            reviewsCount: typeof data.reviewsCount === 'number' ? data.reviewsCount : 0,
             isHidden: data.isHidden === true || String(data.isHidden) === 'true',
             updatedAt: data.updatedAt || undefined
           } as Product);
@@ -1325,8 +1325,13 @@ export const deduplicateStoredOrders = (ordersList: StoredOrder[]): StoredOrder[
   });
 };
 
-export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
+export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<StoredOrder[]> => {
   try {
+    const now = Date.now();
+    if (!forceRefresh && ordersMemoryCache && ordersMemoryCache.expiresAt > now) {
+      return ordersMemoryCache.data;
+    }
+
     recordOperation('read');
     const colRef = collection(db, 'orders');
     // Fetch all documents directly without strict orderBy index constraints
@@ -1381,10 +1386,12 @@ export const fetchOrdersFromFirestore = async (): Promise<StoredOrder[]> => {
       recordOperation('read');
     });
 
-    return deduplicateStoredOrders(results);
+    const deduplicated = deduplicateStoredOrders(results);
+    ordersMemoryCache = { data: deduplicated, expiresAt: now + 30000 };
+    return deduplicated;
   } catch (err) {
     console.error('Lỗi tải đơn hàng từ Firestore:', err);
-    return [];
+    return ordersMemoryCache?.data || [];
   }
 };
 
@@ -1468,6 +1475,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
   }
 
   // 4. Broadcast live custom event across browser window/tabs
+  ordersMemoryCache = null;
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nak_order_created', { detail: payload }));
   }
@@ -1639,6 +1647,7 @@ export const updateOrderStatusInFirestore = async (
       updatedAt: new Date().toISOString()
     }));
     recordOperation('write', 1, 100);
+    ordersMemoryCache = null;
   } catch (err) {
     console.error('Lỗi cập nhật trạng thái đơn hàng Firestore:', err);
     throw err;
@@ -3228,4 +3237,129 @@ export const saveBackupScheduleToFirestore = async (schedule: BackupScheduleConf
     console.warn('Lỗi lưu cấu hình auto backup lên Firestore:', err);
   }
 };
+
+// ----------------------------------------------------
+// DATABASE INDEXED QUERY HELPERS & CLIENT INDEX CACHE
+// ----------------------------------------------------
+
+/**
+ * Fetch orders by status using the composite index (status ASC, createdAt DESC)
+ */
+export const fetchOrdersByStatusIndex = async (status: string, limitCount = 50): Promise<any[]> => {
+  try {
+    recordOperation('read', 1);
+    const colRef = collection(db, 'orders');
+    const q = query(colRef, where('status', '==', status), orderBy('createdAt', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn(`[Firestore Index] Failed compound query for status "${status}":`, err);
+    // Fallback: load from client IDB/local cache
+    const all = await fetchOrdersFromFirestore();
+    return all.filter((o: any) => o.status === status).slice(0, limitCount);
+  }
+};
+
+/**
+ * Fetch orders by type using the composite index (type ASC, createdAt DESC)
+ */
+export const fetchOrdersByTypeIndex = async (type: string, limitCount = 50): Promise<any[]> => {
+  try {
+    recordOperation('read', 1);
+    const colRef = collection(db, 'orders');
+    const q = query(colRef, where('type', '==', type), orderBy('createdAt', 'desc'), limit(limitCount));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn(`[Firestore Index] Failed compound query for type "${type}":`, err);
+    const all = await fetchOrdersFromFirestore();
+    return all.filter((o: any) => o.type === type).slice(0, limitCount);
+  }
+};
+
+/**
+ * Fetch products by category sorted by price using the composite index
+ * (category ASC, price ASC / DESC)
+ */
+export const fetchProductsByCategoryAndPriceIndex = async (
+  category: string,
+  sortDirection: 'asc' | 'desc' = 'asc'
+): Promise<Product[]> => {
+  try {
+    recordOperation('read', 1);
+    const colRef = collection(db, 'products');
+    const q = query(colRef, where('category', '==', category), orderBy('price', sortDirection));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Product[];
+  } catch (err) {
+    console.warn(`[Firestore Index] Failed query for category "${category}":`, err);
+    const all = await fetchProductsFromFirestore();
+    return all
+      .filter((p) => p.category === category)
+      .sort((a, b) => (sortDirection === 'asc' ? a.price - b.price : b.price - a.price));
+  }
+};
+
+/**
+ * Client-Side In-Memory Database Index Cache
+ * Provides O(1) indexed lookups for products and orders
+ */
+class ClientDatabaseIndexManager {
+  private productsByCategory = new Map<string, Product[]>();
+  private ordersByStatus = new Map<string, any[]>();
+  private ordersByPhone = new Map<string, any[]>();
+  private lastIndexedAt = 0;
+
+  indexProducts(products: Product[]): void {
+    this.productsByCategory.clear();
+    for (const p of products) {
+      if (p.category) {
+        if (!this.productsByCategory.has(p.category)) {
+          this.productsByCategory.set(p.category, []);
+        }
+        this.productsByCategory.get(p.category)!.push(p);
+      }
+    }
+    this.lastIndexedAt = Date.now();
+  }
+
+  indexOrders(orders: any[]): void {
+    this.ordersByStatus.clear();
+    this.ordersByPhone.clear();
+    for (const o of orders) {
+      if (o.status) {
+        if (!this.ordersByStatus.has(o.status)) {
+          this.ordersByStatus.set(o.status, []);
+        }
+        this.ordersByStatus.get(o.status)!.push(o);
+      }
+      if (o.phone) {
+        const cleanPhone = String(o.phone).trim();
+        if (!this.ordersByPhone.has(cleanPhone)) {
+          this.ordersByPhone.set(cleanPhone, []);
+        }
+        this.ordersByPhone.get(cleanPhone)!.push(o);
+      }
+    }
+  }
+
+  getProductsByCategory(category: string): Product[] {
+    return this.productsByCategory.get(category) || [];
+  }
+
+  getOrdersByStatus(status: string): any[] {
+    return this.ordersByStatus.get(status) || [];
+  }
+
+  getOrdersByPhone(phone: string): any[] {
+    return this.ordersByPhone.get(phone.trim()) || [];
+  }
+
+  getLastIndexedTime(): number {
+    return this.lastIndexedAt;
+  }
+}
+
+export const dbIndexManager = new ClientDatabaseIndexManager();
+
 

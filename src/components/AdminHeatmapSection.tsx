@@ -347,11 +347,11 @@ export const AdminHeatmapSection: React.FC<AdminHeatmapSectionProps> = ({ orders
                 <span className="text-base font-black text-slate-900 mt-0.5 block">
                   {timeMatrixData.eveningPercent}% Đơn Hàng
                 </span>
-                <span className="text-[11px] text-purple-700 font-semibold">
+                <span className="text-[11px] text-indigo-700 font-semibold">
                   Tập trung khung 18:00 - 23:59
                 </span>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center text-purple-800">
+              <div className="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-800">
                 <Sparkles className="w-5 h-5" />
               </div>
             </div>
@@ -462,7 +462,7 @@ export const AdminHeatmapSection: React.FC<AdminHeatmapSectionProps> = ({ orders
             </div>
           </div>
 
-          {/* AI Strategic Recommendation Box */}
+          {/* Strategic Recommendation Box */}
           <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/80 flex items-start gap-3">
             <Sparkles className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-950 leading-relaxed">

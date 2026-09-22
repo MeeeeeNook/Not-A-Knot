@@ -58,8 +58,8 @@ export interface Product {
   isEvent2010?: boolean;
   isBestSeller?: boolean;
   isNew?: boolean;
-  rating: number;
-  reviewsCount: number;
+  rating?: number;
+  reviewsCount?: number;
   availableColors?: string[];
   availableSizes?: string[];
   // Dynamic Variation Settings

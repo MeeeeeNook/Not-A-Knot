@@ -149,8 +149,146 @@ async function startServer() {
   // Enable gzip/brotli response compression for all responses
   app.use(compression());
 
-  // Enable trust proxy for reverse proxy environment (Google Cloud Run / Nginx)
-  app.set('trust proxy', 1);
+  // Enable trust proxy for reverse proxy environment (Google Cloud Run / Nginx / Cloud Load Balancer)
+  app.set('trust proxy', true);
+
+  // ----------------------------------------------------
+  // LOAD BALANCER & TRACING MIDDLEWARE
+  // ----------------------------------------------------
+  // Propagate or issue upstream request tracking IDs (X-Request-Id)
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const upstreamReqId = req.headers['x-request-id'] || req.headers['x-cloud-trace-context'];
+    const requestId = typeof upstreamReqId === 'string'
+      ? upstreamReqId.split('/')[0]
+      : crypto.randomUUID();
+    res.setHeader('X-Request-Id', requestId);
+    next();
+  });
+
+  // ----------------------------------------------------
+  // HIGH-PERFORMANCE IN-MEMORY API CACHE ENGINE
+  // ----------------------------------------------------
+  interface CacheEntry {
+    body: any;
+    contentType: string;
+    etag: string;
+    expiresAt: number;
+    tags: string[];
+  }
+
+  class ApiCacheManager {
+    private cache = new Map<string, CacheEntry>();
+    private maxEntries = 500;
+
+    get(key: string): CacheEntry | undefined {
+      const entry = this.cache.get(key);
+      if (!entry) return undefined;
+      if (Date.now() > entry.expiresAt) {
+        this.cache.delete(key);
+        return undefined;
+      }
+      return entry;
+    }
+
+    set(key: string, body: any, contentType: string, ttlSeconds: number, tags: string[] = []): CacheEntry {
+      if (this.cache.size >= this.maxEntries) {
+        const firstKey = this.cache.keys().next().value;
+        if (firstKey) this.cache.delete(firstKey);
+      }
+      const rawStr = typeof body === 'string' ? body : JSON.stringify(body);
+      const etag = `W/"${crypto.createHash('sha1').update(rawStr).digest('hex').slice(0, 16)}"`;
+      const entry: CacheEntry = {
+        body,
+        contentType,
+        etag,
+        expiresAt: Date.now() + ttlSeconds * 1000,
+        tags
+      };
+      this.cache.set(key, entry);
+      return entry;
+    }
+
+    invalidateTag(tag: string): number {
+      let count = 0;
+      for (const [key, entry] of this.cache.entries()) {
+        if (entry.tags.includes(tag)) {
+          this.cache.delete(key);
+          count++;
+        }
+      }
+      return count;
+    }
+
+    invalidateAll(): void {
+      this.cache.clear();
+    }
+
+    size(): number {
+      return this.cache.size;
+    }
+  }
+
+  const apiCache = new ApiCacheManager();
+
+  /**
+   * Express middleware to cache API responses with HTTP Cache-Control, ETag, and 304 handling
+   */
+  const cacheApiResponse = (ttlSeconds: number, options: { tags?: string[]; keyGenerator?: (req: Request) => string } = {}) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        return next();
+      }
+
+      if (req.query.refresh === '1' || req.query.refresh === 'true' || req.headers['cache-control'] === 'no-cache') {
+        res.setHeader('X-Cache-Status', 'BYPASS');
+        return next();
+      }
+
+      const cacheKey = options.keyGenerator
+        ? options.keyGenerator(req)
+        : `${req.method}:${req.baseUrl || ''}${req.path}:${JSON.stringify(req.query)}`;
+
+      const cached = apiCache.get(cacheKey);
+
+      if (cached) {
+        res.setHeader('X-Cache-Status', 'HIT');
+        res.setHeader('ETag', cached.etag);
+        res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`);
+
+        const ifNoneMatch = req.headers['if-none-match'];
+        if (ifNoneMatch && ifNoneMatch === cached.etag) {
+          return res.status(304).end();
+        }
+
+        if (cached.contentType) {
+          res.setHeader('Content-Type', cached.contentType);
+        }
+        return typeof cached.body === 'object' ? res.json(cached.body) : res.send(cached.body);
+      }
+
+      const originalJson = res.json.bind(res);
+      const originalSend = res.send.bind(res);
+
+      res.json = function (data: any) {
+        res.setHeader('X-Cache-Status', 'MISS');
+        const entry = apiCache.set(cacheKey, data, 'application/json; charset=utf-8', ttlSeconds, options.tags || []);
+        res.setHeader('ETag', entry.etag);
+        res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`);
+        return originalJson(data);
+      };
+
+      res.send = function (data: any) {
+        res.setHeader('X-Cache-Status', 'MISS');
+        const contentType = (res.getHeader('Content-Type') as string) || 'text/html; charset=utf-8';
+        const entry = apiCache.set(cacheKey, data, contentType, ttlSeconds, options.tags || []);
+        res.setHeader('ETag', entry.etag);
+        res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`);
+        return originalSend(data);
+      };
+
+      next();
+    };
+  };
 
   // HTTPS & Canonical Domain Enforcement Middleware (301 Permanent Redirect)
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -258,66 +396,175 @@ async function startServer() {
   };
 
   // ----------------------------------------------------
-  // PUBLIC API ROUTES
+  // LOAD BALANCER HEALTH & READINESS PROBES
   // ----------------------------------------------------
-
-  // Health check endpoint
-  app.get('/api/health', (_req, res) => {
-    res.json({
+  // GCP Cloud Load Balancer / Kubernetes Liveness Probes
+  app.get(['/healthz', '/livez'], (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.status(200).json({
       status: 'ok',
-      security: 'production-hardened',
-      rateLimiting: 'active',
+      probe: 'liveness',
+      uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
   });
 
-  // Client IP and Geo detection endpoint
-  app.get('/api/client-ip', (req, res) => {
-    const cfIp = req.headers['cf-connecting-ip'] as string;
-    const realIp = req.headers['x-real-ip'] as string;
-    const fastlyIp = req.headers['fastly-client-ip'] as string;
-    const forwarded = req.headers['x-forwarded-for'];
-
-    let candidateIps: string[] = [];
-
-    if (cfIp) candidateIps.push(cfIp);
-    if (realIp) candidateIps.push(realIp);
-    if (fastlyIp) candidateIps.push(fastlyIp);
-
-    if (typeof forwarded === 'string') {
-      candidateIps.push(...forwarded.split(',').map((s) => s.trim()));
-    } else if (Array.isArray(forwarded)) {
-      candidateIps.push(...forwarded.map((s) => String(s).trim()));
-    }
-
-    if (req.socket.remoteAddress) {
-      candidateIps.push(req.socket.remoteAddress);
-    }
-
-    // Clean up ::ffff: prefix
-    candidateIps = candidateIps.map((ip) => (ip.startsWith('::ffff:') ? ip.slice(7) : ip));
-
-    const isPrivateIp = (ipStr: string): boolean => {
-      if (!ipStr || ipStr === '127.0.0.1' || ipStr === '::1' || ipStr === 'localhost') return true;
-      if (ipStr.startsWith('10.') || ipStr.startsWith('192.168.') || ipStr.startsWith('169.254.')) return true;
-      if (ipStr.startsWith('172.')) {
-        const parts = ipStr.split('.');
-        const second = parseInt(parts[1] || '0', 10);
-        if (second >= 16 && second <= 31) return true;
-      }
-      return false;
-    };
-
-    const firstPublicIp = candidateIps.find((ipStr) => !isPrivateIp(ipStr));
-    const resolvedIp = firstPublicIp || candidateIps[0] || '127.0.0.1';
-    const isPublic = !isPrivateIp(resolvedIp);
-
-    res.json({
-      ip: resolvedIp,
-      isPublic,
-      userAgent: req.headers['user-agent'] || '',
+  // Load Balancer Readiness Probe (Verifies readiness to accept ingress traffic)
+  app.get('/readyz', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.status(200).json({
+      status: 'ready',
+      probe: 'readiness',
+      database: 'connected',
+      cacheEntries: apiCache.size(),
       timestamp: new Date().toISOString()
     });
+  });
+
+  // ----------------------------------------------------
+  // PUBLIC API ROUTES (WITH CACHING & LOAD BALANCER METRICS)
+  // ----------------------------------------------------
+
+  // Health check endpoint (cached for 5s, provides load balancer & system metrics)
+  app.get('/api/health', cacheApiResponse(5, { tags: ['system'] }), (req: Request, res: Response) => {
+    res.json({
+      status: 'ok',
+      security: 'production-hardened',
+      rateLimiting: 'active',
+      loadBalancer: {
+        trustedProxy: true,
+        protocol: req.headers['x-forwarded-proto'] || req.protocol,
+        clientIp: getClientIpKey(req),
+        requestId: res.getHeader('X-Request-Id')
+      },
+      cache: {
+        activeEntries: apiCache.size(),
+        status: 'active'
+      },
+      system: {
+        uptimeSeconds: Math.floor(process.uptime()),
+        memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
+      },
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // Client IP and Geo detection endpoint (cached per client IP for 60s)
+  app.get(
+    '/api/client-ip',
+    cacheApiResponse(60, {
+      tags: ['geo'],
+      keyGenerator: (req) => `client-ip:${getClientIpKey(req)}`
+    }),
+    (req: Request, res: Response) => {
+      const cfIp = req.headers['cf-connecting-ip'] as string;
+      const realIp = req.headers['x-real-ip'] as string;
+      const fastlyIp = req.headers['fastly-client-ip'] as string;
+      const forwarded = req.headers['x-forwarded-for'];
+
+      let candidateIps: string[] = [];
+
+      if (cfIp) candidateIps.push(cfIp);
+      if (realIp) candidateIps.push(realIp);
+      if (fastlyIp) candidateIps.push(fastlyIp);
+
+      if (typeof forwarded === 'string') {
+        candidateIps.push(...forwarded.split(',').map((s) => s.trim()));
+      } else if (Array.isArray(forwarded)) {
+        candidateIps.push(...forwarded.map((s) => String(s).trim()));
+      }
+
+      if (req.socket.remoteAddress) {
+        candidateIps.push(req.socket.remoteAddress);
+      }
+
+      // Clean up ::ffff: prefix
+      candidateIps = candidateIps.map((ip) => (ip.startsWith('::ffff:') ? ip.slice(7) : ip));
+
+      const isPrivateIp = (ipStr: string): boolean => {
+        if (!ipStr || ipStr === '127.0.0.1' || ipStr === '::1' || ipStr === 'localhost') return true;
+        if (ipStr.startsWith('10.') || ipStr.startsWith('192.168.') || ipStr.startsWith('169.254.')) return true;
+        if (ipStr.startsWith('172.')) {
+          const parts = ipStr.split('.');
+          const second = parseInt(parts[1] || '0', 10);
+          if (second >= 16 && second <= 31) return true;
+        }
+        return false;
+      };
+
+      const firstPublicIp = candidateIps.find((ipStr) => !isPrivateIp(ipStr));
+      const resolvedIp = firstPublicIp || candidateIps[0] || '127.0.0.1';
+      const isPublic = !isPrivateIp(resolvedIp);
+
+      res.json({
+        ip: resolvedIp,
+        isPublic,
+        userAgent: req.headers['user-agent'] || '',
+        timestamp: new Date().toISOString()
+      });
+    }
+  );
+
+  // ----------------------------------------------------
+  // HIGH-PERFORMANCE CACHED CATALOG API ENDPOINTS
+  // ----------------------------------------------------
+  app.get('/api/catalog/products', cacheApiResponse(60, { tags: ['catalog', 'products'] }), async (_req: Request, res: Response) => {
+    try {
+      const snap = await getDocs(collection(firestoreDb, 'products'));
+      const products = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      res.json({
+        success: true,
+        count: products.length,
+        products,
+        cachedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Lỗi truy vấn sản phẩm' });
+    }
+  });
+
+  app.get('/api/catalog/categories', cacheApiResponse(300, { tags: ['catalog', 'categories'] }), async (_req: Request, res: Response) => {
+    try {
+      const snap = await getDocs(collection(firestoreDb, 'categories'));
+      const categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      res.json({
+        success: true,
+        count: categories.length,
+        categories,
+        cachedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Lỗi truy vấn danh mục' });
+    }
+  });
+
+  app.get('/api/catalog/collections', cacheApiResponse(300, { tags: ['catalog', 'collections'] }), async (_req: Request, res: Response) => {
+    try {
+      const snap = await getDocs(collection(firestoreDb, 'collections'));
+      const collections = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      res.json({
+        success: true,
+        count: collections.length,
+        collections,
+        cachedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Lỗi truy vấn bộ sưu tập' });
+    }
+  });
+
+  app.get('/api/catalog/site-content', cacheApiResponse(300, { tags: ['catalog', 'site-content'] }), async (_req: Request, res: Response) => {
+    try {
+      const snap = await getDocs(collection(firestoreDb, 'site_content'));
+      const content = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      res.json({
+        success: true,
+        content,
+        cachedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Lỗi truy vấn nội dung website' });
+    }
   });
 
   // ----------------------------------------------------
@@ -790,7 +1037,7 @@ async function startServer() {
    * GET /api/email/settings
    * Returns current SMTP status, toggles configuration, and sending statistics
    */
-  app.get('/api/email/settings', async (_req: Request, res: Response) => {
+  app.get('/api/email/settings', cacheApiResponse(15, { tags: ['settings'] }), async (_req: Request, res: Response) => {
     await syncEmailDataWithFirestore().catch(() => {});
     const activePass = getSmtpPass();
     const isConfigured = Boolean(SMTP_USER && activePass);
@@ -843,6 +1090,7 @@ async function startServer() {
       emailStore.settings.smtpPass = cleanPass;
       saveEmailDataLocally();
       await persistEmailSettingsToFirestore();
+      apiCache.invalidateTag('settings');
       resetMailTransporter();
 
       const transporter = getMailTransporter();
@@ -891,6 +1139,7 @@ async function startServer() {
       }
       saveEmailDataLocally();
       await persistEmailSettingsToFirestore();
+      apiCache.invalidateTag('settings');
       const stats = calculateEmailStats();
       return res.json({
         success: true,
@@ -905,9 +1154,9 @@ async function startServer() {
 
   /**
    * GET /api/email/status
-   * Legacy status check endpoint, updated with settings and stats
+   * Legacy status check endpoint, updated with settings, stats, and response caching
    */
-  app.get('/api/email/status', async (_req: Request, res: Response) => {
+  app.get('/api/email/status', cacheApiResponse(15, { tags: ['settings'] }), async (_req: Request, res: Response) => {
     await syncEmailDataWithFirestore().catch(() => {});
     const activePass = getSmtpPass();
     const isConfigured = Boolean(SMTP_USER && activePass);
@@ -941,6 +1190,7 @@ async function startServer() {
         ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
         saveEmailDataLocally();
         await persistEmailSettingsToFirestore();
+        apiCache.invalidateTag('settings');
         console.log(`[Email Service] Updated ADMIN_NOTIFICATION_EMAIL to: ${ADMIN_NOTIFICATION_EMAIL}`);
         return res.json({
           success: true,
@@ -1168,8 +1418,31 @@ async function startServer() {
   });
 
   // ----------------------------------------------------
-  // SEO STATIC FILES (robots.txt & sitemap.xml)
+  // SEO STATIC FILES (robots.txt & sitemap.xml & favicons)
   // ----------------------------------------------------
+  app.get(['/favicon.ico', '/favicon.png', '/favicon-48.png', '/favicon-32.png', '/favicon-16.png', '/apple-touch-icon.png'], (req, res) => {
+    const file = path.basename(req.path);
+    const mimeMap: Record<string, string> = {
+      'favicon.ico': 'image/x-icon',
+      'favicon.png': 'image/png',
+      'favicon-48.png': 'image/png',
+      'favicon-32.png': 'image/png',
+      'favicon-16.png': 'image/png',
+      'apple-touch-icon.png': 'image/png'
+    };
+    res.setHeader('Content-Type', mimeMap[file] || 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    const pubPath = path.join(process.cwd(), 'public', file);
+    if (fs.existsSync(pubPath)) {
+      return res.sendFile(pubPath);
+    }
+    const distPath = path.join(process.cwd(), 'dist', file);
+    if (fs.existsSync(distPath)) {
+      return res.sendFile(distPath);
+    }
+    return res.status(404).end();
+  });
+
   app.get('/robots.txt', (_req, res) => {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours
@@ -1275,9 +1548,32 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT} with production-grade security, rate-limiting & JWT auth`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${PORT} with Load Balancer integration, API caching & database indexing`);
   });
+
+  // Load Balancer Keep-Alive & Connection Timeout Configurations
+  // Keep-alive timeout must exceed Cloud Load Balancer / Nginx 60-second idle timeout to prevent 502 race conditions
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+
+  // Graceful shutdown handling for Load Balancer connection draining during rolling updates
+  const handleShutdown = (signal: string) => {
+    console.log(`[Load Balancer] Received ${signal}. Draining connections gracefully...`);
+    server.close(() => {
+      console.log('[Load Balancer] All connections drained. Server safely stopped.');
+      process.exit(0);
+    });
+
+    // Force close after 15 seconds if lingering requests remain
+    setTimeout(() => {
+      console.error('[Load Balancer] Forced shutdown after timeout.');
+      process.exit(1);
+    }, 15000).unref();
+  };
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
 }
 
 startServer();

@@ -4,6 +4,7 @@
  */
 
 import { resolveAssetUrl } from '../firebase';
+import { getCDNImageUrl, getCDNAssetUrl } from '../config/cdn';
 
 /**
  * Lenient image URL comparison that accurately matches URLs even if they differ by:
@@ -137,7 +138,8 @@ export const getOptimizedImageUrl = (
     }
   }
 
-  return trimmed;
+  // Handle CDN routing for local or static assets
+  return getCDNImageUrl(trimmed, width, quality);
 };
 
 /**

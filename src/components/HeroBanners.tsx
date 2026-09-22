@@ -110,68 +110,74 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     }
 
     let isMounted = true;
+    let idleId: number | null = null;
+    let timeoutId: any = null;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = activeImgSrc;
 
     img.onload = () => {
       if (!isMounted) return;
-      try {
-        let computedRatio: number | null = null;
-        if (img.naturalWidth && img.naturalHeight) {
-          computedRatio = img.naturalWidth / img.naturalHeight;
-          setImageNaturalRatio(computedRatio);
-        }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = 30;
-        canvas.height = 30;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
-
-        // Sample bottom center area (30% width, bottom 25% height)
-        const sx = img.naturalWidth * 0.35;
-        const sy = img.naturalHeight * 0.75;
-        const sw = Math.max(1, img.naturalWidth * 0.3);
-        const sh = Math.max(1, img.naturalHeight * 0.25);
-
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 30, 30);
-        const imageData = ctx.getImageData(0, 0, 30, 30);
-        const data = imageData.data;
-
-        let totalLum = 0;
-        let validPixels = 0;
-
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const a = data[i + 3];
-          if (a > 30) {
-            // Standard perceptual luminance formula
-            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-            totalLum += lum;
-            validPixels++;
+      const analyzeLuminance = () => {
+        if (!isMounted) return;
+        try {
+          let computedRatio: number | null = null;
+          if (img.naturalWidth && img.naturalHeight) {
+            computedRatio = img.naturalWidth / img.naturalHeight;
+            setImageNaturalRatio(computedRatio);
           }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = 30;
+          canvas.height = 30;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return;
+
+          // Sample bottom center area (30% width, bottom 25% height)
+          const sx = img.naturalWidth * 0.35;
+          const sy = img.naturalHeight * 0.75;
+          const sw = Math.max(1, img.naturalWidth * 0.3);
+          const sh = Math.max(1, img.naturalHeight * 0.25);
+
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, 30, 30);
+          const imageData = ctx.getImageData(0, 0, 30, 30);
+          const data = imageData.data;
+
+          let totalLum = 0;
+          let validPixels = 0;
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
+            if (a > 30) {
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+              totalLum += lum;
+              validPixels++;
+            }
+          }
+
+          const avgBrightness = validPixels > 0 ? totalLum / validPixels : 40;
+          const overlayOp = s.overlayOpacity ?? 0.3;
+          const hideOverlay = s.hideOverlay;
+
+          const effectiveBrightness = hideOverlay ? avgBrightness : avgBrightness * (1 - overlayOp * 0.7);
+          const isBright = effectiveBrightness > 120;
+          setIsBrightBg(isBright);
+
+          slideLuminanceCache.set(activeImgSrc, { isBright, ratio: computedRatio });
+        } catch {
+          setIsBrightBg(false);
+          slideLuminanceCache.set(activeImgSrc, { isBright: false, ratio: null });
         }
+      };
 
-        const avgBrightness = validPixels > 0 ? totalLum / validPixels : 40;
-        const overlayOp = s.overlayOpacity ?? 0.3;
-        const hideOverlay = s.hideOverlay;
-
-        // Overlay darkens the background
-        const effectiveBrightness = hideOverlay ? avgBrightness : avgBrightness * (1 - overlayOp * 0.7);
-
-        // Threshold of 120 (0-255) classifies background as bright/light vs dark
-        const isBright = effectiveBrightness > 120;
-        setIsBrightBg(isBright);
-
-        // Cache result
-        slideLuminanceCache.set(activeImgSrc, { isBright, ratio: computedRatio });
-      } catch {
-        // In case of CORS or canvas error, fallback to dark
-        setIsBrightBg(false);
-        slideLuminanceCache.set(activeImgSrc, { isBright: false, ratio: null });
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleId = window.requestIdleCallback(analyzeLuminance, { timeout: 1500 });
+      } else {
+        timeoutId = setTimeout(analyzeLuminance, 120);
       }
     };
 
@@ -184,6 +190,12 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       isMounted = false;
       img.onload = null;
       img.onerror = null;
+      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [
     currentSlide?.bgImage,
@@ -366,6 +378,8 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         onError={handleImgError}
                         loading="lazy"
                         decoding="async"
+                        width={1600}
+                        height={700}
                         className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
                       />
                       <img
@@ -374,7 +388,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         onError={handleImgError}
                         loading={isFirstSlide ? "eager" : "lazy"}
                         fetchPriority={isFirstSlide ? "high" : "low"}
-                        decoding="async"
+                        decoding={isFirstSlide ? "sync" : "async"}
+                        width={1600}
+                        height={700}
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
                           transform: `scale(${zoom / 100})`,
@@ -392,7 +408,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                       onError={handleImgError}
                       loading={isFirstSlide ? "eager" : "lazy"}
                       fetchPriority={isFirstSlide ? "high" : "low"}
-                      decoding="async"
+                      decoding={isFirstSlide ? "sync" : "async"}
+                      width={1600}
+                      height={700}
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
                         objectPosition: `${posX}% ${posY}%`,
@@ -409,7 +427,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                     onError={handleImgError}
                     loading={isFirstSlide ? "eager" : "lazy"}
                     fetchPriority={isFirstSlide ? "high" : "low"}
-                    decoding="async"
+                    decoding={isFirstSlide ? "sync" : "async"}
+                    width={1600}
+                    height={700}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{
                       objectPosition: `${posX}% ${posY}%`,

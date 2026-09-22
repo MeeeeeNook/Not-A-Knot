@@ -876,7 +876,7 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
                             </span>
                           )}
                           {(log.type === 'manual_admin' || log.type === 'test') && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200/60">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
                               Gửi thủ công
                             </span>
                           )}

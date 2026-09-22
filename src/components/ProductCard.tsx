@@ -296,7 +296,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 {product.price.toLocaleString('vi-VN')}đ
               </div>
               {product.originalPrice && (
-                <div className="text-[10px] sm:text-xs text-neutral-400 line-through font-mono truncate">
+                <div className="text-[10px] sm:text-xs text-neutral-500 line-through font-mono truncate">
                   {product.originalPrice.toLocaleString('vi-VN')}đ
                 </div>
               )}
@@ -305,6 +305,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <button
               type="button"
               disabled={isSoldOut}
+              aria-label={
+                isSoldOut
+                  ? 'Sản phẩm đã hết hàng'
+                  : hasMandatoryOptions
+                  ? `Xem tùy chọn ${product.name}`
+                  : `Thêm ${product.name} vào giỏ hàng`
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 if (isSoldOut) return;
@@ -318,7 +325,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               }}
               className={`p-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center shrink-0 ${
                 isSoldOut
-                  ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                  ? 'bg-neutral-100 text-neutral-500 cursor-not-allowed'
                   : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer'
               }`}
               title={
@@ -335,7 +342,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           {/* Real Stock / Sold info only if present */}
           {product.soldCount !== undefined && product.soldCount > 0 ? (
-            <div className="text-[10px] text-neutral-500">
+            <div className="text-[11px] text-neutral-600 font-medium">
               Đã bán {product.soldCount}
             </div>
           ) : null}

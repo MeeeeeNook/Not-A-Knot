@@ -24,13 +24,6 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
   const storyP1 = content?.storyParagraph1 || 'NOT A KNOT ra đời từ niềm đam mê chế tác thủ công bền bỉ. Tên gọi NOT A KNOT mang thông điệp: mỗi chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần kiên cường, kỷ luật và phong cách cá nhân.';
   const quote = content?.quote || '“Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.”';
 
-  const stats = content?.stats || [
-    { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
-    { label: 'Đan Tay Thủ Công', value: '100%', desc: 'Tỉ mỉ & độc bản' },
-    { label: 'Bảo Hành Nút Thắt', value: 'Trọn Đời', desc: 'Vệ sinh & đan lại miễn phí' },
-    { label: 'Đánh Giá Hài Lòng', value: '4.9/5★', desc: 'Khách hàng toàn quốc' }
-  ];
-
   return (
     <section id="about-us-section" className="py-10 sm:py-14 bg-white text-slate-900 relative overflow-hidden border-t border-slate-200/80 font-sans">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 space-y-8 sm:space-y-10">
@@ -99,25 +92,6 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
                 </p>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* Stats Strip */}
-        <div className="bg-slate-50 rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-2xs">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
-            {stats.map((stat, idx) => (
-              <div key={idx} className="space-y-0.5">
-                <div className="text-lg sm:text-2xl font-black text-amber-600 tracking-tight">
-                  {stat.value}
-                </div>
-                <div className="text-xs font-bold text-slate-800">
-                  {stat.label}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  {stat.desc}
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 

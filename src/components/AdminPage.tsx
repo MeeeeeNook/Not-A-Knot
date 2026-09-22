@@ -1779,8 +1779,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isNew: formIsNew,
         isHidden: formIsHidden,
         customUrl: formCustomUrl.trim() || undefined,
-        rating: 5.0,
-        reviewsCount: 1,
+        reviewsCount: 0,
         updatedAt: new Date().toISOString()
       };
 
@@ -6521,7 +6520,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <button
                     type="button"
                     onClick={() => handleBulkUpdateStatus('Knot đang được sản xuất')}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
                   >
                     Đánh dấu Đang sản xuất
                   </button>
@@ -6798,7 +6797,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           </span>
                                         )}
                                         {item.selectedCharm && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-purple-50 text-purple-900 border border-purple-200 rounded">
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded">
                                             ✨ {typeof item.selectedCharm === 'object' ? item.selectedCharm.name : item.selectedCharm}
                                           </span>
                                         )}
@@ -6884,8 +6883,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 }}
                                 className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer whitespace-nowrap ${
                                   currentStatus === 'Knot đang được sản xuất'
-                                    ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                                    : 'bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-800 border-slate-300'
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                    : 'bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border-slate-300'
                                 }`}
                                 title={currentStatus === 'Knot đang được sản xuất' ? 'Đang làm Knot - Bấm để chuyển về Đã xác nhận' : 'Bấm để đánh dấu: Knot đang được sản xuất'}
                               >
@@ -7237,7 +7236,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             </span>
                                           )}
                                           {it.selectedCharm && (
-                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-purple-50 text-purple-900 border border-purple-200 rounded font-medium">
+                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded font-medium">
                                               ✨ {typeof it.selectedCharm === 'object' ? it.selectedCharm.name : it.selectedCharm}
                                             </span>
                                           )}
@@ -7333,8 +7332,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   }}
                                   className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer whitespace-nowrap ${
                                     currentStatus === 'Knot đang được sản xuất'
-                                      ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                                      : 'bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-800 border-slate-300'
+                                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                      : 'bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border-slate-300'
                                   }`}
                                   title={currentStatus === 'Knot đang được sản xuất' ? 'Đang làm Knot - Bấm để chuyển về Đã xác nhận' : 'Bấm để đánh dấu: Knot đang được sản xuất'}
                                 >

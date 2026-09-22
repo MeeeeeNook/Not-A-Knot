@@ -283,13 +283,15 @@ export function updateProductSchemaJsonLd(product: Product, categoryName?: strin
         }
       }
     },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: product.rating || 5.0,
-      reviewCount: product.reviewsCount || 15,
-      bestRating: '5',
-      worstRating: '1'
-    }
+    ...(product.rating && product.reviewsCount && product.reviewsCount > 0 ? {
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: product.rating,
+        reviewCount: product.reviewsCount,
+        bestRating: '5',
+        worstRating: '1'
+      }
+    } : {})
   };
 
   script.textContent = JSON.stringify(schemaData, null, 2);
@@ -621,6 +623,24 @@ export function setAdminSEO() {
     description: 'Cổng quản trị nội bộ dành cho ban điều hành NOT A KNOT Studio.',
     canonicalUrl: `${SITE_DOMAIN}/?page=admin`,
     ogType: 'website',
+    noindex: true
+  });
+
+  removeProductSchemaJsonLd();
+  removeCollectionSchemaJsonLd();
+  removeBreadcrumbSchemaJsonLd();
+}
+
+/**
+ * Apply SEO for 404 Not Found Page (noindex, follow)
+ */
+export function setNotFoundSEO() {
+  applyPageSEO({
+    title: '404 - Không Tìm Thấy Trang | NOT A KNOT',
+    description: 'Trang bạn đang tìm kiếm không tồn tại hoặc đã được dời đi. Khám phá các mẫu vòng tay và phụ kiện thủ công tinh tế tại NOT A KNOT.',
+    canonicalUrl: `${SITE_DOMAIN}/404`,
+    ogType: 'website',
+    ogImage: '/favicon.png',
     noindex: true
   });
 

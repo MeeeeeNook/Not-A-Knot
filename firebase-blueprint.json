@@ -194,5 +194,15 @@
         "write": "true"
       }
     }
-  }
+  },
+  "indexes": [
+    { "collectionGroup": "orders", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "orders", "fields": [{ "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "orders", "fields": [{ "fieldPath": "phone", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "products", "fields": [{ "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "price", "order": "ASCENDING" }] },
+    { "collectionGroup": "products", "fields": [{ "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "inStock", "order": "ASCENDING" }, { "fieldPath": "price", "order": "ASCENDING" }] },
+    { "collectionGroup": "products", "fields": [{ "fieldPath": "isBestSeller", "order": "ASCENDING" }, { "fieldPath": "price", "order": "ASCENDING" }] },
+    { "collectionGroup": "contact_messages", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "email_logs", "fields": [{ "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "timestamp", "order": "DESCENDING" }] }
+  ]
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Voucher, VoucherType, StoredOrder } from '../../types';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   getVouchers,
   saveVoucher,
@@ -52,6 +53,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
   const [internalOrders, setInternalOrders] = useState<StoredOrder[]>(propsOrders || []);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [filterType, setFilterType] = useState<'all' | 'has_usage' | 'no_usage' | 'active' | 'percent' | 'freeship'>('all');
   const [sortBy, setSortBy] = useState<'usage_desc' | 'discount_desc' | 'revenue_desc' | 'newest' | 'code_asc'>('usage_desc');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -320,7 +322,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
   // Filter & Sort
   const processedVouchers = useMemo(() => {
     let list = vouchers.filter((v) =>
-      v.code.toLowerCase().includes(searchQuery.toLowerCase().trim())
+      !debouncedSearchQuery || v.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase().trim())
     );
 
     if (filterType === 'has_usage') {
@@ -357,7 +359,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
       }
       return 0;
     });
-  }, [vouchers, searchQuery, filterType, sortBy, voucherStatsMap]);
+  }, [vouchers, debouncedSearchQuery, filterType, sortBy, voucherStatsMap]);
 
   return (
     <div className="space-y-6">

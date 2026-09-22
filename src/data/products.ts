@@ -34,11 +34,11 @@ export const HERO_BANNERS: BannerItem[] = [
     highlight: 'Biểu Tượng Tinh Xảo',
     subtitle: 'Hạt charm phong thủy, cung hoàng đạo và chữ cái theo mẫu thiết kế hoàn thiện.',
     bgImage: '/assets/img_0.jpg',
-    bgGradient: 'from-purple-950/90 via-neutral-900/65 to-transparent',
+    bgGradient: 'from-stone-950/90 via-neutral-900/65 to-transparent',
     categoryLink: 'charm_bracelet',
     buttonText: 'Xem BST Vòng Charm',
     isEvent0209: false,
-    themeColor: '#9333EA'
+    themeColor: '#78350F'
   },
   {
     id: 'banner-everyday',
@@ -70,7 +70,6 @@ export const PRODUCTS: Product[] = [
       "/assets/0209/img_3.jpg"
     ],
     "name": "Vòng Tay 02/09 Edition",
-    "reviewsCount": 168,
     "details": [
       "Chất liệu: Dây đan thủ công cao cấp",
       "Màu sắc: Dây xanh, gắn cờ đỏ sao vàng rực rỡ tượng trưng Quốc kỳ",
@@ -87,7 +86,6 @@ export const PRODUCTS: Product[] = [
     "discountBadge": "Giảm giá",
     "isBestSeller": false,
     "description": "Hình tượng chú bộ đội nhí nhảnh, đáng yêu — biểu tượng của thế hệ anh hùng đã viết nên lịch sử. Móc khoá acrylic đa lớp, sắc nét, bền đẹp theo thời gian.",
-    "rating": 5,
     "isNew": false,
     "stock": 0,
     "originalPrice": 40000,
@@ -96,7 +94,6 @@ export const PRODUCTS: Product[] = [
     "images": [
       "/assets/keychain-bodoi.jpg"
     ],
-    "reviewsCount": 1,
     "id": "nak-prod-1787939174867",
     "category": "event_0209",
     "price": 29000,
@@ -128,8 +125,6 @@ export const PRODUCTS: Product[] = [
       "/assets/keychain-mucoi.jpg"
     ],
     "originalPrice": 40000,
-    "reviewsCount": 1,
-    "rating": 5,
     "isEvent2010": false,
     "id": "nak-prod-1788103862340",
     "isNew": false,

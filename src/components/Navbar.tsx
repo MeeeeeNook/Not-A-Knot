@@ -194,11 +194,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {/* Collection Title & Subtitle */}
                           <div className="p-3 flex flex-col justify-between flex-grow">
                             <div>
-                              <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-1">
+                              <span className="block text-xs font-bold text-slate-900 group-hover:text-amber-700 transition-colors line-clamp-1">
                                 {cleanTitle}
-                              </h4>
+                              </span>
                               {col.subtitle && (
-                                <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5 font-normal">
+                                <p className="text-[11px] text-slate-600 line-clamp-1 mt-0.5 font-normal">
                                   {col.subtitle}
                                 </p>
                               )}

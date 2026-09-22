@@ -892,8 +892,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               )}
               {selectedCategoryFilter !== 'all' && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-900 border border-purple-300 text-[10px] font-bold inline-flex items-center gap-1">
-                  <Layers className="w-3 h-3 text-purple-600" />
+                <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-300 text-[10px] font-bold inline-flex items-center gap-1">
+                  <Layers className="w-3 h-3 text-indigo-600" />
                   {categories.find(c => c.id === selectedCategoryFilter)?.label || selectedCategoryFilter}
                 </span>
               )}
@@ -961,7 +961,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Category Filter Selector */}
           <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
-            <Layers className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+            <Layers className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
             <select
               value={selectedCategoryFilter}
               onChange={(e) => setSelectedCategoryFilter(e.target.value)}

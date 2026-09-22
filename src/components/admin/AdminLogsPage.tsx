@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../../hooks/useDebounce';
 import { 
   Terminal, 
   AlertTriangle, 
@@ -45,6 +46,7 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | 'errors' | 'logins' | 'activity'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [selectedLevel, setSelectedLevel] = useState<'all' | 'error' | 'warning' | 'info'>('all');
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | '7days' | '30days'>('all');
   const [selectedLogDetail, setSelectedLogDetail] = useState<SystemLogItem | null>(null);
@@ -156,8 +158,8 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
       }
 
       // 4. Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (debouncedSearchQuery.trim()) {
+        const q = debouncedSearchQuery.toLowerCase();
         const matchTitle = log.title?.toLowerCase().includes(q);
         const matchMsg = log.message?.toLowerCase().includes(q);
         const matchIp = log.ip?.toLowerCase().includes(q);
@@ -173,7 +175,7 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
 
       return true;
     });
-  }, [logs, activeFilterTab, selectedLevel, timeFilter, searchQuery]);
+  }, [logs, activeFilterTab, selectedLevel, timeFilter, debouncedSearchQuery]);
 
   // Metric stats
   const stats = useMemo(() => {

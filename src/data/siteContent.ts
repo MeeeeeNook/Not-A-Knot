@@ -113,12 +113,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     storyParagraph1: 'NOT A KNOT ra đời từ niềm đam mê chế tác thủ công bền bỉ. Tên gọi NOT A KNOT mang thông điệp: mỗi chiếc vòng tay không đơn thuần chỉ là những nút thắt vô tri, mà là sự gắn kết của tinh thần kiên cường, kỷ luật và phong cách cá nhân.',
     storyParagraph2: 'Chúng tôi tuyển chọn chất liệu đan thủ công cao cấp bền chắc, kết hợp cùng khóa titan và inox 316L đúc nguyên khối chống gỉ sét. Sản phẩm được đóng gói trang trọng trong hộp giấy.',
     quote: 'Một chiếc vòng bền bỉ không chỉ là phụ kiện làm đẹp, mà là người bạn đồng hành tin cậy trên mọi cung đường.',
-    stats: [
-      { label: 'Sản Phẩm Xuất Xưởng', value: '10.000+', desc: 'Đan thủ công tỉ mỉ' },
-      { label: 'Chuẩn Thủ Công Cao Cấp', value: '100%', desc: 'Chất liệu bền bỉ' },
-      { label: 'Bảo Hành Chi Tiết', value: 'Dài Hạn', desc: 'Khoen, charm, bùa, dây' },
-      { label: 'Độ Hài Lòng', value: '100%', desc: 'Khách hàng toàn quốc' }
-    ],
+    stats: [],
     coreValues: [
       {
         id: 'val-1',

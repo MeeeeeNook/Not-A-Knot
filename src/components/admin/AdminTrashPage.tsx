@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { StoredOrder } from '../../types';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   Trash2,
   RefreshCw,
@@ -36,6 +37,7 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
   onUpdateOrders
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -49,17 +51,19 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
   // Filter only deleted orders
   const deletedOrders = orders.filter((o) => o.isDeleted === true);
 
-  const filteredTrash = deletedOrders.filter((o) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      (o.id && o.id.toLowerCase().includes(q)) ||
-      (o.name && o.name.toLowerCase().includes(q)) ||
-      (o.customerName && o.customerName.toLowerCase().includes(q)) ||
-      (o.phone && o.phone.includes(q)) ||
-      (o.address && o.address.toLowerCase().includes(q))
-    );
-  });
+  const filteredTrash = useMemo(() => {
+    const q = debouncedSearchQuery.toLowerCase().trim();
+    return deletedOrders.filter((o) => {
+      if (!q) return true;
+      return (
+        (o.id && o.id.toLowerCase().includes(q)) ||
+        (o.name && o.name.toLowerCase().includes(q)) ||
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+        (o.phone && o.phone.includes(q)) ||
+        (o.address && o.address.toLowerCase().includes(q))
+      );
+    });
+  }, [deletedOrders, debouncedSearchQuery]);
 
   const handleSelectAll = () => {
     if (selectedIds.length === filteredTrash.length) {

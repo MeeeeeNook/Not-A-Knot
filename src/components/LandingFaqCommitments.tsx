@@ -54,7 +54,7 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
             {title}
           </h2>
           {siteContent?.faqSubtitle && siteContent.faqSubtitle.trim().length > 0 && (
-            <p className="text-xs sm:text-sm text-slate-500 font-medium">
+            <p className="text-xs sm:text-sm text-slate-600 font-medium">
               {siteContent.faqSubtitle}
             </p>
           )}
@@ -78,13 +78,13 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
                   className="w-full p-4 sm:p-4.5 text-left flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-slate-900 cursor-pointer"
                 >
                   <span className="leading-snug">{faq.q}</span>
-                  <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-500">
-                    {isOpen ? <ChevronUp className="w-4 h-4 text-amber-600" /> : <ChevronDown className="w-4 h-4" />}
+                  <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
+                    {isOpen ? <ChevronUp className="w-4 h-4 text-amber-700" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
                 </button>
 
                 {isOpen && (
-                  <div className="px-4 sm:px-4.5 pb-4 pt-0 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100">
+                  <div className="px-4 sm:px-4.5 pb-4 pt-0 text-xs sm:text-sm text-slate-700 leading-relaxed border-t border-slate-100">
                     {faq.a}
                   </div>
                 )}

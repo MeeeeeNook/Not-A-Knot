@@ -885,7 +885,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
                             item.type === 'product'
                               ? 'bg-sky-100 text-sky-800'
                               : item.type === 'collection'
-                              ? 'bg-purple-100 text-purple-800'
+                              ? 'bg-amber-100 text-amber-800'
                               : item.type === 'category'
                               ? 'bg-indigo-100 text-indigo-800'
                               : 'bg-slate-100 text-slate-800'

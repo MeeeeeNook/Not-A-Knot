@@ -238,7 +238,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
           </h2>
           {subtitle && (
             <p className={`text-xs sm:text-sm font-normal tracking-wide mt-2 max-w-xl mx-auto ${
-              isDarkBg ? 'text-slate-300' : 'text-slate-500'
+              isDarkBg ? 'text-slate-300' : 'text-slate-600'
             }`}>
               {subtitle}
             </p>
@@ -330,21 +330,21 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
 
                     {/* Product Title */}
                     <h3 className={`text-xs sm:text-sm font-semibold tracking-wider uppercase line-clamp-1 transition-colors px-1 w-full ${
-                      isDarkBg ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'
+                      isDarkBg ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-700'
                     }`}>
                       {product.name}
                     </h3>
 
                     {/* Price Display */}
                     <div className="flex items-baseline justify-center gap-1.5 mt-1">
-                      <span className={`text-xs sm:text-sm font-medium ${
-                        isDarkBg ? 'text-amber-300' : 'text-slate-500'
+                      <span className={`text-xs sm:text-sm font-semibold ${
+                        isDarkBg ? 'text-amber-300' : 'text-slate-800'
                       }`}>
                         {priceFormatted}
                       </span>
                       {origPriceFormatted && (
                         <span className={`text-[11px] line-through ${
-                          isDarkBg ? 'text-slate-400' : 'text-slate-400'
+                          isDarkBg ? 'text-slate-400' : 'text-slate-500'
                         }`}>
                           {origPriceFormatted}
                         </span>
@@ -355,8 +355,8 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                     <button
                       type="button"
                       onClick={(e) => handleProductAction(product, e)}
-                      className={`mt-2.5 text-xs font-medium transition-colors underline-offset-4 hover:underline py-1 px-3 cursor-pointer inline-flex items-center gap-1 ${
-                        isDarkBg ? 'text-slate-300 group-hover:text-white' : 'text-slate-600 group-hover:text-black'
+                      className={`mt-2.5 text-xs font-semibold transition-colors underline-offset-4 hover:underline py-1 px-3 cursor-pointer inline-flex items-center gap-1 ${
+                        isDarkBg ? 'text-slate-200 group-hover:text-white' : 'text-slate-700 group-hover:text-black'
                       }`}
                     >
                       <span>{detailButtonText}</span>
@@ -370,7 +370,9 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
             </div>
 
             {/* Mobile Touch Swipe Indicator Pill */}
-            <div className="flex sm:hidden items-center justify-center gap-1 mt-4 text-[11px] text-slate-400">
+            <div className={`flex sm:hidden items-center justify-center gap-1 mt-4 text-[11px] ${
+              isDarkBg ? 'text-slate-300' : 'text-slate-600'
+            }`}>
               <span>← Vuốt xem thêm {displayProducts.length} sản phẩm →</span>
             </div>
           </div>
@@ -419,21 +421,21 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
 
                   {/* Product Title */}
                   <h3 className={`text-xs sm:text-sm font-semibold tracking-wider uppercase line-clamp-1 transition-colors px-1 w-full ${
-                    isDarkBg ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-600'
+                    isDarkBg ? 'text-white group-hover:text-amber-400' : 'text-slate-900 group-hover:text-amber-700'
                   }`}>
                     {product.name}
                   </h3>
 
                   {/* Price Display */}
                   <div className="flex items-baseline justify-center gap-1.5 mt-1">
-                    <span className={`text-xs sm:text-sm font-medium ${
-                      isDarkBg ? 'text-amber-300' : 'text-slate-500'
+                    <span className={`text-xs sm:text-sm font-semibold ${
+                      isDarkBg ? 'text-amber-300' : 'text-slate-800'
                     }`}>
                       {priceFormatted}
                     </span>
                     {origPriceFormatted && (
                       <span className={`text-[11px] line-through ${
-                        isDarkBg ? 'text-slate-400' : 'text-slate-400'
+                        isDarkBg ? 'text-slate-400' : 'text-slate-500'
                       }`}>
                         {origPriceFormatted}
                       </span>
@@ -444,8 +446,8 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                   <button
                     type="button"
                     onClick={(e) => handleProductAction(product, e)}
-                    className={`mt-2.5 text-xs font-medium transition-colors underline-offset-4 hover:underline py-1 px-3 cursor-pointer inline-flex items-center gap-1 ${
-                      isDarkBg ? 'text-slate-300 group-hover:text-white' : 'text-slate-600 group-hover:text-black'
+                    className={`mt-2.5 text-xs font-semibold transition-colors underline-offset-4 hover:underline py-1 px-3 cursor-pointer inline-flex items-center gap-1 ${
+                      isDarkBg ? 'text-slate-200 group-hover:text-white' : 'text-slate-700 group-hover:text-black'
                     }`}
                   >
                     <span>{detailButtonText}</span>

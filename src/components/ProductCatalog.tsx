@@ -7,6 +7,7 @@ import { ProductCard } from './ProductCard';
 import { LazyProductImage } from './LazyProductImage';
 import { IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
 import { trackGA4Search } from '../utils/analytics';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -31,7 +32,15 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   onBackToHome,
   isLoading = false,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search).get('search') || new URLSearchParams(window.location.search).get('q');
+      return q || '';
+    }
+    return '';
+  });
+  // Debounce the search input query by 250ms to prevent heavy re-filtering on each keystroke
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock'>('in_stock');
 
@@ -144,8 +153,9 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       if (p.category && hiddenCategoryIds.has(p.category)) return false;
       const matchesCategory = isProductMatchingCategory(p, selectedCategory);
       const matchesSearch =
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchQuery.toLowerCase());
+        !debouncedSearchQuery ||
+        p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        p.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
 
@@ -162,7 +172,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       inStockCount: inCount,
       outOfStockCount: outCount
     };
-  }, [products, selectedCategory, searchQuery, hiddenCategoryIds, collections]);
+  }, [products, selectedCategory, debouncedSearchQuery, hiddenCategoryIds, collections]);
 
   const filteredProducts = useMemo(() => {
     return products
@@ -171,8 +181,9 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         if (p.category && hiddenCategoryIds.has(p.category)) return false;
         const matchesCategory = isProductMatchingCategory(p, selectedCategory);
         const matchesSearch =
-          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          p.description.toLowerCase().includes(searchQuery.toLowerCase());
+          !debouncedSearchQuery ||
+          p.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          p.description.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
         
         const isAvailable = p.inStock !== false && (p.stock === undefined || p.stock > 0);
         let matchesStock = true;
@@ -198,17 +209,17 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
         if (sortBy === 'newest') return (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0);
         return (b.isBestSeller ? 1 : 0) - (a.isBestSeller ? 1 : 0);
       });
-  }, [products, selectedCategory, searchQuery, sortBy, stockFilter]);
+  }, [products, selectedCategory, debouncedSearchQuery, sortBy, stockFilter]);
 
   // Track search query on GA4 with debounce
   useEffect(() => {
-    const query = searchQuery.trim();
+    const query = debouncedSearchQuery.trim();
     if (!query || query.length < 2) return;
     const timer = setTimeout(() => {
       trackGA4Search(query, filteredProducts.length);
     }, 1200);
     return () => clearTimeout(timer);
-  }, [searchQuery, filteredProducts.length]);
+  }, [debouncedSearchQuery, filteredProducts.length]);
 
   return (
     <div id="product-catalog-page" className="pt-4 sm:pt-6 pb-20 bg-[#FAF8F5] text-neutral-900 min-h-screen">

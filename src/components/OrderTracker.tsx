@@ -1157,7 +1157,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                       : normalizeOrderStatus(activeOrder.status) === 'Đang giao hàng'
                       ? 'bg-blue-50 border-blue-300 text-blue-900'
                       : normalizeOrderStatus(activeOrder.status) === 'Knot đang được sản xuất'
-                      ? 'bg-purple-50 border-purple-300 text-purple-900'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900'
                       : 'bg-amber-50 border-amber-300 text-amber-950'
                   }`}>
                     {normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công' ? (
@@ -1165,7 +1165,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     ) : normalizeOrderStatus(activeOrder.status) === 'Đang giao hàng' ? (
                       <Truck className="w-4 h-4 text-blue-600 shrink-0" />
                     ) : normalizeOrderStatus(activeOrder.status) === 'Knot đang được sản xuất' ? (
-                      <Hammer className="w-4 h-4 text-purple-600 shrink-0" />
+                      <Hammer className="w-4 h-4 text-indigo-600 shrink-0" />
                     ) : (
                       <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                     )}

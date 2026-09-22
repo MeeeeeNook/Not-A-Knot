@@ -137,8 +137,6 @@ function sanitizeProductForCart(product: Product): Product {
       image: '/assets/bracelet.jpg',
       description: '',
       details: [],
-      rating: 5,
-      reviewsCount: 0,
       inStock: true,
     };
   }
@@ -153,8 +151,8 @@ function sanitizeProductForCart(product: Product): Product {
     image: sanitizeImageUrl(product.image),
     description: (product.description || '').slice(0, 100),
     details: [],
-    rating: product.rating || 5,
-    reviewsCount: product.reviewsCount || 0,
+    rating: product.rating,
+    reviewsCount: product.reviewsCount,
     inStock: product.inStock !== false,
     stock: product.stock,
     isEvent0209: product.isEvent0209,
@@ -233,8 +231,6 @@ export function deserializeCartItems(
             image: '/assets/bracelet.jpg',
             description: '',
             details: [],
-            rating: 5,
-            reviewsCount: 0,
             inStock: true,
           },
           quantity: Math.max(1, Number(item.quantity) || 1),

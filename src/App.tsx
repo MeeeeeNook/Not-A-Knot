@@ -4,16 +4,8 @@ import { HeroBanners } from './components/HeroBanners';
 import { LandingProductsCollection } from './components/LandingProductsCollection';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
 import { LandingFaqCommitments } from './components/LandingFaqCommitments';
-import { AboutPage } from './components/AboutPage';
-import { ContactPage } from './components/ContactPage';
-import { CollectionDetailPage } from './components/CollectionDetailPage';
-import { ProductCatalog } from './components/ProductCatalog';
-import { ProductDetailPage } from './components/ProductDetailPage';
 import { CartDrawer } from './components/CartDrawer';
-import { CartPage } from './components/CartPage';
-import { OrderTracker } from './components/OrderTracker';
 import { Footer } from './components/Footer';
-import { FloatingChatWidget } from './components/FloatingChatWidget';
 import { FlyingProductCartAnimation, FlyingCartItemData } from './components/FlyingProductCartAnimation';
 import { PRODUCTS } from './data/products';
 import { DEFAULT_CATEGORIES } from './data/categories';
@@ -21,19 +13,28 @@ import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
 import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
-import { AdminLoginModal } from './components/AdminLoginModal';
-import { MaintenanceScreen } from './components/MaintenanceScreen';
-import { LegalPoliciesModal, PolicyTab } from './components/LegalPoliciesModal';
+import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
 import { useAdminPresence } from './hooks/useAdminPresence';
 
-// Dynamic code-splitting for Admin portal: only loaded over network AFTER admin authentication
-const AdminPage = React.lazy(() =>
-  import('./components/AdminPage').then((m) => ({ default: m.AdminPage }))
-);
+// Dynamic code-splitting for non-landing pages & deferred non-critical widgets
+const AboutPage = React.lazy(() => import('./components/AboutPage').then((m) => ({ default: m.AboutPage })));
+const ContactPage = React.lazy(() => import('./components/ContactPage').then((m) => ({ default: m.ContactPage })));
+const CollectionDetailPage = React.lazy(() => import('./components/CollectionDetailPage').then((m) => ({ default: m.CollectionDetailPage })));
+const ProductCatalog = React.lazy(() => import('./components/ProductCatalog').then((m) => ({ default: m.ProductCatalog })));
+const ProductDetailPage = React.lazy(() => import('./components/ProductDetailPage').then((m) => ({ default: m.ProductDetailPage })));
+const CartPage = React.lazy(() => import('./components/CartPage').then((m) => ({ default: m.CartPage })));
+const OrderTracker = React.lazy(() => import('./components/OrderTracker').then((m) => ({ default: m.OrderTracker })));
+const AdminLoginModal = React.lazy(() => import('./components/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
+const MaintenanceScreen = React.lazy(() => import('./components/MaintenanceScreen').then((m) => ({ default: m.MaintenanceScreen })));
+const LegalPoliciesModal = React.lazy(() => import('./components/LegalPoliciesModal').then((m) => ({ default: m.LegalPoliciesModal })));
+const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
+const NotFoundPage = React.lazy(() => import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
+const FloatingChatWidget = React.lazy(() => import('./components/FloatingChatWidget').then((m) => ({ default: m.FloatingChatWidget })));
+const CookieConsentBanner = React.lazy(() => import('./components/CookieConsentBanner').then((m) => ({ default: m.CookieConsentBanner })));
 import {
   fetchProductsFromFirestore,
   fetchCategoriesFromFirestore,
@@ -75,7 +76,8 @@ import {
   setContactSEO,
   setOrderTrackerSEO,
   setCartSEO,
-  setAdminSEO
+  setAdminSEO,
+  setNotFoundSEO
 } from './utils/seo';
 import {
   findProductBySlugOrId,
@@ -119,9 +121,16 @@ function migrateLegacyShippingPolicy(content: SiteContentConfig): SiteContentCon
   };
 }
 
+const ViewLoadingFallback = () => (
+  <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 bg-neutral-50/50">
+    <div className="w-8 h-8 rounded-full border-2 border-neutral-300 border-t-amber-600 animate-spin mb-3" />
+    <span className="text-xs font-semibold text-neutral-500 tracking-wide">Đang tải trang...</span>
+  </div>
+);
+
 export default function App() {
-  // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page)
-  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart'>('landing');
+  // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page, Custom 404 Page)
+  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart' | 'not-found'>('landing');
   const [previousView, setPreviousView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin'>('catalog');
   const [activeCollectionId, setActiveCollectionId] = useState<string>('event_0209');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -550,8 +559,15 @@ export default function App() {
       return;
     }
 
-    // Default fallback
-    setCurrentView('landing');
+    if (routePath === '404' || routePath === 'not-found' || routePath === 'khong-tim-thay') {
+      setCurrentView('not-found');
+      setIsCartOpen(false);
+      return;
+    }
+
+    // Default fallback: any unknown route triggers the custom 404 page
+    setCurrentView('not-found');
+    setIsCartOpen(false);
   }, [categories, collections, handleOpenPolicy]);
 
   // Initialize anti-inspection, DevTools protection, global client error telemetry & server token verification
@@ -665,6 +681,8 @@ export default function App() {
       setCartSEO();
     } else if (currentView === 'admin') {
       setAdminSEO();
+    } else if (currentView === 'not-found') {
+      setNotFoundSEO();
     }
   }, [currentView, selectedCategory, categories, orderTrackerInitialCode]);
 
@@ -1346,11 +1364,15 @@ export default function App() {
     navigateTo(`/collection/${colSlug}`);
   };
 
-  const handleOpenAllCatalog = (categoryId: string = 'all') => {
+  const handleOpenAllCatalog = (categoryId: string = 'all', searchQuery?: string) => {
     setSelectedCategory(categoryId);
     setCurrentView('catalog');
     const catSlug = slugify(categoryId);
-    navigateTo(categoryId !== 'all' ? `/products?category=${catSlug}` : '/products');
+    if (searchQuery) {
+      navigateTo(`/products?search=${encodeURIComponent(searchQuery)}`);
+    } else {
+      navigateTo(categoryId !== 'all' ? `/products?category=${catSlug}` : '/products');
+    }
   };
 
   const handleOpenAbout = () => {
@@ -1632,8 +1654,8 @@ export default function App() {
         </aside>
       )}
 
-      {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode & Maintenance Mode for Users) */}
-      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
+      {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode, 404 Page & Maintenance Mode for Users) */}
+      {currentView !== 'admin' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
         <Navbar
           cartCount={totalCartCount}
           isCartBumping={isCartBumping}
@@ -1659,17 +1681,24 @@ export default function App() {
       <main className="flex-grow w-full max-w-full overflow-x-clip relative">
         {/* VIEW: Public Maintenance Mode Screen for Visitors */}
         {isMaintenanceActiveForUser && (
-          <MaintenanceScreen
-            config={maintenanceConfig}
-            brandName={siteContent?.brandName}
-            logoUrl={siteContent?.logoUrl}
-            onOpenAdminLogin={() => setIsAdminLoginModalOpen(true)}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <MaintenanceScreen
+              config={maintenanceConfig}
+              brandName={siteContent?.brandName}
+              logoUrl={siteContent?.logoUrl}
+              onOpenAdminLogin={() => setIsAdminLoginModalOpen(true)}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 1: Landing Page */}
         {!isMaintenanceActiveForUser && currentView === 'landing' && (
           <>
+            {/* Primary Semantic H1 Heading for Accessibility and SEO Hierarchy */}
+            <h1 className="sr-only">
+              {siteContent?.brandName || 'NOT A KNOT'} - {siteContent?.tagline || 'Phụ Kiện Vòng Tay Handmade Thủ Công Độc Bản'}
+            </h1>
+
             {/* Hero Carousel */}
             <HeroBanners
               slides={siteContent?.heroSlides}
@@ -1708,52 +1737,60 @@ export default function App() {
 
         {/* VIEW 2: Collection Detail Page */}
         {currentView === 'collection' && (
-          <CollectionDetailPage
-            collectionId={activeCollectionId}
-            products={visibleProducts}
-            collections={collections}
-            isAdminLoggedIn={Boolean(currentSeller)}
-            onUpdateCollections={handleUpdateCollections}
-            onBackToLanding={handleNavigateLanding}
-            onSelectCollection={handleSelectCollection}
-            onOpenProductDetail={handleOpenProductDetail}
-            onAddToCart={handleAddToCart}
-            onPreorderSuccess={() => showToast('Đăng ký đặt trước 02/09 thành công!')}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <CollectionDetailPage
+              collectionId={activeCollectionId}
+              products={visibleProducts}
+              collections={collections}
+              isAdminLoggedIn={Boolean(currentSeller)}
+              onUpdateCollections={handleUpdateCollections}
+              onBackToLanding={handleNavigateLanding}
+              onSelectCollection={handleSelectCollection}
+              onOpenProductDetail={handleOpenProductDetail}
+              onAddToCart={handleAddToCart}
+              onPreorderSuccess={() => showToast('Đăng ký đặt trước 02/09 thành công!')}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 3: Full Catalog Page (All products store with search & category filters) */}
         {currentView === 'catalog' && (
-          <ProductCatalog
-            products={visibleProducts}
-            categories={categories}
-            collections={collections}
-            selectedCategory={selectedCategory}
-            onSelectCategory={(cat) => setSelectedCategory(cat)}
-            onOpenProductDetail={handleOpenProductDetail}
-            onAddToCart={(p) => handleAddToCart(p, 1)}
-            onBackToHome={handleNavigateLanding}
-            isLoading={isProductsLoading}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <ProductCatalog
+              products={visibleProducts}
+              categories={categories}
+              collections={collections}
+              selectedCategory={selectedCategory}
+              onSelectCategory={(cat) => setSelectedCategory(cat)}
+              onOpenProductDetail={handleOpenProductDetail}
+              onAddToCart={(p) => handleAddToCart(p, 1)}
+              onBackToHome={handleNavigateLanding}
+              isLoading={isProductsLoading}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 4: Dedicated Standalone About Page */}
         {currentView === 'about' && (
-          <AboutPage
-            siteContent={siteContent}
-            onNavigateHome={handleNavigateLanding}
-            onOpenCatalog={() => handleOpenAllCatalog('all')}
-            onOpenContact={handleOpenContact}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <AboutPage
+              siteContent={siteContent}
+              onNavigateHome={handleNavigateLanding}
+              onOpenCatalog={() => handleOpenAllCatalog('all')}
+              onOpenContact={handleOpenContact}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 5: Dedicated Standalone Contact Page */}
         {currentView === 'contact' && (
-          <ContactPage
-            siteContent={siteContent}
-            onNavigateHome={handleNavigateLanding}
-            onOpenAllCatalog={() => handleOpenAllCatalog('all')}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <ContactPage
+              siteContent={siteContent}
+              onNavigateHome={handleNavigateLanding}
+              onOpenAllCatalog={() => handleOpenAllCatalog('all')}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 6: Dedicated Standalone Admin Portal Page with Strict Auth Gating */}
@@ -1813,67 +1850,90 @@ export default function App() {
 
         {/* VIEW 7: Dedicated Standalone Product Detail Page */}
         {currentView === 'product-detail' && selectedProduct && (
-          <ProductDetailPage
-            product={selectedProduct}
-            allProducts={visibleProducts}
-            categories={categories}
-            collections={collections}
-            cartItems={cartItems}
-            backLabel={
-              previousView === 'catalog'
-                ? 'Quay lại trang sản phẩm'
-                : previousView === 'collection'
-                ? 'Quay lại bộ sưu tập'
-                : previousView === 'landing'
-                ? 'Quay lại trang chủ'
-                : previousView === 'about'
-                ? 'Quay lại Về chúng tôi'
-                : previousView === 'contact'
-                ? 'Quay lại Liên hệ'
-                : 'Quay lại danh mục sản phẩm'
-            }
-            onBack={handleCloseProductDetail}
-            onSelectProduct={handleOpenProductDetail}
-            onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
-            }}
-            onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
-              handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
-              handleOpenCartDrawer();
-            }}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <ProductDetailPage
+              product={selectedProduct}
+              allProducts={visibleProducts}
+              categories={categories}
+              collections={collections}
+              cartItems={cartItems}
+              backLabel={
+                previousView === 'catalog'
+                  ? 'Quay lại trang sản phẩm'
+                  : previousView === 'collection'
+                  ? 'Quay lại bộ sưu tập'
+                  : previousView === 'landing'
+                  ? 'Quay lại trang chủ'
+                  : previousView === 'about'
+                  ? 'Quay lại Về chúng tôi'
+                  : previousView === 'contact'
+                  ? 'Quay lại Liên hệ'
+                  : 'Quay lại danh mục sản phẩm'
+              }
+              onBack={handleCloseProductDetail}
+              onSelectProduct={handleOpenProductDetail}
+              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
+              }}
+              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
+                handleOpenCartDrawer();
+              }}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 8: Standalone Order Tracking & Progress Page */}
         {currentView === 'order-tracker' && (
-          <OrderTracker
-            initialTrackingCode={orderTrackerInitialCode}
-            siteContent={siteContent}
-            onNavigateHome={handleNavigateLanding}
-            onNavigateCatalog={() => handleOpenAllCatalog('all')}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <OrderTracker
+              initialTrackingCode={orderTrackerInitialCode}
+              siteContent={siteContent}
+              onNavigateHome={handleNavigateLanding}
+              onNavigateCatalog={() => handleOpenAllCatalog('all')}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW 9: Dedicated Full-Page Cart & Checkout Experience */}
         {currentView === 'cart' && (
-          <CartPage
-            cartItems={cartItems}
-            products={products}
-            siteContent={siteContent}
-            facebookUrl={siteContent?.socialLinks?.facebook}
-            messengerUrl={siteContent?.socialLinks?.messenger || 'https://m.me/61593591390851'}
-            onUpdateQuantity={handleUpdateCartQuantity}
-            onRemoveItem={handleRemoveCartItem}
-            onClearCart={handleClearCart}
-            onOrderPlaced={handleWebsiteOrderPlaced}
-            onContinueShopping={() => handleOpenAllCatalog('all')}
-            onOpenOrderTracker={handleOpenOrderTracker}
-          />
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <CartPage
+              cartItems={cartItems}
+              products={products}
+              siteContent={siteContent}
+              facebookUrl={siteContent?.socialLinks?.facebook}
+              messengerUrl={siteContent?.socialLinks?.messenger || 'https://m.me/61593591390851'}
+              onUpdateQuantity={handleUpdateCartQuantity}
+              onRemoveItem={handleRemoveCartItem}
+              onClearCart={handleClearCart}
+              onOrderPlaced={handleWebsiteOrderPlaced}
+              onContinueShopping={() => handleOpenAllCatalog('all')}
+              onOpenOrderTracker={handleOpenOrderTracker}
+            />
+          </React.Suspense>
+        )}
+
+        {/* VIEW 10: Dedicated Custom 404 Page (Self-contained like Maintenance Page) */}
+        {currentView === 'not-found' && (
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <NotFoundPage
+              onNavigateHome={handleNavigateLanding}
+              onOpenCatalog={(catId, search) => handleOpenAllCatalog(catId || 'all', search)}
+              onOpenTracker={() => {
+                setCurrentView('order-tracker');
+                navigateTo('/tracker');
+              }}
+              onOpenContact={handleOpenContact}
+              brandName={siteContent?.brandName}
+              logoUrl={siteContent?.logoUrl}
+            />
+          </React.Suspense>
         )}
       </main>
 
-      {/* Customer Footer (Rendered across Landing, Collection, Catalog, About, Contact & Order Tracking pages) */}
-      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
+      {/* Customer Footer (Rendered across Landing, Collection, Catalog, About, Contact & Order Tracking pages; Hidden on Admin, 404 & Maintenance) */}
+      {currentView !== 'admin' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
         <Footer
           siteContent={siteContent}
           categories={categories}
@@ -1888,30 +1948,40 @@ export default function App() {
         />
       )}
 
-      {/* Transparent Legal & Customer Protection Policies Modal */}
-      <LegalPoliciesModal
-        isOpen={isPolicyModalOpen}
-        onClose={() => setIsPolicyModalOpen(false)}
-        initialTab={policyModalTab}
-      />
+      {/* Transparent Legal & Customer Protection Policies Modal (Lazy Loaded on Open) */}
+      {isPolicyModalOpen && (
+        <React.Suspense fallback={null}>
+          <LegalPoliciesModal
+            isOpen={isPolicyModalOpen}
+            onClose={() => setIsPolicyModalOpen(false)}
+            initialTab={policyModalTab}
+          />
+        </React.Suspense>
+      )}
 
-      {/* Admin Login Authentication Gate Modal */}
-      <AdminLoginModal
-        isOpen={isAdminLoginModalOpen}
-        onClose={() => setIsAdminLoginModalOpen(false)}
-        onLoginSuccess={handleAdminLoginSuccess}
-        sellers={sellers}
-        brandName={siteContent?.brandName}
-        logoUrl={siteContent?.logoUrl}
-      />
+      {/* Admin Login Authentication Gate Modal (Lazy Loaded on Open) */}
+      {isAdminLoginModalOpen && (
+        <React.Suspense fallback={null}>
+          <AdminLoginModal
+            isOpen={isAdminLoginModalOpen}
+            onClose={() => setIsAdminLoginModalOpen(false)}
+            onLoginSuccess={handleAdminLoginSuccess}
+            sellers={sellers}
+            brandName={siteContent?.brandName}
+            logoUrl={siteContent?.logoUrl}
+          />
+        </React.Suspense>
+      )}
 
-      {/* Non-intrusive Floating Customer Support & Direct Chat Bubble */}
+      {/* Non-intrusive Floating Customer Support & Direct Chat Bubble (Deferred Script Loading) */}
       {currentView !== 'admin' && !isMaintenanceActiveForUser && (
-        <FloatingChatWidget
-          siteContent={siteContent}
-          currentOrderCode={orderTrackerInitialCode}
-          isProductDetail={currentView === 'product_detail'}
-        />
+        <React.Suspense fallback={null}>
+          <FloatingChatWidget
+            siteContent={siteContent}
+            currentOrderCode={orderTrackerInitialCode}
+            isProductDetail={currentView === 'product_detail'}
+          />
+        </React.Suspense>
       )}
 
       {/* Interactive Fly-To-Cart Dynamic Visual Animation */}
@@ -1919,6 +1989,16 @@ export default function App() {
         items={flyingCartItems}
         onItemComplete={handleFlyingItemComplete}
       />
+
+      {/* Clear Cookie Consent & Privacy Transparency Form (Deferred Script Loading) */}
+      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
+        <React.Suspense fallback={null}>
+          <CookieConsentBanner
+            onOpenPolicy={handleOpenPolicy}
+            onToast={showToast}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 }

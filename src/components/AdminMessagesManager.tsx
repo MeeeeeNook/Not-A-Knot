@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '../hooks/useDebounce';
 import { 
   Mail, 
   MailCheck, 
@@ -35,6 +36,7 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [filterTab, setFilterTab] = useState<'all' | 'unread' | 'read'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
@@ -140,8 +142,8 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
       if (filterTab === 'unread' && msg.isRead) return false;
       if (filterTab === 'read' && !msg.isRead) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (debouncedSearchQuery.trim()) {
+        const q = debouncedSearchQuery.toLowerCase();
         const matchName = msg.name?.toLowerCase().includes(q);
         const matchContact = msg.contactInfo?.toLowerCase().includes(q) || msg.email?.toLowerCase().includes(q) || msg.phone?.toLowerCase().includes(q);
         const matchMessage = msg.message?.toLowerCase().includes(q);
@@ -149,7 +151,7 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
       }
       return true;
     });
-  }, [messages, filterTab, searchQuery]);
+  }, [messages, filterTab, debouncedSearchQuery]);
 
   const getInitials = (name?: string) => {
     if (!name || !name.trim()) return '?';

@@ -252,9 +252,9 @@ export const getStatusBadgeConfig = (status?: string) => {
     case 'Knot đang được sản xuất':
       return {
         label: 'Knot đang được sản xuất',
-        badgeClass: 'bg-purple-50 text-purple-700 border border-purple-200 font-medium',
-        pillClass: 'bg-purple-50 text-purple-700 border-purple-200 font-medium',
-        selectClass: 'bg-purple-50 text-purple-800 border-purple-200'
+        badgeClass: 'bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium',
+        pillClass: 'bg-indigo-50 text-indigo-700 border-indigo-200 font-medium',
+        selectClass: 'bg-indigo-50 text-indigo-800 border-indigo-200'
       };
     case 'Đang giao hàng':
       return {

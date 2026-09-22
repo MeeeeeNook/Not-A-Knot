@@ -14,25 +14,15 @@ interface ProductRatingProps {
 }
 
 /**
- * Deterministically generates a stable realistic review count for any product
- * if reviewsCount is missing or 0, so that every single product displays credible social proof.
+ * Returns genuine review count or 0. No fake metrics are fabricated.
  */
-export function getStableReviewsCount(productId?: string, defaultCount?: number): number {
-  if (defaultCount && defaultCount > 0) return defaultCount;
-  if (!productId) return 36;
-  
-  let hash = 0;
-  for (let i = 0; i < productId.length; i++) {
-    hash = (hash << 5) - hash + productId.charCodeAt(i);
-    hash |= 0;
-  }
-  // Generate a number between 24 and 186
-  const base = Math.abs(hash) % 162 + 24;
-  return base;
+export function getStableReviewsCount(_productId?: string, defaultCount?: number): number {
+  if (typeof defaultCount === 'number' && defaultCount > 0) return defaultCount;
+  return 0;
 }
 
 export const ProductRating: React.FC<ProductRatingProps> = ({
-  rating = 5.0,
+  rating,
   reviewsCount,
   productId,
   size = 'xs',
@@ -42,8 +32,14 @@ export const ProductRating: React.FC<ProductRatingProps> = ({
   className = '',
   isDarkTheme = false
 }) => {
-  const displayRating = rating > 0 ? rating : 5.0;
   const count = getStableReviewsCount(productId, reviewsCount);
+
+  // If no rating or no reviews, do not render fake metrics
+  if (!rating || rating <= 0 || count <= 0) {
+    return null;
+  }
+
+  const displayRating = rating;
 
   // Star size mapping
   const starDimensions = {

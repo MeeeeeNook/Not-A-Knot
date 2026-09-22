@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, Cookie } from 'lucide-react';
 import { CategoryItem, SiteContentConfig } from '../types';
 import { slugify } from '../utils/slugify';
 
@@ -97,7 +97,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <p className="font-bold text-amber-400 tracking-wide">
                       Not A Knot - Even More.
                     </p>
-                    <p className="text-slate-400 leading-relaxed">
+                    <p className="text-slate-300 leading-relaxed">
                       Not A Knot cùng hệ thống website và các kênh truyền thông liên quan là dự án học tập và bài tập nhóm thuộc khuôn khổ môn Quản trị tác nghiệp Thương mại điện tử - Đại học Kinh tế Quốc dân. Dự án được triển khai hoàn toàn nhằm mục đích nghiên cứu, thực hành môn học và không mang tính chất kinh doanh thương mại.
                     </p>
                   </div>
@@ -105,7 +105,7 @@ export const Footer: React.FC<FooterProps> = ({
               }
 
               return (
-                <div className="space-y-1 text-xs text-slate-400 leading-relaxed pr-4 whitespace-pre-line">
+                <div className="space-y-1 text-xs text-slate-300 leading-relaxed pr-4 whitespace-pre-line">
                   {text}
                 </div>
               );
@@ -114,9 +114,9 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Col 3: Sản Phẩm Internal Links */}
           <div className="space-y-3">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
               Sản Phẩm
-            </h4>
+            </h3>
             <ul className="space-y-2 text-xs">
               <li>
                 <a
@@ -185,9 +185,9 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Col 4: Hỗ Trợ & Tra Cứu */}
           <div className="space-y-3">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">
+            <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
               Hỗ Trợ & Tra Cứu
-            </h4>
+            </h3>
             <ul className="space-y-2 text-xs">
               <li>
                 <a
@@ -267,9 +267,9 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Col 5: Về Chúng Tôi & Social Media */}
           <div className="space-y-4">
             <div className="space-y-3">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-white">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-white">
                 Về Chúng Tôi
-              </h4>
+              </h3>
               <ul className="space-y-2 text-xs">
                 <li>
                   <a
@@ -312,7 +312,7 @@ export const Footer: React.FC<FooterProps> = ({
 
             {/* Social Media Logos (Moved to the Right) */}
             <div className="pt-2 border-t border-slate-800/80">
-              <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5">
+              <span className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-2.5">
                 Kênh kết nối
               </span>
               <div className="flex items-center gap-2.5">
@@ -372,15 +372,30 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Bottom Minimal Copyright & Admin Access */}
-        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
           <span>
             {copyrightText}
           </span>
 
           <div className="flex items-center gap-4">
             <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('open-cookie-settings'));
+                }
+              }}
+              className="text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Cài đặt & Xóa Cookie"
+              aria-label="Cài đặt và xóa cookie"
+            >
+              <Cookie className="w-3.5 h-3.5 text-amber-500/80" />
+              <span>Cài đặt & Xóa Cookie</span>
+            </button>
+
+            <button
               onClick={onOpenAdmin}
-              className="text-slate-500 hover:text-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition-colors cursor-pointer"
               title="Cổng quản trị"
             >
               <Lock className="w-3.5 h-3.5" />
