@@ -651,9 +651,10 @@ async function startServer() {
 
   /**
    * GET /api/auth/verify
-   * Validates a JWT token and returns user details.
+   * Validates a JWT token, checks latest authoritative seller data from Firestore,
+   * and returns refreshed user details with up-to-date role permissions.
    */
-  app.get('/api/auth/verify', (req: Request, res: Response) => {
+  app.get('/api/auth/verify', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ valid: false, error: 'Thiếu token xác thực.' });
@@ -662,6 +663,34 @@ async function startServer() {
     const token = authHeader.split(' ')[1];
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as JwtAdminPayload;
+      
+      // Look up current authoritative seller record in Firestore to catch real-time role promotions/demotions
+      const authSeller = await fetchAuthoritativeSeller(decoded.username);
+      if (authSeller) {
+        const isRoot = authSeller.isRootAdmin === true || authSeller.role === 'root_admin' || decoded.username === ROOT_ADMIN_USERNAME;
+        const refreshedPayload: JwtAdminPayload = {
+          id: authSeller.id || decoded.id,
+          username: decoded.username,
+          name: authSeller.name || decoded.name,
+          role: isRoot ? 'root_admin' : (authSeller.role || 'member'),
+          isRootAdmin: isRoot,
+          avatarColor: authSeller.avatarColor || decoded.avatarColor,
+          issuedAt: new Date().toISOString()
+        };
+
+        const refreshedToken = jwt.sign(
+          refreshedPayload,
+          JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        return res.json({
+          valid: true,
+          user: refreshedPayload,
+          token: refreshedToken
+        });
+      }
+
       return res.json({
         valid: true,
         user: decoded

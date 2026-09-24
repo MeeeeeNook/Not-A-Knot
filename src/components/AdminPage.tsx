@@ -111,6 +111,7 @@ interface AdminPageProps {
   collections?: CollectionInfo[];
   siteContent?: SiteContentConfig;
   currentSeller?: SellerUser;
+  onUpdateCurrentSeller?: (seller: SellerUser) => void;
   onUpdateProducts: (newProducts: Product[]) => void;
   onUpdateCategories?: (newCategories: CategoryItem[]) => void;
   onUpdateCollections?: (newCollections: CollectionInfo[]) => void;
@@ -144,6 +145,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   collections = COLLECTIONS_DATA,
   siteContent = DEFAULT_SITE_CONTENT,
   currentSeller,
+  onUpdateCurrentSeller,
   onUpdateProducts,
   onUpdateCategories,
   onUpdateCollections,
@@ -177,7 +179,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Switch tab with simulated enterprise loading transition
   const handleSwitchTab = (tab: AdminTabType) => {
     if ((tab === 'sellers' || tab === 'email' || tab === 'maintenance') && !isRootAdmin) {
-      alert('Chỉ Root Admin mới có quyền truy cập mục Quản trị này.');
+      alert('Chỉ Quản trị viên mới có quyền truy cập mục Quản trị này.');
       return;
     }
     if (tab === activeTab && !isAddingNew && !isAddingCategory) return;
@@ -825,6 +827,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       safeStorageSetItem('nak_sellers_list', JSON.stringify(clean));
     } catch (e) {
       console.warn('Lỗi lưu sellers:', e);
+    }
+
+    if (currentSeller && onUpdateCurrentSeller) {
+      const match = clean.find(
+        (s) =>
+          (s.username && currentSeller.username && s.username.toLowerCase() === currentSeller.username.toLowerCase()) ||
+          (s.id && currentSeller.id && s.id === currentSeller.id)
+      );
+      if (match) {
+        const isRoot = isRootAdminUser(match);
+        const updatedSelf: SellerUser = {
+          ...currentSeller,
+          ...match,
+          role: isRoot ? 'root_admin' : (match.role || 'member'),
+          isRootAdmin: isRoot
+        };
+        onUpdateCurrentSeller(updatedSelf);
+        try {
+          localStorage.setItem('notaknot_admin_auth_session', JSON.stringify(updatedSelf));
+        } catch {}
+      }
     }
   };
 

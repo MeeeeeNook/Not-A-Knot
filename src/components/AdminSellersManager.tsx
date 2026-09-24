@@ -8,7 +8,17 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { SellerUser, SystemLogItem } from '../types';
 import { db, StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore, updateSellerPresence } from '../firebase';
-import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser, isRootAdminUsername, verifyAdminAction } from '../utils/auth';
+import { 
+  hashPassword, 
+  generateSalt, 
+  ROOT_ADMIN_USERNAME, 
+  deduplicateSellers, 
+  hashUsername, 
+  isRootAdminUser, 
+  isRootAdminUsername, 
+  verifyAdminAction,
+  refreshAdminSession
+} from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
 interface AdminSellersManagerProps {
@@ -335,6 +345,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
+      refreshAdminSession().catch(() => {});
       setEditingSellerId(null);
       triggerSuccess(`Đã cập nhật thông tin tài khoản "${cleanName}" (${finalIsRootAdmin ? 'Quản trị viên' : 'Người bán'}).`);
     } catch {
@@ -344,7 +355,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     }
   };
 
-  // Promote Member to Root Admin
+  // Promote Member to Admin
   const handleConfirmPromote = async (seller: SellerUser) => {
     setIsSaving(true);
     try {
@@ -358,6 +369,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
+      refreshAdminSession().catch(() => {});
       setPromotingSellerId(null);
       triggerSuccess(`Đã nâng quyền người bán "${seller.name}" (@${seller.username}) thành Quản trị viên thành công!`);
     } catch {
@@ -386,6 +398,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
+      refreshAdminSession().catch(() => {});
       setDemotingSellerId(null);
       triggerSuccess(`Đã chuyển vai trò của "${seller.name}" (@${seller.username}) về Người bán thông thường.`);
     } catch {

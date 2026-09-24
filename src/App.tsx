@@ -756,6 +756,56 @@ export default function App() {
     initSellers();
   }, [isAdminLoginModalOpen, currentSeller]);
 
+  // Synchronize current active seller session with updated sellers list from Firestore
+  useEffect(() => {
+    if (currentSeller && sellers.length > 0) {
+      const matched = sellers.find(
+        (s) =>
+          (s.username && currentSeller.username && s.username.toLowerCase() === currentSeller.username.toLowerCase()) ||
+          (s.id && currentSeller.id && s.id === currentSeller.id)
+      );
+      if (matched) {
+        const isRoleDifferent =
+          matched.role !== currentSeller.role ||
+          Boolean(matched.isRootAdmin) !== Boolean(currentSeller.isRootAdmin) ||
+          matched.name !== currentSeller.name ||
+          matched.isActive !== currentSeller.isActive;
+
+        if (isRoleDifferent) {
+          const isRoot = isRootAdminUser(matched);
+          const updated: SellerUser = {
+            ...currentSeller,
+            ...matched,
+            role: isRoot ? 'root_admin' : (matched.role || 'member'),
+            isRootAdmin: isRoot
+          };
+          setCurrentSeller(updated);
+          try {
+            localStorage.setItem('notaknot_admin_auth_session', JSON.stringify(updated));
+          } catch {}
+        }
+      }
+    }
+  }, [sellers, currentSeller]);
+
+  // Re-verify session with server on mount & whenever switching to Admin view
+  useEffect(() => {
+    if (currentView === 'admin' || currentSeller) {
+      verifySessionWithServer().then((freshUser) => {
+        if (freshUser && freshUser.username) {
+          setCurrentSeller((prev) => {
+            if (!prev) return freshUser as SellerUser;
+            const isChanged =
+              prev.role !== freshUser.role ||
+              Boolean(prev.isRootAdmin) !== Boolean(freshUser.isRootAdmin) ||
+              prev.name !== freshUser.name;
+            return isChanged ? ({ ...prev, ...freshUser } as SellerUser) : prev;
+          });
+        }
+      }).catch(() => {});
+    }
+  }, [currentView]);
+
   // Online presence, public IP detection (ipapi.co) and heartbeat for active admin/seller
   useAdminPresence(currentView === 'admin' ? currentSeller : null);
 
@@ -1832,6 +1882,7 @@ export default function App() {
                 collections={collections}
                 siteContent={siteContent}
                 currentSeller={currentSeller}
+                onUpdateCurrentSeller={setCurrentSeller}
                 onUpdateProducts={handleUpdateProducts}
                 onUpdateCategories={handleUpdateCategories}
                 onUpdateCollections={handleUpdateCollections}

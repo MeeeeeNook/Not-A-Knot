@@ -313,6 +313,9 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
 
     const data = await res.json();
     if (data.valid && data.user) {
+      if (data.token) {
+        localStorage.setItem(JWT_STORAGE_KEY, data.token);
+      }
       localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data.user));
       return data.user;
     } else {
@@ -326,6 +329,25 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
     console.warn('Verification request error or static deployment, keeping session:', err);
     return localSession;
   }
+};
+
+/**
+ * Explicitly updates the locally cached session with fresh user data
+ */
+export const refreshAdminSession = async (userProfile?: Partial<SellerUser> | null): Promise<Partial<SellerUser> | null> => {
+  if (userProfile && userProfile.username) {
+    const isRoot = isRootAdminUser(userProfile);
+    const updated: Partial<SellerUser> = {
+      ...userProfile,
+      role: isRoot ? 'root_admin' : (userProfile.role || 'member'),
+      isRootAdmin: isRoot
+    };
+    try {
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
+    return updated;
+  }
+  return verifySessionWithServer();
 };
 
 export const clearAdminSession = (): void => {
