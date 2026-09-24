@@ -136,20 +136,41 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   return (
     <div className="space-y-2 pt-1">
       {/* Header Bar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <div className="flex items-center gap-1 text-xs font-bold text-slate-800 tracking-wide">
             <Flame className="w-3.5 h-3.5 text-rose-500" />
-            <span>{displayTitle} {isRequired && <span className="text-rose-500">*</span>}</span>
+            <span>
+              {displayTitle}:{' '}
+              <span className="text-rose-700 font-semibold">
+                {currentSelection.length === 1
+                  ? currentSelection[0].name
+                  : currentSelection.length > 1
+                  ? `${currentSelection.length} mẫu đã chọn`
+                  : isRequired
+                  ? 'Chưa chọn *'
+                  : 'Tùy chọn'}
+              </span>
+            </span>
           </div>
 
-          <span className="text-[11px] text-slate-500 font-medium">
-            {maxAllowed > 1
-              ? `(${currentSelection.length}/${maxAllowed})`
-              : currentSelection.length > 0
-              ? '(1 đã chọn)'
-              : '(Tùy chọn)'}
-          </span>
+          {currentSelection.length === 1 && typeof currentSelection[0].stock === 'number' && (
+            currentSelection[0].stock > 0 ? (
+              <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                Còn {currentSelection[0].stock} chiếc
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                Tạm hết hàng
+              </span>
+            )
+          )}
+
+          {maxAllowed > 1 && (
+            <span className="text-[11px] text-slate-500 font-medium">
+              ({currentSelection.length}/{maxAllowed})
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -165,7 +186,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
               onClick={handleClearAll}
               className="text-[11px] font-medium text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
             >
-              Xóa tất cả
+              Bỏ chọn
             </button>
           )}
         </div>
@@ -265,22 +286,16 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                 )}
               </div>
 
-              {/* Card Label - Strictly fixed height so selecting never alters card height */}
-              <div className="w-full text-center h-8 flex flex-col justify-center">
+              {/* Card Label - Clean single/compact label */}
+              <div className="w-full text-center py-1 flex flex-col justify-center">
                 <span className="text-[11px] block truncate leading-tight font-semibold text-slate-800">
                   {omamori.name}
                 </span>
-                <span className="text-[10px] block h-3.5 leading-none mt-0.5">
-                  {isOutOfStock ? (
-                    <span className="text-rose-500 font-medium">Hết hàng</span>
-                  ) : typeof omamori.stock === 'number' && omamori.stock > 0 ? (
-                    <span className={isSelected ? 'text-rose-700 font-semibold' : 'text-slate-400 font-medium'}>
-                      Còn {omamori.stock}
-                    </span>
-                  ) : (
-                    <span className="text-transparent select-none">-</span>
-                  )}
-                </span>
+                {isOutOfStock && (
+                  <span className="text-[10px] block text-rose-500 font-bold mt-0.5">
+                    Hết hàng
+                  </span>
+                )}
               </div>
             </div>
           );

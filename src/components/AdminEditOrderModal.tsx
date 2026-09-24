@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Product, SellerUser, OrderItemDetail, ProductOmamoriOption } from '../types';
+import { Product, SellerUser, OrderItemDetail, ProductOmamoriOption, ComboItemSelection } from '../types';
 import { StoredOrder, saveOrderToFirestore } from '../firebase';
 import { 
   formatOrderDateWithoutSeconds, 

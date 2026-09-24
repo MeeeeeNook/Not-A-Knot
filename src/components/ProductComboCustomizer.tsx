@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, ArrowLeft, Check, AlertCircle, ShoppingBag } from 'lucide-react';
 import { Product, ComboItemConfig, ComboItemSelection } from '../types';
@@ -10,6 +10,7 @@ import { ProductKhoenSelector } from './ProductKhoenSelector';
 interface ProductComboCustomizerProps {
   product: Product;
   comboItems: ComboItemConfig[];
+  allProducts?: Product[];
   activeStep?: number;
   onStepChange?: (stepIdx: number) => void;
   onColorSelect?: (colorName: string, colorImage?: string) => void;
@@ -27,6 +28,7 @@ interface ProductComboCustomizerProps {
 export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
   product,
   comboItems,
+  allProducts,
   activeStep: controlledStep,
   onStepChange,
   onColorSelect,
@@ -73,6 +75,36 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
     itemId: currentItem?.id,
     itemTitle: currentItem?.title,
   };
+
+  // Resolve the full complete description without any accidental truncations
+  const resolvedSubtitle = useMemo(() => {
+    if (!currentItem) return '';
+    const storedSub = currentItem.subtitle ? currentItem.subtitle.trim() : '';
+
+    if (allProducts && allProducts.length > 0) {
+      const match = allProducts.find((p) => {
+        if (currentItem.linkedProductId && p.id === currentItem.linkedProductId) return true;
+        const normItemTitle = (currentItem.title || '').trim().toLowerCase();
+        const normProdName = (p.name || '').trim().toLowerCase();
+        return normItemTitle === normProdName || normItemTitle.includes(normProdName) || normProdName.includes(normItemTitle);
+      });
+
+      if (match) {
+        // If stored subtitle looks clipped (e.g. cut off mid-sentence or shorter than product description)
+        if (match.description && match.description.trim()) {
+          const matchDesc = match.description.trim();
+          if (!storedSub || (matchDesc.length > storedSub.length && matchDesc.toLowerCase().startsWith(storedSub.slice(0, 30).toLowerCase()))) {
+            return matchDesc;
+          }
+        }
+        if (!storedSub && match.subtitle) {
+          return match.subtitle.trim();
+        }
+      }
+    }
+
+    return storedSub;
+  }, [currentItem, allProducts]);
 
   const updateCurrentSelection = (patch: Partial<ComboItemSelection>) => {
     setStepError(null);
@@ -230,11 +262,13 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
         >
           {/* Card Header: Product Title & Subtitle */}
           <div className="pb-2 sm:pb-3 border-b border-neutral-200/70">
-            <h3 className="text-sm sm:text-lg font-black text-neutral-900 tracking-tight truncate">
+            <h3 className="text-sm sm:text-lg font-black text-neutral-900 tracking-tight leading-snug">
               {currentItem.title}
             </h3>
-            {currentItem.subtitle && (
-              <p className="text-xs text-neutral-600 leading-relaxed mt-0.5">{currentItem.subtitle}</p>
+            {resolvedSubtitle && (
+              <p className="text-xs text-neutral-600 leading-relaxed mt-1 whitespace-pre-line">
+                {resolvedSubtitle}
+              </p>
             )}
           </div>
 

@@ -325,29 +325,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               className="relative aspect-square w-full rounded-2xl overflow-hidden bg-white shadow-sm mb-3 sm:mb-4 group cursor-zoom-in isolate"
             >
               {/* Promo / Discount Badge safely inside top-left of image frame */}
-              {(() => {
-                const hasOrig = product.originalPrice && product.originalPrice > product.price;
-                const pct = hasOrig 
-                  ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-                  : 0;
-                const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
-
-                if (badgeText) {
-                  return (
-                    <div className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-md z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
-                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
-                    </div>
-                  );
-                }
-                if (product.isEvent0209) {
-                  return (
-                    <div className="absolute top-2.5 left-2.5 bg-brand-red text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-xl shadow-sm z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
-                      Bản giới hạn 02.09
-                    </div>
-                  );
-                }
-                return null;
-              })()}
+              {product.discountBadge ? (
+                <div className="absolute top-2.5 left-2.5 bg-rose-600 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-md z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
+                  {product.discountBadge}
+                </div>
+              ) : product.isEvent0209 ? (
+                <div className="absolute top-2.5 left-2.5 bg-brand-red text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-xl shadow-sm z-10 max-w-[45%] truncate pointer-events-none border border-white/20">
+                  Bản giới hạn 02.09
+                </div>
+              ) : null}
 
               {/* Zoom & Compare Overlay Button */}
               <button
@@ -503,19 +489,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     {(product.originalPrice + totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ
                   </span>
                 )}
-                {(() => {
-                  const hasOrig = product.originalPrice && product.originalPrice > product.price;
-                  const pct = hasOrig 
-                    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-                    : 0;
-                  const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
-                  if (!badgeText) return null;
-                  return (
-                    <span className="px-2 py-0.5 bg-rose-600 text-white text-xs font-black rounded-lg shadow-2xs flex items-center shrink-0">
-                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
-                    </span>
-                  );
-                })()}
+                {product.discountBadge && (
+                  <span className="px-2 py-0.5 bg-rose-600 text-white text-xs font-black rounded-lg shadow-2xs flex items-center shrink-0">
+                    {product.discountBadge}
+                  </span>
+                )}
                 {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                   <span className="bg-amber-100/80 text-amber-900 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">
                     +{(totalCharmPrice + totalOmamoriPrice).toLocaleString('vi-VN')}đ phụ kiện

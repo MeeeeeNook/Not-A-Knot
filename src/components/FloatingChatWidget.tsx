@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageCircle, 
@@ -27,34 +27,29 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'options' | 'leave-message'>('options');
-  
-  // Draggable position state (in viewport fixed pixels)
-  const [buttonPos, setButtonPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Relative Position from bottom-right of viewport (in pixels)
+  // This guarantees the button NEVER drifts to center upon window resize
+  const [position, setPosition] = useState<{ right: number; bottom: number }>(() => ({
+    right: typeof window !== 'undefined' && window.innerWidth < 640 ? 16 : 24,
+    bottom: typeof window !== 'undefined'
+      ? (isProductDetail ? (window.innerWidth < 640 ? 84 : 24) : (window.innerWidth < 640 ? 20 : 24))
+      : 24
+  }));
+
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ pointerX: number; pointerY: number; startPosX: number; startPosY: number }>({
+  const dragStartRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    startRight: number;
+    startBottom: number;
+  }>({
     pointerX: 0,
     pointerY: 0,
-    startPosX: 0,
-    startPosY: 0,
+    startRight: 24,
+    startBottom: 24,
   });
   const hasMovedRef = useRef(false);
-
-  // Computed Popup Box Position (clamped strictly within viewport, never overlapping button)
-  const [popupStyle, setPopupStyle] = useState<{
-    left?: number;
-    right?: number;
-    top?: number;
-    bottom?: number;
-    width: number;
-    maxHeight: number;
-    transformOrigin: string;
-  }>({
-    right: 20,
-    bottom: 90,
-    width: 320,
-    maxHeight: 500,
-    transformOrigin: 'bottom right'
-  });
 
   // Message Form State
   const [name, setName] = useState('');
@@ -72,100 +67,24 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
   const facebookUrl = siteContent?.socialLinks?.facebook || 'https://www.facebook.com/profile.php?id=61593591390851';
   const hotline = siteContent?.hotline || '0342 938 174';
   const cleanPhone = hotline.replace(/[^0-9]/g, '');
-  const zaloUrl = siteContent?.socialLinks?.zalo || `https://zalo.me/${cleanPhone || '0342938174'}`;
+  const zaloUrl = siteContent?.socialLinks?.zalo || (cleanPhone ? `https://zalo.me/${cleanPhone}` : 'https://zalo.me/0342938174');
 
-  // Initialize button position on mount
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const isMobile = window.innerWidth < 640;
-    const bSize = isMobile ? 48 : 56;
-    const rightMargin = isMobile ? 14 : 24;
-    const bottomMargin = isProductDetail ? 84 : (isMobile ? 18 : 24);
-
-    const initialX = window.innerWidth - bSize - rightMargin;
-    const initialY = window.innerHeight - bSize - bottomMargin;
-    setButtonPos({ x: initialX, y: initialY });
-  }, [isProductDetail]);
-
-  // Adjust button position if window resizes so it never stays outside bounds
+  // Keep button within screen bounds on window resize
   useEffect(() => {
     const handleResize = () => {
-      setButtonPos((prev) => {
-        if (!prev) return prev;
-        const bSize = window.innerWidth < 640 ? 48 : 56;
-        const clampedX = Math.max(12, Math.min(window.innerWidth - bSize - 12, prev.x));
-        const clampedY = Math.max(70, Math.min(window.innerHeight - bSize - 16, prev.y));
-        return { x: clampedX, y: clampedY };
+      setPosition((prev) => {
+        const maxRight = Math.max(12, window.innerWidth - 68);
+        const maxBottom = Math.max(16, window.innerHeight - 68);
+        return {
+          right: Math.min(prev.right, maxRight),
+          bottom: Math.min(prev.bottom, maxBottom),
+        };
       });
     };
-    window.addEventListener('resize', handleResize);
+
+    window.addEventListener('resize', handleResize, { passive: true });
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Compute smart popup placement: NEVER covers the button and NEVER exceeds screen bounds
-  const recalculatePopupPosition = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const bSize = vw < 640 ? 48 : 56;
-    const curX = buttonPos?.x ?? (vw - bSize - 20);
-    const curY = buttonPos?.y ?? (vh - bSize - 20);
-
-    const cardWidth = Math.min(340, vw - 28);
-
-    // 1. Horizontal placement: align with button without going offscreen
-    let left: number | undefined = undefined;
-    let right: number | undefined = undefined;
-    let horizontalOrigin: 'left' | 'right';
-
-    if (curX < vw / 2) {
-      // Button is on left half: align card with button left edge, expanding rightward
-      left = Math.max(14, Math.min(curX, vw - cardWidth - 14));
-      horizontalOrigin = 'left';
-    } else {
-      // Button is on right half: align card with button right edge, expanding leftward
-      right = Math.max(14, Math.min(vw - (curX + bSize), vw - cardWidth - 14));
-      horizontalOrigin = 'right';
-    }
-
-    // 2. Vertical placement: Open ABOVE if space permits, else BELOW (always with 10px safe gap)
-    let top: number | undefined = undefined;
-    let bottom: number | undefined = undefined;
-    let verticalOrigin: 'top' | 'bottom';
-    let cardMaxHeight: number;
-
-    const spaceAbove = curY - 70; // Clearance from top header
-    const spaceBelow = vh - (curY + bSize) - 16;
-
-    if (spaceAbove >= 300 || spaceAbove >= spaceBelow) {
-      // Open ABOVE button: anchor bottom edge 10px above button top edge
-      bottom = Math.max(16, vh - curY + 10);
-      cardMaxHeight = Math.max(260, Math.min(520, curY - 76));
-      verticalOrigin = 'bottom';
-    } else {
-      // Open BELOW button: anchor top edge 10px below button bottom edge
-      top = Math.max(70, curY + bSize + 10);
-      cardMaxHeight = Math.max(260, Math.min(520, vh - (curY + bSize) - 20));
-      verticalOrigin = 'top';
-    }
-
-    setPopupStyle({
-      left,
-      right,
-      top,
-      bottom,
-      width: cardWidth,
-      maxHeight: cardMaxHeight,
-      transformOrigin: `${verticalOrigin} ${horizontalOrigin}`
-    });
-  }, [buttonPos]);
-
-  useLayoutEffect(() => {
-    if (isOpen) {
-      recalculatePopupPosition();
-    }
-  }, [isOpen, recalculatePopupPosition]);
 
   // Listen for image zoom modal events to hide chat bubble when viewing zoomed images
   useEffect(() => {
@@ -200,68 +119,61 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
         setIsOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('touchstart', handleOutsideClick, { passive: true });
+    }
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('touchstart', handleOutsideClick);
     };
   }, [isOpen]);
 
-  // Pre-fill message if order code provided
-  useEffect(() => {
-    if (currentOrderCode && !message) {
-      setMessage(`Chào shop, mình cần tư vấn/hỗ trợ về đơn hàng #${currentOrderCode}`);
-    }
-  }, [currentOrderCode]);
-
-  // Drag Handlers for pointer (mouse + touch)
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (isOpen) return; // Don't drag while popup is open
+  // DRAG LOGIC (Relative to screen edges)
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    hasMovedRef.current = false;
     dragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
-      startPosX: buttonPos?.x ?? (window.innerWidth - 70),
-      startPosY: buttonPos?.y ?? (window.innerHeight - 70),
+      startRight: position.right,
+      startBottom: position.bottom,
     };
-    hasMovedRef.current = false;
-    setIsDragging(true);
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const deltaX = e.clientX - dragStartRef.current.pointerX;
-    const deltaY = e.clientY - dragStartRef.current.pointerY;
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
 
-    if (Math.hypot(deltaX, deltaY) > 5) {
+    const deltaX = e.clientX - dragStartRef.current.pointerX; // Moving right means deltaX > 0, decreasing distance from right edge
+    const deltaY = e.clientY - dragStartRef.current.pointerY; // Moving down means deltaY > 0, decreasing distance from bottom edge
+
+    if (!hasMovedRef.current && (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4)) {
       hasMovedRef.current = true;
+      setIsDragging(true);
     }
 
-    const bSize = window.innerWidth < 640 ? 48 : 56;
-    const newX = dragStartRef.current.startPosX + deltaX;
-    const newY = dragStartRef.current.startPosY + deltaY;
+    if (hasMovedRef.current) {
+      const maxRight = Math.max(12, window.innerWidth - 68);
+      const maxBottom = Math.max(16, window.innerHeight - 68);
 
-    // Strict clamp so button NEVER escapes screen borders
-    const clampedX = Math.max(12, Math.min(window.innerWidth - bSize - 12, newX));
-    const clampedY = Math.max(70, Math.min(window.innerHeight - bSize - 16, newY));
+      const newRight = Math.max(12, Math.min(maxRight, dragStartRef.current.startRight - deltaX));
+      const newBottom = Math.max(16, Math.min(maxBottom, dragStartRef.current.startBottom - deltaY));
 
-    setButtonPos({ x: clampedX, y: clampedY });
+      setPosition({ right: newRight, bottom: newBottom });
+    }
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    try {
-      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-    } catch {
-      // ignore
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
 
-    // If it was just a tap/click without significant move, toggle open
     if (!hasMovedRef.current) {
+      // Clean click - toggle open/close
       setIsOpen((prev) => !prev);
     }
+    setIsDragging(false);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -302,28 +214,33 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
 
   if (isZoomModalOpen) return null;
 
+  // Compute popup box position relative to the floating button
+  const popupWidth = typeof window !== 'undefined' ? (window.innerWidth < 640 ? window.innerWidth - 32 : 350) : 350;
+  const clampedPopupRight = typeof window !== 'undefined' 
+    ? Math.max(12, Math.min(window.innerWidth - popupWidth - 12, position.right))
+    : 24;
+  const popupBottom = position.bottom + 64;
+
   return (
     <>
-      {/* 1. EXPANDED POPUP CARD (Never covers the floating button) */}
+      {/* 1. EXPANDED POPUP CARD (Anchored relative to screen edges & bubble button, z-35 so modals at z-50 overlay it) */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             ref={popupRef}
             id="floating-chat-card"
-            initial={{ opacity: 0, scale: 0.9, y: popupStyle.bottom !== undefined ? 8 : -8 }}
+            initial={{ opacity: 0, scale: 0.92, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: popupStyle.bottom !== undefined ? 6 : -6 }}
+            exit={{ opacity: 0, scale: 0.92, y: 12 }}
             transition={{ type: 'spring', damping: 26, stiffness: 360 }}
             style={{
               position: 'fixed',
-              left: popupStyle.left !== undefined ? `${popupStyle.left}px` : undefined,
-              right: popupStyle.right !== undefined ? `${popupStyle.right}px` : undefined,
-              top: popupStyle.top !== undefined ? `${popupStyle.top}px` : undefined,
-              bottom: popupStyle.bottom !== undefined ? `${popupStyle.bottom}px` : undefined,
-              width: `${popupStyle.width}px`,
-              maxHeight: `${popupStyle.maxHeight}px`,
-              transformOrigin: popupStyle.transformOrigin,
-              zIndex: 60,
+              right: `${clampedPopupRight}px`,
+              bottom: `${popupBottom}px`,
+              width: `${popupWidth}px`,
+              maxHeight: typeof window !== 'undefined' ? `${Math.max(300, window.innerHeight - popupBottom - 20)}px` : '75vh',
+              transformOrigin: 'bottom right',
+              zIndex: 35,
             }}
             className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col font-sans select-none"
           >
@@ -378,135 +295,181 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
             </div>
 
             {/* Content Body with Scroll if needed */}
-            <div className="p-4 bg-white overflow-y-auto flex-1">
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3">
               <AnimatePresence mode="wait">
                 {activeTab === 'options' ? (
                   <motion.div
                     key="tab-options"
-                    initial={{ opacity: 0, x: -8 }}
+                    initial={{ opacity: 0, x: -6 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 8 }}
+                    exit={{ opacity: 0, x: 6 }}
                     transition={{ duration: 0.15 }}
                     className="space-y-2.5"
                   >
-                    {/* Option 1: Chat qua Messenger */}
+                    {/* Option 1: Chat Zalo */}
+                    <a
+                      href={zaloUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => trackGA4Contact('zalo', 'Floating Chat Zalo')}
+                      className="flex items-center justify-between p-3 rounded-2xl bg-sky-50 hover:bg-sky-100/90 text-sky-950 border border-sky-200 transition-all font-bold text-xs sm:text-sm group"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#0068FF] text-white flex items-center justify-center font-black text-xs shadow-xs">
+                          Zalo
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold">Chat qua Zalo</div>
+                          <div className="text-[11px] font-normal text-sky-700">{hotline}</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-sky-700 group-hover:translate-x-1 transition-transform" />
+                    </a>
+
+                    {/* Option 2: Chat qua Messenger */}
                     <a
                       href={messengerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => trackGA4Contact('messenger', 'Floating Chat Messenger')}
-                      className="w-full py-2.5 px-3.5 rounded-2xl bg-[#1d5ec9] hover:bg-[#164da7] active:scale-98 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+                      className="flex items-center justify-between p-3 rounded-2xl bg-blue-50/80 hover:bg-blue-100/90 text-blue-900 border border-blue-200 transition-all font-bold text-xs sm:text-sm group"
                     >
-                      <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                      <span>Chat qua Messenger</span>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#0084FF] text-white flex items-center justify-center shadow-xs">
+                          <MessageCircle className="w-4 h-4 fill-current" />
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold">Chat qua Messenger</div>
+                          <div className="text-[11px] font-normal text-blue-700">Facebook Direct Message</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-blue-700 group-hover:translate-x-1 transition-transform" />
                     </a>
 
-                    {/* Option 2: Zalo Chat / Hotline */}
-                    {cleanPhone && (
-                      <a
-                        href={zaloUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => trackGA4Contact('zalo', 'Floating Chat Zalo')}
-                        className="w-full py-2.5 px-3.5 rounded-2xl bg-[#0068FF] hover:bg-[#0055D4] active:scale-98 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
-                      >
-                        <PhoneCall className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                        <span>Chat Zalo ({hotline})</span>
-                      </a>
-                    )}
-
-                    {/* Option 3: Xem trang Facebook */}
+                    {/* Option 3: Facebook Fanpage */}
                     <a
                       href={facebookUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => trackGA4Contact('facebook', 'Floating Chat Facebook')}
-                      className="w-full py-2.5 px-3.5 rounded-2xl bg-white hover:bg-slate-50 active:scale-98 text-slate-800 font-bold text-xs sm:text-sm border-2 border-slate-200 hover:border-slate-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                      className="flex items-center justify-between p-3 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-950 border border-indigo-200 transition-all font-bold text-xs sm:text-sm group"
                     >
-                      <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1d5ec9] shrink-0" />
-                      <span>Xem trang Facebook</span>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shadow-xs">
+                          <Facebook className="w-4 h-4 fill-current" />
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold">Trang Facebook</div>
+                          <div className="text-[11px] font-normal text-indigo-700">Xem tin bài & bài đăng mới</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-indigo-700 group-hover:translate-x-1 transition-transform" />
                     </a>
 
-                    {/* Quick Switch to message form */}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('leave-message')}
-                      className="w-full pt-1.5 text-center text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center gap-1"
+                    {/* Hotline Direct Call */}
+                    <a
+                      href={`tel:${cleanPhone || '0342938174'}`}
+                      onClick={() => trackGA4Contact('hotline', 'Floating Chat Hotline')}
+                      className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/80 text-emerald-950 border border-emerald-200 transition-all font-bold text-xs sm:text-sm group"
                     >
-                      <span>Hoặc gửi lời nhắn để xưởng gọi lại</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                          <PhoneCall className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-sm font-bold">Gọi Hotline Trực Tiếp</div>
+                          <div className="text-[11px] font-normal text-emerald-700">{hotline}</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-emerald-700 group-hover:translate-x-1 transition-transform" />
+                    </a>
                   </motion.div>
                 ) : (
                   <motion.div
                     key="tab-message"
-                    initial={{ opacity: 0, x: 8 }}
+                    initial={{ opacity: 0, x: 6 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
+                    exit={{ opacity: 0, x: -6 }}
                     transition={{ duration: 0.15 }}
                   >
                     {isSubmitted ? (
-                      <div className="text-center py-4 space-y-2.5">
-                        <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                          <CheckCircle2 className="w-5 h-5" />
+                      <div className="py-6 px-3 text-center space-y-3 bg-emerald-50/70 rounded-2xl border border-emerald-200 animate-fadeIn">
+                        <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-2xs">
+                          <CheckCircle2 className="w-6 h-6" />
                         </div>
-                        <h4 className="font-bold text-sm text-slate-900">Đã gửi tin nhắn đến shop!</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed">
-                          Tụi mình sẽ phản hồi sớm nhất qua SĐT của bạn nhé.
+                        <h4 className="font-extrabold text-sm text-slate-900">Đã Nhận Lời Nhắn!</h4>
+                        <p className="text-xs text-slate-600 leading-relaxed max-w-xs mx-auto">
+                          Cảm ơn bạn! Đội ngũ {brandName} sẽ phản hồi qua thông tin liên hệ của bạn trong thời gian sớm nhất.
                         </p>
                         <button
                           type="button"
                           onClick={() => setIsSubmitted(false)}
-                          className="mt-1 px-4 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer"
+                          className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-emerald-700 transition-all cursor-pointer"
                         >
                           Gửi lời nhắn khác
                         </button>
                       </div>
                     ) : (
-                      <form onSubmit={handleSendMessage} className="space-y-2 text-xs">
+                      <form onSubmit={handleSendMessage} className="space-y-3 text-left">
+                        {currentOrderCode && (
+                          <div className="px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] font-bold text-amber-900 flex items-center justify-between">
+                            <span>Đang hỗ trợ đơn hàng:</span>
+                            <span className="font-mono text-xs">{currentOrderCode}</span>
+                          </div>
+                        )}
+
                         <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Tên của bạn *
+                          </label>
                           <input
                             type="text"
                             required
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="Tên của bạn..."
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-slate-900"
+                            placeholder="Ví dụ: Linh Chi"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-slate-800 focus:bg-white"
                           />
                         </div>
 
                         <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            SĐT hoặc Link Facebook / Zalo *
+                          </label>
                           <input
                             type="text"
                             required
                             value={contactInfo}
                             onChange={(e) => setContactInfo(e.target.value)}
-                            placeholder="Số điện thoại liên hệ..."
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-slate-900"
+                            placeholder="0912... hoặc fb.com/..."
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-slate-800 focus:bg-white"
                           />
                         </div>
 
                         <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1">
+                            Nội dung cần hỗ trợ *
+                          </label>
                           <textarea
                             required
-                            rows={2}
+                            rows={3}
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
-                            placeholder="Nội dung cần tư vấn..."
-                            className="w-full px-3 py-2 rounded-xl border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-slate-900 resize-none"
+                            placeholder="Mô tả yêu cầu cần tư vấn, đổi mẫu hoặc đặt làm riêng..."
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-slate-800 focus:bg-white resize-none"
                           />
                         </div>
 
                         <button
                           type="submit"
                           disabled={isSubmitting}
-                          className="w-full py-2.5 rounded-xl bg-[#1d5ec9] hover:bg-[#164da7] disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                          className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                         >
                           {isSubmitting ? (
                             <span>Đang gửi...</span>
                           ) : (
                             <>
-                              <Send className="w-3.5 h-3.5 text-white" />
+                              <Send className="w-3.5 h-3.5" />
                               <span>Gửi Lời Nhắn</span>
                             </>
                           )}
@@ -521,68 +484,66 @@ export const FloatingChatWidget: React.FC<FloatingChatWidgetProps> = ({
         )}
       </AnimatePresence>
 
-      {/* 2. DRAGGABLE FLOATING CHAT BUBBLE BUTTON */}
-      {buttonPos && (
-        <div
-          style={{
-            position: 'fixed',
-            left: `${buttonPos.x}px`,
-            top: `${buttonPos.y}px`,
-            zIndex: 55,
-            touchAction: 'none',
-          }}
-          className="select-none flex flex-col items-center group"
-        >
-          {/* Subtle drag hint tooltip on hover */}
-          {!isOpen && (
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none mb-1 text-[10px] font-medium bg-slate-900/80 text-white px-2 py-0.5 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-sm">
-              <GripHorizontal className="w-3 h-3" />
-              <span>Kéo để dời vị trí</span>
-            </div>
-          )}
+      {/* 2. DRAGGABLE FLOATING CHAT BUBBLE BUTTON (Relative to screen edges, z-30) */}
+      <div
+        style={{
+          position: 'fixed',
+          right: `${position.right}px`,
+          bottom: `${position.bottom}px`,
+          zIndex: 30,
+          touchAction: 'none',
+        }}
+        className="select-none flex flex-col items-center group"
+      >
+        {/* Drag Hint Tooltip on hover */}
+        {!isOpen && !isDragging && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none mb-1 text-[10px] font-medium bg-slate-900/80 text-white px-2 py-0.5 rounded-md backdrop-blur-xs flex items-center gap-1 shadow-sm">
+            <GripHorizontal className="w-3 h-3" />
+            <span>Kéo để dời vị trí</span>
+          </div>
+        )}
 
-          <motion.button
-            ref={buttonRef}
-            type="button"
-            id="btn-toggle-floating-chat"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            aria-label="Mở menu tư vấn trực tiếp"
-            title="Bấm để tư vấn | Giữ & kéo để dời vị trí nếu che nút khác"
-            whileTap={{ scale: 0.92 }}
-            whileHover={{ scale: 1.05 }}
-            className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-xl flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] active:bg-[#124294] text-white shadow-blue-500/40 border-2 border-white/20 touch-none ${
-              isDragging ? 'cursor-grabbing scale-105 shadow-2xl' : 'cursor-grab'
-            }`}
-          >
-            <AnimatePresence mode="wait">
-              {isOpen ? (
-                <motion.div
-                  key="close-icon"
-                  initial={{ rotate: -90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.18 }}
-                >
-                  <X className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="chat-icon"
-                  initial={{ rotate: 90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: -90, opacity: 0 }}
-                  transition={{ duration: 0.18 }}
-                >
-                  <MessageCircle className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.button>
-        </div>
-      )}
+        <motion.button
+          ref={buttonRef}
+          type="button"
+          id="btn-toggle-floating-chat"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          aria-label="Mở menu tư vấn trực tiếp"
+          title="Bấm để tư vấn | Giữ & kéo để dời vị trí nếu che nút khác"
+          whileTap={{ scale: 0.92 }}
+          whileHover={{ scale: 1.05 }}
+          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full shadow-xl flex items-center justify-center transition-colors bg-[#1d5ec9] hover:bg-[#164da7] active:bg-[#124294] text-white shadow-blue-500/40 border-2 border-white/20 touch-none ${
+            isDragging ? 'cursor-grabbing scale-105 shadow-2xl' : 'cursor-grab'
+          }`}
+        >
+          <AnimatePresence mode="wait">
+            {isOpen ? (
+              <motion.div
+                key="close-icon"
+                initial={{ rotate: -90, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: 90, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                <X className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="chat-icon"
+                initial={{ rotate: 90, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: -90, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                <MessageCircle className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.button>
+      </div>
     </>
   );
 };

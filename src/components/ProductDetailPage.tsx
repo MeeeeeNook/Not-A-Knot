@@ -788,7 +788,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-xs font-semibold text-neutral-500 hidden sm:inline">
+            <span className="text-xs font-bold text-neutral-700 bg-neutral-100/90 border border-neutral-200/80 px-2.5 py-1 rounded-lg truncate max-w-[160px] sm:max-w-none">
               {categoryName}
             </span>
             <button
@@ -818,46 +818,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             >
-              {/* Promo / Discount Badge (Positioned safely inside top-left of image frame) */}
-              {(() => {
-                const hasOrig = product.originalPrice && product.originalPrice > product.price;
-                const pct = hasOrig 
-                  ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-                  : 0;
-                const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
-
-                if (badgeText) {
-                  return (
-                    <div className="absolute top-2.5 left-2.5 z-10 bg-rose-600 text-white text-[11px] sm:text-xs font-extrabold px-2.5 py-1 rounded-xl shadow-md max-w-[45%] truncate pointer-events-none border border-white/20">
-                      {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
-                    </div>
-                  );
-                }
-                if (product.isEvent0209) {
-                  return (
-                    <div className="absolute top-2.5 left-2.5 z-10 bg-brand-red text-white text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-xl shadow-md max-w-[45%] truncate pointer-events-none border border-white/20">
-                      Bản giới hạn 02.09
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* Zoom & Compare Overlay Button (Positioned safely inside top-right of image frame) */}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setProductCompareModalOpen(true);
-                }}
-                className="absolute top-2.5 right-2.5 z-10 px-2.5 py-1 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[11px] font-semibold rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer border border-white/20 active:scale-95 max-w-[45%]"
-                title="Bấm để phóng to và so sánh ảnh (hoặc phím mũi tên)"
-              >
-                <ZoomIn className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span className="hidden sm:inline truncate">Phóng to & So sánh</span>
-                <span className="sm:hidden truncate">Phóng to</span>
-              </button>
-
               {/* Main Image Carousel Track: Flex wrapper with overflow-hidden and animated horizontal transform */}
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
@@ -1037,20 +997,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       </span>
                     )}
 
-                    {/* Discount Badge Tag next to Price */}
-                    {(() => {
-                      const hasOrig = product.originalPrice && product.originalPrice > product.price;
-                      const pct = hasOrig 
-                        ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100) 
-                        : 0;
-                      const badgeText = product.discountBadge || (pct > 0 ? `-${pct}%` : null);
-                      if (!badgeText) return null;
-                      return (
-                        <span className="px-2 py-0.5 bg-rose-600 text-white text-xs sm:text-sm font-extrabold rounded-lg shadow-2xs flex items-center shrink-0">
-                          {badgeText.includes('%') || badgeText.includes('-') ? badgeText : `-${badgeText}`}
-                        </span>
-                      );
-                    })()}
+                    {/* Discount Badge Tag next to Price (Only if explicitly set) */}
+                    {product.discountBadge && (
+                      <span className="px-2 py-0.5 bg-rose-600 text-white text-xs sm:text-sm font-extrabold rounded-lg shadow-2xs flex items-center shrink-0">
+                        {product.discountBadge}
+                      </span>
+                    )}
                   </div>
                   {(totalCharmPrice > 0 || totalOmamoriPrice > 0) && (
                     <div className="text-xs font-medium text-amber-800">
@@ -1078,6 +1030,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <ProductComboCustomizer
                   product={product}
                   comboItems={product.comboItems!}
+                  allProducts={allProducts}
                   activeStep={activeComboStep}
                   onStepChange={(stepIdx) => {
                     setActiveComboStep(stepIdx);
@@ -1534,81 +1487,61 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </h2>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {recommendedProducts.map((rec) => (
-                <motion.div
-                  key={rec.id}
-                  whileHover={{ y: -4 }}
-                  onClick={() => onSelectProduct(rec)}
-                  className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
-                >
-                  {/* Product Image & Badges */}
-                  <div className="relative aspect-square overflow-hidden bg-neutral-100">
-                    <img
-                      src={rec.image || '/assets/bracelet.jpg'}
-                      alt={rec.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
-                      {rec.discountBadge ? (
-                        <span className="px-2 py-0.5 bg-amber-400 text-neutral-950 text-[10px] font-black rounded-lg shadow-2xs">
-                          {rec.discountBadge}
-                        </span>
-                      ) : rec.isBestSeller ? (
-                        <span className="px-2 py-0.5 bg-neutral-950 text-white text-[10px] font-black rounded-lg shadow-2xs">
-                          HOT
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Product Info */}
-                  <div className="p-4 flex flex-col flex-1 justify-between gap-3">
-                    <div>
-                      <h3 className="font-bold text-xs sm:text-sm text-neutral-950 group-hover:text-amber-700 transition-colors line-clamp-1">
-                        {rec.name}
-                      </h3>
-                      <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
-                        {rec.description}
-                      </p>
-
-                      <div className="flex items-baseline gap-1.5 mt-2">
-                        <span className="font-mono text-sm sm:text-base font-black text-neutral-950">
-                          {rec.price.toLocaleString('vi-VN')}đ
-                        </span>
-                        {rec.originalPrice && (
-                          <span className="text-xs text-neutral-400 line-through font-mono">
-                            {rec.originalPrice.toLocaleString('vi-VN')}đ
+              {recommendedProducts.map((rec) => {
+                return (
+                  <motion.div
+                    key={rec.id}
+                    whileHover={{ y: -4 }}
+                    onClick={() => onSelectProduct(rec)}
+                    className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
+                  >
+                    {/* Product Image & Badges */}
+                    <div className="relative aspect-square overflow-hidden bg-neutral-100">
+                      <img
+                        src={rec.image || '/assets/bracelet.jpg'}
+                        alt={rec.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
+                        {rec.discountBadge ? (
+                          <span className="px-2 py-0.5 bg-rose-600 text-white text-[10px] font-black rounded-lg shadow-2xs">
+                            {rec.discountBadge}
                           </span>
-                        )}
+                        ) : rec.isBestSeller ? (
+                          <span className="px-2 py-0.5 bg-neutral-950 text-white text-[10px] font-black rounded-lg shadow-2xs">
+                            HOT
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
-                    {/* Quick Add Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleQuickAddRecommended(e, rec)}
-                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
-                        quickAddedId === rec.id
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-neutral-100 hover:bg-neutral-950 text-neutral-900 hover:text-white active:scale-95'
-                      }`}
-                      title="Thêm vào giỏ hàng"
-                    >
-                      {quickAddedId === rec.id ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Đã thêm vào giỏ ✓</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Thêm vào giỏ</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
+                    {/* Product Info */}
+                    <div className="p-4 flex flex-col flex-1 justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-xs sm:text-sm text-neutral-950 group-hover:text-amber-700 transition-colors line-clamp-1">
+                          {rec.name}
+                        </h3>
+                        <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                          {(rec as any).subtitle || rec.description}
+                        </p>
+
+                        <div className="flex items-baseline gap-1.5 mt-2">
+                          <span className="font-mono text-sm sm:text-base font-black text-neutral-950">
+                            {rec.price.toLocaleString('vi-VN')}đ
+                          </span>
+                          {rec.originalPrice && rec.originalPrice > rec.price && (
+                            <span className="text-xs text-neutral-400 line-through font-mono">
+                              {rec.originalPrice.toLocaleString('vi-VN')}đ
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
         )}
@@ -1629,42 +1562,58 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {relatedProducts.map((rel) => (
-                <motion.div
-                  key={rel.id}
-                  whileHover={{ y: -4 }}
-                  onClick={() => onSelectProduct(rel)}
-                  className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
-                >
-                  <div className="relative aspect-square overflow-hidden bg-neutral-100">
-                    <img
-                      src={rel.image || '/assets/bracelet.jpg'}
-                      alt={rel.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    {rel.discountBadge && (
-                      <span className="absolute top-2.5 right-2.5 px-2.5 py-0.5 bg-brand-red text-white text-[10px] font-bold rounded-full">
-                        {rel.discountBadge}
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-4 flex flex-col flex-1 justify-between space-y-2">
-                    <div>
-                      <h3 className="font-bold text-xs sm:text-sm text-neutral-900 group-hover:text-amber-700 line-clamp-1">
-                        {rel.name}
-                      </h3>
-                      <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
-                        {rel.description}
-                      </p>
+              {relatedProducts.map((rel) => {
+                return (
+                  <motion.div
+                    key={rel.id}
+                    whileHover={{ y: -4 }}
+                    onClick={() => onSelectProduct(rel)}
+                    className="bg-white rounded-3xl border border-neutral-200 hover:border-neutral-900 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-2xs hover:shadow-md"
+                  >
+                    <div className="relative aspect-square overflow-hidden bg-neutral-100">
+                      <img
+                        src={rel.image || '/assets/bracelet.jpg'}
+                        alt={rel.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
+                        {rel.discountBadge ? (
+                          <span className="px-2 py-0.5 bg-rose-600 text-white text-[10px] font-black rounded-lg shadow-2xs">
+                            {rel.discountBadge}
+                          </span>
+                        ) : rel.isBestSeller ? (
+                          <span className="px-2 py-0.5 bg-neutral-950 text-white text-[10px] font-black rounded-lg shadow-2xs">
+                            HOT
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="font-mono text-xs sm:text-sm font-bold text-neutral-950">
-                      {rel.price.toLocaleString('vi-VN')}đ
+                    <div className="p-4 flex flex-col flex-1 justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-xs sm:text-sm text-neutral-950 group-hover:text-amber-700 transition-colors line-clamp-1">
+                          {rel.name}
+                        </h3>
+                        <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                          {(rel as any).subtitle || rel.description}
+                        </p>
+
+                        <div className="flex items-baseline gap-1.5 mt-2">
+                          <span className="font-mono text-sm sm:text-base font-black text-neutral-950">
+                            {rel.price.toLocaleString('vi-VN')}đ
+                          </span>
+                          {rel.originalPrice && rel.originalPrice > rel.price && (
+                            <span className="text-xs text-neutral-400 line-through font-mono">
+                              {rel.originalPrice.toLocaleString('vi-VN')}đ
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
         )}

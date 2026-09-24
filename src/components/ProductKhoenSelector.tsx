@@ -70,18 +70,33 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
   return (
     <div className="space-y-2 pt-1">
       {/* Header Bar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 tracking-wide">
             <CircleDot className="w-3.5 h-3.5 text-amber-600" />
             <span>
-              {displayTitle} {isRequired && <span className="text-rose-500">*</span>}
+              {displayTitle}:{' '}
+              <span className="text-amber-700 font-semibold">
+                {selectedKhoen
+                  ? selectedKhoen.name
+                  : isRequired
+                  ? 'Chưa chọn *'
+                  : 'Tùy chọn'}
+              </span>
             </span>
           </div>
 
-          <span className="text-[11px] text-slate-500 font-medium">
-            {selectedKhoen ? '(1 đã chọn)' : isRequired ? '(Bắt buộc)' : '(Tùy chọn)'}
-          </span>
+          {selectedKhoen && typeof selectedKhoen.stock === 'number' && (
+            selectedKhoen.stock > 0 ? (
+              <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                Còn {selectedKhoen.stock} chiếc
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                Tạm hết hàng
+              </span>
+            )
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -215,22 +230,16 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                 )}
               </div>
 
-              {/* Card Label */}
-              <div className="w-full text-center h-8 flex flex-col justify-center">
+              {/* Card Label - Clean single/compact label */}
+              <div className="w-full text-center py-1 flex flex-col justify-center">
                 <span className="text-[11px] block truncate leading-tight font-semibold text-slate-800">
                   {khoen.name}
                 </span>
-                <span className="text-[10px] block h-3.5 leading-none mt-0.5">
-                  {isOutOfStock ? (
-                    <span className="text-rose-500 font-medium">Hết hàng</span>
-                  ) : typeof khoen.stock === 'number' && khoen.stock > 0 ? (
-                    <span className={isSelected ? 'text-amber-700 font-semibold' : 'text-slate-400 font-medium'}>
-                      Còn {khoen.stock}
-                    </span>
-                  ) : (
-                    <span className="text-transparent select-none">-</span>
-                  )}
-                </span>
+                {isOutOfStock && (
+                  <span className="text-[10px] block text-rose-500 font-bold mt-0.5">
+                    Hết hàng
+                  </span>
+                )}
               </div>
             </div>
           );

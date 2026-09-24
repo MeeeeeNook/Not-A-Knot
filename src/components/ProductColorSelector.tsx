@@ -127,20 +127,12 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
 
               <span>{opt.name}</span>
 
-              {/* Stock status indicator */}
-              {isOutOfStock ? (
+              {/* Out of stock indicator */}
+              {isOutOfStock && (
                 <span className="ml-1 text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 not-sr-only">
                   Hết
                 </span>
-              ) : typeof opt.stock === 'number' ? (
-                <span
-                  className={`text-[10px] font-mono ${
-                    isSelected ? 'text-amber-300' : opt.stock <= 3 ? 'text-amber-600 font-bold' : 'text-neutral-400'
-                  }`}
-                >
-                  ({opt.stock})
-                </span>
-              ) : null}
+              )}
             </button>
           );
         })}

@@ -1131,8 +1131,8 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         name: data.name || '',
         category: data.category || 'bracelets',
         price: data.price || 0,
-        originalPrice: data.originalPrice,
-        discountBadge: data.discountBadge,
+        originalPrice: typeof data.originalPrice === 'number' ? data.originalPrice : undefined,
+        discountBadge: (typeof data.discountBadge === 'string' && data.discountBadge.trim().length > 0) ? data.discountBadge.trim() : undefined,
         image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
         images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
           ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
@@ -1208,8 +1208,8 @@ export const subscribeToProductsFromFirestore = (
             name: data.name || '',
             category: data.category || 'bracelets',
             price: data.price || 0,
-            originalPrice: data.originalPrice,
-            discountBadge: data.discountBadge,
+            originalPrice: typeof data.originalPrice === 'number' ? data.originalPrice : undefined,
+            discountBadge: (typeof data.discountBadge === 'string' && data.discountBadge.trim().length > 0) ? data.discountBadge.trim() : undefined,
             image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
             images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
               ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
@@ -1285,7 +1285,7 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
     const payload = cleanFirestoreData(storageProd);
     const prodSize = JSON.stringify(payload).length;
 
-    await setDoc(docRef, payload, { merge: true });
+    await setDoc(docRef, payload);
     productsMemoryCache = null;
     recordOperation('write', 1, prodSize);
   } catch (err) {

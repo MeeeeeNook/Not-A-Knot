@@ -135,7 +135,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
 
     const itemData: Partial<ComboItemConfig> = {
       title: product.name,
-      subtitle: product.description ? product.description.slice(0, 90) : (product.category || 'Sản phẩm hoàn thiện thủ công'),
+      subtitle: ((product as any).subtitle || product.description || product.category || 'Sản phẩm hoàn thiện thủ công').trim(),
       image: product.image || allProdImages[0] || '',
       images: allProdImages.length > 0 ? allProdImages : undefined,
       linkedProductId: product.id,
@@ -473,15 +473,34 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Mô tả ngắn / Hướng dẫn chọn
-                        </label>
-                        <input
-                          type="text"
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-slate-700">
+                            Mô tả chi tiết / Ý nghĩa món này:
+                          </label>
+                          {item.linkedProductId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const linked = existingProducts.find((p) => p.id === item.linkedProductId);
+                                if (linked) {
+                                  const fullText = (linked.subtitle || linked.description || linked.category || '').trim();
+                                  updateItem(item.id, { subtitle: fullText });
+                                  showAdminToast(`✓ Đã nạp lại mô tả đầy đủ từ "${linked.name}"!`);
+                                }
+                              }}
+                              className="text-[10px] text-purple-600 hover:text-purple-800 font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <RefreshCw className="w-2.5 h-2.5" />
+                              Lấy lại mô tả gốc
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          rows={2}
                           value={item.subtitle || ''}
                           onChange={(e) => updateItem(item.id, { subtitle: e.target.value })}
-                          placeholder="Ví dụ: Chọn màu dây và phụ kiện may mắn cho món này"
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white"
+                          placeholder="Ví dụ: Nút Cát Tường biểu tượng may mắn, bình an và thuận lợi..."
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white resize-none leading-relaxed"
                         />
                       </div>
                     </div>
