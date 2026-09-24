@@ -2852,8 +2852,18 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
   try {
     const sellerId = seller.id || `seller-${seller.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     const docRef = doc(db, 'sellers', sellerId);
+    
+    const sellerCopy = { ...seller };
+    // DO NOT OVERWRITE passwordHash / passwordSalt in Firestore with empty strings
+    if (!sellerCopy.passwordHash) {
+      delete (sellerCopy as any).passwordHash;
+    }
+    if (!sellerCopy.passwordSalt) {
+      delete (sellerCopy as any).passwordSalt;
+    }
+
     const payload = cleanFirestoreData({
-      ...seller,
+      ...sellerCopy,
       id: sellerId,
       updatedAt: new Date().toISOString()
     });
