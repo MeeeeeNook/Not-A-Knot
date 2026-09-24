@@ -250,6 +250,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           }`
         );
       }
+      if (item.selectedComboItems && item.selectedComboItems.length > 0) {
+        const comboSummary = item.selectedComboItems.map((ci, i) => {
+          const parts = [];
+          if (ci.selectedColor) parts.push(`Màu: ${ci.selectedColor}`);
+          if (ci.selectedCharms && ci.selectedCharms.length > 0) parts.push(`Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}`);
+          if (ci.selectedOmamoris && ci.selectedOmamoris.length > 0) parts.push(`Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}`);
+          if (ci.selectedKhoen) parts.push(`Khoen: ${ci.selectedKhoen}`);
+          if (ci.selectedSize) parts.push(`Size: ${ci.selectedSize}`);
+          return `[${ci.itemTitle || `Món ${i + 1}`}: ${parts.join(', ')}]`;
+        }).join(' + ');
+        extras.push(`Combo: ${comboSummary}`);
+      }
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) desc += ` [${extras.join(', ')}]`;

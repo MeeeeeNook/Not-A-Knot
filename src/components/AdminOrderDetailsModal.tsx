@@ -555,14 +555,19 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                                   {cItem.selectedColor && (
                                     <div>• Màu: <strong className="text-slate-800">{cItem.selectedColor}</strong></div>
                                   )}
-                                  {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
+                                  {cItem.selectedCharms && cItem.selectedCharms.length > 0 ? (
                                     <div>• Charm: <strong className="text-amber-800">{cItem.selectedCharms.map((c) => c.name).join(', ')}</strong></div>
-                                  )}
+                                  ) : cItem.selectedCharm ? (
+                                    <div>• Charm: <strong className="text-amber-800">{typeof cItem.selectedCharm === 'object' ? (cItem.selectedCharm as any).name : cItem.selectedCharm}</strong></div>
+                                  ) : null}
                                   {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
                                     <div>• Omamori: <strong className="text-rose-800">{cItem.selectedOmamoris.map((o) => o.name).join(', ')}</strong></div>
                                   )}
                                   {cItem.selectedKhoen && (
                                     <div>• Khoen: <strong className="text-sky-800">{cItem.selectedKhoen}</strong></div>
+                                  )}
+                                  {cItem.selectedSize && (
+                                    <div>• Size: <strong className="text-blue-800">{cItem.selectedSize}</strong></div>
                                   )}
                                 </div>
                               </div>

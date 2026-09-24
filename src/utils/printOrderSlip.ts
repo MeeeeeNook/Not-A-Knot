@@ -48,6 +48,21 @@ export const generateOrderSlipHtml = (
             const p = Number(it.price || (it as any).unitPrice || 0);
             const q = Number(it.quantity || 1);
             const sub = p * q;
+            let comboHtml = '';
+            if (it.selectedComboItems && it.selectedComboItems.length > 0) {
+              const comboRows = it.selectedComboItems.map((ci, i) => {
+                const subParts = [
+                  ci.selectedColor ? `Màu: ${ci.selectedColor}` : '',
+                  ci.selectedCharms && ci.selectedCharms.length > 0 ? `Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}` : '',
+                  ci.selectedOmamoris && ci.selectedOmamoris.length > 0 ? `Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}` : '',
+                  ci.selectedKhoen ? `Khoen: ${ci.selectedKhoen}` : '',
+                  ci.selectedSize ? `Size: ${ci.selectedSize}` : ''
+                ].filter(Boolean).join(' | ');
+                return `<div style="font-size:11px;color:#334155;margin-top:2px;">• <strong>${ci.itemTitle || `Món ${i + 1}`}:</strong> ${subParts}</div>`;
+              }).join('');
+              comboHtml = `<div style="margin-top:4px;padding:4px 6px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:2px;"><strong style="font-size:11px;color:#92400e;">Combo ${it.selectedComboItems.length} món:</strong>${comboRows}</div>`;
+            }
+
             const details = [
               it.selectedSize ? `Size: ${it.selectedSize}` : '',
               it.selectedColor ? `Màu: ${it.selectedColor}` : '',
@@ -65,7 +80,7 @@ export const generateOrderSlipHtml = (
           <tr>
             <td style="padding:10px;border-bottom:1px solid #e2e8f0;">
               <strong style="color:#0f172a;font-size:13px;">${it.productName}</strong>
-              ${details ? `<div style="font-size:11px;color:#475569;margin-top:3px;font-weight:600;">${details}</div>` : ''}
+              ${comboHtml || (details ? `<div style="font-size:11px;color:#475569;margin-top:3px;font-weight:600;">${details}</div>` : '')}
               ${customNote}
             </td>
             <td style="padding:10px;text-align:center;border-bottom:1px solid #e2e8f0;font-weight:bold;color:#0f172a;">${q}</td>

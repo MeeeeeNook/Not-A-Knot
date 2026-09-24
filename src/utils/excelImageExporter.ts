@@ -99,17 +99,25 @@ function formatOrderItemFullNameAndOptions(it: any): string {
     }
   }
 
+  if (it.selectedSize) {
+    optionsParts.push(`Size: ${it.selectedSize}`);
+  }
+
   if (Array.isArray(it.selectedComboItems) && it.selectedComboItems.length > 0) {
-    const comboDesc = it.selectedComboItems.map((c: any) => {
-      const parts = [
-        c.selectedColor ? `Màu: ${c.selectedColor}` : '',
-        Array.isArray(c.selectedCharms) && c.selectedCharms.length > 0 ? `Charm: ${c.selectedCharms.map((x: any) => typeof x === 'object' ? x.name : x).join(', ')}` : '',
-        Array.isArray(c.selectedOmamoris) && c.selectedOmamoris.length > 0 ? `Bùa: ${c.selectedOmamoris.map((x: any) => typeof x === 'object' ? x.name : x).join(', ')}` : '',
-        c.selectedKhoen ? `Khoen: ${c.selectedKhoen}` : '',
-      ].filter(Boolean).join(' - ');
-      return `[${c.itemTitle || 'Món'}: ${parts}]`;
+    const comboDesc = it.selectedComboItems.map((c: any, i: number) => {
+      const cParts = [];
+      if (c.selectedColor) cParts.push(`Màu: ${c.selectedColor}`);
+      if (Array.isArray(c.selectedCharms) && c.selectedCharms.length > 0) {
+        cParts.push(`Charm: ${c.selectedCharms.map((ch: any) => typeof ch === 'object' ? ch.name : ch).join(', ')}`);
+      }
+      if (Array.isArray(c.selectedOmamoris) && c.selectedOmamoris.length > 0) {
+        cParts.push(`Bùa: ${c.selectedOmamoris.map((om: any) => typeof om === 'object' ? om.name : om).join(', ')}`);
+      }
+      if (c.selectedKhoen) cParts.push(`Khoen: ${c.selectedKhoen}`);
+      if (c.selectedSize) cParts.push(`Size: ${c.selectedSize}`);
+      return `[${c.itemTitle || `Món ${i + 1}`}: ${cParts.join(' | ')}]`;
     }).join(' + ');
-    optionsParts.push(`Gói Combo: ${comboDesc}`);
+    optionsParts.push(`Combo: ${comboDesc}`);
   }
 
   if (it.customKnotColor) {

@@ -2938,7 +2938,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           (it.productName && it.productName.toLowerCase().includes(q)) || 
           (it.name && it.name.toLowerCase().includes(q)) ||
           (it.selectedColor && it.selectedColor.toLowerCase().includes(q)) ||
-          (it.customNote && it.customNote.toLowerCase().includes(q))
+          (it.customNote && it.customNote.toLowerCase().includes(q)) ||
+          (Array.isArray(it.selectedComboItems) && it.selectedComboItems.some((ci: any) =>
+            (ci.itemTitle && ci.itemTitle.toLowerCase().includes(q)) ||
+            (ci.selectedColor && ci.selectedColor.toLowerCase().includes(q)) ||
+            (Array.isArray(ci.selectedCharms) && ci.selectedCharms.some((ch: any) => (ch?.name || ch).toLowerCase().includes(q))) ||
+            (Array.isArray(ci.selectedOmamoris) && ci.selectedOmamoris.some((om: any) => (om?.name || om).toLowerCase().includes(q))) ||
+            (ci.selectedKhoen && ci.selectedKhoen.toLowerCase().includes(q))
+          ))
         )) ||
         (o.note && o.note.toLowerCase().includes(q)) ||
         (o.trackingNumber && o.trackingNumber.toLowerCase().includes(q)) ||
@@ -7172,7 +7179,55 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <span className="truncate pr-2 font-medium">• {item.name || item.productName || 'Sản phẩm'}</span>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
-                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) && (
+                                    {/* Combo Items breakdown */}
+                                    {item.selectedComboItems && item.selectedComboItems.length > 0 ? (
+                                      <div className="mt-1 p-1.5 bg-amber-50/80 rounded-lg border border-amber-200/80 space-y-1 text-[10px]">
+                                        <div className="font-bold text-amber-950 flex items-center gap-1">
+                                          <span className="px-1 py-0.2 bg-amber-200 text-amber-950 rounded text-[9px] font-black">
+                                            COMBO {item.selectedComboItems.length} MÓN:
+                                          </span>
+                                        </div>
+                                        <div className="space-y-1 pl-1">
+                                          {item.selectedComboItems.map((cItem, cIdx) => (
+                                            <div key={cIdx} className="bg-white/90 p-1 rounded border border-amber-100 space-y-0.5">
+                                              <div className="font-bold text-slate-800 flex items-center gap-1">
+                                                <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-neutral-950 text-[8px] font-black flex items-center justify-center shrink-0">
+                                                  {cIdx + 1}
+                                                </span>
+                                                <span className="truncate">{cItem.itemTitle || `Món ${cIdx + 1}`}</span>
+                                              </div>
+                                              <div className="flex flex-wrap gap-1 pl-4 text-[9px] text-slate-600">
+                                                {cItem.selectedColor && (
+                                                  <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium">
+                                                    🎨 {cItem.selectedColor}
+                                                  </span>
+                                                )}
+                                                {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
+                                                  <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1 py-0.2 rounded font-medium">
+                                                    ✨ {cItem.selectedCharms.map(c => c.name).join(', ')}
+                                                  </span>
+                                                )}
+                                                {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
+                                                  <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1 py-0.2 rounded font-medium">
+                                                    🧧 {cItem.selectedOmamoris.map(o => o.name).join(', ')}
+                                                  </span>
+                                                )}
+                                                {cItem.selectedKhoen && (
+                                                  <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1 py-0.2 rounded font-medium">
+                                                    🔗 {cItem.selectedKhoen}
+                                                  </span>
+                                                )}
+                                                {cItem.selectedSize && (
+                                                  <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1 py-0.2 rounded font-medium">
+                                                    📏 {cItem.selectedSize}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : (item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) ? (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded">
@@ -7199,6 +7254,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             📏 {item.selectedSize}
                                           </span>
                                         )}
+                                      </div>
+                                    ) : null}
+                                    {item.customNote && (
+                                      <div className="text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 pl-2">
+                                        * {item.customNote}
                                       </div>
                                     )}
                                   </div>
@@ -7611,7 +7671,55 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </span>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
-                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0) || it.selectedSize) && (
+                                      {/* Combo Items breakdown */}
+                                      {it.selectedComboItems && it.selectedComboItems.length > 0 ? (
+                                        <div className="mt-1 p-1.5 bg-amber-50/80 rounded border border-amber-200/80 space-y-1 text-[10px]">
+                                          <div className="font-black text-amber-950 flex items-center gap-1">
+                                            <span className="px-1 py-0.2 bg-amber-200 text-amber-950 rounded text-[9px]">
+                                              COMBO {it.selectedComboItems.length} MÓN:
+                                            </span>
+                                          </div>
+                                          <div className="space-y-1">
+                                            {it.selectedComboItems.map((cItem, cIdx) => (
+                                              <div key={cIdx} className="bg-white/95 p-1 rounded border border-amber-100 space-y-0.5">
+                                                <div className="font-bold text-slate-900 flex items-center gap-1">
+                                                  <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-neutral-950 text-[8px] font-black flex items-center justify-center shrink-0">
+                                                    {cIdx + 1}
+                                                  </span>
+                                                  <span className="truncate">{cItem.itemTitle || `Món ${cIdx + 1}`}</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1 pl-4 text-[9px] text-slate-600">
+                                                  {cItem.selectedColor && (
+                                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium">
+                                                      🎨 {cItem.selectedColor}
+                                                    </span>
+                                                  )}
+                                                  {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
+                                                    <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1 py-0.2 rounded font-medium">
+                                                      ✨ {cItem.selectedCharms.map(c => c.name).join(', ')}
+                                                    </span>
+                                                  )}
+                                                  {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
+                                                    <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1 py-0.2 rounded font-medium">
+                                                      🧧 {cItem.selectedOmamoris.map(o => o.name).join(', ')}
+                                                    </span>
+                                                  )}
+                                                  {cItem.selectedKhoen && (
+                                                    <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1 py-0.2 rounded font-medium">
+                                                      🔗 {cItem.selectedKhoen}
+                                                    </span>
+                                                  )}
+                                                  {cItem.selectedSize && (
+                                                    <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1 py-0.2 rounded font-medium">
+                                                      📏 {cItem.selectedSize}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : (it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0) || it.selectedSize) ? (
                                         <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                                           {it.selectedColor && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
@@ -7638,6 +7746,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               📏 {it.selectedSize}
                                             </span>
                                           )}
+                                        </div>
+                                      ) : null}
+                                      {it.customNote && (
+                                        <div className="text-[10px] text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-200/60 mt-0.5">
+                                          * {it.customNote}
                                         </div>
                                       )}
                                     </div>

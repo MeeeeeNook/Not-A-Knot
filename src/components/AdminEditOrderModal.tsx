@@ -54,6 +54,7 @@ interface EditableOrderItem {
   selectedKhoenPrice?: number;
   selectedOmamoris?: ProductOmamoriOption[];
   selectedOmamoriPrice?: number;
+  selectedComboItems?: ComboItemSelection[];
   customNote?: string;
 }
 
@@ -132,6 +133,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         selectedKhoenPrice: it.selectedKhoenPrice,
         selectedOmamoris: it.selectedOmamoris,
         selectedOmamoriPrice: it.selectedOmamoriPrice,
+        selectedComboItems: it.selectedComboItems,
         customNote: it.customNote || ''
       }));
     }
@@ -437,6 +439,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           selectedKhoenPrice: it.selectedKhoenPrice || undefined,
           selectedOmamoris: it.selectedOmamoris || undefined,
           selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
+          selectedComboItems: it.selectedComboItems || undefined,
           customNote: it.customNote || undefined
         })),
         items: items.map((it) => {
@@ -445,7 +448,10 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             it.selectedColor ? `Màu: ${it.selectedColor}` : '',
             it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
             it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
-            it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}` : ''
+            it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}` : '',
+            it.selectedComboItems && it.selectedComboItems.length > 0
+              ? `Combo: ${it.selectedComboItems.map((ci, i) => `[${ci.itemTitle || `Món ${i + 1}`}: ${[ci.selectedColor ? `Màu: ${ci.selectedColor}` : '', ci.selectedCharms && ci.selectedCharms.length > 0 ? `Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}` : '', ci.selectedOmamoris && ci.selectedOmamoris.length > 0 ? `Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}` : ''].filter(Boolean).join(', ')}]`).join(' + ')}`
+              : ''
           ].filter(Boolean).join(', ');
           return `${it.productName}${specs ? ` (${specs})` : ''} x${it.quantity}`;
         })
@@ -868,6 +874,54 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                           </button>
                         </div>
                       </div>
+
+                      {/* Combo Breakdown Preview if item is a combo */}
+                      {it.selectedComboItems && it.selectedComboItems.length > 0 && (
+                        <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200/90 space-y-2">
+                          <div className="text-xs font-black text-amber-950 flex items-center justify-between">
+                            <span>✨ CHI TIẾT TỪNG MÓN TRONG COMBO ({it.selectedComboItems.length} MÓN):</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {it.selectedComboItems.map((ci, cIdx) => (
+                              <div key={cIdx} className="bg-white p-2 rounded-lg border border-amber-200/60 shadow-2xs space-y-1 text-xs">
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black flex items-center justify-center shrink-0">
+                                    {cIdx + 1}
+                                  </span>
+                                  <span>{ci.itemTitle || `Món ${cIdx + 1}`}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 text-[11px] text-slate-600 pl-5">
+                                  {ci.selectedColor && (
+                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
+                                      🎨 Màu: {ci.selectedColor}
+                                    </span>
+                                  )}
+                                  {ci.selectedCharms && ci.selectedCharms.length > 0 && (
+                                    <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.5 rounded font-medium">
+                                      ✨ Charm: {ci.selectedCharms.map(c => c.name).join(', ')}
+                                    </span>
+                                  )}
+                                  {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
+                                    <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1.5 py-0.5 rounded font-medium">
+                                      🧧 Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}
+                                    </span>
+                                  )}
+                                  {ci.selectedKhoen && (
+                                    <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.5 rounded font-medium">
+                                      🔗 Khoen: {ci.selectedKhoen}
+                                    </span>
+                                  )}
+                                  {ci.selectedSize && (
+                                    <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1.5 py-0.5 rounded font-medium">
+                                      📏 Size: {ci.selectedSize}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Custom Attributes: Color, Charm, Khoen, Custom Note */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">

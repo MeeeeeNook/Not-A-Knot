@@ -1481,33 +1481,82 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                                   {it.productName}
                                 </h4>
 
-                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-slate-500">
-                                  {it.selectedSize && (
-                                    <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-[11px] text-slate-800">
-                                      Size: {it.selectedSize}
-                                    </span>
-                                  )}
-                                  {it.selectedColor && (
-                                    <span className="bg-slate-100 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-700">
-                                      Màu: {it.selectedColor}
-                                    </span>
-                                  )}
-                                  {it.selectedCharm && (
-                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                                      Charm: {it.selectedCharm}
-                                    </span>
-                                  )}
-                                  {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
-                                    <span className="bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                                      Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}
-                                    </span>
-                                  )}
-                                  {it.selectedKhoen && (
-                                    <span className="bg-sky-50 text-sky-900 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                                      Khoen: {it.selectedKhoen}
-                                    </span>
-                                  )}
-                                </div>
+                                {it.selectedComboItems && it.selectedComboItems.length > 0 ? (
+                                  <div className="mt-2 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/80 space-y-1.5 text-xs">
+                                    <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                                      <span className="px-1.5 py-0.5 bg-amber-200 text-amber-950 rounded text-[10px] font-black">
+                                        COMBO {it.selectedComboItems.length} MÓN
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1.5 pl-1">
+                                      {it.selectedComboItems.map((ci, cIdx) => (
+                                        <div key={cIdx} className="bg-white/90 p-1.5 rounded-lg border border-amber-100 text-xs space-y-0.5">
+                                          <div className="font-bold text-slate-900 flex items-center gap-1">
+                                            <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-neutral-950 text-[9px] font-black flex items-center justify-center shrink-0">
+                                              {cIdx + 1}
+                                            </span>
+                                            <span>{ci.itemTitle || `Món ${cIdx + 1}`}</span>
+                                          </div>
+                                          <div className="flex flex-wrap gap-1 text-[11px] text-slate-600 pl-4.5">
+                                            {ci.selectedColor && (
+                                              <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded font-medium">
+                                                🎨 Màu: {ci.selectedColor}
+                                              </span>
+                                            )}
+                                            {ci.selectedCharms && ci.selectedCharms.length > 0 && (
+                                              <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded font-medium">
+                                                ✨ Charm: {ci.selectedCharms.map(c => c.name).join(', ')}
+                                              </span>
+                                            )}
+                                            {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
+                                              <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1.5 py-0.2 rounded font-medium">
+                                                🧧 Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}
+                                              </span>
+                                            )}
+                                            {ci.selectedKhoen && (
+                                              <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded font-medium">
+                                                🔗 Khoen: {ci.selectedKhoen}
+                                              </span>
+                                            )}
+                                            {ci.selectedSize && (
+                                              <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1.5 py-0.2 rounded font-medium">
+                                                📏 Size: {ci.selectedSize}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-slate-500">
+                                    {it.selectedSize && (
+                                      <span className="bg-slate-100 px-2 py-0.5 rounded-md font-bold text-[11px] text-slate-800">
+                                        Size: {it.selectedSize}
+                                      </span>
+                                    )}
+                                    {it.selectedColor && (
+                                      <span className="bg-slate-100 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-700">
+                                        Màu: {it.selectedColor}
+                                      </span>
+                                    )}
+                                    {it.selectedCharm && (
+                                      <span className="bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                        Charm: {it.selectedCharm}
+                                      </span>
+                                    )}
+                                    {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
+                                      <span className="bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                        Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}
+                                      </span>
+                                    )}
+                                    {it.selectedKhoen && (
+                                      <span className="bg-sky-50 text-sky-900 border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                        Khoen: {it.selectedKhoen}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
 
                                 {it.customNote && (
                                   <div className="mt-2 p-2 rounded-xl bg-amber-50/80 border border-amber-200/70 text-xs text-amber-900 leading-tight">
@@ -1906,13 +1955,31 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                               <tr key={idx}>
                                 <td className="p-2.5">
                                   <strong className="text-slate-900 block">{it.productName}</strong>
-                                  <div className="text-[11px] text-slate-500 flex flex-wrap gap-1.5 mt-0.5">
-                                    {it.selectedSize && <span>Size: {it.selectedSize}</span>}
-                                    {it.selectedColor && <span>• Màu: {it.selectedColor}</span>}
-                                    {it.selectedCharm && <span>• Charm: {it.selectedCharm}</span>}
-                                    {it.selectedOmamoris && it.selectedOmamoris.length > 0 && <span>• Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}</span>}
-                                    {it.selectedKhoen && <span>• Khoen: {it.selectedKhoen}</span>}
-                                  </div>
+                                  {it.selectedComboItems && it.selectedComboItems.length > 0 ? (
+                                    <div className="text-[11px] text-slate-700 bg-amber-50/70 p-1.5 rounded border border-amber-200/60 mt-1 space-y-1">
+                                      <span className="font-bold text-amber-950 block">Combo {it.selectedComboItems.length} món:</span>
+                                      {it.selectedComboItems.map((ci, cIdx) => (
+                                        <div key={cIdx} className="pl-1.5 border-l-2 border-amber-300">
+                                          <span className="font-bold">{cIdx + 1}. {ci.itemTitle || `Món ${cIdx + 1}`}:</span>{' '}
+                                          {[
+                                            ci.selectedColor ? `Màu: ${ci.selectedColor}` : '',
+                                            ci.selectedCharms && ci.selectedCharms.length > 0 ? `Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}` : '',
+                                            ci.selectedOmamoris && ci.selectedOmamoris.length > 0 ? `Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}` : '',
+                                            ci.selectedKhoen ? `Khoen: ${ci.selectedKhoen}` : '',
+                                            ci.selectedSize ? `Size: ${ci.selectedSize}` : ''
+                                          ].filter(Boolean).join(' | ')}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[11px] text-slate-500 flex flex-wrap gap-1.5 mt-0.5">
+                                      {it.selectedSize && <span>Size: {it.selectedSize}</span>}
+                                      {it.selectedColor && <span>• Màu: {it.selectedColor}</span>}
+                                      {it.selectedCharm && <span>• Charm: {it.selectedCharm}</span>}
+                                      {it.selectedOmamoris && it.selectedOmamoris.length > 0 && <span>• Bùa: {it.selectedOmamoris.map(o => o.name).join(', ')}</span>}
+                                      {it.selectedKhoen && <span>• Khoen: {it.selectedKhoen}</span>}
+                                    </div>
+                                  )}
                                   {it.customNote && (
                                     <div className="text-[10px] text-amber-800 italic mt-0.5">
                                       * Ghi chú: {it.customNote}
