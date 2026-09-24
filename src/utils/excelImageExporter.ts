@@ -99,8 +99,17 @@ function formatOrderItemFullNameAndOptions(it: any): string {
     }
   }
 
-  if (it.selectedSize) {
-    optionsParts.push(`Size: ${it.selectedSize}`);
+  if (Array.isArray(it.selectedComboItems) && it.selectedComboItems.length > 0) {
+    const comboDesc = it.selectedComboItems.map((c: any) => {
+      const parts = [
+        c.selectedColor ? `Màu: ${c.selectedColor}` : '',
+        Array.isArray(c.selectedCharms) && c.selectedCharms.length > 0 ? `Charm: ${c.selectedCharms.map((x: any) => typeof x === 'object' ? x.name : x).join(', ')}` : '',
+        Array.isArray(c.selectedOmamoris) && c.selectedOmamoris.length > 0 ? `Bùa: ${c.selectedOmamoris.map((x: any) => typeof x === 'object' ? x.name : x).join(', ')}` : '',
+        c.selectedKhoen ? `Khoen: ${c.selectedKhoen}` : '',
+      ].filter(Boolean).join(' - ');
+      return `[${c.itemTitle || 'Món'}: ${parts}]`;
+    }).join(' + ');
+    optionsParts.push(`Gói Combo: ${comboDesc}`);
   }
 
   if (it.customKnotColor) {

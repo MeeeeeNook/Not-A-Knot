@@ -176,7 +176,7 @@ export const LegalPoliciesModal: React.FC<LegalPoliciesModalProps> = ({
               <div>
                 <h4 className="font-bold text-slate-900 text-base mb-2">1. Quy Trình Đặt Hàng & Gia Công Thủ Công</h4>
                 <p className="text-slate-600 mb-2">
-                  Tất cả các sản phẩm phụ kiện tại NOT A KNOT là sản phẩm được đan tay tỉ mỉ theo yêu cầu kích thước riêng của từng đơn hàng.
+                  Tất cả các sản phẩm phụ kiện tại NOT A KNOT là sản phẩm được đan tay tỉ mỉ theo yêu cầu phối màu của từng đơn hàng.
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-slate-600">
                   <li>Thời gian chuẩn bị và hoàn thiện đan thủ công từ 24h - 48h làm việc.</li>

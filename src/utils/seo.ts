@@ -555,7 +555,7 @@ export function setAboutSEO() {
 export function setContactSEO() {
   applyPageSEO({
     title: 'Liên Hệ & Hỗ Trợ Khách Hàng | NOT A KNOT',
-    description: 'Liên hệ xưởng thủ công NOT A KNOT để được tư vấn kích thước vòng tay, đặt mẫu custom theo yêu cầu hoặc hỗ trợ đơn hàng nhanh chóng qua Zalo, Messenger, Hotline.',
+    description: 'Liên hệ xưởng thủ công NOT A KNOT để được tư vấn phụ kiện vòng tay, đặt mẫu custom theo yêu cầu hoặc hỗ trợ đơn hàng nhanh chóng qua Zalo, Messenger, Hotline.',
     canonicalUrl: `${SITE_DOMAIN}/?page=contact`,
     ogType: 'website'
   });

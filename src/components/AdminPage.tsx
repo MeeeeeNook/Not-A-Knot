@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert } from 'lucide-react';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption } from '../types';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers } from 'lucide-react';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, ComboItemConfig } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
@@ -23,6 +23,7 @@ import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
 import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
+import { AdminProductComboSection } from './admin/AdminProductComboSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
@@ -536,6 +537,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formKhoenTitle, setFormKhoenTitle] = useState('');
   const [formKhoenSelectionRequired, setFormKhoenSelectionRequired] = useState(false);
   const [formKhoenOptions, setFormKhoenOptions] = useState<ProductKhoenOption[]>([]);
+  // Combo multi-product states
+  const [formIsCombo, setFormIsCombo] = useState(false);
+  const [isComboMode, setIsComboMode] = useState(false);
+  const [formComboItems, setFormComboItems] = useState<ComboItemConfig[]>([]);
+  const [productFormTab, setProductFormTab] = useState<'basic' | 'customizations' | 'combo'>('basic');
   const [draggedCharmIndex, setDraggedCharmIndex] = useState<number | null>(null);
   const [draggedOmamoriIndex, setDraggedOmamoriIndex] = useState<number | null>(null);
   const [activeCharmDropIndex, setActiveCharmDropIndex] = useState<number | null>(null);
@@ -1291,9 +1297,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     showAdminToast(includeImages ? 'Đã xuất file ZIP kèm toàn bộ hình ảnh thành công!' : 'Đã xuất file Excel (.xlsx) thành công!');
   };
 
-  // Open form for adding new product
+  // Open form for adding single product
   const handleOpenAddForm = () => {
     setEditingProduct(null);
+    setIsComboMode(false);
+    setFormIsCombo(false);
     setFormName('');
     setFormPriceInput('150000');
     setFormOriginalPriceInput('220000');
@@ -1330,13 +1338,71 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormKhoenTitle('');
     setFormKhoenSelectionRequired(false);
     setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
+    // Combo initialization
+    setFormComboItems([]);
     setFormEnableSizeSelection(false);
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
+    setProductFormTab('basic');
+    setIsAddingNew(true);
+  };
+
+  // Open dedicated form for creating a multi-product Combo
+  const handleOpenAddComboForm = () => {
+    setEditingProduct(null);
+    setIsComboMode(true);
+    setFormIsCombo(true);
+    setFormName('');
+    setFormPriceInput('250000');
+    setFormOriginalPriceInput('320000');
+    setFormCategory(localCategories[0]?.id || 'event_0209');
+    setFormDescription('Gói Combo ưu đãi đặc biệt: gộp các món phụ kiện tùy biến theo sở thích riêng của bạn.');
+    setFormImage('/assets/hero-bg.png');
+    setFormImages(['/assets/hero-bg.png']);
+    setNewImageUrlInput('');
+    setFormDiscountBadge('');
+    setFormDetailsText('Trọn bộ combo tùy biến theo yêu cầu\nTặng kèm hộp quà và thiệp chúc mừng');
+    setFormStock(20);
+    setFormInStock(true);
+    setFormSoldCount(0);
+    setFormIsEvent0209(false);
+    setFormIsBestSeller(true);
+    setFormIsNew(true);
+    setFormIsHidden(false);
+    setFormCustomUrl('');
+    // Standalone variations are not needed in combo mode
+    setFormEnableColorSelection(false);
+    setFormColorOptions([]);
+    setFormEnableCharmSelection(false);
+    setFormCharmTitle('');
+    setFormCharmSelectionRequired(false);
+    setFormMaxCharmsAllowed(1);
+    setFormCharmOptions([]);
+    setFormEnableOmamoriSelection(false);
+    setFormOmamoriTitle('');
+    setFormOmamoriSelectionRequired(false);
+    setFormMaxOmamoriAllowed(1);
+    setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
+    setFormEnableKhoenSelection(false);
+    setFormKhoenTitle('');
+    setFormKhoenSelectionRequired(false);
+    setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
+    setFormEnableSizeSelection(false);
+    setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
+    setFormComboItems([]);
+    setProductFormTab('basic');
     setIsAddingNew(true);
   };
 
   // Open form for editing existing product
   const handleOpenEditForm = (prod: Product) => {
+    const isCombo = Boolean(
+      prod.isCombo ||
+      (prod.comboItems && prod.comboItems.length > 0) ||
+      prod.category === 'combo' ||
+      (prod.name && prod.name.toLowerCase().includes('combo'))
+    );
+    setIsComboMode(isCombo);
+    setFormIsCombo(isCombo);
     setEditingProduct(prod);
     setFormName(prod.name);
     setFormPriceInput(String(prod.price || 0));
@@ -1389,12 +1455,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       ? prod.khoenOptions
       : DEFAULT_KHOEN_PRESETS;
     setFormKhoenOptions(loadedKhoens);
-    setFormEnableSizeSelection(Boolean(prod.enableSizeSelection));
-    setFormAvailableSizes(
-      prod.availableSizes && prod.availableSizes.length > 0
-        ? prod.availableSizes
-        : ['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']
-    );
+    // Combo loading
+    setFormComboItems(prod.comboItems || []);
+    setFormEnableSizeSelection(false);
+    setProductFormTab(isCombo ? 'combo' : 'basic');
     setIsAddingNew(true);
   };
 
@@ -1630,6 +1694,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
     const originalPriceNum = formOriginalPriceInput.trim() ? parsePrice(formOriginalPriceInput) : undefined;
 
+    // Combo validation
+    const savingAsCombo = Boolean(isComboMode || formIsCombo);
+    if (savingAsCombo) {
+      if (!formComboItems || formComboItems.length === 0) {
+        alert('Gói Combo cần có ít nhất 1 món. Vui lòng chuyển sang Tab "2. Các Món Trong Combo" và bấm "+ Chọn Từ SP Có Sẵn" hoặc "+ Tự Nhập Món Mới" để thêm món.');
+        setProductFormTab('combo');
+        return;
+      }
+    }
+
     const detailsArray = formDetailsText
       .split('\n')
       .map((s) => s.trim())
@@ -1665,25 +1739,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         images: finalImages,
         discountBadge: formDiscountBadge.trim() || undefined,
         details: detailsArray.length > 0 ? detailsArray : ['Dây đan thủ công cao cấp'],
-        enableColorSelection: formEnableColorSelection,
-        colorOptions: formEnableColorSelection ? formColorOptions : [],
-        availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
-        enableCharmSelection: formEnableCharmSelection,
-        charmTitle: formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined,
-        charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
-        maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
-        charmOptions: formEnableCharmSelection ? formCharmOptions : [],
-        enableOmamoriSelection: formEnableOmamoriSelection,
-        omamoriTitle: formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined,
-        omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
-        maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
-        omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
-        enableKhoenSelection: formEnableKhoenSelection,
-        khoenTitle: formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined,
-        khoenSelectionRequired: formEnableKhoenSelection && formKhoenSelectionRequired,
-        khoenOptions: formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : [],
-        enableSizeSelection: formEnableSizeSelection,
-        availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
+        enableColorSelection: savingAsCombo ? false : formEnableColorSelection,
+        colorOptions: savingAsCombo ? [] : (formEnableColorSelection ? formColorOptions : []),
+        availableColors: savingAsCombo ? undefined : (formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined),
+        enableCharmSelection: savingAsCombo ? false : formEnableCharmSelection,
+        charmTitle: savingAsCombo ? undefined : (formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined),
+        charmSelectionRequired: savingAsCombo ? false : (formEnableCharmSelection && formCharmSelectionRequired),
+        maxCharmsAllowed: savingAsCombo ? undefined : (formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined),
+        charmOptions: savingAsCombo ? [] : (formEnableCharmSelection ? formCharmOptions : []),
+        enableOmamoriSelection: savingAsCombo ? false : formEnableOmamoriSelection,
+        omamoriTitle: savingAsCombo ? undefined : (formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined),
+        omamoriSelectionRequired: savingAsCombo ? false : (formEnableOmamoriSelection && formOmamoriSelectionRequired),
+        maxOmamoriAllowed: savingAsCombo ? undefined : (formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined),
+        omamoriOptions: savingAsCombo ? [] : (formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : []),
+        enableKhoenSelection: savingAsCombo ? false : formEnableKhoenSelection,
+        khoenTitle: savingAsCombo ? undefined : (formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined),
+        khoenSelectionRequired: savingAsCombo ? false : (formEnableKhoenSelection && formKhoenSelectionRequired),
+        khoenOptions: savingAsCombo ? [] : (formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : []),
+        isCombo: savingAsCombo,
+        comboItems: savingAsCombo ? formComboItems : undefined,
+        enableSizeSelection: false,
+        availableSizes: undefined,
         stock: stockNumber,
         inStock: calculatedInStock,
         soldCount: formSoldCount > 0 ? formSoldCount : undefined,
@@ -1752,25 +1828,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         images: finalImages,
         discountBadge: formDiscountBadge.trim() || undefined,
         details: detailsArray.length > 0 ? detailsArray : ['Dây đan thủ công cao cấp', 'Khóa kim loại chống gỉ'],
-        enableColorSelection: formEnableColorSelection,
-        colorOptions: formEnableColorSelection ? formColorOptions : [],
-        availableColors: formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined,
-        enableCharmSelection: formEnableCharmSelection,
-        charmTitle: formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined,
-        charmSelectionRequired: formEnableCharmSelection && formCharmSelectionRequired,
-        maxCharmsAllowed: formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined,
-        charmOptions: formEnableCharmSelection ? formCharmOptions : [],
-        enableOmamoriSelection: formEnableOmamoriSelection,
-        omamoriTitle: formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined,
-        omamoriSelectionRequired: formEnableOmamoriSelection && formOmamoriSelectionRequired,
-        maxOmamoriAllowed: formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined,
-        omamoriOptions: formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : [],
-        enableKhoenSelection: formEnableKhoenSelection,
-        khoenTitle: formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined,
-        khoenSelectionRequired: formEnableKhoenSelection && formKhoenSelectionRequired,
-        khoenOptions: formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : [],
-        enableSizeSelection: formEnableSizeSelection,
-        availableSizes: formEnableSizeSelection ? formAvailableSizes : undefined,
+        enableColorSelection: savingAsCombo ? false : formEnableColorSelection,
+        colorOptions: savingAsCombo ? [] : (formEnableColorSelection ? formColorOptions : []),
+        availableColors: savingAsCombo ? undefined : (formEnableColorSelection && formColorOptions.length > 0 ? formColorOptions.map((c) => c.name) : undefined),
+        enableCharmSelection: savingAsCombo ? false : formEnableCharmSelection,
+        charmTitle: savingAsCombo ? undefined : (formEnableCharmSelection ? (formCharmTitle.trim() || undefined) : undefined),
+        charmSelectionRequired: savingAsCombo ? false : (formEnableCharmSelection && formCharmSelectionRequired),
+        maxCharmsAllowed: savingAsCombo ? undefined : (formEnableCharmSelection ? (formMaxCharmsAllowed > 0 ? formMaxCharmsAllowed : 1) : undefined),
+        charmOptions: savingAsCombo ? [] : (formEnableCharmSelection ? formCharmOptions : []),
+        enableOmamoriSelection: savingAsCombo ? false : formEnableOmamoriSelection,
+        omamoriTitle: savingAsCombo ? undefined : (formEnableOmamoriSelection ? (formOmamoriTitle.trim() || undefined) : undefined),
+        omamoriSelectionRequired: savingAsCombo ? false : (formEnableOmamoriSelection && formOmamoriSelectionRequired),
+        maxOmamoriAllowed: savingAsCombo ? undefined : (formEnableOmamoriSelection ? (formMaxOmamoriAllowed > 0 ? formMaxOmamoriAllowed : 1) : undefined),
+        omamoriOptions: savingAsCombo ? [] : (formEnableOmamoriSelection ? (formOmamoriOptions && formOmamoriOptions.length > 0 ? formOmamoriOptions : DEFAULT_OMAMORI_PRESETS) : []),
+        enableKhoenSelection: savingAsCombo ? false : formEnableKhoenSelection,
+        khoenTitle: savingAsCombo ? undefined : (formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined),
+        khoenSelectionRequired: savingAsCombo ? false : (formEnableKhoenSelection && formKhoenSelectionRequired),
+        khoenOptions: savingAsCombo ? [] : (formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : []),
+        isCombo: savingAsCombo,
+        comboItems: savingAsCombo ? formComboItems : undefined,
+        enableSizeSelection: false,
+        availableSizes: undefined,
         stock: stockNumber,
         inStock: calculatedInStock,
         soldCount: formSoldCount > 0 ? formSoldCount : undefined,
@@ -2748,7 +2826,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         p.name.toLowerCase().includes(adminSearch.toLowerCase()) ||
         p.id.toLowerCase().includes(adminSearch.toLowerCase());
       const matchesCategory =
-        adminCategoryFilter === 'all' || p.category === adminCategoryFilter;
+        adminCategoryFilter === 'all'
+          ? true
+          : adminCategoryFilter === 'combo'
+          ? Boolean(p.isCombo)
+          : p.category === adminCategoryFilter;
       
       const stockCount = p.stock ?? 15;
       const isAvailable = p.inStock !== false && stockCount > 0;
@@ -2794,7 +2876,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         p.name.toLowerCase().includes(adminSearch.toLowerCase()) ||
         p.id.toLowerCase().includes(adminSearch.toLowerCase());
       const matchesCategory =
-        adminCategoryFilter === 'all' || p.category === adminCategoryFilter;
+        adminCategoryFilter === 'all'
+          ? true
+          : adminCategoryFilter === 'combo'
+          ? Boolean(p.isCombo)
+          : p.category === adminCategoryFilter;
       return matchesSearch && matchesCategory;
     });
   }, [allHiddenProducts, adminSearch, adminCategoryFilter]);
@@ -3341,8 +3427,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   id="admin-add-product-btn"
                   onClick={handleOpenAddForm}
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer"
+                  title="Thêm sản phẩm đơn lẻ (vòng tay, charm hoặc móc khóa đơn)"
                 >
-                  <span>+ Thêm Sản Phẩm Mới</span>
+                  <Plus className="w-4 h-4" />
+                  <span>+ Thêm Sản Phẩm Đơn</span>
+                </button>
+
+                <button
+                  id="admin-add-combo-btn"
+                  onClick={handleOpenAddComboForm}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer hover:shadow-purple-500/20 hover:scale-[1.02]"
+                  title="Tạo gói sản phẩm Combo gộp nhiều món tùy biến (khách chọn từng món theo từng bước)"
+                >
+                  <Layers className="w-4 h-4 text-purple-200" />
+                  <span>🎁 Tạo Combo Mới (Gộp Nhiều Món)</span>
                 </button>
 
                 <button
@@ -3454,6 +3552,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                 >
                   <option value="all">Tất cả BST ({products.length})</option>
+                  <option value="combo">🎁 Gói Combo ({products.filter((p) => p.isCombo).length})</option>
                   {localCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.label} ({products.filter((p) => p.category === cat.id).length})
@@ -3478,11 +3577,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-400 shadow-xl space-y-6 animate-fadeIn">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      {isComboMode ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                          <Layers className="w-3 h-3" />
+                          <span>Gói Combo Nhiều Món</span>
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                          <Plus className="w-3 h-3" />
+                          <span>Sản Phẩm Đơn Lẻ</span>
+                        </span>
+                      )}
+                    </div>
                     <h3 className="font-black text-lg text-slate-900">
-                      {editingProduct ? `Chỉnh Sửa Sản Phẩm #${editingProduct.id}` : 'Thêm Sản Phẩm Mới Vào Hệ Thống'}
+                      {isComboMode
+                        ? (editingProduct ? `Chỉnh Sửa Combo #${editingProduct.id}: ${editingProduct.name}` : '🎁 Tạo Sản Phẩm Combo Mới (Gộp Nhiều Món)')
+                        : (editingProduct ? `Chỉnh Sửa Sản Phẩm #${editingProduct.id}: ${editingProduct.name}` : 'Thêm Sản Phẩm Đơn Mới Vào Hệ Thống')}
                     </h3>
-                    <p className="text-xs text-slate-500">
-                      Thông tin sẽ tự động đồng bộ lên Firebase Firestore và cập nhật ngay vào cửa hàng.
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isComboMode
+                        ? 'Gói combo gộp các sản phẩm/phụ kiện lại để khách chọn phối từng món và mua với giá ưu đãi.'
+                        : 'Thông tin sẽ tự động đồng bộ lên Firebase Firestore và cập nhật ngay vào cửa hàng.'}
                     </p>
                   </div>
 
@@ -3491,14 +3607,77 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       setIsAddingNew(false);
                       setEditingProduct(null);
                     }}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                   >
                     Hủy Bỏ
                   </button>
                 </div>
 
+                {/* Workflow Tabs: Separated for Single Product vs Combo */}
+                <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200">
+                  {/* TAB 1: Common for both modes */}
+                  <button
+                    type="button"
+                    onClick={() => setProductFormTab('basic')}
+                    className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      productFormTab === 'basic'
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <span>{isComboMode ? '📝 1. Thông tin gói Combo & Ảnh bìa' : '📝 1. Thông tin chung & Ảnh'}</span>
+                    {formImages.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
+                        {formImages.length} ảnh
+                      </span>
+                    )}
+                  </button>
+
+                  {/* TAB 2 for Single Product: Customizations */}
+                  {!isComboMode && (
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab('customizations')}
+                      className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        productFormTab === 'customizations'
+                          ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                      }`}
+                    >
+                      <span>🎨 2. Tùy chọn phối (Màu, Charm, Bùa, Khoen)</span>
+                      {(formEnableColorSelection || formEnableCharmSelection || formEnableOmamoriSelection || formEnableKhoenSelection) && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
+                          Đang bật
+                        </span>
+                      )}
+                    </button>
+                  )}
+
+                  {/* TAB 2 for Combo: Combo Items */}
+                  {isComboMode && (
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab('combo')}
+                      className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                        productFormTab === 'combo'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'bg-purple-100 text-purple-900 hover:bg-purple-200'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>📦 2. Các Món Trong Combo ({formComboItems.length} món)</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold">
+                        {formComboItems.length} món
+                      </span>
+                    </button>
+                  )}
+                </div>
+
                 <form onSubmit={handleSaveProduct} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* TAB 1: THÔNG TIN CƠ BẢN & HÌNH ẢNH */}
+                  {productFormTab === 'basic' && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Left Column: Core Product Info */}
                     <div className="space-y-4">
                       <div>
@@ -3929,19 +4108,52 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Product Variations Section (Colors with linked images, Charms with photos, Sizes) */}
-                  <div className="pt-5 border-t border-slate-200 space-y-6">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <SlidersHorizontal className="w-4 h-4 text-amber-600" />
-                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                          Tùy chọn phân loại sản phẩm (Màu sắc, Charm, Kích thước)
-                        </h4>
+                      {/* Bottom navigation helper for Tab 1 */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-medium">
+                          {isComboMode
+                            ? 'Bước 1/2: Đã hoàn tất thông tin gói Combo & ảnh bìa đại diện.'
+                            : 'Bước 1/2: Đã hoàn tất thông tin cơ bản & album ảnh sản phẩm.'}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isComboMode ? (
+                            <button
+                              type="button"
+                              onClick={() => setProductFormTab('combo')}
+                              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Tiếp tục: Cấu hình Các Món Trong Combo ({formComboItems.length} món) ➔</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setProductFormTab('customizations')}
+                              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                            >
+                              <span>Tiếp tục: Tùy chọn phối (Màu, Charm, Bùa, Size) ➔</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Bật hoặc tắt từng phân loại tùy theo từng sản phẩm. Mỗi màu có thể liên kết 1 hình ảnh riêng (khách bấm màu sẽ tự động đổi sang ảnh đó), mỗi charm có ảnh đại diện và phụ thu riêng.
-                      </p>
                     </div>
+                  )}
+
+                  {/* TAB 2: TÙY CHỌN PHỐI (MÀU, CHARM, BÙA, KHOEN, SIZE) */}
+                  {productFormTab === 'customizations' && (
+                    <div className="space-y-6">
+                      <div className="pt-2 space-y-6">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <SlidersHorizontal className="w-4 h-4 text-amber-600" />
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                              Tùy chọn phân loại sản phẩm (Màu sắc, Charm, Bùa, Khoen)
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Bật hoặc tắt từng phân loại tùy theo từng sản phẩm. Mỗi màu có thể liên kết 1 hình ảnh riêng (khách bấm màu sẽ tự động đổi sang ảnh đó), mỗi charm/khoen có ảnh đại diện và phụ thu riêng.
+                          </p>
+                        </div>
 
                     {/* 1. COLOR OPTIONS */}
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3.5">
@@ -4215,23 +4427,68 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <select
                                         onChange={(e) => {
                                           const selectedImg = e.target.value;
-                                          if (selectedImg) {
-                                            setFormColorOptions((prev) =>
-                                              prev.map((c, i) => (i === cIdx ? { ...c, image: selectedImg } : c))
-                                            );
-                                          }
+                                          setFormColorOptions((prev) =>
+                                            prev.map((c, i) => (i === cIdx ? { ...c, image: selectedImg } : c))
+                                          );
                                         }}
-                                        value=""
-                                        className="px-2 py-1 bg-slate-100 border border-slate-200 rounded text-[10px] font-semibold text-slate-700 cursor-pointer"
+                                        value={formImages.includes(col.image || '') ? (col.image || '') : ''}
+                                        className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors ${
+                                          formImages.includes(col.image || '')
+                                            ? 'bg-amber-100 border-amber-400 text-amber-950 font-black'
+                                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                                        }`}
                                         title="Gán nhanh từ ảnh sản phẩm đã tải lên"
                                       >
-                                        <option value="" disabled>Gán từ ảnh SP</option>
+                                        <option value="">-- Gán từ ảnh SP --</option>
                                         {formImages.map((imgUrl, imgIdx) => (
                                           <option key={imgIdx} value={imgUrl}>
-                                            Ảnh #{imgIdx + 1}
+                                            {col.image === imgUrl ? `✓ Ảnh #${imgIdx + 1} (Đang gắn)` : `Ảnh #${imgIdx + 1}`}
                                           </option>
                                         ))}
                                       </select>
+                                    )}
+                                  </div>
+
+                                  {/* Badge hiển thị rõ ràng ảnh đang gắn */}
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {col.image ? (
+                                      formImages.includes(col.image) ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 text-[10px] font-extrabold shadow-2xs">
+                                          <span>✓ Đang gắn: Ảnh #{formImages.indexOf(col.image) + 1}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormColorOptions((prev) =>
+                                                prev.map((c, i) => (i === cIdx ? { ...c, image: '' } : c))
+                                              );
+                                            }}
+                                            className="ml-1 text-amber-800 hover:text-rose-600 font-black cursor-pointer"
+                                            title="Gỡ ảnh màu này"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 text-[10px] font-extrabold shadow-2xs">
+                                          <span>✓ Đã tải ảnh riêng</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormColorOptions((prev) =>
+                                                prev.map((c, i) => (i === cIdx ? { ...c, image: '' } : c))
+                                              );
+                                            }}
+                                            className="ml-1 text-emerald-800 hover:text-rose-600 font-black cursor-pointer"
+                                            title="Gỡ ảnh màu này"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 italic">
+                                        (Chưa gắn ảnh, màu sẽ dùng ảnh chính SP)
+                                      </span>
                                     )}
                                   </div>
                                 </div>
@@ -4695,7 +4952,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <input
                                       type="text"
                                       value={charm.image}
@@ -4706,7 +4963,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         );
                                       }}
                                       placeholder="URL hoặc kéo thả ảnh..."
-                                      className="flex-1 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                                      className="flex-1 min-w-[120px] px-2 py-1 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-700 placeholder-slate-400 focus:outline-none focus:border-amber-500"
                                     />
                                     <button
                                       type="button"
@@ -4717,7 +4974,69 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <Upload className="w-3 h-3" />
                                       <span>Tải</span>
                                     </button>
+                                    {formImages.length > 0 && (
+                                      <select
+                                        onChange={(e) => {
+                                          const selectedImg = e.target.value;
+                                          setFormCharmOptions((prev) =>
+                                            prev.map((c, i) => (i === chIdx ? { ...c, image: selectedImg } : c))
+                                          );
+                                        }}
+                                        value={formImages.includes(charm.image || '') ? (charm.image || '') : ''}
+                                        className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer transition-colors ${
+                                          formImages.includes(charm.image || '')
+                                            ? 'bg-amber-100 border-amber-400 text-amber-950 font-black'
+                                            : 'bg-slate-100 border-slate-200 text-slate-700'
+                                        }`}
+                                        title="Gán nhanh từ ảnh sản phẩm đã tải lên"
+                                      >
+                                        <option value="">-- Gán từ ảnh SP --</option>
+                                        {formImages.map((imgUrl, imgIdx) => (
+                                          <option key={imgIdx} value={imgUrl}>
+                                            {charm.image === imgUrl ? `✓ Ảnh #${imgIdx + 1} (Đang gắn)` : `Ảnh #${imgIdx + 1}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
                                   </div>
+                                  {/* Badge hiển thị rõ ràng ảnh đang gắn cho charm */}
+                                  {charm.image && (
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      {formImages.includes(charm.image) ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 text-[9px] font-extrabold">
+                                          <span>✓ Đang gắn: Ảnh #{formImages.indexOf(charm.image) + 1}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormCharmOptions((prev) =>
+                                                prev.map((c, i) => (i === chIdx ? { ...c, image: '' } : c))
+                                              );
+                                            }}
+                                            className="ml-1 text-amber-800 hover:text-rose-600 font-black cursor-pointer"
+                                            title="Gỡ ảnh"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-950 border border-emerald-300 text-[9px] font-extrabold">
+                                          <span>✓ Đã tải ảnh riêng</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setFormCharmOptions((prev) =>
+                                                prev.map((c, i) => (i === chIdx ? { ...c, image: '' } : c))
+                                              );
+                                            }}
+                                            className="ml-1 text-emerald-800 hover:text-rose-600 font-black cursor-pointer"
+                                            title="Gỡ ảnh"
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -5205,8 +5524,56 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       processOptionImageFile={processOptionImageFile}
                       showAdminToast={showAdminToast}
                     />
-
                   </div>
+
+                  {/* Bottom navigation helper for Tab 2 (Single Product Customizations) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab('basic')}
+                      className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                    >
+                      <span>← Quay lại: Thông tin chung & Ảnh</span>
+                    </button>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Bước 2/2: Đã thiết lập xong các tùy chọn phối cho sản phẩm đơn lẻ.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2 / TAB COMBO: CẤU HÌNH COMBO NHIỀU MÓN */}
+              {productFormTab === 'combo' && (
+                <div className="space-y-6">
+                  <div className="pt-2">
+                    {/* SECTION 5: COMBO MULTI-PRODUCT CUSTOMIZATION */}
+                    <AdminProductComboSection
+                      formIsCombo={formIsCombo}
+                      setFormIsCombo={setFormIsCombo}
+                      formComboItems={formComboItems}
+                      setFormComboItems={setFormComboItems}
+                      availableProductImages={formImages}
+                      existingProducts={products}
+                      processOptionImageFile={processOptionImageFile}
+                      showAdminToast={showAdminToast}
+                    />
+                  </div>
+
+                  {/* Bottom navigation helper for Combo Items */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab('basic')}
+                      className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                    >
+                      <span>← Quay lại: Thông tin gói Combo & Ảnh bìa</span>
+                    </button>
+                    <div className="text-xs text-slate-500 font-medium">
+                      Bước 2/2: Đã cấu hình {formComboItems.length} món trong Combo.
+                    </div>
+                  </div>
+                </div>
+              )}
 
                   {/* Form Submit Button */}
                   <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -5216,16 +5583,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         setIsAddingNew(false);
                         setEditingProduct(null);
                       }}
-                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
                       Hủy
                     </button>
 
                     <button
                       type="submit"
-                      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md flex items-center gap-2"
+                      className={`px-6 py-2.5 font-black rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer ${
+                        isComboMode
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/25'
+                          : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
+                      }`}
                     >
-                      <span>{editingProduct ? 'Lưu Thay Đổi Sản Phẩm' : 'Tạo Sản Phẩm Mới'}</span>
+                      {isComboMode ? <Layers className="w-4 h-4 text-white" /> : <Plus className="w-4 h-4" />}
+                      <span>
+                        {isComboMode
+                          ? (editingProduct ? 'Lưu Thay Đổi Gói Combo' : 'Tạo Gói Combo Mới')
+                          : (editingProduct ? 'Lưu Thay Đổi Sản Phẩm' : 'Tạo Sản Phẩm Mới')}
+                      </span>
                     </button>
                   </div>
                 </form>
@@ -5271,6 +5647,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-1">
+                              {p.isCombo && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5">
+                                  <span>🎁 COMBO</span>
+                                  {p.comboItems && p.comboItems.length > 0 && <span>({p.comboItems.length} món)</span>}
+                                </span>
+                              )}
                               {p.isEvent0209 && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                   02.09
@@ -5458,6 +5840,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   <span className="font-bold text-slate-900 block truncate">{p.name}</span>
                                   <span className="text-[10px] text-slate-400 block font-mono">ID: {p.id}</span>
                                   <div className="flex gap-1 mt-1">
+                                    {p.isCombo && (
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                        🎁 COMBO ({p.comboItems?.length || 0} món)
+                                      </span>
+                                    )}
                                     {p.isEvent0209 && (
                                       <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                         02.09
@@ -6789,7 +7176,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <span className="truncate pr-2 font-medium">• {item.name || item.productName || 'Sản phẩm'}</span>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
-                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) && (
+                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0)) && (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded">
@@ -6811,11 +7198,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             🧧 {item.selectedOmamoris.map((o) => o.name).join(', ')}
                                           </span>
                                         )}
-                                        {item.selectedSize && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded">
-                                            📏 {item.selectedSize}
-                                          </span>
-                                        )}
+                                      </div>
+                                    )}
+                                    {item.selectedComboItems && item.selectedComboItems.length > 0 && (
+                                      <div className="pl-2 pt-0.5 space-y-0.5">
+                                        {item.selectedComboItems.map((c, ci) => (
+                                          <div key={ci} className="text-[10px] text-slate-700 flex items-center gap-1 flex-wrap bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                            <span className="font-bold text-slate-900">• {c.itemTitle}:</span>
+                                            {c.selectedColor && <span className="text-slate-800 font-medium">{c.selectedColor}</span>}
+                                            {c.selectedCharms && c.selectedCharms.length > 0 && (
+                                              <span className="text-amber-800">✨ {c.selectedCharms.map((x) => x.name).join(', ')}</span>
+                                            )}
+                                            {c.selectedOmamoris && c.selectedOmamoris.length > 0 && (
+                                              <span className="text-rose-800">🧧 {c.selectedOmamoris.map((x) => x.name).join(', ')}</span>
+                                            )}
+                                            {c.selectedKhoen && (
+                                              <span className="text-sky-800">🔗 {c.selectedKhoen}</span>
+                                            )}
+                                          </div>
+                                        ))}
                                       </div>
                                     )}
                                   </div>
@@ -7228,7 +7629,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </span>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
-                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0) || it.selectedSize) && (
+                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0)) && (
                                         <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                                           {it.selectedColor && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
@@ -7250,11 +7651,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               🧧 {it.selectedOmamoris.map((o) => o.name).join(', ')}
                                             </span>
                                           )}
-                                          {it.selectedSize && (
-                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded font-medium">
-                                              📏 {it.selectedSize}
-                                            </span>
-                                          )}
+                                        </div>
+                                      )}
+                                      {it.selectedComboItems && it.selectedComboItems.length > 0 && (
+                                        <div className="pt-1 space-y-0.5">
+                                          {it.selectedComboItems.map((c, ci) => (
+                                            <div key={ci} className="text-[10px] text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 flex-wrap">
+                                              <span className="font-bold text-slate-900">• {c.itemTitle}:</span>
+                                              {c.selectedColor && <span className="text-slate-800 font-medium">{c.selectedColor}</span>}
+                                              {c.selectedCharms && c.selectedCharms.length > 0 && (
+                                                <span className="text-amber-800">✨ {c.selectedCharms.map((x) => x.name).join(', ')}</span>
+                                              )}
+                                              {c.selectedOmamoris && c.selectedOmamoris.length > 0 && (
+                                                <span className="text-rose-800">🧧 {c.selectedOmamoris.map((x) => x.name).join(', ')}</span>
+                                              )}
+                                              {c.selectedKhoen && (
+                                                <span className="text-sky-800">🔗 {c.selectedKhoen}</span>
+                                              )}
+                                            </div>
+                                          ))}
                                         </div>
                                       )}
                                     </div>

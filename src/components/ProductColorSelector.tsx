@@ -18,12 +18,14 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
   if (!colors || colors.length === 0) return null;
 
   // Normalize options to ProductColorOption format
-  const normalizedOptions: ProductColorOption[] = colors.map((c) => {
-    if (typeof c === 'string') {
-      return { name: c };
-    }
-    return c;
-  });
+  const normalizedOptions: ProductColorOption[] = React.useMemo(() => {
+    return colors.map((c) => {
+      if (typeof c === 'string') {
+        return { name: c };
+      }
+      return c;
+    });
+  }, [colors]);
 
   const selectedOption = normalizedOptions.find(
     (c) => (selectedColor || '').trim().toLowerCase() === c.name.trim().toLowerCase()

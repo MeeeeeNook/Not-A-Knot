@@ -50,7 +50,7 @@ export const Footer: React.FC<FooterProps> = ({
       <div className="sr-only">
         <h2 itemProp="name">NOT A KNOT - Phụ Kiện Vòng Tay Handmade Thủ Công</h2>
         <p itemProp="description">
-          NOT A KNOT chuyên chế tác thủ công các dòng vòng tay handmade nam nữ, móc khóa thời trang, phụ kiện đan tay cao cấp, charm đồng và titan nguyên khối độc bản. Nhận custom phối màu và kích thước theo yêu cầu toàn quốc.
+          NOT A KNOT chuyên chế tác thủ công các dòng vòng tay handmade nam nữ, móc khóa thời trang, phụ kiện đan tay cao cấp, charm đồng và titan nguyên khối độc bản. Nhận custom phối màu và charm theo yêu cầu toàn quốc.
         </p>
         <span itemProp="address" itemScope itemType="https://schema.org/PostalAddress">
           <span itemProp="addressCountry">Việt Nam</span>

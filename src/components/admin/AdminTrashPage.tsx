@@ -130,6 +130,7 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
       title: 'Xóa vĩnh viễn đơn hàng này?',
       message: `Đơn hàng #${orderId} và dữ liệu liên quan sẽ bị xóa vĩnh viễn khỏi hệ thống Cloud và không thể phục hồi lại.`,
       onConfirm: async () => {
+        setConfirmModal(null);
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
@@ -137,7 +138,6 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
           }
           await deleteOrderPermanently(orderId);
           onNotify(`✓ Đã xóa vĩnh viễn đơn hàng #${orderId}.`);
-          setConfirmModal(null);
           if (onRefreshOrders) onRefreshOrders();
         } catch (err) {
           onNotify('Lỗi khi xóa vĩnh viễn đơn hàng!');
@@ -157,6 +157,7 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
       title: `Xóa vĩnh viễn ${count} đơn hàng đã chọn?`,
       message: `${count} đơn hàng này sẽ bị xóa vĩnh viễn khỏi Cloud Firebase. Hành động này KHÔNG THỂ HỎAN TÁC.`,
       onConfirm: async () => {
+        setConfirmModal(null);
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
@@ -167,7 +168,6 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
           await emptyOrderTrash(selectedIds);
           onNotify(`✓ Đã xóa vĩnh viễn ${count} đơn hàng!`);
           setSelectedIds([]);
-          setConfirmModal(null);
           if (onRefreshOrders) onRefreshOrders();
         } catch (err) {
           onNotify('Lỗi khi xóa vĩnh viễn các đơn hàng đã chọn!');
@@ -188,6 +188,7 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
       title: `Dọn sạch Thùng rác (${count} đơn)?`,
       message: `Tất cả ${count} đơn hàng trong Thùng rác sẽ bị xóa vĩnh viễn khỏi hệ thống. Hành động này KHÔNG THỂ HỎAN TÁC.`,
       onConfirm: async () => {
+        setConfirmModal(null);
         setIsProcessing(true);
         try {
           if (onUpdateOrders) {
@@ -198,7 +199,6 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
           await emptyOrderTrash(allIds);
           onNotify(`✓ Đã dọn sạch ${count} đơn hàng khỏi Thùng rác!`);
           setSelectedIds([]);
-          setConfirmModal(null);
           if (onRefreshOrders) onRefreshOrders();
         } catch (err) {
           onNotify('Lỗi khi dọn sạch thùng rác!');

@@ -20,7 +20,7 @@ export interface ProductColorOption {
 export interface ProductCharmOption {
   id?: string;
   name: string; // e.g. "Sao chuông · Xanh", "Sao trong · Hồng", "Hoa anh đào · Hồng"
-  image: string; // thumbnail / photo of the charm
+  image?: string; // thumbnail / photo of the charm
   priceDelta?: number; // optional extra price, default 0
   stock?: number; // Inventory quantity for this specific charm (undefined = unlimited, 0 = out of stock)
 }
@@ -28,7 +28,7 @@ export interface ProductCharmOption {
 export interface ProductOmamoriOption {
   id?: string;
   name: string; // e.g. "Bùa Bình An (Đỏ)", "Bùa May Mắn (Vàng)", "Bùa Tình Duyên (Hồng)"
-  image: string; // thumbnail / photo of the Omamori amulet
+  image?: string; // thumbnail / photo of the Omamori amulet
   priceDelta?: number; // optional extra price, default 0
   meaning?: string; // e.g. "Bình an, may mắn"
   stock?: number; // Inventory quantity for this specific amulet (undefined = unlimited, 0 = out of stock)
@@ -40,6 +40,53 @@ export interface ProductKhoenOption {
   image?: string; // thumbnail / photo of the clasp/keyring
   priceDelta?: number; // optional extra price (e.g. +5.000đ), default 0
   stock?: number; // Inventory quantity for this specific khoen (undefined = unlimited, 0 = out of stock)
+}
+
+// Multi-Product Combo Item Definition
+export interface ComboItemConfig {
+  id: string; // e.g. "item-1", "item-2"
+  linkedProductId?: string; // ID of the existing store product linked to this combo item
+  title: string; // e.g. "Sản phẩm 1: Vòng Lucky", "Sản phẩm 2: Nút thắt Bướm"
+  subtitle?: string; // e.g. "Chọn màu dây, charm và kích thước cho vòng Lucky"
+  image?: string; // preview image for this individual item
+  images?: string[]; // all photos associated with this item
+  // Option toggles and presets per combo item
+  enableColorSelection?: boolean;
+  colorOptions?: ProductColorOption[];
+  availableColors?: string[];
+  enableCharmSelection?: boolean;
+  charmTitle?: string;
+  charmOptions?: ProductCharmOption[];
+  charmSelectionRequired?: boolean;
+  maxCharmsAllowed?: number;
+  enableOmamoriSelection?: boolean;
+  omamoriTitle?: string;
+  omamoriOptions?: ProductOmamoriOption[];
+  omamoriSelectionRequired?: boolean;
+  maxOmamoriAllowed?: number;
+  enableKhoenSelection?: boolean;
+  khoenTitle?: string;
+  khoenOptions?: ProductKhoenOption[];
+  khoenSelectionRequired?: boolean;
+  enableSizeSelection?: boolean;
+  availableSizes?: string[];
+}
+
+// Customer choices for each item in a Combo
+export interface ComboItemSelection {
+  itemId: string;
+  itemTitle: string;
+  selectedColor?: string;
+  selectedColorImage?: string;
+  selectedCharms?: ProductCharmOption[];
+  selectedCharmPrice?: number;
+  selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriPrice?: number;
+  selectedKhoen?: string;
+  selectedKhoenImage?: string;
+  selectedKhoenPrice?: number;
+  selectedSize?: string;
+  customNote?: string;
 }
 
 export interface Product {
@@ -83,6 +130,9 @@ export interface Product {
   khoenOptions?: ProductKhoenOption[];
   khoenSelectionRequired?: boolean;
   enableSizeSelection?: boolean;
+  // Multi-Product Combo settings
+  isCombo?: boolean; // If true, product has multiple distinct items to customize
+  comboItems?: ComboItemConfig[]; // Array of sub-items that make up this combo
   inStock: boolean;
   stock?: number;
   soldCount?: number;
@@ -121,6 +171,7 @@ export interface CartItem {
   selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
+  selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
 export type OrderSource = 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other';
@@ -147,6 +198,7 @@ export interface OrderItemDetail {
   selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
+  selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
 export interface SellerUser {

@@ -295,9 +295,11 @@ const mergeOrderRecords = (target: StoredOrder, source: StoredOrder): StoredOrde
   };
 };
 
+const EMPTY_DEFAULT_ORDERS: StoredOrder[] = [];
+
 export const OrderTracker: React.FC<OrderTrackerProps> = ({
   initialTrackingCode = '',
-  allOrders = [],
+  allOrders = EMPTY_DEFAULT_ORDERS,
   onNavigateHome,
   onNavigateCatalog,
   siteContent

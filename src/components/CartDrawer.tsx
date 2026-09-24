@@ -329,6 +329,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           }`
         );
       }
+      if (item.selectedComboItems && item.selectedComboItems.length > 0) {
+        const comboSummary = item.selectedComboItems.map((ci, i) => {
+          const parts = [];
+          if (ci.selectedColor) parts.push(`Màu: ${ci.selectedColor}`);
+          if (ci.selectedCharms && ci.selectedCharms.length > 0) parts.push(`Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}`);
+          if (ci.selectedOmamoris && ci.selectedOmamoris.length > 0) parts.push(`Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}`);
+          if (ci.selectedKhoen) parts.push(`Khoen: ${ci.selectedKhoen}`);
+          if (ci.selectedSize) parts.push(`Size: ${ci.selectedSize}`);
+          return `[${ci.itemTitle || `Món ${i + 1}`}: ${parts.join(', ')}]`;
+        }).join(' + ');
+        extras.push(`Combo: ${comboSummary}`);
+      }
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) line += ` (${extras.join(', ')})`;
@@ -366,7 +378,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         selectedKhoen: item.selectedKhoen,
         selectedKhoenPrice: item.selectedKhoenPrice,
         selectedSize: item.selectedSize,
-        customNote: item.customNote
+        customNote: item.customNote,
+        selectedComboItems: item.selectedComboItems
       };
     });
 
@@ -771,6 +784,36 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                     <span className="font-bold text-neutral-900 text-[11px]">
                                       {item.selectedSize}
                                     </span>
+                                  </div>
+                                )}
+                                {item.selectedComboItems && item.selectedComboItems.length > 0 && (
+                                  <div className="space-y-1.5 pt-1">
+                                    <span className="text-[10px] font-black text-purple-800 uppercase tracking-wider block">
+                                      Tùy chọn trọn bộ Combo:
+                                    </span>
+                                    <div className="space-y-1 bg-purple-50/70 border border-purple-200/80 rounded-xl p-2">
+                                      {item.selectedComboItems.map((ci, ciIdx) => (
+                                        <div key={ciIdx} className="text-[11px] text-purple-950 font-medium">
+                                          <div className="font-bold text-purple-900 flex items-center gap-1">
+                                            <span className="w-3.5 h-3.5 rounded-full bg-purple-200 text-purple-900 text-[9px] font-black flex items-center justify-center shrink-0">
+                                              {ciIdx + 1}
+                                            </span>
+                                            <span className="truncate">{ci.itemTitle}</span>
+                                          </div>
+                                          <div className="pl-4 text-[10px] text-purple-800 space-x-1">
+                                            {ci.selectedColor && <span>Màu: <b>{ci.selectedColor}</b></span>}
+                                            {ci.selectedCharms && ci.selectedCharms.length > 0 && (
+                                              <span>• Charm: <b>{ci.selectedCharms.map(c => c.name).join(', ')}</b></span>
+                                            )}
+                                            {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
+                                              <span>• Bùa: <b>{ci.selectedOmamoris.map(o => o.name).join(', ')}</b></span>
+                                            )}
+                                            {ci.selectedKhoen && <span>• Khoen: <b>{ci.selectedKhoen}</b></span>}
+                                            {ci.selectedSize && <span>• Size: <b>{ci.selectedSize}</b></span>}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
                                 )}
                                 {item.customNote && (

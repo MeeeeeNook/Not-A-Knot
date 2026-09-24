@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, CollectionInfo } from '../types';
+import { Product, CategoryItem, CartItem, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, CollectionInfo, ComboItemSelection } from '../types';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
+import { ProductComboCustomizer } from './ProductComboCustomizer';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { ShareProductModal } from './ShareProductModal';
 import { LoadingImage } from './LoadingImage';
@@ -60,7 +61,8 @@ interface ProductDetailPageProps {
     selectedOmamoriPrice?: number,
     selectedKhoen?: string,
     selectedKhoenImage?: string,
-    selectedKhoenPrice?: number
+    selectedKhoenPrice?: number,
+    selectedComboItems?: ComboItemSelection[]
   ) => void;
   onBuyNow: (
     product: Product,
@@ -77,16 +79,21 @@ interface ProductDetailPageProps {
     selectedOmamoriPrice?: number,
     selectedKhoen?: string,
     selectedKhoenImage?: string,
-    selectedKhoenPrice?: number
+    selectedKhoenPrice?: number,
+    selectedComboItems?: ComboItemSelection[]
   ) => void;
 }
+
+const EMPTY_CATEGORIES: CategoryItem[] = [];
+const EMPTY_COLLECTIONS: CollectionInfo[] = [];
+const EMPTY_CART_ITEMS: CartItem[] = [];
 
 export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
   allProducts,
-  categories = [],
-  collections = [],
-  cartItems = [],
+  categories = EMPTY_CATEGORIES,
+  collections = EMPTY_COLLECTIONS,
+  cartItems = EMPTY_CART_ITEMS,
   backLabel,
   onBack,
   onSelectProduct,
@@ -95,8 +102,47 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 }) => {
   const [quantity, setQuantity] = useState(1);
   const [activeImageIdx, setActiveImageIdx] = useState<number>(0);
+  const [activeComboStep, setActiveComboStep] = useState<number>(0);
 
-  // Initial color setup
+  const isInteractiveCombo = Boolean(product.isCombo && product.comboItems && product.comboItems.length > 0);
+
+  // Gallery images strictly reflecting the product's uploaded images and color variant images (and combo sub-items if combo)
+  const images = useMemo(() => {
+    if (isInteractiveCombo && product.comboItems && product.comboItems.length > 0) {
+      const list: string[] = [];
+      const addImg = (url?: string) => {
+        if (!url || typeof url !== 'string' || !url.trim()) return;
+        const clean = url.trim();
+        if (!list.some((existing) => isSameImageUrl(existing, clean))) {
+          list.push(clean);
+        }
+      };
+
+      // 1. Primary general combo overview image(s)
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        product.images.forEach(addImg);
+      } else if (product.image) {
+        addImg(product.image);
+      }
+
+      // 2. Combo sub-items images & colors
+      product.comboItems.forEach((item) => {
+        if (item.image) addImg(item.image);
+        if (Array.isArray(item.images)) {
+          item.images.forEach(addImg);
+        }
+        if (Array.isArray(item.colorOptions)) {
+          item.colorOptions.forEach((col) => {
+            if (col.image) addImg(col.image);
+          });
+        }
+      });
+
+      return list.length > 0 ? list : ['/assets/bracelet.jpg'];
+    }
+
+    return buildProductGalleryImages(product);
+  }, [isInteractiveCombo, product]);
   const initialColor = useMemo(() => {
     if (product.colorOptions && product.colorOptions.length > 0) {
       const inStockColor = product.colorOptions.find((c) => c.stock === undefined || c.stock > 0);
@@ -191,10 +237,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
   }, [product?.id]);
 
-  // Gallery images strictly reflecting the product's uploaded images and color variant images
-  const images = useMemo(() => {
-    return buildProductGalleryImages(product);
-  }, [product.images, product.image, product.colorOptions]);
+
 
   const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);
 
@@ -275,12 +318,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Ensure selected quantity never exceeds remaining addable stock
   useEffect(() => {
-    if (remainingAddableStock > 0 && quantity > remainingAddableStock) {
-      setQuantity(remainingAddableStock);
-    } else if (remainingAddableStock === 0) {
-      setQuantity(1);
+    if (remainingAddableStock > 0) {
+      setQuantity((prev) => (prev > remainingAddableStock ? remainingAddableStock : prev));
     }
-  }, [remainingAddableStock, quantity]);
+  }, [remainingAddableStock]);
 
   const paginate = useCallback((newDirection: number) => {
     setActiveImageIdx((curr) => {
@@ -294,14 +335,27 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const selectImage = useCallback((idx: number) => {
     setActiveImageIdx(idx);
     const targetImg = images[idx];
-    if (targetImg && product.colorOptions && product.colorOptions.length > 0) {
+    if (!targetImg) return;
+
+    if (isInteractiveCombo && product.comboItems) {
+      for (let i = 0; i < product.comboItems.length; i++) {
+        const item = product.comboItems[i];
+        const isItemImg = item.image && isSameImageUrl(item.image, targetImg);
+        const isItemSubImg = Array.isArray(item.images) && item.images.some((si) => isSameImageUrl(si, targetImg));
+        const matchingCol = item.colorOptions?.find((c) => c.image && isSameImageUrl(c.image, targetImg));
+        if (isItemImg || isItemSubImg || matchingCol) {
+          setActiveComboStep(i);
+          break;
+        }
+      }
+    } else if (product.colorOptions && product.colorOptions.length > 0) {
       const matchingColor = product.colorOptions.find((c) => c.image && isSameImageUrl(c.image, targetImg));
       if (matchingColor && (matchingColor.stock === undefined || matchingColor.stock > 0)) {
         setSelectedColor(matchingColor.name);
         setSelectedColorImage(matchingColor.image);
       }
     }
-  }, [images, product.colorOptions]);
+  }, [images, isInteractiveCombo, product.comboItems, product.colorOptions]);
 
   const prevImage = useCallback(() => {
     paginate(-1);
@@ -579,8 +633,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const handleQuickAddRecommended = (e: React.MouseEvent, prod: Product) => {
     e.stopPropagation();
     const defaultColor = prod.colorOptions?.[0]?.name || prod.availableColors?.[0];
-    const defaultSize = prod.availableSizes?.[0];
-    onAddToCart(prod, 1, defaultColor, defaultSize);
+    onAddToCart(prod, 1, defaultColor, undefined);
     
     setQuickAddedId(prod.id);
     setTimeout(() => {
@@ -910,6 +963,29 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 {images.map((img, idx) => {
                   const isActive = idx === activeImageIdx;
+                  
+                  // Compute label badge for thumbnail
+                  let thumbBadge: string | null = null;
+                  if (isInteractiveCombo && product.comboItems) {
+                    const isMainOverview = (Array.isArray(product.images) && product.images.some((m) => isSameImageUrl(m, img))) || (product.image && isSameImageUrl(product.image, img));
+                    if (idx === 0 || isMainOverview) {
+                      thumbBadge = 'Ảnh chung';
+                    } else {
+                      for (let i = 0; i < product.comboItems.length; i++) {
+                        const itm = product.comboItems[i];
+                        const isItmImg = itm.image && isSameImageUrl(itm.image, img);
+                        const isItmSub = Array.isArray(itm.images) && itm.images.some((si) => isSameImageUrl(si, img));
+                        const itmCol = itm.colorOptions?.find((c) => c.image && isSameImageUrl(c.image, img));
+                        if (isItmImg || isItmSub || itmCol) {
+                          thumbBadge = `SP ${i + 1}`;
+                          break;
+                        }
+                      }
+                    }
+                  } else if (idx === 0) {
+                    thumbBadge = 'Chính';
+                  }
+
                   return (
                     <button
                       key={idx}
@@ -930,9 +1006,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         spinnerSize="xs"
                         spinnerColor="neutral"
                       />
-                      {idx === 0 && (
-                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[7px] text-white text-center font-bold py-0.2">
-                          Chính
+                      {thumbBadge && (
+                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/85 text-[8px] text-white text-center font-bold py-0.2 truncate px-0.5">
+                          {thumbBadge}
                         </span>
                       )}
                     </button>
@@ -1011,88 +1087,165 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </p>
               )}
 
-              {/* Color Selection (if enabled) */}
-              {product.enableColorSelection !== false &&
-                ((product.colorOptions && product.colorOptions.length > 0) ||
-                  (product.availableColors && product.availableColors.length > 0)) && (
-                  <ProductColorSelector
-                    colors={
-                      product.colorOptions && product.colorOptions.length > 0
-                        ? product.colorOptions
-                        : product.availableColors || []
+              {/* Multi-Product Combo Stepper Flow if this product is a Combo */}
+              {isInteractiveCombo ? (
+                <ProductComboCustomizer
+                  product={product}
+                  comboItems={product.comboItems!}
+                  isOutOfStock={isOutOfStock}
+                  activeStep={activeComboStep}
+                  onStepChange={(newStep) => {
+                    setActiveComboStep(newStep);
+                    const item = product.comboItems?.[newStep];
+                    const itemImg = item?.colorOptions?.[0]?.image || item?.image;
+                    if (itemImg) {
+                      const idx = findGalleryImageIndex(images, itemImg);
+                      if (idx > -1) setActiveImageIdx(idx);
                     }
-                    selectedColor={selectedColor}
-                    onSelectColor={handleSelectColor}
-                  />
-                )}
-
-              {/* Charm Selection (if enabled) */}
-              {product.enableCharmSelection &&
-                product.charmOptions &&
-                product.charmOptions.length > 0 && (
-                  <div className="space-y-1">
-                    <ProductCharmSelector
-                      title={product.charmTitle}
-                      charms={product.charmOptions}
-                      selectedCharms={selectedCharms}
-                      onSelectCharms={handleSelectCharms}
-                      isRequired={product.charmSelectionRequired}
-                      maxAllowed={product.maxCharmsAllowed || 1}
-                    />
-                    {charmError && (
-                      <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                        {charmError}
-                      </p>
+                  }}
+                  onActiveColorChange={(_colName, colImg) => {
+                    if (colImg) {
+                      const idx = findGalleryImageIndex(images, colImg);
+                      if (idx > -1) {
+                        setActiveImageIdx(idx);
+                      }
+                    }
+                  }}
+                  quantity={quantity}
+                  onQuantityChange={setQuantity}
+                  availableStock={availableStock}
+                  onCompleteCombo={(selectedComboItems, totalExtra) => {
+                    // Update state or callback
+                  }}
+                  onAddToCartDirect={(selectedComboItems, totalExtra, qty) => {
+                    setIsAdded(true);
+                    setTimeout(() => setIsAdded(false), 2000);
+                    onAddToCart(
+                      product,
+                      qty || quantity,
+                      selectedComboItems[0]?.selectedColor,
+                      undefined,
+                      undefined,
+                      undefined,
+                      selectedComboItems[0]?.selectedColorImage,
+                      undefined,
+                      totalExtra,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      selectedComboItems
+                    );
+                  }}
+                  onBuyNowDirect={(selectedComboItems, totalExtra, qty) => {
+                    onBuyNow(
+                      product,
+                      qty || quantity,
+                      selectedComboItems[0]?.selectedColor,
+                      undefined,
+                      undefined,
+                      undefined,
+                      selectedComboItems[0]?.selectedColorImage,
+                      undefined,
+                      totalExtra,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      undefined,
+                      selectedComboItems
+                    );
+                  }}
+                />
+              ) : (
+                <>
+                  {/* Color Selection (if enabled) */}
+                  {product.enableColorSelection !== false &&
+                    ((product.colorOptions && product.colorOptions.length > 0) ||
+                      (product.availableColors && product.availableColors.length > 0)) && (
+                      <ProductColorSelector
+                        colors={
+                          product.colorOptions && product.colorOptions.length > 0
+                            ? product.colorOptions
+                            : product.availableColors || []
+                        }
+                        selectedColor={selectedColor}
+                        onSelectColor={handleSelectColor}
+                      />
                     )}
-                  </div>
-                )}
 
-              {/* Omamori Selection (if enabled) */}
-              {product.enableOmamoriSelection && (
-                <div className="space-y-1">
-                  <ProductOmamoriSelector
-                    title={product.omamoriTitle}
-                    omamoris={
-                      product.omamoriOptions && product.omamoriOptions.length > 0
-                        ? product.omamoriOptions
-                        : DEFAULT_OMAMORI_PRESETS
-                    }
-                    selectedOmamoris={selectedOmamoris}
-                    onSelectOmamoris={handleSelectOmamoris}
-                    isRequired={product.omamoriSelectionRequired}
-                    maxAllowed={product.maxOmamoriAllowed || 1}
-                  />
-                  {omamoriError && (
-                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                      {omamoriError}
-                    </p>
-                  )}
-                </div>
-              )}
+                  {/* Charm Selection (if enabled) */}
+                  {product.enableCharmSelection &&
+                    product.charmOptions &&
+                    product.charmOptions.length > 0 && (
+                      <div className="space-y-1">
+                        <ProductCharmSelector
+                          title={product.charmTitle}
+                          charms={product.charmOptions}
+                          selectedCharms={selectedCharms}
+                          onSelectCharms={handleSelectCharms}
+                          isRequired={product.charmSelectionRequired}
+                          maxAllowed={product.maxCharmsAllowed || 1}
+                        />
+                        {charmError && (
+                          <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                            {charmError}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
-              {/* Khoen Selection (if enabled) */}
-              {product.enableKhoenSelection && (
-                <div className="space-y-1">
-                  <ProductKhoenSelector
-                    title={product.khoenTitle}
-                    khoenOptions={
-                      product.khoenOptions && product.khoenOptions.length > 0
-                        ? product.khoenOptions
-                        : DEFAULT_KHOEN_PRESETS
-                    }
-                    selectedKhoen={selectedKhoen}
-                    onSelectKhoen={(khoen) => {
-                      setKhoenError(null);
-                      setSelectedKhoen(khoen);
-                    }}
-                    isRequired={product.khoenSelectionRequired}
-                  />
-                  {khoenError && (
-                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
-                      {khoenError}
-                    </p>
+                  {/* Omamori Selection (if enabled) */}
+                  {product.enableOmamoriSelection && (
+                    <div className="space-y-1">
+                      <ProductOmamoriSelector
+                        title={product.omamoriTitle}
+                        omamoris={
+                          product.omamoriOptions && product.omamoriOptions.length > 0
+                            ? product.omamoriOptions
+                            : DEFAULT_OMAMORI_PRESETS
+                        }
+                        selectedOmamoris={selectedOmamoris}
+                        onSelectOmamoris={handleSelectOmamoris}
+                        isRequired={product.omamoriSelectionRequired}
+                        maxAllowed={product.maxOmamoriAllowed || 1}
+                      />
+                      {omamoriError && (
+                        <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                          {omamoriError}
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
+
+                  {/* Khoen Selection (if enabled) */}
+                  {product.enableKhoenSelection && (
+                    <div className="space-y-1">
+                      <ProductKhoenSelector
+                        title={product.khoenTitle}
+                        khoenOptions={
+                          product.khoenOptions && product.khoenOptions.length > 0
+                            ? product.khoenOptions
+                            : DEFAULT_KHOEN_PRESETS
+                        }
+                        selectedKhoen={selectedKhoen}
+                        onSelectKhoen={(khoen) => {
+                          setKhoenError(null);
+                          setSelectedKhoen(khoen);
+                        }}
+                        isRequired={product.khoenSelectionRequired}
+                      />
+                      {khoenError && (
+                        <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl animate-shake">
+                          {khoenError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* In-cart stock status alert */}
@@ -1120,8 +1273,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </div>
               )}
 
-              {/* Quantity Selector & Action Buttons */}
-              <div ref={mainCtaRef} id="product-detail-main-cta" className="space-y-3 pt-2">
+              {/* Quantity Selector & Action Buttons (Hidden for interactive Combo products because Combo has its own interactive stepper buttons) */}
+              {!isInteractiveCombo && (
+                <div ref={mainCtaRef} id="product-detail-main-cta" className="space-y-3 pt-2">
                 {/* Large Prominent Quantity & Subtotal Card */}
                 <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/90 shadow-2xs">
                   <div className="flex items-center gap-2.5 flex-wrap">
@@ -1243,9 +1397,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     <span>{isCartFullForProduct ? 'Kho đã hết' : 'Mua Ngay'}</span>
                   </button>
                 </div>
+              </div>
+              )}
 
-                {/* Service Guarantees */}
-                <div className="pt-4 border-t border-neutral-100 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-neutral-700">
+              {/* Service Guarantees */}
+              <div className="pt-4 border-t border-neutral-100 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-neutral-700">
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-neutral-50 border border-neutral-100/90">
                     <div className="w-6 h-6 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
                       <Package className="w-3.5 h-3.5" />
@@ -1265,7 +1421,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     <span className="font-medium truncate">Phí ship minh bạch</span>
                   </div>
                 </div>
-              </div>
 
             </div>
           </div>
@@ -1308,10 +1463,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-100 space-y-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-950 text-sm">
                     <Check className="w-4 h-4 text-emerald-600" />
-                    <span>Quy cách sản phẩm: Không có size</span>
+                    <span>Thiết kế đan thủ công tinh xảo</span>
                   </div>
                   <p className="text-neutral-600 leading-relaxed">
-                    Sản phẩm của chúng tôi bán không có phân chia size số. Thiết kế dạng freesize linh hoạt, dễ dàng điều chỉnh độ vừa vặn phù hợp cho mọi kích thước cổ tay.
+                    Từng đường đan được thắt thủ công tỉ mỉ, chất liệu chỉ dù cao cấp bền màu, êm ái khi đeo cả ngày dài.
                   </p>
                 </div>
 
@@ -1530,9 +1685,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
       </main>
 
-      {/* UNIVERSAL FLOATING PERSISTENT PURCHASE DOCK (Desktop & Mobile) */}
+      {/* UNIVERSAL FLOATING PERSISTENT PURCHASE DOCK (Desktop & Mobile) - disabled for combo products to let user customize both products */}
       <AnimatePresence>
-        {showFloatingBar && (
+        {showFloatingBar && !isInteractiveCombo && (
           <motion.div
             key="floating-product-dock"
             id="floating-product-dock"

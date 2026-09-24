@@ -536,6 +536,41 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         )}
                       </div>
 
+                      {/* Combo Multi-Product Breakdown (if item is a combo) */}
+                      {it.selectedComboItems && it.selectedComboItems.length > 0 && (
+                        <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 space-y-2 mt-1.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-black text-stone-900 uppercase">
+                            <span>Chi tiết phối đồ Combo ({it.selectedComboItems.length} món):</span>
+                          </div>
+                          <div className="space-y-1.5 text-[11px]">
+                            {it.selectedComboItems.map((cItem, cIdx) => (
+                              <div key={cIdx} className="bg-white p-2 rounded-lg border border-stone-200 space-y-0.5">
+                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                  <span className="w-4 h-4 rounded-full bg-stone-900 text-white text-[10px] font-black flex items-center justify-center">
+                                    {cIdx + 1}
+                                  </span>
+                                  <span>{cItem.itemTitle}</span>
+                                </div>
+                                <div className="pl-5 text-slate-600 space-y-0.5">
+                                  {cItem.selectedColor && (
+                                    <div>• Màu: <strong className="text-slate-800">{cItem.selectedColor}</strong></div>
+                                  )}
+                                  {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
+                                    <div>• Charm: <strong className="text-amber-800">{cItem.selectedCharms.map((c) => c.name).join(', ')}</strong></div>
+                                  )}
+                                  {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
+                                    <div>• Omamori: <strong className="text-rose-800">{cItem.selectedOmamoris.map((o) => o.name).join(', ')}</strong></div>
+                                  )}
+                                  {cItem.selectedKhoen && (
+                                    <div>• Khoen: <strong className="text-sky-800">{cItem.selectedKhoen}</strong></div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {it.customNote && (
                         <div className="text-[11px] text-amber-900 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">
                           <strong>Yêu cầu riêng của khách:</strong> {it.customNote}
@@ -745,6 +780,16 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                                 it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}${it.selectedOmamoriPrice ? ` (+${it.selectedOmamoriPrice.toLocaleString('vi-VN')}đ)` : ''}` : ''
                               ].filter(Boolean).join(' | ')}
                             </div>
+                            {it.selectedComboItems && it.selectedComboItems.length > 0 && (
+                              <div className="text-[10px] text-stone-800 bg-stone-100 p-1.5 rounded mt-1 border border-stone-200">
+                                <strong>Combo {it.selectedComboItems.length} món:</strong>
+                                {it.selectedComboItems.map((c, i) => (
+                                  <div key={i} className="pl-1">
+                                    • {c.itemTitle}: {[c.selectedColor, c.selectedCharms?.map(x=>x.name).join(','), c.selectedOmamoris?.map(x=>x.name).join(','), c.selectedKhoen].filter(Boolean).join(' - ')}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             {it.customNote && (
                               <div className="text-[10px] text-amber-800 italic mt-0.5">
                                 * {it.customNote}

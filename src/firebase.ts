@@ -343,6 +343,63 @@ export const uploadProductToFirebaseStorage = async (prod: Product): Promise<Pro
     updatedProd.khoenOptions = updatedKhoens;
   }
 
+  // 7. Combo items images (if any base64)
+  if (Array.isArray(updatedProd.comboItems)) {
+    const updatedCombo = [];
+    for (let ci = 0; ci < updatedProd.comboItems.length; ci++) {
+      const item = { ...updatedProd.comboItems[ci] };
+      if (item.image && item.image.startsWith('data:')) {
+        item.image = await uploadBase64ToStorage(item.image, `products/${prodId}/combo_${ci}_main.png`);
+      }
+      if (Array.isArray(item.colorOptions)) {
+        const upColors = [];
+        for (let coi = 0; coi < item.colorOptions.length; coi++) {
+          const col = { ...item.colorOptions[coi] };
+          if (col.image && col.image.startsWith('data:')) {
+            col.image = await uploadBase64ToStorage(col.image, `products/${prodId}/combo_${ci}_color_${coi}.png`);
+          }
+          upColors.push(col);
+        }
+        item.colorOptions = upColors;
+      }
+      if (Array.isArray(item.charmOptions)) {
+        const upCharms = [];
+        for (let chi = 0; chi < item.charmOptions.length; chi++) {
+          const ch = { ...item.charmOptions[chi] };
+          if (ch.image && ch.image.startsWith('data:')) {
+            ch.image = await uploadBase64ToStorage(ch.image, `products/${prodId}/combo_${ci}_charm_${chi}.png`);
+          }
+          upCharms.push(ch);
+        }
+        item.charmOptions = upCharms;
+      }
+      if (Array.isArray(item.omamoriOptions)) {
+        const upOmamoris = [];
+        for (let omi = 0; omi < item.omamoriOptions.length; omi++) {
+          const om = { ...item.omamoriOptions[omi] };
+          if (om.image && om.image.startsWith('data:')) {
+            om.image = await uploadBase64ToStorage(om.image, `products/${prodId}/combo_${ci}_omamori_${omi}.png`);
+          }
+          upOmamoris.push(om);
+        }
+        item.omamoriOptions = upOmamoris;
+      }
+      if (Array.isArray(item.khoenOptions)) {
+        const upKhoens = [];
+        for (let ki = 0; ki < item.khoenOptions.length; ki++) {
+          const kh = { ...item.khoenOptions[ki] };
+          if (kh.image && kh.image.startsWith('data:')) {
+            kh.image = await uploadBase64ToStorage(kh.image, `products/${prodId}/combo_${ci}_khoen_${ki}.png`);
+          }
+          upKhoens.push(kh);
+        }
+        item.khoenOptions = upKhoens;
+      }
+      updatedCombo.push(item);
+    }
+    updatedProd.comboItems = updatedCombo;
+  }
+
   return updatedProd;
 };
 
@@ -1100,6 +1157,8 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
         khoenSelectionRequired: !!data.khoenSelectionRequired,
         enableSizeSelection: !!data.enableSizeSelection,
+        isCombo: !!data.isCombo,
+        comboItems: Array.isArray(data.comboItems) ? data.comboItems : undefined,
         stock: rawStock,
         inStock: computedInStock,
         soldCount: typeof data.soldCount === 'number' ? data.soldCount : undefined,
@@ -1175,6 +1234,8 @@ export const subscribeToProductsFromFirestore = (
             khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
             khoenSelectionRequired: !!data.khoenSelectionRequired,
             enableSizeSelection: !!data.enableSizeSelection,
+            isCombo: !!data.isCombo,
+            comboItems: Array.isArray(data.comboItems) ? data.comboItems : undefined,
             stock: rawStock,
             inStock: computedInStock,
             soldCount: typeof data.soldCount === 'number' ? data.soldCount : undefined,

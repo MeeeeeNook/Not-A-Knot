@@ -86,8 +86,8 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     },
     {
       id: 'faq-2',
-      q: 'Kích cỡ sản phẩm như thế nào?',
-      a: 'Sản phẩm của chúng tôi bán không có size. Thiết kế dạng freesize linh hoạt, dễ dàng điều chỉnh độ vừa vặn phù hợp cho mọi kích thước cổ tay.'
+      q: 'Chất lượng và độ hoàn thiện của sản phẩm ra sao?',
+      a: 'Tất cả sản phẩm tại NOT A KNOT được đan tay thủ công tỉ mỉ từng chi tiết, sử dụng sợi bện cao cấp bền màu, khóa và charm tuyển chọn kỹ lưỡng, mang lại trải nghiệm êm ái và bền đẹp.'
     },
     {
       id: 'faq-3',

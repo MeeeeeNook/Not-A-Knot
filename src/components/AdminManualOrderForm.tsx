@@ -2103,34 +2103,6 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                           </div>
                         )}
 
-                        {/* OPTION 5: Size Selection (nếu có) */}
-                        {hasSizes && currentSelectedProduct.availableSizes && (
-                          <div className="space-y-1.5 bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-                            <label className="block text-xs font-bold text-slate-800">
-                              Kích thước / Size: <span className="text-amber-700 font-semibold">{pickerSize}</span>
-                            </label>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              {currentSelectedProduct.availableSizes.map((sz) => {
-                                const isSelected = pickerSize === sz;
-                                return (
-                                  <button
-                                    key={sz}
-                                    type="button"
-                                    onClick={() => setPickerSize(sz)}
-                                    className={`px-3 py-1 rounded text-xs font-bold border transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-amber-400 text-slate-950 border-amber-400 font-bold shadow-2xs'
-                                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    {sz}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
                         {/* Quantity & Note row */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                           <div>

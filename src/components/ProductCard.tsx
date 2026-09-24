@@ -261,11 +261,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
         ) : (
           <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 pointer-events-none z-10">
-            {product.isNew ? (
-              <span className="px-2 py-0.5 bg-neutral-900 text-white text-[9px] sm:text-[10px] font-semibold rounded-md shadow-xs">
-                Mới
-              </span>
-            ) : <span />}
+            <div className="flex flex-col gap-1">
+              {product.isNew ? (
+                <span className="px-2 py-0.5 bg-neutral-900 text-white text-[9px] sm:text-[10px] font-semibold rounded-md shadow-xs">
+                  Mới
+                </span>
+              ) : null}
+            </div>
 
             {product.discountBadge && (
               <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[9px] sm:text-[10px] font-bold rounded-md shadow-xs">

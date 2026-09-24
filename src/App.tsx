@@ -11,7 +11,7 @@ import { PRODUCTS } from './data/products';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
-import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig } from './types';
+import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig, ComboItemSelection } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
@@ -983,7 +983,8 @@ export default function App() {
     selectedOmamoriPrice?: number,
     selectedKhoen?: string,
     selectedKhoenImage?: string,
-    selectedKhoenPrice?: number
+    selectedKhoenPrice?: number,
+    selectedComboItems?: ComboItemSelection[]
   ) => {
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`);
@@ -995,22 +996,24 @@ export default function App() {
     const hasRequiredOmamori = Boolean(product.enableOmamoriSelection && product.omamoriSelectionRequired);
     const hasRequiredKhoen = Boolean(product.enableKhoenSelection && product.khoenSelectionRequired);
 
-    if (hasRequiredCharm && (!selectedCharms || selectedCharms.length === 0) && !selectedCharm) {
-      setSelectedProduct(product);
-      showToast(`Vui lòng chọn ${product.charmTitle?.trim() || 'charm'} trước khi thêm vào giỏ hàng.`);
-      return;
-    }
+    if (!selectedComboItems || selectedComboItems.length === 0) {
+      if (hasRequiredCharm && (!selectedCharms || selectedCharms.length === 0) && !selectedCharm) {
+        setSelectedProduct(product);
+        showToast(`Vui lòng chọn ${product.charmTitle?.trim() || 'charm'} trước khi thêm vào giỏ hàng.`);
+        return;
+      }
 
-    if (hasRequiredOmamori && (!selectedOmamoris || selectedOmamoris.length === 0)) {
-      setSelectedProduct(product);
-      showToast(`Vui lòng chọn ${product.omamoriTitle?.trim() || 'bùa Omamori'} trước khi thêm vào giỏ hàng.`);
-      return;
-    }
+      if (hasRequiredOmamori && (!selectedOmamoris || selectedOmamoris.length === 0)) {
+        setSelectedProduct(product);
+        showToast(`Vui lòng chọn ${product.omamoriTitle?.trim() || 'bùa Omamori'} trước khi thêm vào giỏ hàng.`);
+        return;
+      }
 
-    if (hasRequiredKhoen && !selectedKhoen) {
-      setSelectedProduct(product);
-      showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`);
-      return;
+      if (hasRequiredKhoen && !selectedKhoen) {
+        setSelectedProduct(product);
+        showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`);
+        return;
+      }
     }
 
     // Determine max available stock for this product
@@ -1092,6 +1095,8 @@ export default function App() {
       const existingIdx = prev.findIndex((item) => {
         const itemCharmsKey = (item.selectedCharms || []).map((c) => c.name).sort().join(';');
         const itemOmamorisKey = (item.selectedOmamoris || []).map((o) => o.name).sort().join(';');
+        const comboKey = (selectedComboItems || []).map((c) => `${c.itemId}-${c.selectedColor}-${c.selectedSize}`).join('|');
+        const itemComboKey = (item.selectedComboItems || []).map((c) => `${c.itemId}-${c.selectedColor}-${c.selectedSize}`).join('|');
         return (
           item.product.id === product.id &&
           item.selectedColor === selectedColor &&
@@ -1100,7 +1105,8 @@ export default function App() {
           item.selectedSize === selectedSize &&
           item.customNote === customNote &&
           charmsKey === itemCharmsKey &&
-          omamorisKey === itemOmamorisKey
+          omamorisKey === itemOmamorisKey &&
+          comboKey === itemComboKey
         );
       });
 
@@ -1128,7 +1134,8 @@ export default function App() {
             selectedKhoenImage,
             selectedKhoenPrice,
             selectedSize,
-            customNote
+            customNote,
+            selectedComboItems
           }
         ];
       }
@@ -1872,11 +1879,11 @@ export default function App() {
               }
               onBack={handleCloseProductDetail}
               onSelectProduct={handleOpenProductDetail}
-              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
+              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems);
               }}
-              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice);
+              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems);
                 handleOpenCartDrawer();
               }}
             />

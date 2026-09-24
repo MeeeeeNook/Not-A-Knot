@@ -21,10 +21,12 @@ interface ProductCatalogProps {
   isLoading?: boolean;
 }
 
+const EMPTY_CATALOG_COLLECTIONS: CollectionInfo[] = [];
+
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   products,
   categories = DEFAULT_CATEGORIES,
-  collections = [],
+  collections = EMPTY_CATALOG_COLLECTIONS,
   selectedCategory,
   onSelectCategory,
   onOpenProductDetail,

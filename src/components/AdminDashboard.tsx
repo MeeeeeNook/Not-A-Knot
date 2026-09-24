@@ -99,11 +99,13 @@ function getOrderPaidRevenue(o: StoredOrder): number {
   return Math.max(0, paidRaw - (Number(o.shippingFee) || 0));
 }
 
+const EMPTY_DASHBOARD_SELLERS: SellerUser[] = [];
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   orders,
   products,
   categories,
-  sellers = [],
+  sellers = EMPTY_DASHBOARD_SELLERS,
   onNavigateToOrders,
   onNavigateToManualOrder
 }) => {
