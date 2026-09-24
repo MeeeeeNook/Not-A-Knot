@@ -49,7 +49,7 @@ export interface ComboItemConfig {
   title: string; // e.g. "Sản phẩm 1: Vòng Lucky", "Sản phẩm 2: Nút thắt Bướm"
   subtitle?: string; // e.g. "Chọn màu dây, charm và kích thước cho vòng Lucky"
   image?: string; // preview image for this individual item
-  images?: string[]; // all photos associated with this item
+  images?: string[]; // multiple preview images for this individual item
   // Option toggles and presets per combo item
   enableColorSelection?: boolean;
   colorOptions?: ProductColorOption[];

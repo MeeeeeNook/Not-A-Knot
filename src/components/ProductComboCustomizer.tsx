@@ -1,46 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowRight, ArrowLeft, Check, AlertCircle, ShoppingBag, Eye } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Check, AlertCircle, ShoppingBag } from 'lucide-react';
 import { Product, ComboItemConfig, ComboItemSelection } from '../types';
+import { ProductColorSelector } from './ProductColorSelector';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
-import { LoadingImage } from './LoadingImage';
 
 interface ProductComboCustomizerProps {
   product: Product;
   comboItems: ComboItemConfig[];
-  onCompleteCombo?: (selectedComboItems: ComboItemSelection[], totalExtraPrice: number) => void;
-  onAddToCartDirect: (selectedComboItems: ComboItemSelection[], totalExtraPrice: number, quantity: number) => void;
-  onBuyNowDirect: (selectedComboItems: ComboItemSelection[], totalExtraPrice: number, quantity: number) => void;
-  isOutOfStock?: boolean;
   activeStep?: number;
   onStepChange?: (stepIdx: number) => void;
-  onActiveColorChange?: (colorName: string, imageUrl?: string, itemIdx?: number) => void;
+  onColorSelect?: (colorName: string, colorImage?: string) => void;
   quantity?: number;
-  onQuantityChange?: (qty: number) => void;
+  setQuantity?: React.Dispatch<React.SetStateAction<number>>;
   availableStock?: number;
+  isOutOfStock?: boolean;
+  isCartFullForProduct?: boolean;
+  remainingAddableStock?: number;
+  isAdded?: boolean;
+  onAddToCartDirect: (selectedComboItems: ComboItemSelection[], totalExtraPrice: number, quantity: number) => void;
+  onBuyNowDirect: (selectedComboItems: ComboItemSelection[], totalExtraPrice: number, quantity: number) => void;
 }
 
 export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
   product,
   comboItems,
-  onCompleteCombo,
+  activeStep: controlledStep,
+  onStepChange,
+  onColorSelect,
+  quantity = 1,
+  setQuantity,
+  availableStock = 50,
+  isOutOfStock = false,
+  isCartFullForProduct = false,
+  remainingAddableStock = 50,
+  isAdded = false,
   onAddToCartDirect,
   onBuyNowDirect,
-  isOutOfStock = false,
-  activeStep: controlledActiveStep,
-  onStepChange,
-  onActiveColorChange,
-  quantity: controlledQuantity,
-  onQuantityChange,
-  availableStock = 99,
 }) => {
-  const [internalActiveStep, setInternalActiveStep] = useState<number>(0);
-  const activeStep = controlledActiveStep !== undefined ? controlledActiveStep : internalActiveStep;
-  
-  const [internalQty, setInternalQty] = useState<number>(1);
-  const quantity = controlledQuantity !== undefined ? controlledQuantity : internalQty;
+  const [internalStep, setInternalStep] = useState<number>(0);
+  const activeStep = controlledStep !== undefined ? controlledStep : internalStep;
+
+  const setActiveStep = (stepIdx: number) => {
+    setInternalStep(stepIdx);
+    onStepChange?.(stepIdx);
+  };
 
   const totalSteps = comboItems.length;
 
@@ -48,9 +54,9 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
   const [selections, setSelections] = useState<ComboItemSelection[]>(() => {
     return comboItems.map((item, idx) => ({
       itemId: item.id || `combo-item-${idx}`,
-      itemTitle: item.title || `Sản phẩm ${idx + 1}`,
+      itemTitle: item.title || `Sản phẩm #${idx + 1}`,
       selectedColor: item.colorOptions?.[0]?.name || item.availableColors?.[0],
-      selectedColorImage: item.colorOptions?.[0]?.image || item.image,
+      selectedColorImage: item.colorOptions?.[0]?.image,
       selectedCharms: [],
       selectedCharmPrice: 0,
       selectedOmamoris: [],
@@ -68,30 +74,6 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
     itemTitle: currentItem?.title,
   };
 
-  const handleStepChange = (newStep: number) => {
-    setStepError(null);
-    if (controlledActiveStep === undefined) {
-      setInternalActiveStep(newStep);
-    }
-    onStepChange?.(newStep);
-    
-    // Sync current selection image with parent gallery
-    const targetSel = selections[newStep];
-    const targetItem = comboItems[newStep];
-    const imgToSync = targetSel?.selectedColorImage || targetItem?.image || product.image;
-    if (imgToSync) {
-      onActiveColorChange?.(targetSel?.selectedColor || '', imgToSync, newStep);
-    }
-  };
-
-  const handleQtyChange = (newQty: number) => {
-    const clamped = Math.max(1, Math.min(availableStock, newQty));
-    if (controlledQuantity === undefined) {
-      setInternalQty(clamped);
-    }
-    onQuantityChange?.(clamped);
-  };
-
   const updateCurrentSelection = (patch: Partial<ComboItemSelection>) => {
     setStepError(null);
     setSelections((prev) => {
@@ -99,12 +81,6 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
       next[activeStep] = { ...next[activeStep], ...patch };
       return next;
     });
-
-    if (patch.selectedColor || patch.selectedColorImage) {
-      const colName = patch.selectedColor || currentSelection.selectedColor || '';
-      const colImg = patch.selectedColorImage || currentSelection.selectedColorImage || currentItem?.image;
-      onActiveColorChange?.(colName, colImg, activeStep);
-    }
   };
 
   // Comprehensive validation across all combo items before purchase/add-to-cart
@@ -117,7 +93,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
       // Charm validation
       if (item.enableCharmSelection && item.charmSelectionRequired) {
         if (!sel.selectedCharms || sel.selectedCharms.length === 0) {
-          handleStepChange(idx);
+          setActiveStep(idx);
           setStepError(`Vui lòng chọn charm cho "${item.title}".`);
           return false;
         }
@@ -126,7 +102,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
       // Omamori validation
       if (item.enableOmamoriSelection && item.omamoriSelectionRequired) {
         if (!sel.selectedOmamoris || sel.selectedOmamoris.length === 0) {
-          handleStepChange(idx);
+          setActiveStep(idx);
           setStepError(`Vui lòng chọn bùa Omamori cho "${item.title}".`);
           return false;
         }
@@ -135,7 +111,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
       // Khoen validation
       if (item.enableKhoenSelection && item.khoenSelectionRequired) {
         if (!sel.selectedKhoen) {
-          handleStepChange(idx);
+          setActiveStep(idx);
           setStepError(`Vui lòng chọn khoen cài cho "${item.title}".`);
           return false;
         }
@@ -149,14 +125,14 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
   const handleNextStep = () => {
     setStepError(null);
     if (activeStep < totalSteps - 1) {
-      handleStepChange(activeStep + 1);
+      setActiveStep(activeStep + 1);
     }
   };
 
   const handlePrevStep = () => {
     setStepError(null);
     if (activeStep > 0) {
-      handleStepChange(activeStep - 1);
+      setActiveStep(activeStep - 1);
     }
   };
 
@@ -165,8 +141,6 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
     return sum + (sel.selectedCharmPrice || 0) + (sel.selectedOmamoriPrice || 0) + (sel.selectedKhoenPrice || 0);
   }, 0);
 
-  const effectiveUnitPrice = (product.price || 0) + totalExtraPrice;
-  const subtotalPrice = effectiveUnitPrice * quantity;
   const isLastStep = activeStep === totalSteps - 1;
 
   const handleFinishAddToCart = () => {
@@ -181,84 +155,62 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
 
   if (comboItems.length === 0) return null;
 
-  // Active display image
-  const currentPreviewImage =
-    currentSelection?.selectedColorImage ||
-    currentItem?.image ||
-    product.image ||
-    '/assets/hero-bg.png';
-
-  const nextItem = activeStep < totalSteps - 1 ? comboItems[activeStep + 1] : null;
-  const nextItemTitle = nextItem ? (nextItem.title || `Sản phẩm ${activeStep + 2}`) : `Sản phẩm ${activeStep + 2}`;
+  const basePrice = product.price || 0;
+  const singleComboTotal = basePrice + totalExtraPrice;
+  const subtotal = singleComboTotal * quantity;
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl border border-neutral-200/90 p-4 sm:p-5 space-y-5 shadow-xs">
-      {/* 1. Item Navigation Tabs - Users can switch freely anytime to inspect photos and customize */}
+    <div className="p-0 sm:p-5 sm:bg-white sm:rounded-3xl sm:border sm:border-neutral-200/90 space-y-3.5 sm:space-y-5 sm:shadow-xs">
+      {/* 1. Item Navigation Tabs - Clean, light artisan styling without darkmode or inner images */}
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs text-neutral-500 font-semibold px-0.5">
-          <span>Chọn sản phẩm để xem ảnh & phối màu:</span>
-          <span>{activeStep + 1} / {totalSteps} sản phẩm</span>
+        <div className="text-xs text-neutral-500 font-semibold px-0.5">
+          Chọn món để xem ảnh & phối màu:
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2">
           {comboItems.map((item, idx) => {
             const isActive = idx === activeStep;
             const sel = selections[idx];
-            const itemThumb =
-              sel?.selectedColorImage ||
-              item.image ||
-              product.image ||
-              '/assets/hero-bg.png';
-
             const summaryColor = sel?.selectedColor;
 
             return (
               <button
                 key={item.id || idx}
                 type="button"
-                onClick={() => handleStepChange(idx)}
-                className={`group p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 select-none ${
+                onClick={() => {
+                  setActiveStep(idx);
+                  setStepError(null);
+                  if (sel?.selectedColorImage) {
+                    onColorSelect?.(sel.selectedColor || '', sel.selectedColorImage);
+                  }
+                }}
+                className={`p-2 sm:p-3 rounded-xl sm:rounded-2xl border text-left transition-all cursor-pointer select-none flex flex-col justify-center ${
                   isActive
-                    ? 'bg-neutral-950 text-white border-neutral-950 shadow-md ring-2 ring-amber-400/40'
-                    : 'bg-neutral-50/80 hover:bg-neutral-100/80 text-neutral-800 border-neutral-200 hover:border-neutral-300'
+                    ? 'bg-amber-50/90 text-amber-950 border-amber-400 shadow-xs ring-2 ring-amber-400/30'
+                    : 'bg-white hover:bg-neutral-50 text-neutral-800 border-neutral-200'
                 }`}
               >
-                {/* Thumbnail Image */}
-                <div
-                  className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 border transition-transform group-hover:scale-[1.03] ${
-                    isActive ? 'border-neutral-700 bg-neutral-900' : 'border-neutral-200 bg-white'
-                  }`}
-                >
-                  <LoadingImage
-                    src={itemThumb}
-                    alt={item.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
-                        isActive
-                          ? 'bg-amber-400 text-neutral-950'
-                          : 'bg-neutral-200 text-neutral-700'
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span className="text-xs font-bold truncate leading-tight">
-                      {item.title}
-                    </span>
-                  </div>
-
-                  <div
-                    className={`text-[11px] truncate mt-1 ${
-                      isActive ? 'text-neutral-300' : 'text-neutral-500'
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black shrink-0 ${
+                      isActive
+                        ? 'bg-amber-500 text-neutral-950'
+                        : 'bg-neutral-100 text-neutral-600'
                     }`}
                   >
-                    {summaryColor ? `Màu: ${summaryColor}` : item.subtitle || `Sản phẩm ${idx + 1}`}
-                  </div>
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs sm:text-sm font-extrabold truncate leading-tight text-neutral-950">
+                    {item.title}
+                  </span>
+                </div>
+
+                <div
+                  className={`text-[10px] sm:text-[11px] truncate mt-0.5 sm:mt-1 pl-5 sm:pl-6 ${
+                    isActive ? 'text-amber-800 font-medium' : 'text-neutral-500'
+                  }`}
+                >
+                  {summaryColor ? `Màu: ${summaryColor}` : (item.subtitle || 'Tùy chỉnh')}
                 </div>
               </button>
             );
@@ -266,7 +218,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
         </div>
       </div>
 
-      {/* 2. Active Item Customization Card */}
+      {/* 2. Active Item Customization Card - Clean header without "sản phẩm 1/2" or "ảnh mẫu" badges */}
       <AnimatePresence mode="wait">
         <motion.div
           key={activeStep}
@@ -274,46 +226,29 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.18 }}
-          className="bg-neutral-50/60 rounded-2xl p-4 sm:p-5 border border-neutral-200/80 space-y-4"
+          className="bg-neutral-50/60 sm:bg-neutral-50/70 rounded-xl sm:rounded-2xl p-2.5 sm:p-5 border border-neutral-200/70 space-y-3 sm:space-y-4"
         >
-          {/* Item Header & Visual Photo Preview */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5 pb-4 border-b border-neutral-200/80">
-            <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border border-neutral-200 overflow-hidden shrink-0 bg-white shadow-xs">
-              <LoadingImage
-                src={currentPreviewImage}
-                alt={currentItem.title}
-                className="w-full h-full object-cover"
-              />
-              <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md bg-neutral-950/70 backdrop-blur-xs text-white text-[9px] font-medium flex items-center gap-0.5">
-                <Eye className="w-2.5 h-2.5" />
-                <span>Ảnh mẫu</span>
-              </span>
-            </div>
-
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100/80 text-amber-950 text-[10px] font-bold">
-                <span>Sản phẩm {activeStep + 1} / {totalSteps}</span>
-              </div>
-              <h3 className="text-base sm:text-lg font-black text-neutral-900 tracking-tight truncate">
-                {currentItem.title}
-              </h3>
-              {currentItem.subtitle && (
-                <p className="text-xs text-neutral-600 leading-relaxed">{currentItem.subtitle}</p>
-              )}
-            </div>
+          {/* Card Header: Product Title & Subtitle */}
+          <div className="pb-2 sm:pb-3 border-b border-neutral-200/70">
+            <h3 className="text-sm sm:text-lg font-black text-neutral-900 tracking-tight truncate">
+              {currentItem.title}
+            </h3>
+            {currentItem.subtitle && (
+              <p className="text-xs text-neutral-600 leading-relaxed mt-0.5">{currentItem.subtitle}</p>
+            )}
           </div>
 
           {/* Color Selection for this combo sub-item */}
           {currentItem.enableColorSelection !== false && currentItem.colorOptions && currentItem.colorOptions.length > 0 && (
-            <div className="space-y-2 pt-1">
+            <div className="space-y-1.5 pt-0.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-neutral-900 block">
                   Màu sắc / Mẫu dây: <span className="text-amber-700 font-extrabold">{currentSelection.selectedColor}</span>
                 </label>
-                <span className="text-[11px] text-neutral-400">Chạm để chọn màu</span>
+                <span className="text-[10px] sm:text-[11px] text-neutral-400">Chạm để chọn màu</span>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {currentItem.colorOptions.map((col, cIdx) => {
                   const isColActive = currentSelection.selectedColor === col.name;
                   return (
@@ -321,14 +256,17 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
                       key={cIdx}
                       type="button"
                       onClick={() => {
+                        const targetImg = col.image || currentSelection.selectedColorImage;
                         updateCurrentSelection({
                           selectedColor: col.name,
-                          selectedColorImage: col.image || currentSelection.selectedColorImage,
+                          selectedColorImage: targetImg,
                         });
+                        // Synchronize with parent page image gallery so the left main photo jumps to this color
+                        onColorSelect?.(col.name, targetImg);
                       }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                      className={`px-2.5 py-1.5 rounded-lg sm:rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
                         isColActive
-                          ? 'bg-neutral-950 text-white border-neutral-950 shadow-xs ring-2 ring-amber-400/50'
+                          ? 'bg-amber-100 text-amber-950 border-amber-500 shadow-xs ring-2 ring-amber-400/40'
                           : 'bg-white hover:bg-neutral-100 text-neutral-800 border-neutral-200'
                       }`}
                     >
@@ -339,7 +277,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
                         />
                       )}
                       <span>{col.name}</span>
-                      {isColActive && <Check className="w-3 h-3 text-amber-400" />}
+                      {isColActive && <Check className="w-3 h-3 text-amber-700" />}
                     </button>
                   );
                 })}
@@ -351,7 +289,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           {currentItem.enableCharmSelection && currentItem.charmOptions && currentItem.charmOptions.length > 0 && (
             <div className="space-y-1.5 pt-2">
               <ProductCharmSelector
-                title={currentItem.charmTitle || `Chọn Charm Cho Sản Phẩm ${activeStep + 1}`}
+                title={currentItem.charmTitle || 'Chọn Charm'}
                 charms={currentItem.charmOptions}
                 selectedCharms={currentSelection.selectedCharms || []}
                 onSelectCharms={(charms) => {
@@ -371,7 +309,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           {currentItem.enableOmamoriSelection && currentItem.omamoriOptions && currentItem.omamoriOptions.length > 0 && (
             <div className="space-y-1.5 pt-2">
               <ProductOmamoriSelector
-                title={currentItem.omamoriTitle || `Chọn Bùa Omamori Cho Sản Phẩm ${activeStep + 1}`}
+                title={currentItem.omamoriTitle || 'Chọn Bùa Omamori'}
                 omamoris={currentItem.omamoriOptions}
                 selectedOmamoris={currentSelection.selectedOmamoris || []}
                 onSelectOmamoris={(omamoris) => {
@@ -391,7 +329,7 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           {currentItem.enableKhoenSelection && currentItem.khoenOptions && currentItem.khoenOptions.length > 0 && (
             <div className="space-y-1.5 pt-2">
               <ProductKhoenSelector
-                title={currentItem.khoenTitle || `Chọn Khoen Cài Cho Sản Phẩm ${activeStep + 1}`}
+                title={currentItem.khoenTitle || 'Chọn Khoen Cài'}
                 khoenOptions={currentItem.khoenOptions}
                 selectedKhoen={
                   currentItem.khoenOptions.find((k) => k.name === currentSelection.selectedKhoen) || null
@@ -416,16 +354,16 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
             </div>
           )}
 
-          {/* Navigation Controls inside Step */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-neutral-200/80">
+          {/* Navigation Controls: Displaying product names (e.g. Butterfly Knot, Lucky Knot) */}
+          <div className="flex items-center justify-between gap-2 pt-2.5 sm:pt-3 border-t border-neutral-200/70">
             {activeStep > 0 ? (
               <button
                 type="button"
                 onClick={handlePrevStep}
-                className="px-4 py-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-100 text-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-100 text-neutral-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Quay lại sản phẩm trước</span>
+                <span className="truncate max-w-[120px] sm:max-w-none">{comboItems[activeStep - 1]?.title || 'Quay lại'}</span>
               </button>
             ) : <span />}
 
@@ -433,23 +371,24 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
               <button
                 type="button"
                 onClick={handleNextStep}
-                className="px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold flex items-center gap-2 shadow-xs transition-all cursor-pointer ml-auto"
+                className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer ml-auto"
               >
-                <span>Xem & phối {nextItemTitle}</span>
-                <ArrowRight className="w-4 h-4" />
+                <span className="truncate max-w-[120px] sm:max-w-none">{comboItems[activeStep + 1]?.title || 'Tiếp theo'}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             ) : null}
           </div>
         </motion.div>
       </AnimatePresence>
 
-      {/* 3. Summary & Purchase Action Dock */}
-      <div className="bg-neutral-50 rounded-2xl p-4 border border-neutral-200/80 space-y-4">
-        <div className="flex items-center justify-between text-xs font-black text-neutral-800 uppercase tracking-wide">
+      {/* 3. Summary & Unified Purchase Action Dock */}
+      <div className="bg-neutral-50/70 sm:bg-neutral-50 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border border-neutral-200/70 sm:border-neutral-200/90 space-y-3 sm:space-y-4">
+        {/* Header without "(2 món)" as requested */}
+        <div className="flex items-center justify-between text-[11px] sm:text-xs font-black text-neutral-800 uppercase tracking-wide">
           <span>Tóm tắt lựa chọn trọn bộ Combo:</span>
           {totalExtraPrice > 0 && (
             <span className="text-amber-700 font-bold">
-              Phụ thu phụ kiện: +{totalExtraPrice.toLocaleString('vi-VN')}đ
+              Phụ thu: +{totalExtraPrice.toLocaleString('vi-VN')}đ
             </span>
           )}
         </div>
@@ -458,9 +397,9 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           {comboItems.map((item, i) => {
             const sel = selections[i];
             return (
-              <div key={i} className="p-2.5 bg-white rounded-xl border border-neutral-200 space-y-1 shadow-2xs">
+              <div key={i} className="p-2 sm:p-2.5 bg-white rounded-lg sm:rounded-xl border border-neutral-200/80 space-y-0.5 shadow-2xs">
                 <div className="font-bold text-neutral-900 flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-neutral-900 text-white text-[10px] font-black flex items-center justify-center">
+                  <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[9px] font-black flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
                   <span className="truncate">{item.title}</span>
@@ -484,72 +423,111 @@ export const ProductComboCustomizer: React.FC<ProductComboCustomizerProps> = ({
           })}
         </div>
 
-        {/* Quantity Selector & Subtotal Card - Exactly matching normal product page */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 bg-white rounded-2xl border border-neutral-200 shadow-2xs">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-xs font-bold text-neutral-600">Số lượng:</span>
-            <div className="flex items-center border border-neutral-200 rounded-xl bg-white p-0.5 shadow-2xs">
+        {/* Unified Quantity Selector & Subtotal Card */}
+        <div className="flex items-center justify-between gap-2 p-2.5 sm:p-4 bg-white rounded-xl sm:rounded-2xl border border-neutral-200/80 shadow-2xs">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-neutral-600 hidden xs:inline">SL:</span>
+            <div className="flex items-center border border-neutral-200 rounded-lg sm:rounded-xl bg-white p-0.5 shadow-2xs">
               <button
                 type="button"
-                disabled={quantity <= 1 || isOutOfStock}
-                onClick={() => handleQtyChange(quantity - 1)}
-                className="w-8 h-8 rounded-lg bg-neutral-50 hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer text-sm"
+                disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
+                onClick={() => setQuantity?.((q) => Math.max(1, q - 1))}
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-neutral-50 hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer text-xs sm:text-sm"
                 aria-label="Giảm số lượng"
               >
                 -
               </button>
-              <span className="w-10 text-center font-black text-sm text-neutral-950 font-mono">
+              <span className="w-8 sm:w-10 text-center font-black text-xs sm:text-sm text-neutral-950 font-mono">
                 {quantity}
               </span>
               <button
                 type="button"
-                disabled={quantity >= availableStock || isOutOfStock}
-                onClick={() => handleQtyChange(quantity + 1)}
-                className="w-8 h-8 rounded-lg bg-neutral-50 hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer text-sm"
+                disabled={quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct}
+                onClick={() => setQuantity?.((q) => Math.min(remainingAddableStock, q + 1))}
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg font-bold flex items-center justify-center transition-colors cursor-pointer text-xs sm:text-sm ${
+                  quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct
+                    ? 'bg-neutral-200 text-neutral-400 hover:bg-neutral-300'
+                    : 'bg-neutral-50 hover:bg-neutral-200 text-neutral-800'
+                }`}
                 aria-label="Tăng số lượng"
               >
                 +
               </button>
             </div>
 
-            {/* Stock indicator */}
+            {/* Subtle Stock Counter */}
             {isOutOfStock || availableStock <= 0 ? (
-              <span className="text-[11px] font-semibold text-rose-600">Hết hàng</span>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600">
+                Hết hàng
+              </span>
             ) : availableStock < 5 ? (
-              <span className="text-[11px] font-medium text-amber-700">(chỉ còn {availableStock})</span>
+              <span className="text-[10px] sm:text-[11px] font-medium text-amber-700">
+                (còn {availableStock})
+              </span>
             ) : (
-              <span className="text-[11px] text-neutral-500">(còn {availableStock})</span>
+              <span className="text-[10px] sm:text-[11px] text-neutral-500">
+                (còn {availableStock})
+              </span>
             )}
           </div>
 
-          <div className="text-right">
-            <div className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">Tổng tạm tính</div>
-            <div className="text-base sm:text-lg font-black text-neutral-950 font-mono">
-              {subtotalPrice.toLocaleString('vi-VN')}đ
+          <div className="text-right min-w-0">
+            <div className="text-[10px] sm:text-[11px] font-semibold text-neutral-500 uppercase tracking-wider truncate">
+              Tạm tính ({quantity})
             </div>
+            <div className="flex items-baseline justify-end gap-1">
+              <span className="text-lg sm:text-2xl font-black text-neutral-950 font-mono tracking-tight">
+                {subtotal.toLocaleString('vi-VN')}đ
+              </span>
+            </div>
+            {totalExtraPrice > 0 && (
+              <div className="text-[10px] sm:text-[11px] font-medium text-amber-700 truncate">
+                (+{(totalExtraPrice * quantity).toLocaleString('vi-VN')}đ phụ kiện)
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Global Action Buttons */}
-        <div className="pt-1 flex flex-col sm:flex-row items-center gap-2.5">
+        {/* Primary CTA Buttons (Identical to normal product page: "Thêm Vào Giỏ" and "Mua Ngay") */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-0.5">
           <button
             type="button"
-            disabled={isOutOfStock}
+            disabled={isOutOfStock || isCartFullForProduct}
             onClick={handleFinishAddToCart}
-            className="w-full sm:flex-1 py-3.5 px-5 rounded-xl bg-amber-400 hover:bg-amber-300 text-neutral-950 text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+            className={`py-3 px-2 sm:py-3.5 sm:px-4 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              isOutOfStock || isCartFullForProduct
+                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : isAdded
+                ? 'bg-emerald-600 text-white'
+                : 'bg-neutral-900 hover:bg-neutral-800 text-white shadow-md active:scale-98'
+            }`}
           >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Thêm Combo Vào Giỏ Hàng</span>
+            {isAdded ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span className="truncate">Đã thêm giỏ</span>
+              </>
+            ) : isCartFullForProduct ? (
+              <span className="truncate">Đạt giới hạn</span>
+            ) : (
+              <>
+                <ShoppingBag className="w-4 h-4" />
+                <span className="truncate">Thêm Vào Giỏ</span>
+              </>
+            )}
           </button>
 
           <button
             type="button"
-            disabled={isOutOfStock}
+            disabled={isOutOfStock || isCartFullForProduct}
             onClick={handleFinishBuyNow}
-            className="w-full sm:flex-1 py-3.5 px-5 rounded-xl bg-neutral-950 hover:bg-neutral-850 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+            className={`py-3 px-2 sm:py-3.5 sm:px-4 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              isOutOfStock || isCartFullForProduct
+                ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                : 'bg-amber-400 hover:bg-amber-300 text-neutral-950 shadow-md active:scale-98'
+            }`}
           >
-            <span>Mua Ngay Trọn Bộ Combo</span>
-            <ArrowRight className="w-4 h-4 text-amber-400" />
+            <span className="truncate">{isCartFullForProduct ? 'Kho đã hết' : 'Mua Ngay'}</span>
           </button>
         </div>
       </div>

@@ -34,9 +34,12 @@ export const ShareProductModal: React.FC<ShareProductModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Canonical official website URL on notaknot.id.vn
+  // Canonical official website clean URL without hash (#)
   const slug = getProductSlug(product);
-  const productUrl = `https://notaknot.id.vn/#product/${slug}`;
+  const baseOrigin = typeof window !== 'undefined' && window.location.hostname.includes('notaknot.id.vn')
+    ? 'https://notaknot.id.vn'
+    : (typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://notaknot.id.vn');
+  const productUrl = `${baseOrigin}/product/${slug}`;
 
   // Generate QR Code when modal opens
   useEffect(() => {

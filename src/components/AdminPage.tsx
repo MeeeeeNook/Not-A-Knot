@@ -5554,6 +5554,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       setFormComboItems={setFormComboItems}
                       availableProductImages={formImages}
                       existingProducts={products}
+                      onImportProductImages={(newImgs) => {
+                        setFormImages((prev) => {
+                          const additions = newImgs.filter((img) => !prev.includes(img));
+                          return additions.length > 0 ? [...prev, ...additions] : prev;
+                        });
+                        setFormImage((prev) => (!prev || prev === '/assets/hero-bg.png' ? newImgs[0] : prev));
+                      }}
                       processOptionImageFile={processOptionImageFile}
                       showAdminToast={showAdminToast}
                     />
@@ -5647,12 +5654,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               </span>
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              {p.isCombo && (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-0.5">
-                                  <span>🎁 COMBO</span>
-                                  {p.comboItems && p.comboItems.length > 0 && <span>({p.comboItems.length} món)</span>}
-                                </span>
-                              )}
                               {p.isEvent0209 && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                   02.09
@@ -5840,11 +5841,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   <span className="font-bold text-slate-900 block truncate">{p.name}</span>
                                   <span className="text-[10px] text-slate-400 block font-mono">ID: {p.id}</span>
                                   <div className="flex gap-1 mt-1">
-                                    {p.isCombo && (
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200">
-                                        🎁 COMBO ({p.comboItems?.length || 0} món)
-                                      </span>
-                                    )}
                                     {p.isEvent0209 && (
                                       <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">
                                         02.09
@@ -7176,7 +7172,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       <span className="truncate pr-2 font-medium">• {item.name || item.productName || 'Sản phẩm'}</span>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
-                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0)) && (
+                                    {(item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) && (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded">
@@ -7198,25 +7194,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             🧧 {item.selectedOmamoris.map((o) => o.name).join(', ')}
                                           </span>
                                         )}
-                                      </div>
-                                    )}
-                                    {item.selectedComboItems && item.selectedComboItems.length > 0 && (
-                                      <div className="pl-2 pt-0.5 space-y-0.5">
-                                        {item.selectedComboItems.map((c, ci) => (
-                                          <div key={ci} className="text-[10px] text-slate-700 flex items-center gap-1 flex-wrap bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-                                            <span className="font-bold text-slate-900">• {c.itemTitle}:</span>
-                                            {c.selectedColor && <span className="text-slate-800 font-medium">{c.selectedColor}</span>}
-                                            {c.selectedCharms && c.selectedCharms.length > 0 && (
-                                              <span className="text-amber-800">✨ {c.selectedCharms.map((x) => x.name).join(', ')}</span>
-                                            )}
-                                            {c.selectedOmamoris && c.selectedOmamoris.length > 0 && (
-                                              <span className="text-rose-800">🧧 {c.selectedOmamoris.map((x) => x.name).join(', ')}</span>
-                                            )}
-                                            {c.selectedKhoen && (
-                                              <span className="text-sky-800">🔗 {c.selectedKhoen}</span>
-                                            )}
-                                          </div>
-                                        ))}
+                                        {item.selectedSize && (
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded">
+                                            📏 {item.selectedSize}
+                                          </span>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -7629,7 +7611,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </span>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
-                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0)) && (
+                                      {(it.selectedColor || it.selectedCharm || it.selectedKhoen || (it.selectedOmamoris && it.selectedOmamoris.length > 0) || it.selectedSize) && (
                                         <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                                           {it.selectedColor && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
@@ -7651,25 +7633,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               🧧 {it.selectedOmamoris.map((o) => o.name).join(', ')}
                                             </span>
                                           )}
-                                        </div>
-                                      )}
-                                      {it.selectedComboItems && it.selectedComboItems.length > 0 && (
-                                        <div className="pt-1 space-y-0.5">
-                                          {it.selectedComboItems.map((c, ci) => (
-                                            <div key={ci} className="text-[10px] text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 flex-wrap">
-                                              <span className="font-bold text-slate-900">• {c.itemTitle}:</span>
-                                              {c.selectedColor && <span className="text-slate-800 font-medium">{c.selectedColor}</span>}
-                                              {c.selectedCharms && c.selectedCharms.length > 0 && (
-                                                <span className="text-amber-800">✨ {c.selectedCharms.map((x) => x.name).join(', ')}</span>
-                                              )}
-                                              {c.selectedOmamoris && c.selectedOmamoris.length > 0 && (
-                                                <span className="text-rose-800">🧧 {c.selectedOmamoris.map((x) => x.name).join(', ')}</span>
-                                              )}
-                                              {c.selectedKhoen && (
-                                                <span className="text-sky-800">🔗 {c.selectedKhoen}</span>
-                                              )}
-                                            </div>
-                                          ))}
+                                          {it.selectedSize && (
+                                            <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded font-medium">
+                                              📏 {it.selectedSize}
+                                            </span>
+                                          )}
                                         </div>
                                       )}
                                     </div>

@@ -29,6 +29,7 @@ interface AdminProductComboSectionProps {
   setFormComboItems: React.Dispatch<React.SetStateAction<ComboItemConfig[]>>;
   availableProductImages?: string[];
   existingProducts?: Product[];
+  onImportProductImages?: (images: string[]) => void;
   processOptionImageFile: (file: File, onDone: (dataUrl: string) => void, maxDim?: number) => void;
   showAdminToast: (msg: string) => void;
 }
@@ -40,6 +41,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
   setFormComboItems,
   availableProductImages = [],
   existingProducts = [],
+  onImportProductImages,
   processOptionImageFile,
   showAdminToast,
 }) => {
@@ -64,27 +66,42 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
 
   // Apply chosen product to a new or existing combo item
   const handleApplyExistingProduct = (product: Product, targetItemId?: string | null) => {
-    // Collect all candidate product images
-    const allProductImages = Array.isArray(product.images) && product.images.length > 0
-      ? product.images.filter(Boolean)
-      : (product.image ? [product.image] : []);
+    // Gather all images from the selected product (main image, gallery, and color variant images)
+    const allProdImages: string[] = [];
+    if (product.image && typeof product.image === 'string' && product.image.trim()) {
+      allProdImages.push(product.image.trim());
+    }
+    if (Array.isArray(product.images)) {
+      product.images.forEach((img) => {
+        if (img && typeof img === 'string' && img.trim() && !allProdImages.includes(img.trim())) {
+          allProdImages.push(img.trim());
+        }
+      });
+    }
+    if (Array.isArray(product.colorOptions)) {
+      product.colorOptions.forEach((c) => {
+        if (c?.image && typeof c.image === 'string' && c.image.trim() && !allProdImages.includes(c.image.trim())) {
+          allProdImages.push(c.image.trim());
+        }
+      });
+    }
 
     // Convert colors properly preserving images, stocks, and colorCodes
     const convertedColors: ProductColorOption[] = (product.colorOptions && product.colorOptions.length > 0)
-      ? product.colorOptions.map((c, idx) => ({
+      ? product.colorOptions.map((c, cIdx) => ({
           name: c.name,
-          image: c.image || allProductImages[idx] || product.image || '',
+          image: c.image || product.images?.[cIdx] || product.image || allProdImages[0] || '',
           colorCode: c.colorCode || '#DC2626',
           stock: typeof c.stock === 'number' ? c.stock : 15,
         }))
       : (product.availableColors && product.availableColors.length > 0)
-      ? product.availableColors.map((cName, idx) => ({
+      ? product.availableColors.map((cName, cIdx) => ({
           name: cName,
-          image: allProductImages[idx] || product.image || '',
+          image: product.images?.[cIdx] || product.image || allProdImages[0] || '',
           colorCode: '#DC2626',
           stock: 15,
         }))
-      : [{ name: 'Màu Tiêu Chuẩn', image: product.image || '', stock: 15, colorCode: '#DC2626' }];
+      : [{ name: 'Màu Tiêu Chuẩn', image: product.image || allProdImages[0] || '', stock: 15, colorCode: '#DC2626' }];
 
     const convertedCharms: ProductCharmOption[] = (product.charmOptions && product.charmOptions.length > 0)
       ? product.charmOptions.map((ch) => ({
@@ -119,8 +136,8 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
     const itemData: Partial<ComboItemConfig> = {
       title: product.name,
       subtitle: product.description ? product.description.slice(0, 90) : (product.category || 'Sản phẩm hoàn thiện thủ công'),
-      image: product.image || allProductImages[0] || '',
-      images: allProductImages,
+      image: product.image || allProdImages[0] || '',
+      images: allProdImages.length > 0 ? allProdImages : undefined,
       linkedProductId: product.id,
       enableColorSelection: convertedColors.length > 0,
       colorOptions: convertedColors,
@@ -141,6 +158,11 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
       enableSizeSelection: false,
       availableSizes: undefined,
     };
+
+    // Propagate all imported product images into the parent combo form
+    if (allProdImages.length > 0 && typeof onImportProductImages === 'function') {
+      onImportProductImages(allProdImages);
+    }
 
     if (targetItemId) {
       updateItem(targetItemId, itemData);

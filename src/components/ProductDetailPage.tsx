@@ -102,47 +102,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 }) => {
   const [quantity, setQuantity] = useState(1);
   const [activeImageIdx, setActiveImageIdx] = useState<number>(0);
-  const [activeComboStep, setActiveComboStep] = useState<number>(0);
 
-  const isInteractiveCombo = Boolean(product.isCombo && product.comboItems && product.comboItems.length > 0);
-
-  // Gallery images strictly reflecting the product's uploaded images and color variant images (and combo sub-items if combo)
-  const images = useMemo(() => {
-    if (isInteractiveCombo && product.comboItems && product.comboItems.length > 0) {
-      const list: string[] = [];
-      const addImg = (url?: string) => {
-        if (!url || typeof url !== 'string' || !url.trim()) return;
-        const clean = url.trim();
-        if (!list.some((existing) => isSameImageUrl(existing, clean))) {
-          list.push(clean);
-        }
-      };
-
-      // 1. Primary general combo overview image(s)
-      if (Array.isArray(product.images) && product.images.length > 0) {
-        product.images.forEach(addImg);
-      } else if (product.image) {
-        addImg(product.image);
-      }
-
-      // 2. Combo sub-items images & colors
-      product.comboItems.forEach((item) => {
-        if (item.image) addImg(item.image);
-        if (Array.isArray(item.images)) {
-          item.images.forEach(addImg);
-        }
-        if (Array.isArray(item.colorOptions)) {
-          item.colorOptions.forEach((col) => {
-            if (col.image) addImg(col.image);
-          });
-        }
-      });
-
-      return list.length > 0 ? list : ['/assets/bracelet.jpg'];
-    }
-
-    return buildProductGalleryImages(product);
-  }, [isInteractiveCombo, product]);
+  // Initial color setup
   const initialColor = useMemo(() => {
     if (product.colorOptions && product.colorOptions.length > 0) {
       const inStockColor = product.colorOptions.find((c) => c.stock === undefined || c.stock > 0);
@@ -237,7 +198,60 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
   }, [product?.id]);
 
+  const isInteractiveCombo = Boolean(product.isCombo && product.comboItems && product.comboItems.length > 0);
+  const [activeComboStep, setActiveComboStep] = useState(0);
 
+  // General combo overview images: always kept accessible
+  const generalComboImages = useMemo(() => {
+    const raw: string[] = [];
+    if (product.images && Array.isArray(product.images) && product.images.length > 0) {
+      raw.push(...product.images);
+    } else if (product.image) {
+      raw.push(product.image);
+    }
+    const clean: string[] = [];
+    raw.forEach((r) => {
+      if (r && typeof r === 'string' && r.trim()) {
+        const resolved = resolveAssetUrl(r.trim());
+        if (resolved && !clean.some((ex) => isSameImageUrl(ex, resolved))) {
+          clean.push(resolved);
+        }
+      }
+    });
+    return clean;
+  }, [product.image, product.images]);
+
+  // Gallery images strictly reflecting the product's uploaded images, sub-items and color variants
+  const images = useMemo(() => {
+    if (isInteractiveCombo && product.comboItems && product.comboItems.length > 0) {
+      const activeItem = product.comboItems[activeComboStep] || product.comboItems[0];
+      const itemRaw: string[] = [];
+      if (activeItem?.image) itemRaw.push(activeItem.image);
+      if (Array.isArray(activeItem?.images)) {
+        itemRaw.push(...activeItem.images);
+      }
+      if (Array.isArray(activeItem?.colorOptions)) {
+        activeItem.colorOptions.forEach((col) => {
+          if (col?.image) itemRaw.push(col.image);
+        });
+      }
+
+      // "lúc nào cũng có ảnh chung": General overview images first, then current sub-product images
+      const combined: string[] = [...generalComboImages];
+      itemRaw.forEach((r) => {
+        if (r && typeof r === 'string' && r.trim()) {
+          const resolved = resolveAssetUrl(r.trim());
+          if (resolved && !combined.some((ex) => isSameImageUrl(ex, resolved))) {
+            combined.push(resolved);
+          }
+        }
+      });
+
+      return combined.length > 0 ? combined : ['/assets/bracelet.jpg'];
+    }
+
+    return buildProductGalleryImages(product);
+  }, [product, isInteractiveCombo, activeComboStep, generalComboImages]);
 
   const [productCompareModalOpen, setProductCompareModalOpen] = useState(false);
 
@@ -335,27 +349,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const selectImage = useCallback((idx: number) => {
     setActiveImageIdx(idx);
     const targetImg = images[idx];
-    if (!targetImg) return;
-
-    if (isInteractiveCombo && product.comboItems) {
-      for (let i = 0; i < product.comboItems.length; i++) {
-        const item = product.comboItems[i];
-        const isItemImg = item.image && isSameImageUrl(item.image, targetImg);
-        const isItemSubImg = Array.isArray(item.images) && item.images.some((si) => isSameImageUrl(si, targetImg));
-        const matchingCol = item.colorOptions?.find((c) => c.image && isSameImageUrl(c.image, targetImg));
-        if (isItemImg || isItemSubImg || matchingCol) {
-          setActiveComboStep(i);
-          break;
-        }
-      }
-    } else if (product.colorOptions && product.colorOptions.length > 0) {
+    if (targetImg && product.colorOptions && product.colorOptions.length > 0) {
       const matchingColor = product.colorOptions.find((c) => c.image && isSameImageUrl(c.image, targetImg));
       if (matchingColor && (matchingColor.stock === undefined || matchingColor.stock > 0)) {
         setSelectedColor(matchingColor.name);
         setSelectedColorImage(matchingColor.image);
       }
     }
-  }, [images, isInteractiveCombo, product.comboItems, product.colorOptions]);
+  }, [images, product.colorOptions]);
 
   const prevImage = useCallback(() => {
     paginate(-1);
@@ -963,29 +964,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 {images.map((img, idx) => {
                   const isActive = idx === activeImageIdx;
-                  
-                  // Compute label badge for thumbnail
-                  let thumbBadge: string | null = null;
-                  if (isInteractiveCombo && product.comboItems) {
-                    const isMainOverview = (Array.isArray(product.images) && product.images.some((m) => isSameImageUrl(m, img))) || (product.image && isSameImageUrl(product.image, img));
-                    if (idx === 0 || isMainOverview) {
-                      thumbBadge = 'Ảnh chung';
-                    } else {
-                      for (let i = 0; i < product.comboItems.length; i++) {
-                        const itm = product.comboItems[i];
-                        const isItmImg = itm.image && isSameImageUrl(itm.image, img);
-                        const isItmSub = Array.isArray(itm.images) && itm.images.some((si) => isSameImageUrl(si, img));
-                        const itmCol = itm.colorOptions?.find((c) => c.image && isSameImageUrl(c.image, img));
-                        if (isItmImg || isItmSub || itmCol) {
-                          thumbBadge = `SP ${i + 1}`;
-                          break;
-                        }
-                      }
-                    }
-                  } else if (idx === 0) {
-                    thumbBadge = 'Chính';
-                  }
-
                   return (
                     <button
                       key={idx}
@@ -1006,10 +984,18 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         spinnerSize="xs"
                         spinnerColor="neutral"
                       />
-                      {thumbBadge && (
-                        <span className="absolute bottom-0 inset-x-0 bg-neutral-900/85 text-[8px] text-white text-center font-bold py-0.2 truncate px-0.5">
-                          {thumbBadge}
-                        </span>
+                      {isInteractiveCombo ? (
+                        idx === generalComboImages.length ? (
+                          <span className="absolute bottom-0 inset-x-0 bg-amber-500/95 text-[7px] text-neutral-950 text-center font-bold py-0.5 truncate px-0.5">
+                            {product.comboItems?.[activeComboStep]?.title || 'Chi tiết'}
+                          </span>
+                        ) : null
+                      ) : (
+                        idx === 0 && (
+                          <span className="absolute bottom-0 inset-x-0 bg-neutral-900/80 text-[7px] text-white text-center font-bold py-0.2">
+                            Chính
+                          </span>
+                        )
                       )}
                     </button>
                   );
@@ -1019,18 +1005,18 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
 
           {/* RIGHT: Product Information & Purchase Panel */}
-          <div className="lg:col-span-7 xl:col-span-7 space-y-5">
-            <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-7 border border-neutral-200/90 shadow-xs space-y-4 sm:space-y-6">
+          <div className="lg:col-span-7 xl:col-span-7 space-y-4 sm:space-y-5">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-7 border border-neutral-200/70 sm:border-neutral-200/90 shadow-2xs sm:shadow-xs space-y-3.5 sm:space-y-6">
               
               {/* Product Title & Quick Share */}
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight flex-1">
+              <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+                <h1 className="text-xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight flex-1">
                   {product.name}
                 </h1>
                 <button
                   type="button"
                   onClick={() => setIsShareModalOpen(true)}
-                  className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-slate-200/80 shadow-2xs active:scale-95"
+                  className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-slate-200/80 shadow-2xs active:scale-95"
                   title="Chia sẻ sản phẩm"
                 >
                   <Share2 className="w-4 h-4 text-slate-800" />
@@ -1039,10 +1025,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>
 
               {/* Price & Sales Row */}
-              <div className="p-3.5 sm:p-4 bg-neutral-50 rounded-2xl border border-neutral-200/80 flex items-center justify-between gap-3">
+              <div className="p-3 sm:p-4 bg-neutral-50 rounded-xl sm:rounded-2xl border border-neutral-200/80 flex items-center justify-between gap-2.5">
                 <div className="space-y-0.5">
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-                    <span className="text-2xl sm:text-3xl font-black text-neutral-950 font-mono tracking-tight">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                    <span className="text-xl sm:text-3xl font-black text-neutral-950 font-mono tracking-tight">
                       {effectiveUnitPrice.toLocaleString('vi-VN')}đ
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
@@ -1092,37 +1078,37 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <ProductComboCustomizer
                   product={product}
                   comboItems={product.comboItems!}
-                  isOutOfStock={isOutOfStock}
                   activeStep={activeComboStep}
-                  onStepChange={(newStep) => {
-                    setActiveComboStep(newStep);
-                    const item = product.comboItems?.[newStep];
-                    const itemImg = item?.colorOptions?.[0]?.image || item?.image;
-                    if (itemImg) {
-                      const idx = findGalleryImageIndex(images, itemImg);
-                      if (idx > -1) setActiveImageIdx(idx);
+                  onStepChange={(stepIdx) => {
+                    setActiveComboStep(stepIdx);
+                    // Switch carousel to active item image (right after general combo images)
+                    if (generalComboImages.length > 0) {
+                      setActiveImageIdx(generalComboImages.length);
+                    } else {
+                      setActiveImageIdx(0);
                     }
                   }}
-                  onActiveColorChange={(_colName, colImg) => {
+                  onColorSelect={(_colName, colImg) => {
                     if (colImg) {
-                      const idx = findGalleryImageIndex(images, colImg);
-                      if (idx > -1) {
-                        setActiveImageIdx(idx);
+                      const matchIdx = findGalleryImageIndex(images, colImg);
+                      if (matchIdx >= 0) {
+                        setActiveImageIdx(matchIdx);
                       }
                     }
                   }}
                   quantity={quantity}
-                  onQuantityChange={setQuantity}
+                  setQuantity={setQuantity}
                   availableStock={availableStock}
-                  onCompleteCombo={(selectedComboItems, totalExtra) => {
-                    // Update state or callback
-                  }}
-                  onAddToCartDirect={(selectedComboItems, totalExtra, qty) => {
+                  isOutOfStock={isOutOfStock}
+                  isCartFullForProduct={isCartFullForProduct}
+                  remainingAddableStock={remainingAddableStock}
+                  isAdded={isAdded}
+                  onAddToCartDirect={(selectedComboItems, totalExtra, chosenQty) => {
                     setIsAdded(true);
                     setTimeout(() => setIsAdded(false), 2000);
                     onAddToCart(
                       product,
-                      qty || quantity,
+                      chosenQty,
                       selectedComboItems[0]?.selectedColor,
                       undefined,
                       undefined,
@@ -1139,10 +1125,10 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       selectedComboItems
                     );
                   }}
-                  onBuyNowDirect={(selectedComboItems, totalExtra, qty) => {
+                  onBuyNowDirect={(selectedComboItems, totalExtra, chosenQty) => {
                     onBuyNow(
                       product,
-                      qty || quantity,
+                      chosenQty,
                       selectedComboItems[0]?.selectedColor,
                       undefined,
                       undefined,
