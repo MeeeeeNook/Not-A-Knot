@@ -151,7 +151,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onLogout,
   onBackToStore
 }) => {
-  const [activeTab, setActiveTab] = useState<AdminTabType>('dashboard');
+  const [activeTab, setActiveTab] = useState<AdminTabType>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedTab = localStorage.getItem('nak_admin_active_tab') as AdminTabType;
+        if (savedTab) return savedTab;
+      } catch {}
+    }
+    return 'dashboard';
+  });
   const [isTabLoading, setIsTabLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<'all' | 'website' | 'event_0209' | 'facebook' | 'workshop'>('all');
@@ -179,6 +187,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setEditingProduct(null);
     setEditingCategory(null);
     setSidebarOpen(false);
+
+    try {
+      localStorage.setItem('nak_admin_active_tab', tab);
+    } catch {}
 
     setTimeout(() => {
       setActiveTab(tab);

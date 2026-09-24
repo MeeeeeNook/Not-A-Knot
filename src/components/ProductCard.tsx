@@ -181,12 +181,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.3 }}
+      whileHover={{ scale: 1.05 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
       id={`product-card-${product.id}`}
       onClick={() => onOpenDetail(product)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`bg-white rounded-xl sm:rounded-2xl border border-neutral-200/90 hover:border-neutral-400/80 transition-all duration-300 overflow-hidden flex flex-col group cursor-pointer shadow-xs hover:shadow-md relative ${
+      className={`bg-white rounded-xl sm:rounded-2xl border border-neutral-200/90 hover:border-neutral-400/80 transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-xl relative hover:z-20 overflow-hidden flex flex-col group cursor-pointer shadow-xs ${
         isSoldOut ? 'opacity-85' : ''
       } ${className}`}
     >

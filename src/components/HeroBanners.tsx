@@ -55,7 +55,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       title: 'NOT A KNOT',
       highlight: 'Sợi Dây Kể Chuyện',
       subtitle: 'Từng nút thắt thủ công đều mang một câu chuyện độc bản.',
-      bgImage: '/assets/hero-bg.jpg',
+      bgImage: '/assets/hero-bg.png',
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
       order: 1,
@@ -336,6 +336,11 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
               }
             }}
             className="absolute inset-0 w-full h-full flex items-center justify-center touch-pan-y"
+            style={{
+              WebkitBackfaceVisibility: 'hidden',
+              backfaceVisibility: 'hidden',
+              transform: 'translateZ(0)'
+            }}
           >
             {/* Background Image with Focal Point, Zoom & Fit Mode */}
             {(() => {
@@ -358,11 +363,11 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                 fitMode: string,
                 altText: string
               ) => {
-                const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.jpg';
+                const validSrc = imgSrc && typeof imgSrc === 'string' && imgSrc.trim().length > 0 ? imgSrc : '/assets/hero-bg.png';
                 const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
                   const target = e.currentTarget;
-                  if (!target.src.includes('/assets/hero-bg.jpg')) {
-                    target.src = '/assets/hero-bg.jpg';
+                  if (!target.src.includes('/assets/hero-bg.png')) {
+                    target.src = '/assets/hero-bg.png';
                   }
                 };
 
@@ -378,9 +383,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         onError={handleImgError}
                         loading="lazy"
                         decoding="async"
-                        width={1600}
-                        height={700}
+                        sizes="100vw"
                         className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
+                        style={{ imageRendering: '-webkit-optimize-contrast' }}
                       />
                       <img
                         src={validSrc}
@@ -389,12 +394,14 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         loading={isFirstSlide ? "eager" : "lazy"}
                         fetchPriority={isFirstSlide ? "high" : "low"}
                         decoding={isFirstSlide ? "sync" : "async"}
-                        width={1600}
-                        height={700}
+                        sizes="100vw"
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
-                          transform: `scale(${zoom / 100})`,
-                          transformOrigin: `${posX}% ${posY}%`
+                          transform: (zoom && zoom !== 100) ? `scale(${zoom / 100}) translateZ(0)` : 'translateZ(0)',
+                          transformOrigin: `${posX}% ${posY}%`,
+                          imageRendering: '-webkit-optimize-contrast',
+                          WebkitBackfaceVisibility: 'hidden',
+                          backfaceVisibility: 'hidden'
                         }}
                       />
                     </div>
@@ -409,13 +416,15 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                       loading={isFirstSlide ? "eager" : "lazy"}
                       fetchPriority={isFirstSlide ? "high" : "low"}
                       decoding={isFirstSlide ? "sync" : "async"}
-                      width={1600}
-                      height={700}
+                      sizes="100vw"
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
                         objectPosition: `${posX}% ${posY}%`,
-                        transform: `scale(${zoom / 100})`,
-                        transformOrigin: `${posX}% ${posY}%`
+                        transform: (zoom && zoom !== 100) ? `scale(${zoom / 100}) translateZ(0)` : 'translateZ(0)',
+                        transformOrigin: `${posX}% ${posY}%`,
+                        imageRendering: '-webkit-optimize-contrast',
+                        WebkitBackfaceVisibility: 'hidden',
+                        backfaceVisibility: 'hidden'
                       }}
                     />
                   );
@@ -428,13 +437,15 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                     loading={isFirstSlide ? "eager" : "lazy"}
                     fetchPriority={isFirstSlide ? "high" : "low"}
                     decoding={isFirstSlide ? "sync" : "async"}
-                    width={1600}
-                    height={700}
+                    sizes="100vw"
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{
                       objectPosition: `${posX}% ${posY}%`,
-                      transform: `scale(${zoom / 100})`,
-                      transformOrigin: `${posX}% ${posY}%`
+                      transform: (zoom && zoom !== 100) ? `scale(${zoom / 100}) translateZ(0)` : 'translateZ(0)',
+                      transformOrigin: `${posX}% ${posY}%`,
+                      imageRendering: '-webkit-optimize-contrast',
+                      WebkitBackfaceVisibility: 'hidden',
+                      backfaceVisibility: 'hidden'
                     }}
                   />
                 );

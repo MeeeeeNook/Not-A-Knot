@@ -463,15 +463,15 @@ export function cleanFirestoreData<T>(obj: T): T {
  */
 export async function compressBase64Image(
   dataUrl: string,
-  maxWidth = 1600,
-  maxHeight = 900,
-  quality = 0.82
+  maxWidth = 2560,
+  maxHeight = 1120,
+  quality = 0.90
 ): Promise<string> {
   if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
     return dataUrl;
   }
-  // If it's already reasonably compact (< 180KB), return directly to save CPU & memory cycles
-  if (dataUrl.length < 180 * 1024) {
+  // If it's already reasonably compact (< 850KB), return directly to preserve 100% crisp original detail
+  if (dataUrl.length < 850 * 1024) {
     return dataUrl;
   }
 
@@ -2459,35 +2459,56 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
   try {
     const docRef = doc(db, 'site_content', 'main_config');
 
-    // Compress hero slides images if any Base64 strings exist & remove legacy separate mobile images
+    // Keep hero slides untouched to preserve 100% original resolution & quality
     let heroSlides = config.heroSlides;
     if (Array.isArray(heroSlides) && heroSlides.length > 0) {
-      heroSlides = await Promise.all(
-        heroSlides.map(async (slide) => {
-          let bgImg = slide.bgImage;
-          if (bgImg && bgImg.startsWith('data:image/')) {
-            try {
-              bgImg = await compressBase64Image(bgImg, 1600, 900, 0.82);
-            } catch (compErr) {
-              console.warn('Lỗi nén ảnh slide:', compErr);
-            }
-          }
-          const { bgImageMobile, ...restSlide } = slide as any;
-          return { ...restSlide, bgImage: bgImg };
-        })
-      );
+      heroSlides = heroSlides.map((slide) => {
+        const { bgImageMobile, ...restSlide } = slide as any;
+        return restSlide;
+      });
     }
 
-    const payload = cleanFirestoreData({
+    // Tối ưu logoUrl nếu là chuỗi Base64 cồng kềnh
+    let cleanLogo = config.logoUrl;
+    if (cleanLogo && cleanLogo.startsWith('data:image/') && cleanLogo.length > 50 * 1024) {
+      cleanLogo = '/assets/logo.png';
+    }
+
+    let payload = cleanFirestoreData({
       ...config,
+      logoUrl: cleanLogo,
       heroSlides,
       updatedAt: new Date().toISOString()
     });
 
+    let dataSize = JSON.stringify(payload).length;
+
+    // Giới hạn tuyệt đối của Firestore Document là 1,048,576 bytes (1MB)
+    // Nếu toàn bộ cấu hình vượt 800KB, tối ưu chuỗi ảnh lớn nhất để setDoc KHÔNG BAO GIỜ bị Firestore từ chối
+    if (dataSize > 800 * 1024 && Array.isArray(heroSlides)) {
+      heroSlides = await Promise.all(
+        heroSlides.map(async (slide) => {
+          let bgImg = slide.bgImage;
+          if (bgImg && bgImg.startsWith('data:image/') && bgImg.length > 250 * 1024) {
+            try {
+              bgImg = await compressBase64Image(bgImg, 2560, 1120, 0.85);
+            } catch (cErr) {
+              console.warn('Lỗi nén an toàn hero slide:', cErr);
+            }
+          }
+          return { ...slide, bgImage: bgImg };
+        })
+      );
+      payload = cleanFirestoreData({
+        ...payload,
+        heroSlides
+      });
+      dataSize = JSON.stringify(payload).length;
+    }
+
     // Also update local storage cache immediately with quota-safe helper
     safeStorageSetItem('nak_site_content', JSON.stringify(payload));
 
-    const dataSize = JSON.stringify(payload).length;
     await setDoc(docRef, payload, { merge: true });
     recordOperation('write', dataSize);
   } catch (err) {

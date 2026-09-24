@@ -583,7 +583,8 @@ export default function App() {
         setIsAdminLoginModalOpen(false);
       } else {
         setCurrentSeller(null);
-        if (window.location.hash.includes('admin')) {
+        const currentUrl = window.location.pathname + window.location.hash;
+        if (currentUrl.includes('/admin') || currentUrl.includes('admin')) {
           setCurrentView('landing');
           setIsAdminLoginModalOpen(true);
         }

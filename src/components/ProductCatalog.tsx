@@ -461,7 +461,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5 p-1 sm:p-2 -m-1 sm:-m-2">
                 <AnimatePresence mode="popLayout">
                   {filteredProducts.map((product, idx) => (
                     <ProductCard

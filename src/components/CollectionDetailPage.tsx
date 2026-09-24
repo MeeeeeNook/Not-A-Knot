@@ -700,7 +700,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 p-1 sm:p-2 -m-1 sm:-m-2">
               {collectionProducts.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -1418,7 +1418,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 p-1 sm:p-2 -m-1 sm:-m-2">
             {collectionProducts.map((product) => (
               <ProductCard
                 key={product.id}

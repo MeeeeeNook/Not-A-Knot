@@ -94,6 +94,24 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
   });
 
   const [isCustomAnnouncementLink, setIsCustomAnnouncementLink] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'collection_products' | 'faq' | 'footer'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nak_admin_site_editor_subtab');
+        if (saved && ['general', 'hero', 'collection_products', 'faq', 'footer'].includes(saved)) {
+          return saved as any;
+        }
+      } catch {}
+    }
+    return 'general';
+  });
+
+  const handleSwitchSubTab = (tab: 'general' | 'hero' | 'collection_products' | 'faq' | 'footer') => {
+    setActiveSubTab(tab);
+    try {
+      localStorage.setItem('nak_admin_site_editor_subtab', tab);
+    } catch {}
+  };
 
   // Keep internal config synchronized if parent or cloud siteContent changes
   useEffect(() => {
@@ -101,6 +119,14 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
       setConfig((prev) => {
         const prevHeroStr = JSON.stringify(prev.heroSlides || []);
         const nextHeroStr = JSON.stringify(initialConfig.heroSlides || []);
+        // Nếu admin đang ở tab hero billboard và đang thao tác, không ghi đè heroSlides từ cloud sync
+        if (activeSubTab === 'hero' && prevHeroStr !== nextHeroStr) {
+          return {
+            ...prev,
+            ...initialConfig,
+            heroSlides: prev.heroSlides
+          };
+        }
         if (prevHeroStr !== nextHeroStr || prev.brandName !== initialConfig.brandName) {
           let sections = initialConfig.landingProductSections;
           if (!sections || sections.length === 0) {
@@ -115,9 +141,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         return prev;
       });
     }
-  }, [initialConfig]);
+  }, [initialConfig, activeSubTab]);
 
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'hero' | 'collection_products' | 'faq' | 'footer'>('general');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [dimensionNotice, setDimensionNotice] = useState<{ id: string; text: string } | null>(null);
@@ -428,7 +453,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
       title: 'Tiêu Đề Slide Mới',
       highlight: 'Phong Cách Độc Bản',
       subtitle: 'Mô tả ngắn gọn về bộ sưu tập và dòng phụ kiện thủ công.',
-      bgImage: 'https://images.unsplash.com/photo-1611591475155-4286fa7c2e60?q=80&w=1200&auto=format&fit=crop',
+      bgImage: '/assets/billboard-slide-1.webp',
       buttonText: 'Khám phá ngay',
       categoryLink: 'all',
       order: (config.heroSlides?.length || 0) + 1,
@@ -609,7 +634,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
       {/* Sub-Tabs Navigation */}
       <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs">
         <button
-          onClick={() => setActiveSubTab('general')}
+          type="button"
+          onClick={() => handleSwitchSubTab('general')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'general' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -618,7 +644,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveSubTab('hero')}
+          type="button"
+          onClick={() => handleSwitchSubTab('hero')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'hero' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -632,7 +659,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveSubTab('collection_products')}
+          type="button"
+          onClick={() => handleSwitchSubTab('collection_products')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'collection_products' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -647,7 +675,8 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveSubTab('faq')}
+          type="button"
+          onClick={() => handleSwitchSubTab('faq')}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'faq' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -656,8 +685,9 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveSubTab('footer')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+          type="button"
+          onClick={() => handleSwitchSubTab('footer')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
             activeSubTab === 'footer' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
@@ -1057,7 +1087,6 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             setConfig((prev) => {
               const updatedConfig = { ...prev, heroSlides: sanitized };
               safeStorageSetItem('nak_site_content', JSON.stringify(updatedConfig));
-              onSaveConfig(updatedConfig);
               return updatedConfig;
             });
           }}

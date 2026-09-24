@@ -41,7 +41,7 @@ interface CanvaSlideStudioProps {
 const DEFAULT_SLIDE_TEMPLATE: SiteHeroSlide = {
   id: '',
   title: 'Billboard Banner',
-  bgImage: 'https://images.unsplash.com/photo-1611591475102-468ae7f6305a?auto=format&fit=crop&w=1920&q=85',
+  bgImage: '/assets/billboard-slide-1.webp',
   categoryLink: 'all',
   order: 1,
   isActive: true,
@@ -241,44 +241,42 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     }
     const reader = new FileReader();
     reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (!dataUrl) return;
+
+      // Nếu file đã gọn (< 350KB), dùng trực tiếp bản gốc 100%
+      if (file.size <= 350 * 1024) {
+        updateActiveSlide({ bgImage: dataUrl });
+        return;
+      }
+
+      // Giữ nguyên 100% kích thước & độ phân giải gốc của ảnh (naturalWidth x naturalHeight)
+      // Xuất sang WebP/JPEG chất lượng cao (0.88) để giữ nguyên vẹn độ sắc nét mà dung lượng cực kỳ gọn gàng
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 1600;
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = Math.max(1, width);
-        canvas.height = Math.max(1, height);
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, width, height);
-          let compressed = '';
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          let crispResult = '';
           try {
-            compressed = canvas.toDataURL('image/webp', 0.82);
-            if (!compressed || !compressed.startsWith('data:image/webp')) {
-              compressed = canvas.toDataURL('image/jpeg', 0.82);
+            crispResult = canvas.toDataURL('image/webp', 0.88);
+            if (!crispResult || !crispResult.startsWith('data:image/webp')) {
+              crispResult = canvas.toDataURL('image/jpeg', 0.88);
             }
           } catch {
-            compressed = canvas.toDataURL('image/jpeg', 0.82);
+            crispResult = canvas.toDataURL('image/jpeg', 0.88);
           }
-          updateActiveSlide({ bgImage: compressed || (e.target?.result as string) });
+          updateActiveSlide({ bgImage: crispResult || dataUrl });
         } else {
-          updateActiveSlide({ bgImage: e.target?.result as string });
+          updateActiveSlide({ bgImage: dataUrl });
         }
       };
-      img.src = e.target?.result as string;
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -523,18 +521,19 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                   {/* Slide Thumbnail */}
                   <div className="relative w-full aspect-[16/7] rounded-lg overflow-hidden bg-neutral-950 border border-neutral-200/40">
                     <img
-                      src={slide.bgImage || '/assets/hero-bg.jpg'}
+                      src={slide.bgImage || '/assets/hero-bg.png'}
                       alt=""
                       onError={(e) => {
                         const target = e.currentTarget;
-                        if (!target.src.includes('/assets/hero-bg.jpg')) {
-                          target.src = '/assets/hero-bg.jpg';
+                        if (!target.src.includes('/assets/hero-bg.png')) {
+                          target.src = '/assets/hero-bg.png';
                         }
                       }}
                       className="w-full h-full object-cover"
                       style={{
                         objectPosition: `${slide.bgPositionX ?? 50}% ${slide.bgPositionY ?? 50}%`,
-                        transform: `scale(${(slide.bgZoom ?? 100) / 100})`
+                        transform: (slide.bgZoom && slide.bgZoom !== 100) ? `scale(${slide.bgZoom / 100})` : undefined,
+                        imageRendering: '-webkit-optimize-contrast'
                       }}
                     />
                     {!slide.isActive && (
@@ -640,20 +639,21 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             >
               {/* Background Image Layer */}
               <img
-                src={activeSlide.bgImage || '/assets/hero-bg.jpg'}
+                src={activeSlide.bgImage || '/assets/hero-bg.png'}
                 alt=""
                 onError={(e) => {
                   const target = e.currentTarget;
-                  if (!target.src.includes('/assets/hero-bg.jpg')) {
-                    target.src = '/assets/hero-bg.jpg';
+                  if (!target.src.includes('/assets/hero-bg.png')) {
+                    target.src = '/assets/hero-bg.png';
                   }
                 }}
                 className="absolute inset-0 w-full h-full pointer-events-none transition-transform duration-100 ease-out"
                 style={{
                   objectFit: activeSlide.bgFit || 'cover',
                   objectPosition: `${activeSlide.bgPositionX ?? 50}% ${activeSlide.bgPositionY ?? 50}%`,
-                  transform: `scale(${(activeSlide.bgZoom ?? 100) / 100})`,
-                  transformOrigin: `${activeSlide.bgPositionX ?? 50}% ${activeSlide.bgPositionY ?? 50}%`
+                  transform: (activeSlide.bgZoom && activeSlide.bgZoom !== 100) ? `scale(${activeSlide.bgZoom / 100})` : undefined,
+                  transformOrigin: `${activeSlide.bgPositionX ?? 50}% ${activeSlide.bgPositionY ?? 50}%`,
+                  imageRendering: '-webkit-optimize-contrast'
                 }}
               />
 
@@ -857,12 +857,13 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                   className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-1.5 text-xs text-neutral-900 outline-none focus:bg-white focus:border-neutral-900 font-mono"
                 />
                 <div className="flex flex-wrap items-center gap-1 pt-1">
-                  <span className="text-[10px] text-neutral-500">Ảnh gợi ý:</span>
+                  <span className="text-[10px] text-neutral-500">Ảnh gợi ý HD:</span>
                   {[
-                    { label: 'Hero Gốc', url: '/assets/hero-bg.jpg' },
+                    { label: 'Hero Gốc 2K', url: '/assets/hero-bg.png' },
+                    { label: 'Billboard 1 HD', url: '/assets/billboard-slide-1.webp' },
+                    { label: 'Billboard 2 HD', url: '/assets/billboard-slide-2.webp' },
                     { label: 'Vòng Tay', url: '/assets/bracelet.jpg' },
-                    { label: 'EDC', url: '/assets/img_3.jpg' },
-                    { label: 'Not A Knot', url: '/assets/img_4_NOT_A_KNOT.jpg' }
+                    { label: 'EDC Phụ Kiện', url: '/assets/img_3.jpg' }
                   ].map((preset) => (
                     <button
                       key={preset.url}

@@ -25,6 +25,16 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
 
   useEffect(() => {
     if (!config.autoRedirect || !config.autoRedirectUrl) return;
+
+    // Do NOT auto-redirect if an admin is logged in or if on an admin path
+    try {
+      const adminSession = localStorage.getItem('nak_admin_session');
+      const currentUrl = window.location.pathname + window.location.hash;
+      if (adminSession || currentUrl.includes('admin')) {
+        return;
+      }
+    } catch {}
+
     const initialSec = config.autoRedirectSeconds || 5;
     setCountdown(initialSec);
 
