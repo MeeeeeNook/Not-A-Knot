@@ -15,10 +15,11 @@ import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, Sel
 import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
-import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer } from './utils/auth';
+import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
 import { useAdminPresence } from './hooks/useAdminPresence';
+import { TurnOffMaintenanceConfirmModal } from './components/admin/TurnOffMaintenanceConfirmModal';
 
 // Dynamic code-splitting for non-landing pages & deferred non-critical widgets
 const AboutPage = React.lazy(() => import('./components/AboutPage').then((m) => ({ default: m.AboutPage })));
@@ -259,6 +260,15 @@ export default function App() {
   const [maintenanceConfig, setMaintenanceConfig] = useState<MaintenanceConfig>(() =>
     getInitialMaintenanceConfig()
   );
+  const [isTurnOffMaintenanceModalOpen, setIsTurnOffMaintenanceModalOpen] = useState(false);
+
+  const handleConfirmTurnOffMaintenance = async () => {
+    const next = { ...maintenanceConfig, enabled: false };
+    await saveMaintenanceConfig(next, currentSeller?.name || 'Quản trị viên');
+    setMaintenanceConfig(next);
+    showToast('Đã tắt chế độ bảo trì thành công! Website đã mở lại đón khách.');
+    setIsTurnOffMaintenanceModalOpen(false);
+  };
 
   useEffect(() => {
     const unsub = subscribeToMaintenanceConfig((cfg) => {
@@ -1568,6 +1578,7 @@ export default function App() {
   const isMaintenanceActiveForUser = Boolean(
     maintenanceConfig.enabled && !currentSeller && currentView !== 'admin'
   );
+  const isCurrentSellerAdmin = Boolean(isRootAdminUser(currentSeller));
 
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-clip relative flex flex-col bg-[#FAF9F6] text-slate-900 selection:bg-amber-400 selection:text-slate-950 font-sans">
@@ -1577,22 +1588,24 @@ export default function App() {
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm shrink-0 animate-pulse">⚠️</span>
             <span className="truncate">
-              <strong>CHẾ ĐỘ BẢO TRÌ ĐANG BẬT:</strong> Khách hàng hiện không thể xem shop (chỉ Quản trị viên mới thấy giao diện này).
+              <strong>CHẾ ĐỘ BẢO TRÌ ĐANG BẬT:</strong> Khách hàng hiện không thể xem shop ({isCurrentSellerAdmin ? 'Quản trị viên có thể tắt bảo trì để mở lại website.' : 'Chỉ Quản trị viên mới có quyền tắt chế độ bảo trì.'}).
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0 ml-3">
-            <button
-              type="button"
-              onClick={async () => {
-                const next = { ...maintenanceConfig, enabled: false };
-                await saveMaintenanceConfig(next, currentSeller.name);
-                setMaintenanceConfig(next);
-                showToast('Đã tắt chế độ bảo trì thành công!');
-              }}
-              className="px-3 py-1 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-black cursor-pointer shadow-xs transition-colors"
-            >
-              Tắt bảo trì ngay
-            </button>
+            {/* ONLY Quản trị viên can see and interact with the button to turn off maintenance! */}
+            {isCurrentSellerAdmin ? (
+              <button
+                type="button"
+                onClick={() => setIsTurnOffMaintenanceModalOpen(true)}
+                className="px-3 py-1 bg-white hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-black cursor-pointer shadow-xs transition-colors"
+              >
+                Tắt bảo trì ngay
+              </button>
+            ) : (
+              <span className="px-2.5 py-1 bg-rose-800/80 text-rose-100 rounded-lg text-[11px] font-semibold border border-rose-500/40">
+                Chỉ Quản trị viên mới được tắt
+              </span>
+            )}
             {currentView !== 'admin' && (
               <button
                 type="button"
@@ -2007,6 +2020,15 @@ export default function App() {
           />
         </React.Suspense>
       )}
+
+      {/* Confirmation Screen when turning off Maintenance Mode */}
+      <TurnOffMaintenanceConfirmModal
+        isOpen={isTurnOffMaintenanceModalOpen}
+        onClose={() => setIsTurnOffMaintenanceModalOpen(false)}
+        onConfirm={handleConfirmTurnOffMaintenance}
+        adminName={currentSeller?.name || 'Quản trị viên'}
+        brandName={siteContent?.brandName || 'NOT A KNOT'}
+      />
     </div>
   );
 }

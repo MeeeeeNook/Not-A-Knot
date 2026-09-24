@@ -25,6 +25,7 @@ import {
   DEFAULT_MAINTENANCE_CONFIG
 } from '../../utils/maintenanceManager';
 import { MaintenanceScreen } from '../MaintenanceScreen';
+import { TurnOffMaintenanceConfirmModal } from './TurnOffMaintenanceConfirmModal';
 
 interface AdminMaintenanceTabProps {
   maintenanceConfig: MaintenanceConfig;
@@ -32,6 +33,7 @@ interface AdminMaintenanceTabProps {
   onNotify?: (msg: string, type?: 'success' | 'error' | 'info') => void;
   brandName?: string;
   logoUrl?: string;
+  adminName?: string;
 }
 
 export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
@@ -39,7 +41,8 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
   onSave,
   onNotify,
   brandName = 'NOT A KNOT',
-  logoUrl
+  logoUrl,
+  adminName = 'Quản trị viên'
 }) => {
   const [formConfig, setFormConfig] = useState<MaintenanceConfig>(() => ({
     ...DEFAULT_MAINTENANCE_CONFIG,
@@ -59,33 +62,55 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isTurnOffConfirmOpen, setIsTurnOffConfirmOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleToggleEnabled = async () => {
     if (isSaving) return;
-    const nextState = !formConfig.enabled;
+
+    // If maintenance is currently ON, require confirmation screen before turning OFF
+    if (formConfig.enabled) {
+      setIsTurnOffConfirmOpen(true);
+      return;
+    }
+
+    // Turning ON
     const nextConfig: MaintenanceConfig = {
       ...formConfig,
-      enabled: nextState
+      enabled: true
     };
 
-    // Optimistic local state update
     setFormConfig(nextConfig);
 
-    // Auto-save immediately to Firestore & LocalStorage
     try {
       setIsSaving(true);
       await onSave(nextConfig);
-      onNotify?.(
-        nextState
-          ? 'Đã BẬT chế độ bảo trì! (Khách hàng sẽ thấy màn hình bảo trì)'
-          : 'Đã TẮT chế độ bảo trì! (Website mở lại bình thường)',
-        'success'
-      );
+      onNotify?.('Đã BẬT chế độ bảo trì! (Khách hàng sẽ thấy màn hình bảo trì)', 'success');
     } catch (err: any) {
-      console.error('Lỗi khi chuyển đổi trạng thái bảo trì:', err);
-      // Revert if error
+      console.error('Lỗi khi bật bảo trì:', err);
+      setFormConfig(formConfig);
+      onNotify?.('Lỗi khi lưu trạng thái bảo trì lên hệ thống', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmTurnOffMaintenance = async () => {
+    const nextConfig: MaintenanceConfig = {
+      ...formConfig,
+      enabled: false
+    };
+
+    setFormConfig(nextConfig);
+
+    try {
+      setIsSaving(true);
+      await onSave(nextConfig);
+      onNotify?.('Đã TẮT chế độ bảo trì thành công! (Website đã mở lại bình thường)', 'success');
+      setIsTurnOffConfirmOpen(false);
+    } catch (err: any) {
+      console.error('Lỗi khi tắt bảo trì:', err);
       setFormConfig(formConfig);
       onNotify?.('Lỗi khi lưu trạng thái bảo trì lên hệ thống', 'error');
     } finally {
@@ -752,6 +777,15 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Confirmation Screen when turning off Maintenance Mode */}
+      <TurnOffMaintenanceConfirmModal
+        isOpen={isTurnOffConfirmOpen}
+        onClose={() => setIsTurnOffConfirmOpen(false)}
+        onConfirm={handleConfirmTurnOffMaintenance}
+        adminName={adminName}
+        brandName={brandName}
+      />
     </div>
   );
 };

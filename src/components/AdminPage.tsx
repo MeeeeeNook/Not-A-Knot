@@ -8642,6 +8642,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               onNotify={showAdminToast}
               brandName={siteContent?.brandName}
               logoUrl={siteContent?.logoUrl}
+              adminName={currentSeller?.name || 'Quản trị viên'}
             />
           ) : null
         )}

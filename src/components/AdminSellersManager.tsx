@@ -8,7 +8,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { SellerUser, SystemLogItem } from '../types';
 import { db, StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore, updateSellerPresence } from '../firebase';
-import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser, verifyAdminAction } from '../utils/auth';
+import { hashPassword, generateSalt, ROOT_ADMIN_USERNAME, deduplicateSellers, hashUsername, isRootAdminUser, isRootAdminUsername, verifyAdminAction } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
 interface AdminSellersManagerProps {
@@ -97,6 +97,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [passwordTargetSellerId, setPasswordTargetSellerId] = useState<string | null>(null);
   const [deletingSellerId, setDeletingSellerId] = useState<string | null>(null);
+  const [promotingSellerId, setPromotingSellerId] = useState<string | null>(null);
+  const [demotingSellerId, setDemotingSellerId] = useState<string | null>(null);
 
   // Form states for Add / Edit
   const [formData, setFormData] = useState({
@@ -201,13 +203,15 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     setEditingSellerId(seller.id);
     setPasswordTargetSellerId(null);
     setDeletingSellerId(null);
+    setPromotingSellerId(null);
+    setDemotingSellerId(null);
     setIsAddFormOpen(false);
     setFormData({
       name: seller.name,
       username: seller.username,
       password: '',
       phone: seller.phone || '',
-      role: seller.role,
+      role: (seller.isRootAdmin || seller.role === 'root_admin') ? 'root_admin' : 'member',
       isActive: seller.isActive
     });
   };
@@ -217,6 +221,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     setPasswordTargetSellerId(seller.id);
     setEditingSellerId(null);
     setDeletingSellerId(null);
+    setPromotingSellerId(null);
+    setDemotingSellerId(null);
     setIsAddFormOpen(false);
     setNewPasswordInput('');
     setShowNewPassword(false);
@@ -227,6 +233,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     setDeletingSellerId(seller.id);
     setEditingSellerId(null);
     setPasswordTargetSellerId(null);
+    setPromotingSellerId(null);
+    setDemotingSellerId(null);
     setIsAddFormOpen(false);
   };
 
@@ -310,21 +318,78 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
     setIsSaving(true);
     try {
+      const isPermanentRoot = isRootAdminUsername(seller.username);
+      const isPromotingToAdmin = formData.role === 'root_admin';
+      const finalRole: 'root_admin' | 'member' = (isPermanentRoot || isPromotingToAdmin) ? 'root_admin' : 'member';
+      const finalIsRootAdmin = isPermanentRoot || isPromotingToAdmin;
+
       const updatedSeller: SellerUser = {
         ...seller,
         name: cleanName,
         phone: formData.phone.trim(),
-        role: seller.isRootAdmin ? 'root_admin' : formData.role,
-        isActive: seller.isRootAdmin ? true : formData.isActive
+        role: finalRole,
+        isRootAdmin: finalIsRootAdmin,
+        isActive: finalIsRootAdmin ? true : formData.isActive
       };
 
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
       setEditingSellerId(null);
-      triggerSuccess(`Đã cập nhật thông tin người bán "${cleanName}".`);
+      triggerSuccess(`Đã cập nhật thông tin tài khoản "${cleanName}" (${finalIsRootAdmin ? 'Quản trị viên' : 'Người bán'}).`);
     } catch {
       alert('Lỗi cập nhật tài khoản.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Promote Member to Root Admin
+  const handleConfirmPromote = async (seller: SellerUser) => {
+    setIsSaving(true);
+    try {
+      const updatedSeller: SellerUser = {
+        ...seller,
+        role: 'root_admin',
+        isRootAdmin: true,
+        isActive: true
+      };
+
+      await saveSellerToFirestore(updatedSeller);
+      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
+      onUpdateSellers(updatedList);
+      setPromotingSellerId(null);
+      triggerSuccess(`Đã nâng quyền người bán "${seller.name}" (@${seller.username}) thành Quản trị viên thành công!`);
+    } catch {
+      alert('Lỗi khi nâng quyền người bán.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Demote Admin back to Member
+  const handleConfirmDemote = async (seller: SellerUser) => {
+    if (isRootAdminUsername(seller.username)) {
+      alert('Không thể hạ quyền Quản trị viên tối cao của hệ thống.');
+      setDemotingSellerId(null);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updatedSeller: SellerUser = {
+        ...seller,
+        role: 'member',
+        isRootAdmin: false
+      };
+
+      await saveSellerToFirestore(updatedSeller);
+      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
+      onUpdateSellers(updatedList);
+      setDemotingSellerId(null);
+      triggerSuccess(`Đã chuyển vai trò của "${seller.name}" (@${seller.username}) về Người bán thông thường.`);
+    } catch {
+      alert('Lỗi khi hạ quyền tài khoản.');
     } finally {
       setIsSaving(false);
     }
@@ -891,12 +956,14 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                 const isEditing = editingSellerId === seller.id;
                 const isChangingPassword = passwordTargetSellerId === seller.id;
                 const isDeleting = deletingSellerId === seller.id;
+                const isPromoting = promotingSellerId === seller.id;
+                const isDemoting = demotingSellerId === seller.id;
                 const presence = getSellerPresenceInfo(seller, allLogs);
 
                 return (
                   <React.Fragment key={`seller-mgr-frag-${seller.id || seller.username}-${sIdx}`}>
                     <tr className={`hover:bg-slate-50/80 transition-colors ${
-                      isEditing || isChangingPassword || isDeleting ? 'bg-amber-50/40' : ''
+                      isEditing || isChangingPassword || isDeleting || isPromoting || isDemoting ? 'bg-amber-50/40' : ''
                     }`}>
                       {/* Column 1: Member Info & Avatar */}
                       <td className="p-3.5">
@@ -1048,6 +1115,60 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                             <span>Đổi MK</span>
                           </button>
 
+                          {/* Promote to Admin Trigger */}
+                          {!isRoot && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isPromoting) {
+                                  setPromotingSellerId(null);
+                                } else {
+                                  setPromotingSellerId(seller.id);
+                                  setEditingSellerId(null);
+                                  setPasswordTargetSellerId(null);
+                                  setDeletingSellerId(null);
+                                  setDemotingSellerId(null);
+                                }
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
+                                isPromoting
+                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
+                              }`}
+                              title="Nâng quyền người bán này lên Quản trị viên"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Thăng QTV</span>
+                            </button>
+                          )}
+
+                          {/* Demote Admin Trigger (only for promoted admins, not root admin) */}
+                          {isRoot && !isRootAdminUsername(seller.username) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isDemoting) {
+                                  setDemotingSellerId(null);
+                                } else {
+                                  setDemotingSellerId(seller.id);
+                                  setEditingSellerId(null);
+                                  setPasswordTargetSellerId(null);
+                                  setDeletingSellerId(null);
+                                  setPromotingSellerId(null);
+                                }
+                              }}
+                              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
+                                isDemoting
+                                  ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                              }`}
+                              title="Hạ quyền xuống Người bán thông thường"
+                            >
+                              <ShieldAlert className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Hạ quyền</span>
+                            </button>
+                          )}
+
                           {/* Toggle Active / Inactive status */}
                           {!isRoot && (
                             <>
@@ -1096,10 +1217,10 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           <form onSubmit={(e) => handleSaveEdit(seller, e)} className="space-y-3">
                             <div className="flex items-center gap-2 text-sky-900 font-bold text-xs pb-1 border-b border-sky-200">
                               <Edit2 className="w-3.5 h-3.5 text-sky-700" />
-                              <span>Chỉnh sửa họ và tên người bán: {seller.name}</span>
+                              <span>Chỉnh sửa thông tin tài khoản: {seller.name} (@{seller.username})</span>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs">
-                              <div className="w-full sm:w-80">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs flex-wrap">
+                              <div className="w-full sm:w-64">
                                 <label className="block text-slate-700 font-semibold mb-1">Họ và tên</label>
                                 <input
                                   type="text"
@@ -1109,6 +1230,29 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                                   className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
                                 />
                               </div>
+                              <div className="w-full sm:w-48">
+                                <label className="block text-slate-700 font-semibold mb-1">Số điện thoại</label>
+                                <input
+                                  type="text"
+                                  value={formData.phone}
+                                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                  placeholder="0912..."
+                                  className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
+                                />
+                              </div>
+                              {!isRootAdminUsername(seller.username) && (
+                                <div className="w-full sm:w-52">
+                                  <label className="block text-slate-700 font-semibold mb-1">Vai trò</label>
+                                  <select
+                                    value={formData.role}
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                                    className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs font-bold focus:outline-none focus:border-sky-600 cursor-pointer"
+                                  >
+                                    <option value="member">Người bán (Member)</option>
+                                    <option value="root_admin">Quản trị viên (Admin)</option>
+                                  </select>
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 sm:mt-5">
                                 <button
                                   type="submit"
@@ -1179,6 +1323,88 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                               </div>
                             </div>
                           </form>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* INLINE ROW SUB-PANEL: PROMOTE TO ADMIN CONFIRMATION (NO POPUP) */}
+                    {isPromoting && (
+                      <tr className="bg-amber-50/90 border-y-2 border-amber-400">
+                        <td colSpan={5} className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div className="flex items-start sm:items-center gap-2.5 text-amber-950 font-medium">
+                              <div className="w-8 h-8 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                                <ShieldCheck className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="font-bold text-amber-900 text-sm">
+                                  Xác nhận nâng quyền Quản trị viên cho "{seller.name}" (@{seller.username})?
+                                </div>
+                                <p className="text-amber-800/90 text-[11px] mt-0.5">
+                                  Tài khoản này sẽ có toàn quyền quản trị: duyệt đơn hàng, quản lý người bán, cấu hình hệ thống và Bật/Tắt chế độ bảo trì toàn shop.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmPromote(seller)}
+                                disabled={isSaving}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                <ShieldCheck className="w-4 h-4" />
+                                <span>{isSaving ? 'Đang nâng quyền...' : 'Xác Nhận Thăng QTV'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPromotingSellerId(null)}
+                                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs border border-slate-300 cursor-pointer"
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* INLINE ROW SUB-PANEL: DEMOTE ADMIN CONFIRMATION (NO POPUP) */}
+                    {isDemoting && (
+                      <tr className="bg-slate-100 border-y-2 border-slate-400">
+                        <td colSpan={5} className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div className="flex items-start sm:items-center gap-2.5 text-slate-900 font-medium">
+                              <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
+                                <ShieldAlert className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900 text-sm">
+                                  Xác nhận hạ quyền tài khoản "{seller.name}" xuống Người bán thông thường?
+                                </div>
+                                <p className="text-slate-600 text-[11px] mt-0.5">
+                                  Tài khoản sẽ không còn quyền truy cập các tab Quản trị hệ thống và không thể Bật/Tắt chế độ bảo trì.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmDemote(seller)}
+                                disabled={isSaving}
+                                className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                <ShieldAlert className="w-4 h-4" />
+                                <span>{isSaving ? 'Đang hạ quyền...' : 'Xác Nhận Hạ Quyền'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDemotingSellerId(null)}
+                                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs border border-slate-300 cursor-pointer"
+                              >
+                                Hủy
+                              </button>
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     )}
