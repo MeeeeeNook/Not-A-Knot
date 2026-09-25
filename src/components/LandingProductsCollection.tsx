@@ -27,11 +27,6 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
   onOpenProductDetail,
   onOpenAllCatalog
 }) => {
-  // If explicitly disabled in admin, do not render
-  if (config?.isActive === false) {
-    return null;
-  }
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -45,6 +40,82 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
   
   // Custom display limit: 0 or undefined means show all selected/matched
   const displayLimit = typeof config?.displayLimit === 'number' ? config.displayLimit : 8;
+
+  // Filter & pick products based on admin configuration
+  const displayProducts = useMemo(() => {
+    // 1. If admin picked specific products manually
+    if (config?.selectedProductIds && config.selectedProductIds.length > 0) {
+      const selected = config.selectedProductIds
+        .map((id) => products.find((p) => String(p.id) === String(id)))
+        .filter((p): p is Product => Boolean(p) && !(p.isHidden === true || String(p.isHidden) === 'true'));
+      if (selected.length > 0) {
+        return displayLimit > 0 ? selected.slice(0, displayLimit) : selected;
+      }
+    }
+
+    // 2. Filter by category if specified
+    let filtered = products.filter((p) => !(p.isHidden === true || String(p.isHidden) === 'true'));
+    if (config?.filterCategory && config.filterCategory !== 'all') {
+      const catFiltered = filtered.filter((p) => p.category === config.filterCategory);
+      if (catFiltered.length > 0) {
+        filtered = catFiltered;
+      }
+    }
+
+    // Fallback: If filtered is empty, take available non-hidden products
+    if (filtered.length === 0 && products.length > 0) {
+      filtered = products.filter((p) => !(p.isHidden === true || String(p.isHidden) === 'true'));
+    }
+
+    // 3. Take products according to limit
+    return displayLimit > 0 ? filtered.slice(0, displayLimit) : filtered;
+  }, [products, config, displayLimit]);
+
+  // Determine dark or light text theme based on background color or explicit setting
+  const isDarkBg = useMemo(() => {
+    if (config?.textColor === 'light') return true;
+    if (config?.textColor === 'dark') return false;
+    const bg = config?.backgroundColor?.toLowerCase() || '';
+    if (!bg) return false;
+    if (bg.startsWith('#')) {
+      // Simple luminance calculation
+      const hex = bg.replace('#', '');
+      if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance < 0.5;
+      }
+    }
+    return bg.includes('black') || bg.includes('slate-900') || bg.includes('neutral-900') || bg.includes('zinc-900');
+  }, [config?.backgroundColor, config?.textColor]);
+
+  // Check scroll position for left/right arrows
+  const checkScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCanScrollLeft(scrollLeft > 10);
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [displayProducts]);
+
+  // If explicitly disabled in admin or no products to show, do not render
+  if (config?.isActive === false || displayProducts.length === 0) {
+    return null;
+  }
 
   // Handle action when clicking the product card or "Chi tiết" button
   const handleProductAction = (product: Product, e?: React.MouseEvent) => {
@@ -99,57 +170,6 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
     onOpenProductDetail(product);
   };
 
-  // Filter & pick products based on admin configuration
-  const displayProducts = useMemo(() => {
-    // 1. If admin picked specific products manually
-    if (config?.selectedProductIds && config.selectedProductIds.length > 0) {
-      const selected = config.selectedProductIds
-        .map((id) => products.find((p) => String(p.id) === String(id)))
-        .filter((p): p is Product => Boolean(p) && !(p.isHidden === true || String(p.isHidden) === 'true'));
-      if (selected.length > 0) {
-        return displayLimit > 0 ? selected.slice(0, displayLimit) : selected;
-      }
-    }
-
-    // 2. Filter by category if specified
-    let filtered = products.filter((p) => !(p.isHidden === true || String(p.isHidden) === 'true'));
-    if (config?.filterCategory && config.filterCategory !== 'all') {
-      const catFiltered = filtered.filter((p) => p.category === config.filterCategory);
-      if (catFiltered.length > 0) {
-        filtered = catFiltered;
-      }
-    }
-
-    // Fallback: If filtered is empty, take available non-hidden products
-    if (filtered.length === 0 && products.length > 0) {
-      filtered = products.filter((p) => !(p.isHidden === true || String(p.isHidden) === 'true'));
-    }
-
-    // 3. Take products according to limit
-    return displayLimit > 0 ? filtered.slice(0, displayLimit) : filtered;
-  }, [products, config, displayLimit]);
-
-  // Check scroll position for left/right arrows
-  const checkScroll = () => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    setCanScrollLeft(scrollLeft > 10);
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
-  };
-
-  useEffect(() => {
-    checkScroll();
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', checkScroll, { passive: true });
-    window.addEventListener('resize', checkScroll);
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-    };
-  }, [displayProducts]);
-
   const handleScroll = (direction: 'left' | 'right') => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -160,35 +180,11 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
     });
   };
 
-  if (displayProducts.length === 0) {
-    return null;
-  }
-
   const isExternalOrRedirect = 
     config?.detailActionType === 'custom_url' ||
     config?.detailActionType === 'zalo' ||
     config?.detailActionType === 'messenger' ||
     config?.detailActionType === 'category';
-
-  // Determine dark or light text theme based on background color or explicit setting
-  const isDarkBg = useMemo(() => {
-    if (config?.textColor === 'light') return true;
-    if (config?.textColor === 'dark') return false;
-    const bg = config?.backgroundColor?.toLowerCase() || '';
-    if (!bg) return false;
-    if (bg.startsWith('#')) {
-      // Simple luminance calculation
-      const hex = bg.replace('#', '');
-      if (hex.length === 6) {
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance < 0.5;
-      }
-    }
-    return bg.includes('black') || bg.includes('slate-900') || bg.includes('neutral-900') || bg.includes('zinc-900');
-  }, [config?.backgroundColor, config?.textColor]);
 
   // Layout mode: 'grid' | 'carousel' | 'auto'
   // Auto mode: If more than 4 products, enable smooth horizontal scroll & desktop arrows; if <= 4 products, center items nicely!

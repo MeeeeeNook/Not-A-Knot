@@ -11,8 +11,8 @@ export type AdminTabType =
   | 'sellers'
   | 'messages'
   | 'site_editor'
+  | 'social_feed'
   | 'bank_account'
-  | 'banners'
   | 'seo_audit'
   | 'products'
   | 'categories'
@@ -309,22 +309,22 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </button>
 
               <button
-                onClick={() => onSwitchTab('banners')}
+                onClick={() => onSwitchTab('social_feed')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'banners'
+                  activeTab === 'social_feed'
                     ? 'bg-amber-400 text-slate-950 shadow-xs font-extrabold'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Banners & Bộ sưu tập</span>
+                <span>Social Media</span>
                 <span
-                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border font-mono ${
-                    activeTab === 'banners'
-                      ? 'bg-black/15 text-slate-950 border-transparent'
-                      : 'bg-slate-100 text-slate-700 border-slate-200/70'
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                    activeTab === 'social_feed'
+                      ? 'bg-black/15 text-slate-950'
+                      : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {collectionsCount}
+                  NEW
                 </span>
               </button>
 

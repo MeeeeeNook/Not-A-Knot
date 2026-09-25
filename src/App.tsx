@@ -3,6 +3,8 @@ import { Navbar } from './components/Navbar';
 import { HeroBanners } from './components/HeroBanners';
 import { LandingProductsCollection } from './components/LandingProductsCollection';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
+import { LandingBrandStoryBanner } from './components/LandingBrandStoryBanner';
+import { LandingSocialGrid } from './components/LandingSocialGrid';
 import { LandingFaqCommitments } from './components/LandingFaqCommitments';
 import { CartDrawer } from './components/CartDrawer';
 import { Footer } from './components/Footer';
@@ -34,10 +36,7 @@ const MaintenanceScreen = React.lazy(() => import('./components/MaintenanceScree
 const LegalPoliciesModal = React.lazy(() => import('./components/LegalPoliciesModal').then((m) => ({ default: m.LegalPoliciesModal })));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
 const NotFoundPage = React.lazy(() => import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
-const FloatingChatWidget = React.lazy(() => import('./components/FloatingChatWidget').then((m) => ({ default: m.FloatingChatWidget })));
 const CookieConsentBanner = React.lazy(() => import('./components/CookieConsentBanner').then((m) => ({ default: m.CookieConsentBanner })));
-const GeoAccessRestrictionScreen = React.lazy(() => import('./components/GeoAccessRestrictionScreen').then((m) => ({ default: m.GeoAccessRestrictionScreen })));
-import { getClientGeoLocation, GeoLocationInfo } from './utils/ipGeo';
 import {
   fetchProductsFromFirestore,
   fetchCategoriesFromFirestore,
@@ -1799,6 +1798,17 @@ export default function App() {
             ))}
 
 
+            {/* Brand Story Banner positioned directly above Social Grid */}
+            <LandingBrandStoryBanner
+              onOpenAboutPage={handleOpenAbout}
+              brandName={siteContent?.brandName}
+            />
+
+            {/* Social Grid & Activity Feed Section */}
+            <LandingSocialGrid
+              siteContent={siteContent}
+            />
+
             {/* Dedicated FAQ Section positioned at the very bottom of Landing Page */}
             <LandingFaqCommitments
               siteContent={siteContent}
@@ -2043,17 +2053,6 @@ export default function App() {
             sellers={sellers}
             brandName={siteContent?.brandName}
             logoUrl={siteContent?.logoUrl}
-          />
-        </React.Suspense>
-      )}
-
-      {/* Non-intrusive Floating Customer Support & Direct Chat Bubble (Deferred Script Loading) */}
-      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
-        <React.Suspense fallback={null}>
-          <FloatingChatWidget
-            siteContent={siteContent}
-            currentOrderCode={orderTrackerInitialCode}
-            isProductDetail={currentView === 'product_detail'}
           />
         </React.Suspense>
       )}

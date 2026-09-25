@@ -456,6 +456,23 @@ export interface LandingCollectionProductsConfig {
   textColor?: 'dark' | 'light' | 'auto';
 }
 
+export interface SocialFeedPost {
+  id: string;
+  image: string;
+  caption: string;
+  url: string;
+  gradient?: string;
+  borderColor?: string;
+}
+
+export interface SocialFeedConfig {
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isActive?: boolean;
+  posts: SocialFeedPost[];
+}
+
 export interface SiteContentConfig {
   logoUrl?: string;
   brandName: string;
@@ -509,6 +526,7 @@ export interface SiteContentConfig {
     tiktok?: string;
     zalo?: string;
   };
+  socialFeed?: SocialFeedConfig;
   maintenanceConfig?: MaintenanceConfig;
 }
 

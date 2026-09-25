@@ -65,18 +65,17 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         setClientGeo(geo);
       }
 
-      // Security check: Only allow admin logins originating from Vietnam (or root admin when roaming)
-      const isRoot = isRootAdminUsername(cleanUsername);
-      if (!geo.isVietnam && !isRoot) {
+      // Security check: Strictly require Vietnam IP for ALL admin logins (including Root Admin) to prevent unauthorized international access
+      if (!geo.isVietnam) {
         await logAdminLogin({
           username: cleanUsername,
           status: 'blocked_geo',
           customGeo: geo,
-          reason: `Truy cập quản trị từ ngoài lãnh thổ Việt Nam (${geo.countryCode}) bị chặn`
+          reason: `Truy cập quản trị từ ngoài lãnh thổ Việt Nam (${geo.countryCode}) bị chặn đối với tất cả tài khoản`
         });
 
         setErrorMessage(
-          `Đăng nhập bị từ chối: Quyền truy cập cổng quản trị chỉ dành cho địa chỉ IP thuộc Việt Nam (VN). Vị trí IP hiện tại của bạn: ${geo.country || 'Nước ngoài'} (${geo.countryCode || 'Quốc tế'}).`
+          `Cảnh báo bảo mật: Cổng quản trị chỉ chấp nhận kết nối từ địa chỉ IP thuộc Việt Nam (VN). Tất cả tài khoản quản trị (bao gồm Root Admin @${cleanUsername}) đều bị chặn khi kết nối từ ngoài Việt Nam (${geo.country || 'Nước ngoài'} - ${geo.countryCode || 'Quốc tế'}).`
         );
         setIsLoading(false);
         return;

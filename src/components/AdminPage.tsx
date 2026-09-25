@@ -28,6 +28,7 @@ import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
+import { AdminSocialFeedManager } from './admin/AdminSocialFeedManager';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { ensureGmailDomain, sendOrderConfirmationEmail } from '../utils/emailService';
 import {
@@ -128,7 +129,7 @@ export type AdminTabType =
   | 'sellers'
   | 'messages'
   | 'site_editor'
-  | 'banners'
+  | 'social_feed'
   | 'seo_audit'
   | 'products'
   | 'categories'
@@ -8618,13 +8619,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB: BANNERS & APPLE SHOWCASE MANAGER */}
+        {/* TAB: SOCIAL MEDIA FEED (5 CARDS MANAGER) */}
         {/* ======================================================== */}
-        {activeTab === 'banners' && (
-          <AdminBannersManager
-            collections={localCollections}
-            categories={localCategories}
-            onUpdateCollections={handleUpdateCollectionsInternal}
+        {activeTab === 'social_feed' && (
+          <AdminSocialFeedManager
+            siteContent={siteContent}
+            onUpdateSiteContent={(newConfig) => {
+              if (onUpdateSiteContent) onUpdateSiteContent(newConfig);
+              showAdminToast('Đã lưu và cập nhật cấu hình Social Media thành công.');
+            }}
           />
         )}
 

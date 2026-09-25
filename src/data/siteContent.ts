@@ -157,5 +157,54 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
     threads: 'https://www.threads.com/@notaknot.handmade?igshid=NTc4MTIwNjQ2YQ==',
     tiktok: '',
     zalo: ''
+  },
+
+  socialFeed: {
+    title: 'GÓC TIN TỨC',
+    subtitle: 'Theo dõi chúng tôi trên Facebook & Instagram để cập nhật các mẫu thiết kế mới, câu chuyện hậu trường và ưu đãi độc quyền.',
+    badge: 'MẠNG XÃ HỘI & HOẠT ĐỘNG',
+    isActive: true,
+    posts: [
+      {
+        id: 'post-1',
+        image: '/assets/about-story.jpg',
+        caption: 'Hậu trường chế tác từng nút thắt thủ công tỉ mỉ cho bộ sưu tập độc bản Not A Knot.\n\nMỗi sản phẩm là một câu chuyện kết nối được tạo nên từ sự tận tâm của người thợ lành nghề.',
+        url: 'https://www.facebook.com/profile.php?id=61593591390851',
+        gradient: 'bg-white/85',
+        borderColor: 'border-black'
+      },
+      {
+        id: 'post-2',
+        image: '/assets/img_4_NOT_A_KNOT.jpg',
+        caption: 'BST Nàng Thơ 20/10 — Sự hòa quyện giữa charm hoa ngọt ngào và dây đan pastel dịu êm.\n\nThiết kế độc quyền tôn vinh vẻ đẹp tinh tế của phái đẹp.',
+        url: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
+        gradient: 'bg-white/85',
+        borderColor: 'border-black'
+      },
+      {
+        id: 'post-3',
+        image: '/assets/hero-bg.png',
+        caption: 'Phiên bản đặc biệt 02/09 — Năng lượng tự hào non sông trong từng nét đan thủ công.\n\nSợi chỉ đỏ kiên cường đan xen vẻ đẹp hiện đại.',
+        url: 'https://www.facebook.com/profile.php?id=61593591390851',
+        gradient: 'bg-white/85',
+        borderColor: 'border-black'
+      },
+      {
+        id: 'post-4',
+        image: '/assets/img_0.jpg',
+        caption: 'Gợi ý phối vòng charm phong cách tối giản cho outfit dạo phố cuối tuần thêm nổi bật.\n\nNhẹ nhàng, thanh lịch và cuốn hút trong từng khoảnh khắc.',
+        url: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
+        gradient: 'bg-white/85',
+        borderColor: 'border-black'
+      },
+      {
+        id: 'post-5',
+        image: '/assets/image_4.jpg',
+        caption: 'Dây đeo Everyday Wear êm ái, bền chắc trên cổ tay suốt ngày dài học tập và làm việc.\n\nĐồng hành cùng bạn trong mọi trải nghiệm cuộc sống.',
+        url: 'https://www.facebook.com/profile.php?id=61593591390851',
+        gradient: 'bg-white/85',
+        borderColor: 'border-black'
+      }
+    ]
   }
 };

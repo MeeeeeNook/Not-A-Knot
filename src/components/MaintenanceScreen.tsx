@@ -66,8 +66,8 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
     }
   };
 
-  const cleanPhone = config.emergencyContactPhone?.replace(/\s+/g, '');
-  const cleanZalo = config.emergencyContactZalo?.replace(/\s+/g, '');
+  const cleanPhone = (config.emergencyContactPhone || '').trim().replace(/\s+/g, '');
+  const cleanZalo = (config.emergencyContactZalo || '').trim().replace(/\s+/g, '');
   const displayLogo = logoUrl || '/assets/logo.jpg';
 
   return (
@@ -176,13 +176,18 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
             )}
 
             {/* Emergency Contact Information */}
-            {(cleanPhone || cleanZalo) && (
+            {(cleanPhone !== '' || cleanZalo !== '') && (
               <div className="pt-4 border-t border-slate-200/80 text-xs sm:text-sm text-slate-500 space-y-2.5">
                 <p className="font-bold text-slate-700">
-                  {config.emergencyContactText || 'Cần hỗ trợ đơn hàng gấp? Liên hệ trực tiếp qua:'}
+                  {config.emergencyContactText ||
+                    (cleanPhone !== '' && cleanZalo !== ''
+                      ? 'Cần hỗ trợ đơn hàng gấp? Liên hệ Hotline / Zalo:'
+                      : cleanPhone !== ''
+                      ? 'Cần hỗ trợ đơn hàng gấp? Liên hệ qua Hotline:'
+                      : 'Cần hỗ trợ đơn hàng gấp? Liên hệ qua Zalo:')}
                 </p>
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 sm:gap-3">
-                  {cleanPhone && (
+                  {cleanPhone !== '' && (
                     <a
                       href={`tel:${cleanPhone}`}
                       className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200/90 font-bold shadow-2xs transition-colors"
@@ -191,7 +196,7 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
                       <span>Hotline: {config.emergencyContactPhone}</span>
                     </a>
                   )}
-                  {cleanZalo && (
+                  {cleanZalo !== '' && (
                     <a
                       href={`https://zalo.me/${cleanZalo}`}
                       target="_blank"

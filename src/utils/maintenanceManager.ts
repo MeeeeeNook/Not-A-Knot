@@ -18,9 +18,9 @@ export const DEFAULT_MAINTENANCE_CONFIG: MaintenanceConfig = {
   autoRedirect: false,
   autoRedirectSeconds: 5,
   autoRedirectUrl: 'https://www.facebook.com/profile.php?id=61593591390851',
-  emergencyContactText: 'Cần hỗ trợ đơn hàng gấp? Liên hệ qua Hotline / Zalo:',
-  emergencyContactPhone: '0342 938 174',
-  emergencyContactZalo: '0342938174'
+  emergencyContactText: 'Cần hỗ trợ đơn hàng gấp? Liên hệ qua Hotline:',
+  emergencyContactPhone: '079 655 5636',
+  emergencyContactZalo: ''
 };
 
 const STORAGE_KEY = 'nak_maintenance_config';
@@ -37,6 +37,9 @@ export function getInitialMaintenanceConfig(): MaintenanceConfig {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (typeof parsed === 'object' && parsed !== null) {
+        if (parsed.emergencyContactZalo === '0342938174' || parsed.emergencyContactZalo === '0342 938 174') {
+          parsed.emergencyContactZalo = '';
+        }
         return {
           ...DEFAULT_MAINTENANCE_CONFIG,
           ...parsed
@@ -420,12 +423,19 @@ export function generateStandaloneMaintenanceHtml(config: MaintenanceConfig): st
       <p class="message">${message}</p>
       ${buttonHtml}
       ${
-        config.emergencyContactPhone || config.emergencyContactZalo
+        (config.emergencyContactPhone && config.emergencyContactPhone.trim()) || (config.emergencyContactZalo && config.emergencyContactZalo.trim())
           ? `<div class="contacts">
-               <p><strong>${config.emergencyContactText || 'Cần hỗ trợ đơn hàng gấp:'}</strong></p>
+               <p><strong>${
+                 config.emergencyContactText ||
+                 (config.emergencyContactPhone && config.emergencyContactZalo
+                   ? 'Cần hỗ trợ đơn hàng gấp? Liên hệ Hotline / Zalo:'
+                   : config.emergencyContactPhone
+                   ? 'Cần hỗ trợ đơn hàng gấp? Liên hệ Hotline:'
+                   : 'Cần hỗ trợ đơn hàng gấp? Liên hệ Zalo:')
+               }</strong></p>
                <div style="margin-top: 8px;">
-                 ${config.emergencyContactPhone ? `<a href="tel:${config.emergencyContactPhone.replace(/\s+/g, '')}">📞 Hotline: ${config.emergencyContactPhone}</a>` : ''}
-                 ${config.emergencyContactZalo ? `<a href="https://zalo.me/${config.emergencyContactZalo.replace(/\s+/g, '')}" target="_blank">💬 Zalo: ${config.emergencyContactZalo}</a>` : ''}
+                 ${config.emergencyContactPhone && config.emergencyContactPhone.trim() ? `<a href="tel:${config.emergencyContactPhone.trim().replace(/\\s+/g, '')}">📞 Hotline: ${config.emergencyContactPhone.trim()}</a>` : ''}
+                 ${config.emergencyContactZalo && config.emergencyContactZalo.trim() ? `<a href="https://zalo.me/${config.emergencyContactZalo.trim().replace(/\\s+/g, '')}" target="_blank">💬 Zalo: ${config.emergencyContactZalo.trim()}</a>` : ''}
                </div>
              </div>`
           : ''

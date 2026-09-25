@@ -25,7 +25,8 @@ import {
   ArrowUpRight,
   Check,
   Loader2,
-  Save
+  Save,
+  Edit2
 } from 'lucide-react';
 import { SiteHeroSlide, BillboardTextBox, CategoryItem, CollectionInfo } from '../types';
 
@@ -101,6 +102,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
     normalizedSlides[0]?.id || 'slide-1'
   );
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
+  const [editingSlideTitleId, setEditingSlideTitleId] = useState<string | null>(null);
   const [dragOverCanvas, setDragOverCanvas] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
@@ -469,15 +471,52 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <span className={`w-5 h-5 rounded-md font-mono text-[10px] font-bold flex items-center justify-center shrink-0 ${
                         isSelected ? 'bg-amber-400 text-neutral-950' : 'bg-neutral-200 text-neutral-700'
                       }`}>
                         {slide.order || index + 1}
                       </span>
-                      <span className="text-xs font-bold truncate">
-                        {slide.title || `Billboard #${index + 1}`}
-                      </span>
+                      {editingSlideTitleId === slide.id ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={slide.title || ''}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            const newTitle = e.target.value;
+                            const updated = normalizedSlides.map((s) =>
+                              s.id === slide.id ? { ...s, title: newTitle } : s
+                            );
+                            commitSlides(updated);
+                          }}
+                          onBlur={() => setEditingSlideTitleId(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Escape') {
+                              setEditingSlideTitleId(null);
+                            }
+                          }}
+                          className="text-xs font-bold px-1.5 py-0.5 rounded bg-white text-neutral-900 border border-amber-400 outline-none w-full"
+                          placeholder="Nhập tên billboard..."
+                        />
+                      ) : (
+                        <div 
+                          className="flex items-center gap-1 min-w-0 flex-1 group/title"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveSlideId(slide.id);
+                            setEditingSlideTitleId(slide.id);
+                          }}
+                          title="Bấm để đổi tên billboard"
+                        >
+                          <span className="text-xs font-bold truncate">
+                            {slide.title || `Billboard #${index + 1}`}
+                          </span>
+                          <Edit2 className={`w-3 h-3 shrink-0 opacity-0 group-hover/title:opacity-100 transition-opacity ${
+                            isSelected ? 'text-amber-400' : 'text-neutral-500'
+                          }`} />
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -758,14 +797,32 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
             </p>
           </div>
 
-          {/* Background Image Adjustments (Pan, Zoom, Overlay) */}
+          {/* Background Image Adjustments & Title */}
           <div className="bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-xs space-y-3.5">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
               <div className="flex items-center gap-1.5 text-xs font-bold text-neutral-900 uppercase">
                 <Compass className="w-3.5 h-3.5 text-neutral-500" />
-                <span>Căn Chỉnh Hình Nền Billboard</span>
+                <span>Thông Tin & Căn Chỉnh Hình Nền Billboard</span>
               </div>
               <span className="text-[11px] font-mono text-neutral-400">Khung 16:7</span>
+            </div>
+
+            {/* Billboard Title Rename Field */}
+            <div className="space-y-1 bg-amber-50/50 p-3 rounded-xl border border-amber-200/60">
+              <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Tên / Tiêu đề Billboard này</span>
+                </span>
+                <span className="text-[10px] text-neutral-400 font-normal">Quản lý danh sách slide</span>
+              </label>
+              <input
+                type="text"
+                value={activeSlide.title || ''}
+                onChange={(e) => updateActiveSlide({ title: e.target.value })}
+                placeholder="Ví dụ: Mid-Autumn Festival, Back to School, BST Mùa Hè..."
+                className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-xs font-bold text-neutral-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">

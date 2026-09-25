@@ -13,8 +13,6 @@ import {
   Trash2,
   Clock,
   Sparkles,
-  Smartphone,
-  Monitor,
   Phone,
   MessageSquare
 } from 'lucide-react';
@@ -44,23 +42,34 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
   logoUrl,
   adminName = 'Quản trị viên'
 }) => {
-  const [formConfig, setFormConfig] = useState<MaintenanceConfig>(() => ({
-    ...DEFAULT_MAINTENANCE_CONFIG,
-    ...maintenanceConfig
-  }));
+  const [formConfig, setFormConfig] = useState<MaintenanceConfig>(() => {
+    const initial = {
+      ...DEFAULT_MAINTENANCE_CONFIG,
+      ...maintenanceConfig
+    };
+    if (initial.emergencyContactZalo === '0342938174' || initial.emergencyContactZalo === '0342 938 174') {
+      initial.emergencyContactZalo = '';
+    }
+    return initial;
+  });
 
   // Keep formConfig synchronized when maintenanceConfig updates from outside / Firestore
   useEffect(() => {
     if (maintenanceConfig) {
-      setFormConfig((prev) => ({
-        ...prev,
-        ...maintenanceConfig
-      }));
+      setFormConfig((prev) => {
+        const next = {
+          ...prev,
+          ...maintenanceConfig
+        };
+        if (next.emergencyContactZalo === '0342938174' || next.emergencyContactZalo === '0342 938 174') {
+          next.emergencyContactZalo = '';
+        }
+        return next;
+      });
     }
   }, [maintenanceConfig]);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isTurnOffConfirmOpen, setIsTurnOffConfirmOpen] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -655,30 +664,72 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
                   type="text"
                   value={formConfig.emergencyContactPhone || ''}
                   onChange={(e) => setFormConfig({ ...formConfig, emergencyContactPhone: e.target.value })}
-                  placeholder="0342 938 174"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-900 font-mono"
+                  placeholder="079 655 5636 (hoặc để trống)"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-900 font-mono focus:outline-hidden focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
-                  <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Số Zalo tư vấn</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Số Zalo tư vấn</span>
+                  </label>
+                  {formConfig.emergencyContactZalo && formConfig.emergencyContactZalo.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setFormConfig({ ...formConfig, emergencyContactZalo: '' })}
+                      className="text-[11px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                      title="Xóa số Zalo để không hiển thị"
+                    >
+                      Xóa Zalo
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={formConfig.emergencyContactZalo || ''}
                   onChange={(e) => setFormConfig({ ...formConfig, emergencyContactZalo: e.target.value })}
-                  placeholder="0342938174"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-900 font-mono"
+                  placeholder="Để trống nếu không dùng Zalo"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm text-slate-900 font-mono focus:outline-hidden focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Để trống ô này nếu không có hoặc không dùng số Zalo tư vấn.
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Mini Live Preview & Resilience Advice (1 Col) */}
+        {/* Right Column: Resilience Advice & Quick Tools (1 Col) */}
         <div className="space-y-6">
+          {/* Quick Actions Card */}
+          <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">
+              Công Cụ Nhanh
+            </h3>
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => setIsPreviewModalOpen(true)}
+                className="w-full px-4 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-slate-200/80 shadow-2xs"
+              >
+                <Eye className="w-4 h-4 text-slate-600" />
+                <span>Xem Trước Toàn Màn Hình</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadStandaloneHtml}
+                className="w-full px-4 py-3 rounded-2xl bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-950 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-amber-200/80 shadow-2xs"
+                title="Tải về file HTML độc lập có thể lưu hoặc mở offline"
+              >
+                <FileCode className="w-4 h-4 text-amber-600" />
+                <span>Tải File HTML Khẩn Cấp</span>
+              </button>
+            </div>
+          </div>
+
           {/* Advice Card: Explaining the Storage Independence */}
           <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-3xl p-6 border border-amber-200 shadow-2xs space-y-3">
             <div className="flex items-center gap-2 text-amber-900 font-black text-sm">
@@ -695,53 +746,6 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
               <p>
                 <strong>3. Không sợ bị khóa ngoài:</strong> Trên màn hình bảo trì có sẵn nút "Quản trị viên đăng nhập" ở góc dưới, giúp bạn luôn có thể đăng nhập lại để mở website bất cứ lúc nào.
               </p>
-            </div>
-          </div>
-
-          {/* Mini Interactive Preview Frame */}
-          <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                Xem Trước Thực Tế
-              </span>
-              <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setPreviewDevice('desktop')}
-                  className={`p-1 rounded cursor-pointer ${
-                    previewDevice === 'desktop' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-400'
-                  }`}
-                  title="Giao diện máy tính"
-                >
-                  <Monitor className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewDevice('mobile')}
-                  className={`p-1 rounded cursor-pointer ${
-                    previewDevice === 'mobile' ? 'bg-white shadow-2xs text-slate-900' : 'text-slate-400'
-                  }`}
-                  title="Giao diện điện thoại"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Preview Container */}
-            <div
-              className={`mx-auto border border-slate-200 rounded-2xl overflow-hidden shadow-xs bg-[#FAF9F6] transition-all ${
-                previewDevice === 'mobile' ? 'max-w-[320px]' : 'w-full'
-              }`}
-            >
-              <div className="scale-90 origin-top">
-                <MaintenanceScreen
-                  config={formConfig}
-                  brandName={brandName}
-                  logoUrl={logoUrl}
-                  onOpenAdminLogin={() => alert('Mở popup đăng nhập Admin')}
-                />
-              </div>
             </div>
           </div>
         </div>
