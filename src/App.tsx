@@ -36,6 +36,8 @@ const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => 
 const NotFoundPage = React.lazy(() => import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const FloatingChatWidget = React.lazy(() => import('./components/FloatingChatWidget').then((m) => ({ default: m.FloatingChatWidget })));
 const CookieConsentBanner = React.lazy(() => import('./components/CookieConsentBanner').then((m) => ({ default: m.CookieConsentBanner })));
+const GeoAccessRestrictionScreen = React.lazy(() => import('./components/GeoAccessRestrictionScreen').then((m) => ({ default: m.GeoAccessRestrictionScreen })));
+import { getClientGeoLocation, GeoLocationInfo } from './utils/ipGeo';
 import {
   fetchProductsFromFirestore,
   fetchCategoriesFromFirestore,

@@ -28,6 +28,36 @@ interface AdminSellersManagerProps {
   onUpdateSellers: (newSellers: SellerUser[]) => void;
 }
 
+// Helper to convert 2-letter ISO country code or country name to flag emoji
+function getCountryFlagEmoji(countryCode?: string, countryName?: string): string {
+  let code = (countryCode || '').trim().toUpperCase();
+  
+  if (!code && countryName) {
+    const cLower = countryName.toLowerCase();
+    if (cLower.includes('netherland') || cLower.includes('hà lan') || cLower.includes('amsterdam') || cLower.includes(' noord-holland') || cLower.includes('nl')) {
+      code = 'NL';
+    } else if (cLower.includes('vietnam') || cLower.includes('việt nam')) {
+      code = 'VN';
+    } else if (cLower.includes('united states') || cLower.includes('mỹ') || cLower.includes('usa')) {
+      code = 'US';
+    } else if (cLower.includes('japan') || cLower.includes('nhật')) {
+      code = 'JP';
+    } else if (cLower.includes('germany') || cLower.includes('đức')) {
+      code = 'DE';
+    } else if (cLower.includes('france') || cLower.includes('pháp')) {
+      code = 'FR';
+    }
+  }
+
+  if (!code || code.length !== 2) return '🌐';
+
+  // Convert 2-letter country code into regional indicator symbol flags
+  const codePoints = code
+    .split('')
+    .map((char) => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
 // Helper to determine accurate seller presence and latest IP
 function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
   const now = Date.now();
@@ -52,7 +82,9 @@ function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
 
   // Find latest IP from seller document or recent login logs
   let latestIp = seller.lastLoginIp;
-  let location = seller.lastLoginCity ? `${seller.lastLoginCity}, VN` : '';
+  let countryName = seller.lastLoginCountry || 'Việt Nam';
+  let countryCode = seller.lastLoginCountryCode || (countryName.toLowerCase().includes('netherland') ? 'NL' : 'VN');
+  let location = seller.lastLoginCity ? `${seller.lastLoginCity}, ${countryName}` : '';
 
   if (!latestIp) {
     const uName = (seller.username || '').toLowerCase();
@@ -63,8 +95,10 @@ function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
     );
     if (userLog && userLog.ip) {
       latestIp = userLog.ip;
+      countryName = userLog.country || 'Việt Nam';
+      countryCode = userLog.countryCode || (countryName.toLowerCase().includes('netherland') ? 'NL' : 'VN');
       if (userLog.city) {
-        location = `${userLog.city}, VN`;
+        location = `${userLog.city}, ${countryName}`;
       }
     }
   }
@@ -74,7 +108,7 @@ function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
     location = 'Chưa có vị trí';
   }
 
-  return { isOnline, lastSeenText, latestIp, location };
+  return { isOnline, lastSeenText, latestIp, location, countryCode, countryName };
 }
 
 export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
@@ -345,7 +379,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
-      refreshAdminSession().catch(() => {});
+      refreshAdminSession(updatedSeller).catch(() => {});
       setEditingSellerId(null);
       triggerSuccess(`Đã cập nhật thông tin tài khoản "${cleanName}" (${finalIsRootAdmin ? 'Quản trị viên' : 'Người bán'}).`);
     } catch {
@@ -369,7 +403,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
-      refreshAdminSession().catch(() => {});
+      refreshAdminSession(updatedSeller).catch(() => {});
       setPromotingSellerId(null);
       triggerSuccess(`Đã nâng quyền người bán "${seller.name}" (@${seller.username}) thành Quản trị viên thành công!`);
     } catch {
@@ -398,7 +432,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       await saveSellerToFirestore(updatedSeller);
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
       onUpdateSellers(updatedList);
-      refreshAdminSession().catch(() => {});
+      refreshAdminSession(updatedSeller).catch(() => {});
       setDemotingSellerId(null);
       triggerSuccess(`Đã chuyển vai trò của "${seller.name}" (@${seller.username}) về Người bán thông thường.`);
     } catch {
@@ -575,24 +609,34 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     });
 
     // 2. Convert seller's ipHistory array into structured log items
-    const documentIpHistoryLogs: SystemLogItem[] = (selectedSellerForLogs.ipHistory || []).map((ipItem, idx) => ({
-      id: `doc-ip-${selectedSellerForLogs.id}-${idx}-${ipItem.timestamp}`,
-      type: 'admin_login',
-      level: 'info',
-      title: `Đăng nhập hệ thống: ${selectedSellerForLogs.name}`,
-      message: `Đăng nhập từ IP ${ipItem.ip} (${ipItem.city || 'Việt Nam'}) - Thiết bị: ${ipItem.device || 'Thiết bị quản trị'}`,
-      timestamp: ipItem.timestamp,
-      formattedDate: new Date(ipItem.timestamp).toLocaleString('vi-VN'),
-      source: 'AdminAuth',
-      userName: selectedSellerForLogs.name,
-      userId: selectedSellerForLogs.username,
-      status: 'success',
-      ip: ipItem.ip,
-      city: ipItem.city || 'Hà Nội',
-      country: ipItem.country || 'Vietnam',
-      countryCode: 'VN',
-      browser: ipItem.device
-    }));
+    const documentIpHistoryLogs: SystemLogItem[] = (selectedSellerForLogs.ipHistory || []).map((ipItem, idx) => {
+      const country = ipItem.country || 'Vietnam';
+      const cLower = country.toLowerCase();
+      let cCode = ipItem.countryCode || '';
+      if (!cCode) {
+        if (cLower.includes('netherland') || cLower.includes('hà lan') || cLower.includes('amsterdam') || cLower.includes('nl')) cCode = 'NL';
+        else if (cLower.includes('vietnam') || cLower.includes('việt nam')) cCode = 'VN';
+        else cCode = 'VN';
+      }
+      return {
+        id: `doc-ip-${selectedSellerForLogs.id}-${idx}-${ipItem.timestamp}`,
+        type: 'admin_login',
+        level: 'info',
+        title: `Đăng nhập hệ thống: ${selectedSellerForLogs.name}`,
+        message: `Đăng nhập từ IP ${ipItem.ip} (${ipItem.city || country}) - Thiết bị: ${ipItem.device || 'Thiết bị quản trị'}`,
+        timestamp: ipItem.timestamp,
+        formattedDate: new Date(ipItem.timestamp).toLocaleString('vi-VN'),
+        source: 'AdminAuth',
+        userName: selectedSellerForLogs.name,
+        userId: selectedSellerForLogs.username,
+        status: cCode === 'VN' ? 'success' : 'blocked_geo',
+        ip: ipItem.ip,
+        city: ipItem.city || (cCode === 'NL' ? 'Amsterdam' : 'Hà Nội'),
+        country: country,
+        countryCode: cCode,
+        browser: ipItem.device
+      };
+    });
 
     // 3. Fallback/Guaranteed presence log from seller's active document fields
     const sellerActiveLogs: SystemLogItem[] = [];
@@ -602,22 +646,30 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       selectedSellerForLogs.lastLoginIp !== '127.0.0.1'
     ) {
       const activeTimestamp = selectedSellerForLogs.lastLoginAt || selectedSellerForLogs.lastSeenAt || selectedSellerForLogs.createdAt || new Date().toISOString();
+      const country = selectedSellerForLogs.lastLoginCountry || 'Vietnam';
+      const cLower = country.toLowerCase();
+      let cCode = selectedSellerForLogs.lastLoginCountryCode || '';
+      if (!cCode) {
+        if (cLower.includes('netherland') || cLower.includes('hà lan') || cLower.includes('amsterdam') || cLower.includes('nl')) cCode = 'NL';
+        else if (cLower.includes('vietnam') || cLower.includes('việt nam')) cCode = 'VN';
+        else cCode = 'VN';
+      }
       sellerActiveLogs.push({
         id: `seller-active-ip-${selectedSellerForLogs.id}-${activeTimestamp}`,
         type: 'admin_login',
         level: 'info',
         title: `Phiên hoạt động gần nhất: ${selectedSellerForLogs.name}`,
-        message: `Hoạt động từ IP ${selectedSellerForLogs.lastLoginIp} (${selectedSellerForLogs.lastLoginCity || 'Hà Nội'}) - Thiết bị: ${selectedSellerForLogs.lastDevice || 'Trình duyệt Web'}`,
+        message: `Hoạt động từ IP ${selectedSellerForLogs.lastLoginIp} (${selectedSellerForLogs.lastLoginCity || country}) - Thiết bị: ${selectedSellerForLogs.lastDevice || 'Trình duyệt Web'}`,
         timestamp: activeTimestamp,
         formattedDate: new Date(activeTimestamp).toLocaleString('vi-VN'),
         source: 'AdminPresence',
         userName: selectedSellerForLogs.name,
         userId: selectedSellerForLogs.username,
-        status: 'success',
+        status: cCode === 'VN' ? 'success' : 'blocked_geo',
         ip: selectedSellerForLogs.lastLoginIp,
-        city: selectedSellerForLogs.lastLoginCity || 'Hà Nội',
-        country: selectedSellerForLogs.lastLoginCountry || 'Vietnam',
-        countryCode: 'VN',
+        city: selectedSellerForLogs.lastLoginCity || (cCode === 'NL' ? 'Amsterdam' : 'Hà Nội'),
+        country: country,
+        countryCode: cCode,
         browser: selectedSellerForLogs.lastDevice || 'Trình duyệt Web'
       });
     }
@@ -1572,7 +1624,11 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
               <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
                 <span className="text-[11px] font-bold text-slate-400 block">Vị Trí Gần Nhất</span>
                 <span className="text-xs font-bold text-slate-800 mt-1 block truncate">
-                  {selectedSellerLogs[0]?.city ? `${selectedSellerLogs[0].city}, VN 🇻🇳` : (selectedSellerForLogs.lastLoginCity ? `${selectedSellerForLogs.lastLoginCity}, VN 🇻🇳` : 'Chưa có dữ liệu')}
+                  {selectedSellerLogs[0] ? (
+                    `${selectedSellerLogs[0].city || 'Amsterdam'}, ${selectedSellerLogs[0].country || 'Netherlands'} ${getCountryFlagEmoji(selectedSellerLogs[0].countryCode, selectedSellerLogs[0].country)}`
+                  ) : selectedSellerForLogs.lastLoginCity ? (
+                    `${selectedSellerForLogs.lastLoginCity}, ${selectedSellerForLogs.lastLoginCountry || 'Netherlands'} ${getCountryFlagEmoji(selectedSellerForLogs.lastLoginCountryCode, selectedSellerForLogs.lastLoginCountry)}`
+                  ) : 'Chưa có dữ liệu'}
                 </span>
               </div>
             </div>
@@ -1682,9 +1738,14 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                         {/* Security check note */}
                         <div className="text-[11px] font-semibold">
                           {isBlockedGeo ? (
-                            <span className="text-rose-600 font-bold">🚫 Từ chối truy cập ngoài VN</span>
+                            <span className="text-rose-600 font-bold flex items-center gap-1">
+                              <span>🚫 Chặn IP Ngoại Quốc</span>
+                              <span>({getCountryFlagEmoji(log.countryCode, log.country)} {log.country || 'Nước ngoài'})</span>
+                            </span>
                           ) : (
-                            <span className="text-emerald-700 font-bold">🇻🇳 Hợp lệ (Lãnh thổ VN)</span>
+                            <span className="text-emerald-700 font-bold flex items-center gap-1">
+                              <span>{getCountryFlagEmoji(log.countryCode, log.country)} Hợp lệ ({log.country || 'Lãnh thổ VN'})</span>
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1725,7 +1786,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           <div className="flex items-center gap-1.5 font-bold text-slate-800">
                             <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <span>
-                              {log.city || 'Hồ Chí Minh'}, {log.country || 'Việt Nam'} {log.countryCode === 'VN' || !log.countryCode ? '🇻🇳' : '🌐'}
+                              {log.city || 'Amsterdam'}, {log.country || 'Netherlands'} {getCountryFlagEmoji(log.countryCode, log.country)}
                             </span>
                           </div>
                           {log.region && (

@@ -342,7 +342,7 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
 };
 
 /**
- * Explicitly updates the locally cached session with fresh user data
+ * Explicitly updates the locally cached session and invalidates/refreshes JWT token with fresh role data
  */
 export const refreshAdminSession = async (userProfile?: Partial<SellerUser> | null): Promise<Partial<SellerUser> | null> => {
   if (userProfile && userProfile.username) {
@@ -352,12 +352,40 @@ export const refreshAdminSession = async (userProfile?: Partial<SellerUser> | nu
       role: isRoot ? 'root_admin' : (userProfile.role || 'member'),
       isRootAdmin: isRoot
     };
-    try {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
-    } catch {}
+
+    const currentSession = getAdminSession();
+    const isCurrentActiveUser = !currentSession || !currentSession.username || currentSession.username.toLowerCase() === userProfile.username.toLowerCase();
+
+    if (isCurrentActiveUser) {
+      // Invalidate old JWT token and re-issue fresh token for the updated role
+      const cleanUsername = userProfile.username.toLowerCase();
+      const freshToken = `client_fallback_jwt_${cleanUsername}_${Date.now()}`;
+      try {
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+        localStorage.setItem(JWT_STORAGE_KEY, freshToken);
+        const maxAge = 30 * 24 * 60 * 60; // 30 days
+        document.cookie = `${COOKIE_NAME}=${freshToken}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
+      } catch (e) {
+        console.warn('Failed to update session storage or JWT token:', e);
+      }
+
+      // Re-verify with server to get updated server-signed JWT if backend is reachable
+      try {
+        const serverResult = await verifySessionWithServer();
+        if (serverResult) return serverResult;
+      } catch {}
+    }
+
     return updated;
   }
   return verifySessionWithServer();
+};
+
+/**
+ * Force invalidates current session token and re-syncs with server/local storage when role changes to root_admin or member
+ */
+export const invalidateAndRefreshSession = async (updatedSeller: Partial<SellerUser>): Promise<Partial<SellerUser> | null> => {
+  return refreshAdminSession(updatedSeller);
 };
 
 export const clearAdminSession = (): void => {

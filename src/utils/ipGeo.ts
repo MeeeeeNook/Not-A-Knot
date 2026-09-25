@@ -28,18 +28,20 @@ function isPublicIp(ipStr?: string): boolean {
  * Fetches the user's public IP address and approximate Geolocation.
  * Uses multiple reliable providers with fallback for 100% uptime.
  */
-export async function getClientGeoLocation(): Promise<GeoLocationInfo> {
-  // Check session cache first (must be a valid public IP)
-  try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed && isPublicIp(parsed.ip) && parsed.countryCode) {
-        return parsed;
+export async function getClientGeoLocation(forceRefresh: boolean = false): Promise<GeoLocationInfo> {
+  // Check session cache first (must be a valid public IP) unless forceRefresh is true
+  if (!forceRefresh) {
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && isPublicIp(parsed.ip) && parsed.countryCode) {
+          return parsed;
+        }
       }
+    } catch {
+      // ignore storage error
     }
-  } catch {
-    // ignore storage error
   }
 
   // Default fallback info

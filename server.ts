@@ -133,7 +133,7 @@ function computeLegacyHash(password: string, salt: string): string {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Enable CORS for cross-origin requests from published frontends (Vercel / GitHub Pages / custom domains)
   app.use((req: Request, res: Response, next: NextFunction) => {

@@ -216,6 +216,7 @@ export interface SellerUser {
   lastLoginIp?: string;
   lastLoginCity?: string;
   lastLoginCountry?: string;
+  lastLoginCountryCode?: string;
   lastSeenAt?: string;
   lastDevice?: string;
   avatarColor?: string;
@@ -224,6 +225,7 @@ export interface SellerUser {
     ip: string;
     city?: string;
     country?: string;
+    countryCode?: string;
     device?: string;
     timestamp: string;
   }>;
