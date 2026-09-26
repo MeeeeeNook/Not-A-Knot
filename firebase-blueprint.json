@@ -166,6 +166,12 @@
         "write": "true"
       }
     },
+    "/social_feed/{feedId}": {
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
     "/contact_messages/{messageId}": {
       "schema": "ContactMessage",
       "allow": {

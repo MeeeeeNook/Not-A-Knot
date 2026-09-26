@@ -4,27 +4,24 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Sparkles,
   ExternalLink,
   Edit3,
   Copy,
   Check,
   RefreshCw,
-  Download,
   Eye,
   SlidersHorizontal,
   Smartphone,
   Monitor,
-  HelpCircle,
   FileText,
   Tag,
   Layers,
   ShoppingBag,
   Globe,
   ArrowRight,
-  Info,
   ChevronRight,
-  Filter
+  Filter,
+  Sparkles
 } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig } from '../../types';
 import { slugify, getProductSlug, getCollectionSlug } from '../../utils/slugify';
@@ -84,10 +81,6 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
   const [editSlug, setEditSlug] = useState('');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [isSaving, setIsSaving] = useState(false);
-
-  // Bulk Auto-Generate Confirmation Modal
-  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkApplying, setBulkApplying] = useState(false);
 
   // Scan & Audit Engine
   const auditResults = useMemo(() => {
@@ -412,7 +405,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
     if (!editSlug) {
       setEditSlug(suggestion.slug);
     }
-    onNotify?.('Đã tạo gợi ý nội dung chuẩn SEO!', 'info');
+    onNotify?.('Đã tạo gợi ý nội dung mẫu chuẩn SEO!', 'info');
   };
 
   // Save Edit Changes
@@ -484,94 +477,6 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
     }
   };
 
-  // Bulk Apply Auto-Generated SEO to all missing items
-  const handleExecuteBulkOptimization = async () => {
-    setBulkApplying(true);
-    let fixedCount = 0;
-
-    try {
-      // 1. Fix Products with missing or short descriptions
-      if (onUpdateProducts) {
-        const updatedProducts = products.map((prod) => {
-          const desc = prod.description?.trim() || '';
-          const name = prod.name?.trim() || '';
-          if (!desc || desc.length < 40 || !prod.slug) {
-            fixedCount++;
-            const cleanName = name || 'Vòng Tay Handmade NOT A KNOT';
-            const catLabel =
-              categories.find((c) => c.id === prod.category)?.label || 'Phụ kiện handmade';
-            const priceStr = prod.price ? `${prod.price.toLocaleString('vi-VN')}đ` : 'Giá tốt';
-            const autoDesc = `${cleanName} (${catLabel}) đan tay thủ công tỉ mỉ, thiết kế trẻ trung độc bản. Giá chỉ ${priceStr}. Bảo hành trọn đời dây và nút thắt.`;
-
-            return {
-              ...prod,
-              name: cleanName,
-              description: desc || autoDesc,
-              slug: prod.slug || slugify(cleanName)
-            };
-          }
-          return prod;
-        });
-        onUpdateProducts(updatedProducts);
-      }
-
-      // 2. Fix Categories with missing descriptions
-      if (onUpdateCategories && categories.length > 0) {
-        const updatedCategories = categories.map((cat) => {
-          if (!cat.description || cat.description.length < 30) {
-            const autoDesc = `Bộ sưu tập ${cat.label} đan tay thủ công chất lượng cao, bền đẹp và hợp xu hướng giới trẻ.`;
-            return {
-              ...cat,
-              description: autoDesc,
-              introText: cat.introText || autoDesc
-            };
-          }
-          return cat;
-        });
-        onUpdateCategories(updatedCategories);
-      }
-
-      onNotify?.(`Đã tự động tối ưu hóa SEO cho ${fixedCount} mục thành công!`, 'success');
-      setIsBulkModalOpen(false);
-    } catch (err: any) {
-      onNotify?.(`Lỗi tối ưu hóa hàng loạt: ${err.message}`, 'error');
-    } finally {
-      setBulkApplying(false);
-    }
-  };
-
-  // Export CSV Report
-  const handleExportCsv = () => {
-    try {
-      const headers = ['ID', 'Loai', 'Tieu de (Title)', 'Do dai Title', 'Mo ta (Meta Description)', 'Do dai Desc', 'Trang thai', 'Duong dan URL', 'Cac van de phat hien'];
-      const rows = auditResults.map((item) => [
-        item.id,
-        item.type,
-        `"${item.title.replace(/"/g, '""')}"`,
-        item.charCountTitle,
-        `"${item.description.replace(/"/g, '""')}"`,
-        item.charCountDesc,
-        item.status === 'good' ? 'Dat chuan' : item.status === 'warning' ? 'Canh bao' : 'Loi nghiem trong',
-        item.url,
-        `"${item.issues.join('; ').replace(/"/g, '""')}"`
-      ]);
-
-      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `NOT_A_KNOT_SEO_Audit_${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      onNotify?.('Đã xuất báo cáo kiểm tra SEO thành công!', 'success');
-    } catch (e: any) {
-      onNotify?.('Không thể xuất tệp CSV', 'error');
-    }
-  };
-
   // Copy Link Helper
   const handleCopyLink = (url: string, id: string) => {
     navigator.clipboard.writeText(url);
@@ -589,46 +494,20 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
 
   return (
     <div className="space-y-6 pb-16">
-      {/* Top Banner & Action Header */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-amber-400 text-slate-950 font-black shadow-xs">
-              <Globe className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                Kiểm Tra & Tối Ưu SEO Meta
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-900 text-amber-400 font-extrabold uppercase tracking-wider">
-                  Audit Tool
-                </span>
-              </h2>
-              <p className="text-xs text-slate-500">
-                Tự động rà soát tiêu đề, thẻ meta description, URL slug và ảnh chia sẻ cho toàn bộ sản phẩm & bộ sưu tập.
-              </p>
-            </div>
+      {/* Clean Professional Header */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-stone-900 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+            <Globe className="w-5 h-5" />
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setIsBulkModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all shadow-xs cursor-pointer active:scale-95"
-            title="Tự động tạo mô tả và tiêu đề chuẩn SEO cho các mục còn thiếu"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Tự Động Tối Ưu Hàng Loạt</span>
-          </button>
-
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all border border-slate-200/70 cursor-pointer active:scale-95"
-            title="Tải tệp báo cáo CSV"
-          >
-            <Download className="w-4 h-4" />
-            <span>Xuất Báo Cáo CSV</span>
-          </button>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 tracking-tight">
+              Quản Lý SEO Meta & Schema
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Tùy chỉnh tiêu đề, mô tả và đường dẫn tĩnh cho danh mục và sản phẩm
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1121,23 +1000,30 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
                 </div>
               </div>
 
-              {/* Smart Suggestion Quick Button */}
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600" /> Gợi Ý Chuẩn SEO Tự Động
-                  </span>
-                  <p className="text-[11px] text-amber-900/80">
-                    Tự động tạo tiêu đề và đoạn mô tả 130-155 ký tự chứa từ khóa bán hàng và chính sách.
-                  </p>
+              {/* Quick Auto-Fill Suggestion Actions */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <span>Gợi Ý Chuẩn SEO Nhanh</span>
+                    </span>
+                    <p className="text-[11px] text-slate-500">
+                      Tự động điền tiêu đề và mô tả tối ưu chuẩn theo danh mục, tên và giá sản phẩm.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleApplySmartSuggestion}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Áp Dụng Mẫu Chuẩn</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleApplySmartSuggestion}
-                  className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all shrink-0 cursor-pointer shadow-2xs"
-                >
-                  Áp Dụng Gợi Ý
-                </button>
               </div>
 
               {/* Form Inputs */}
@@ -1240,54 +1126,6 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
               >
                 {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 <span>{isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi SEO'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Auto-Generate Confirmation Modal */}
-      {isBulkModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center shadow-xs">
-              <Sparkles className="w-6 h-6" />
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="text-base font-black text-slate-900">
-                Tự Động Tối Ưu Hóa SEO Hàng Loạt?
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Hệ thống sẽ quét toàn bộ {stats.missingDesc} mục đang thiếu hoặc có mô tả quá ngắn, tự động tạo mô tả chuẩn 130-155 ký tự với đầy đủ thông tin danh mục, giá bán và bảo hành.
-              </p>
-            </div>
-
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-amber-600" /> Lưu ý an toàn:
-              </div>
-              <p className="text-[11px] text-amber-800 leading-normal">
-                Các sản phẩm đã có mô tả hoàn chỉnh sẽ được giữ nguyên không thay đổi.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsBulkModalOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
-              >
-                Hủy Bỏ
-              </button>
-              <button
-                type="button"
-                disabled={bulkApplying}
-                onClick={handleExecuteBulkOptimization}
-                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {bulkApplying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                <span>{bulkApplying ? 'Đang tạo...' : 'Bắt Đầu Tối Ưu'}</span>
               </button>
             </div>
           </div>

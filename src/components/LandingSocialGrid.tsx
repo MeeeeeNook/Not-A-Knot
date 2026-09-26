@@ -304,159 +304,146 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
         </div>
 
         {/* ---------------------------------------------------- */}
-        {/* MOBILE 3-CARD BALANCED SQUARE STAGE [ 5 ] [ 1 ] [ 2 ] */}
+        {/* MOBILE 3-CARD CONTINUOUS STAGE [ 5 ] [ 1 ] [ 2 ] */}
         {/* ---------------------------------------------------- */}
         <div 
-          className="md:hidden w-full relative select-none py-2 touch-pan-y"
+          className="md:hidden -mx-4 sm:-mx-6 w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] relative select-none py-4 touch-pan-y"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {/* Inline keyframe animations for directional card transitions */}
-          <style>{`
-            @keyframes socialSlideInLeft {
-              0% { opacity: 0.3; transform: translateX(38px) scale(0.96); }
-              100% { opacity: 1; transform: translateX(0) scale(1); }
-            }
-            @keyframes socialSlideInRight {
-              0% { opacity: 0.3; transform: translateX(-38px) scale(0.96); }
-              100% { opacity: 1; transform: translateX(0) scale(1); }
-            }
-            @keyframes socialFadeScale {
-              0% { opacity: 0.4; transform: scale(0.95); }
-              100% { opacity: 1; transform: scale(1); }
-            }
-          `}</style>
+          {/* 3-Card Stage Area with Clear Side Cards and Balanced Spacing */}
+          <div className="relative w-full h-[76vw] min-h-[270px] max-h-[310px] overflow-hidden flex items-center justify-center">
+            {posts.map((post, idx) => {
+              // Calculate circular distance to active index (-2, -1, 0, 1, 2)
+              let diff = (idx - activeIndex) % total;
+              if (diff > total / 2) diff -= total;
+              if (diff < -total / 2) diff += total;
 
-          {/* 3-Card Stage Area matching User's Sketch [5] [ 1 ] [2] with matching full-height blurry side cards */}
-          <div className="flex items-center justify-center gap-3 sm:gap-4 w-full min-h-[300px] sm:min-h-[340px] px-1 overflow-hidden">
-            
-            {/* LEFT CARD (e.g. Post 5 / Previous - Full height with gentle soft blur, white glass + black border) */}
-            <div
-              onClick={() => {
-                lastInteractionRef.current = Date.now();
-                handlePrev();
-              }}
-              style={{
-                transform: `translateX(${swipeOffset * 0.3}px)`,
-                transition: isSwiping ? 'none' : 'all 0.35s cubic-bezier(0.25, 1, 0.5, 1)'
-              }}
-              className="w-[20vw] min-w-[62px] max-w-[96px] h-[72vw] min-h-[240px] max-h-[290px] relative rounded-3xl overflow-hidden border border-black shadow-md bg-white/70 backdrop-blur-md cursor-pointer shrink-0 transition-all group"
-              title="Xem bài trước"
-            >
-              <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none z-30" />
-              <div 
-                key={`prev-${prevIndex}`} 
-                className="w-full h-full flex items-center justify-center overflow-hidden opacity-70 group-hover:opacity-90 transition-opacity p-1.5"
-                style={{
-                  animation: slideDirection ? 'socialFadeScale 0.3s ease-out' : 'none'
-                }}
-              >
-                <img
-                  src={posts[prevIndex].image}
-                  alt="Previous Post"
-                  className="w-full h-full max-w-full max-h-full object-contain object-center blur-[1px] scale-102 group-hover:blur-none transition-all duration-300"
-                />
-              </div>
-              <div className="absolute inset-0 bg-stone-950/10 group-hover:bg-transparent transition-colors pointer-events-none" />
-            </div>
+              const isCenter = diff === 0;
+              const isLeft = diff === -1;
+              const isRight = diff === 1;
+              const isVisible = isCenter || isLeft || isRight;
 
-            {/* CENTER ACTIVE CARD (e.g. Post 1 / Main Featured - Pure Square Aspect Ratio, white glass + distinct black border) */}
-            <div
-              onClick={() => {
-                lastInteractionRef.current = Date.now();
-                setIsDescriptionOpen((prev) => !prev);
-              }}
-              style={{
-                transform: `translateX(${swipeOffset}px)`,
-                transition: isSwiping ? 'none' : 'all 0.35s cubic-bezier(0.25, 1, 0.5, 1)'
-              }}
-              className="w-[72vw] min-w-[240px] max-w-[290px] aspect-square relative rounded-3xl overflow-hidden border-2 border-black shadow-2xl bg-white/90 backdrop-blur-xl cursor-pointer group shrink-0 z-20"
-              title="Chạm để xem chi tiết bài viết"
-            >
-              <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/90 to-transparent pointer-events-none z-30" />
-              
-              {/* Animated Inner Content Container */}
-              <div 
-                key={`active-${activeIndex}`}
-                className="w-full h-full relative"
-                style={{
-                  animation: slideDirection === 'left'
-                    ? 'socialSlideInLeft 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
-                    : slideDirection === 'right'
-                    ? 'socialSlideInRight 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
-                    : 'socialFadeScale 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
-                }}
-              >
-                {/* Image: Natural contain fit, gentle 1px blur on tap so image remains clearly visible */}
-                <div className="w-full h-full flex items-center justify-center overflow-hidden p-2">
-                  <img
-                    src={posts[activeIndex].image}
-                    alt={posts[activeIndex].caption}
-                    className={`w-full h-full max-w-full max-h-full object-contain object-center transition-all duration-300 ease-out ${
-                      isDescriptionOpen ? 'blur-[1px] scale-[1.02] brightness-95' : 'blur-none scale-100'
-                    }`}
-                  />
-                </div>
+              // Card base dimension
+              const cardDimension = 'min(64vw, 250px)';
 
-                {/* Tinted Glass Info Overlay - Subtle bottom gradient, image stays clearly visible */}
+              // Compute position and ~15% scale down for side cards (scale 0.85)
+              let transformStyle = '';
+              let zIndexStyle = 1;
+              let opacityStyle = 0;
+
+              if (isCenter) {
+                zIndexStyle = 20;
+                opacityStyle = 1;
+                transformStyle = `translate3d(calc(-50% + ${swipeOffset}px), -50%, 0) scale(1)`;
+              } else if (isLeft) {
+                zIndexStyle = 10;
+                opacityStyle = 0.9;
+                // Positioned so side card is clearly visible (~55-60px) with ~15px gap to center card
+                transformStyle = `translate3d(calc(-50% - 63vw + ${swipeOffset}px), -50%, 0) scale(0.85)`;
+              } else if (isRight) {
+                zIndexStyle = 10;
+                opacityStyle = 0.9;
+                // Positioned so side card is clearly visible (~55-60px) with ~15px gap to center card
+                transformStyle = `translate3d(calc(-50% + 63vw + ${swipeOffset}px), -50%, 0) scale(0.85)`;
+              } else if (diff < -1) {
+                // Offscreen Left
+                zIndexStyle = 1;
+                opacityStyle = 0;
+                transformStyle = `translate3d(calc(-50% - 120vw + ${swipeOffset}px), -50%, 0) scale(0.75)`;
+              } else {
+                // Offscreen Right
+                zIndexStyle = 1;
+                opacityStyle = 0;
+                transformStyle = `translate3d(calc(-50% + 120vw + ${swipeOffset}px), -50%, 0) scale(0.75)`;
+              }
+
+              return (
                 <div
-                  className={`absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/45 to-transparent backdrop-blur-[1px] p-4 sm:p-5 flex flex-col justify-end text-white z-20 transition-all duration-300 ${
-                    isDescriptionOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                  key={post.id || idx}
+                  onClick={() => {
+                    lastInteractionRef.current = Date.now();
+                    if (isLeft) {
+                      handlePrev();
+                    } else if (isRight) {
+                      handleNext();
+                    } else if (isCenter) {
+                      setIsDescriptionOpen((prev) => !prev);
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: transformStyle,
+                    width: cardDimension,
+                    height: cardDimension,
+                    zIndex: zIndexStyle,
+                    opacity: opacityStyle,
+                    transition: isSwiping 
+                      ? 'none' 
+                      : 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease',
+                    pointerEvents: isVisible ? 'auto' : 'none'
+                  }}
+                  className={`rounded-3xl overflow-hidden cursor-pointer bg-white/95 backdrop-blur-md transition-shadow will-change-transform ${
+                    isCenter 
+                      ? 'border-2 border-black shadow-2xl ring-1 ring-black/10' 
+                      : 'border border-black/85 shadow-lg'
                   }`}
+                  title={isCenter ? 'Chạm để xem chi tiết bài viết' : isLeft ? 'Xem bài trước' : 'Xem bài tiếp theo'}
                 >
-                  <div className="overflow-y-auto max-h-[70%] pr-1 mb-3 space-y-1">
-                    <p className="text-xs sm:text-sm font-medium text-stone-100 leading-snug whitespace-pre-line break-words drop-shadow-xs">
-                      {posts[activeIndex].caption}
-                    </p>
+                  {/* Top Specular Highlight */}
+                  <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none z-30" />
+
+                  {/* Image Container: Full square coverage on all cards */}
+                  <div className="w-full h-full relative overflow-hidden bg-stone-100 flex items-center justify-center">
+                    <img
+                      src={post.image}
+                      alt={post.caption}
+                      style={{ filter: isCenter ? (isDescriptionOpen ? 'blur(1px) brightness(0.95)' : 'none') : 'none' }}
+                      className={`w-full h-full object-cover object-center transition-all duration-300 ${
+                        isCenter && isDescriptionOpen ? 'scale-[1.03]' : 'scale-100'
+                      }`}
+                      loading="lazy"
+                    />
+
+                    {/* Subtle glass tint for side cards */}
+                    {!isCenter && (
+                      <div className="absolute inset-0 bg-stone-900/10 pointer-events-none" />
+                    )}
                   </div>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openPost(posts[activeIndex].url);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/45 border border-white/30 text-white font-bold text-xs backdrop-blur-xl transition-all shadow-xs cursor-pointer"
+
+                  {/* Center Card Info Overlay (Shown on tap with soft blur) */}
+                  {isCenter && (
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/45 to-transparent backdrop-blur-[1px] p-4 sm:p-5 flex flex-col justify-end text-white z-20 transition-all duration-300 ${
+                        isDescriptionOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                      }`}
                     >
-                      <span>Xem bài viết</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                      <div className="overflow-y-auto max-h-[70%] pr-1 mb-3 space-y-1">
+                        <p className="text-xs sm:text-sm font-medium text-stone-100 leading-snug whitespace-pre-line break-words drop-shadow-xs">
+                          {post.caption}
+                        </p>
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPost(post.url);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/45 border border-white/30 text-white font-bold text-xs backdrop-blur-xl transition-all shadow-xs cursor-pointer"
+                        >
+                          <span>Xem bài viết</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-
-            {/* RIGHT CARD (e.g. Post 2 / Next - Full height with gentle soft blur, white glass + black border) */}
-            <div
-              onClick={() => {
-                lastInteractionRef.current = Date.now();
-                handleNext();
-              }}
-              style={{
-                transform: `translateX(${swipeOffset * 0.3}px)`,
-                transition: isSwiping ? 'none' : 'all 0.35s cubic-bezier(0.25, 1, 0.5, 1)'
-              }}
-              className="w-[20vw] min-w-[62px] max-w-[96px] h-[72vw] min-h-[240px] max-h-[290px] relative rounded-3xl overflow-hidden border border-black shadow-md bg-white/70 backdrop-blur-md cursor-pointer shrink-0 transition-all group"
-              title="Xem bài tiếp theo"
-            >
-              <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none z-30" />
-              <div 
-                key={`next-${nextIndex}`} 
-                className="w-full h-full flex items-center justify-center overflow-hidden opacity-70 group-hover:opacity-90 transition-opacity p-1.5"
-                style={{
-                  animation: slideDirection ? 'socialFadeScale 0.3s ease-out' : 'none'
-                }}
-              >
-                <img
-                  src={posts[nextIndex].image}
-                  alt="Next Post"
-                  className="w-full h-full max-w-full max-h-full object-contain object-center blur-[1px] scale-102 group-hover:blur-none transition-all duration-300"
-                />
-              </div>
-              <div className="absolute inset-0 bg-stone-950/10 group-hover:bg-transparent transition-colors pointer-events-none" />
-            </div>
-
+              );
+            })}
           </div>
 
           {/* Clean Indicator Dots */}

@@ -22,7 +22,7 @@ import {
   arrayUnion,
   onSnapshot
 } from 'firebase/firestore';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig } from './types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig, SocialFeedConfig } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import {
   saveProductToIDB,
@@ -32,7 +32,8 @@ import {
   getAssetFromIDB,
   getMultipleAssetsFromIDB,
   deleteProductFromIDB,
-  safeStorageSetItem
+  safeStorageSetItem,
+  safeStorageGetItem
 } from './utils/storageHelper';
 import {
   safeIsoDateString,
@@ -2510,12 +2511,83 @@ export const saveSiteContentToFirestore = async (config: SiteContentConfig): Pro
     safeStorageSetItem('nak_site_content', JSON.stringify(payload));
 
     await setDoc(docRef, payload, { merge: true });
+    
+    // Also save social feed to dedicated document if present
+    if (config.socialFeed) {
+      try {
+        const socialDocRef = doc(db, 'social_feed', 'config');
+        await setDoc(socialDocRef, cleanFirestoreData(config.socialFeed), { merge: true });
+      } catch (sErr) {
+        console.warn('Lỗi ghi phụ vào collection social_feed:', sErr);
+      }
+    }
+    
     recordOperation('write', dataSize);
   } catch (err) {
     console.error('Lỗi lưu cấu hình website vào Firestore:', err);
     // Ensure local storage is updated anyway
     safeStorageSetItem('nak_site_content', JSON.stringify(config));
     throw err;
+  }
+};
+
+/**
+ * Save and Sync Social Media Feed directly to Firestore
+ */
+export const saveSocialFeedToFirestore = async (socialFeed: SocialFeedConfig): Promise<void> => {
+  try {
+    const cleaned = cleanFirestoreData(socialFeed);
+    
+    // 1. Write to social_feed collection
+    const socialDocRef = doc(db, 'social_feed', 'config');
+    await setDoc(socialDocRef, cleaned, { merge: true });
+
+    // 2. Write into site_content/main_config as socialFeed field
+    const mainConfigRef = doc(db, 'site_content', 'main_config');
+    await setDoc(mainConfigRef, { socialFeed: cleaned, updatedAt: new Date().toISOString() }, { merge: true });
+
+    // 3. Cache locally
+    try {
+      const cached = safeStorageGetItem('nak_site_content');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        parsed.socialFeed = cleaned;
+        safeStorageSetItem('nak_site_content', JSON.stringify(parsed));
+      }
+    } catch {}
+
+    recordOperation('write');
+  } catch (err) {
+    console.error('Lỗi lưu Social Feed trực tiếp lên Firestore:', err);
+    throw err;
+  }
+};
+
+/**
+ * Fetch Social Media Feed directly from Firestore
+ */
+export const fetchSocialFeedFromFirestore = async (): Promise<SocialFeedConfig | null> => {
+  try {
+    recordOperation('read');
+    // Try site_content first
+    const mainDocRef = doc(db, 'site_content', 'main_config');
+    const mainSnap = await getDoc(mainDocRef);
+    if (mainSnap.exists()) {
+      const data = mainSnap.data() as SiteContentConfig;
+      if (data.socialFeed) return data.socialFeed;
+    }
+
+    // Fallback to social_feed/config
+    const socialDocRef = doc(db, 'social_feed', 'config');
+    const socialSnap = await getDoc(socialDocRef);
+    if (socialSnap.exists()) {
+      return socialSnap.data() as SocialFeedConfig;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Lỗi đọc Social Feed từ Firestore:', err);
+    return null;
   }
 };
 

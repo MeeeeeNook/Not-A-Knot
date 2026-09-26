@@ -528,21 +528,21 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                 {/* Left Card (Prev) - Full Height with soft blur */}
                 <div 
                   onClick={() => setSelectedCardIdx((selectedCardIdx - 1 + feedConfig.posts.length) % feedConfig.posts.length)}
-                  className="w-[50px] h-[170px] rounded-2xl overflow-hidden opacity-70 hover:opacity-90 border border-black shadow-sm shrink-0 cursor-pointer transition-all relative flex items-center justify-center bg-white/70 backdrop-blur-md p-1"
+                  className="w-[50px] h-[170px] rounded-2xl overflow-hidden opacity-70 hover:opacity-90 border border-black shadow-sm shrink-0 cursor-pointer transition-all relative flex items-center justify-center bg-white/70 backdrop-blur-md"
                   title="Xem ô trước"
                 >
                   <img 
                     src={feedConfig.posts[(selectedCardIdx - 1 + feedConfig.posts.length) % feedConfig.posts.length]?.image} 
                     alt="" 
-                    className="w-full h-full max-w-full max-h-full object-contain blur-[0.5px] scale-102" 
+                    className="w-full h-full object-cover object-center blur-[0.5px] scale-102" 
                   />
                   <div className="absolute inset-0 bg-stone-950/10" />
                 </div>
 
                 {/* Center Active Card - Pure Square */}
-                <div className="w-[170px] h-[170px] aspect-square rounded-3xl overflow-hidden border-2 border-black shadow-xl z-20 shrink-0 relative bg-white/90 backdrop-blur-xl flex items-center justify-center p-1.5">
+                <div className="w-[170px] h-[170px] aspect-square rounded-3xl overflow-hidden border-2 border-black shadow-xl z-20 shrink-0 relative bg-white/90 backdrop-blur-xl flex items-center justify-center">
                   <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/90 to-transparent pointer-events-none z-30" />
-                  <img src={currentPost.image} alt="" className="w-full h-full max-w-full max-h-full object-contain" />
+                  <img src={currentPost.image} alt="" className="w-full h-full object-cover object-center" />
                   <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/45 to-transparent p-3 flex flex-col justify-end text-white">
                     <p className="text-[10px] font-medium whitespace-pre-line leading-tight mb-1 max-h-[70%] overflow-y-auto">
                       {currentPost.caption}
@@ -554,13 +554,13 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                 {/* Right Card (Next) - Full Height with soft blur */}
                 <div 
                   onClick={() => setSelectedCardIdx((selectedCardIdx + 1) % feedConfig.posts.length)}
-                  className="w-[50px] h-[170px] rounded-2xl overflow-hidden opacity-70 hover:opacity-90 border border-black shadow-sm shrink-0 cursor-pointer transition-all relative flex items-center justify-center bg-white/70 backdrop-blur-md p-1"
+                  className="w-[50px] h-[170px] rounded-2xl overflow-hidden opacity-70 hover:opacity-90 border border-black shadow-sm shrink-0 cursor-pointer transition-all relative flex items-center justify-center bg-white/70 backdrop-blur-md"
                   title="Xem ô sau"
                 >
                   <img 
                     src={feedConfig.posts[(selectedCardIdx + 1) % feedConfig.posts.length]?.image} 
                     alt="" 
-                    className="w-full h-full max-w-full max-h-full object-contain blur-[0.5px] scale-102" 
+                    className="w-full h-full object-cover object-center blur-[0.5px] scale-102" 
                   />
                   <div className="absolute inset-0 bg-stone-950/10" />
                 </div>

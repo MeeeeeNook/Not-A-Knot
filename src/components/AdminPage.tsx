@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, ComboItemConfig } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -268,6 +268,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Sellers / Team Members State (9 Team Members)
   const [sellers, setSellers] = useState<SellerUser[]>([]);
+  const [copiedFirebaseKey, setCopiedFirebaseKey] = useState<string | null>(null);
+  const handleCopyFirebaseText = (key: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedFirebaseKey(key);
+    setTimeout(() => setCopiedFirebaseKey(null), 2000);
+  };
 
   // Order Pagination State
   const [orderPageSize, setOrderPageSize] = useState<number | 'all'>(() => {
@@ -8267,61 +8273,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* TAB: FIREBASE ACCOUNT & FREE QUOTA MONITOR */}
+        {/* TAB: FIREBASE SYSTEM & CLOUD INTEGRATION */}
         {/* ======================================================== */}
         {activeTab === 'firebase' && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* Top Connected Account & Main Actions Banner */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    <Database className="w-5 h-5 text-red-600" />
-                    <span>Cơ Sở Dữ Liệu Google Firebase Cloud</span>
-                  </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    {cloudConnected ? 'Đã Kết Nối Trực Tuyến (Online)' : 'Đang Kiểm Tra Kết Nối'}
-                  </span>
+          <div className="space-y-6 animate-fadeIn pb-12">
+            {/* Header Banner */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-orange-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                  <Database className="w-5 h-5" />
                 </div>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                  <span>Tài khoản Google: <strong className="text-slate-800 font-mono">nhunhuhao71@gmail.com</strong></span>
-                  <span>•</span>
-                  <span>Project ID: <strong className="text-slate-800 font-mono">jittery-study-nzp2g</strong></span>
-                  <span>•</span>
-                  <span>Database ID: <strong className="text-slate-800 font-mono text-[11px]">ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f</strong></span>
-                  <span>•</span>
-                  <span>Khu vực: <strong className="text-slate-800 font-mono">asia-southeast1 (Singapore)</strong></span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                      Cơ Sở Dữ Liệu Firebase Cloud
+                    </h2>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {cloudConnected ? 'Đang hoạt động' : 'Đang kiểm tra kết nối'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Hạ tầng lưu trữ đám mây Google Firestore, Authentication & Cloud Storage
+                  </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
-                <a
-                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer"
-                  title="Mở bảng điều khiển Firebase Console chính thức của Google để xem thống kê chính xác 100% từ máy chủ"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Mở Firebase Console (Chính Thức)</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={handleRecalculateStorage}
-                  className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                  title="Tính toán lại dung lượng toàn bộ hình ảnh và dữ liệu"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Tính Lại Dung Lượng</span>
-                </button>
+              {/* Cloud Sync Actions */}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handlePushAllToCloud}
                   disabled={isCloudSyncing}
-                  className="px-3.5 py-2.5 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Đẩy dữ liệu hiện tại trên máy lên Firebase Cloud"
+                  className="px-3.5 py-2 bg-stone-900 hover:bg-stone-800 active:scale-95 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Đẩy toàn bộ dữ liệu hiện tại lên Firestore"
                 >
                   <CloudUpload className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
                   <span>{isCloudSyncing ? 'Đang đẩy...' : 'Đẩy Lên Cloud'}</span>
@@ -8330,8 +8315,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   type="button"
                   onClick={handleFetchFromCloud}
                   disabled={isCloudSyncing}
-                  className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Đồng bộ / kéo dữ liệu mới nhất từ Firebase Firestore về máy"
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold rounded-xl text-xs transition-all border border-slate-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Đồng bộ dữ liệu mới nhất từ Firestore về máy"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
                   <span>{isCloudSyncing ? 'Đang kéo...' : 'Đồng Bộ Về'}</span>
@@ -8339,254 +8324,360 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </div>
             </div>
 
-            {/* Quick Navigation into Official Google Firebase Console */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card 1: Firestore Quota & Usage */}
-              <a
-                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/firestore/usage`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group bg-gradient-to-br from-amber-500/10 via-white to-white p-5 rounded-2xl border border-amber-200/80 hover:border-amber-400 hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="p-2 rounded-xl bg-amber-500 text-white shadow-xs">
-                      <BarChart3 className="w-5 h-5" />
-                    </span>
-                    <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      Thời Gian Thực (Google)
-                    </span>
+            {/* Official Google Firebase Console Quick Access */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Truy Cập Nhanh Google Firebase Console
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {/* 1. Firestore Data Explorer */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/databases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-orange-50 text-orange-600 border border-orange-100">
+                        <Database className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-orange-600 transition-colors">
+                        Firestore Database
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Xem và chỉnh sửa trực tiếp các collections và documents dữ liệu trên Cloud.
+                      </p>
+                    </div>
                   </div>
-                  <h4 className="text-base font-black text-slate-900 group-hover:text-amber-700 transition-colors flex items-center gap-1.5">
-                    <span>Thống Kê Reads / Writes (Usage)</span>
-                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Xem biểu đồ tổng lượt Đọc, Ghi, Xóa trực tiếp từ máy chủ Google Firebase với độ chính xác tuyệt đối.
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-700">
-                  <span>Mở trang Thống Kê Firestore</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </div>
-              </a>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-orange-600 flex items-center gap-1">
+                    <span>Mở Database Console</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
 
-              {/* Card 2: Firestore Database Explorer */}
-              <a
-                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/firestore/databases`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group bg-gradient-to-br from-sky-500/10 via-white to-white p-5 rounded-2xl border border-sky-200/80 hover:border-sky-400 hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="p-2 rounded-xl bg-sky-600 text-white shadow-xs">
-                      <Database className="w-5 h-5" />
-                    </span>
-                    <span className="text-[11px] font-bold text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md">
-                      Duyệt & Quản Lý
-                    </span>
+                {/* 2. Firestore Metrics & Usage */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-100">
+                        <BarChart3 className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-sky-600 transition-colors">
+                        Thống Kê Usage & Hạn Mức
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Biểu đồ lượt Đọc/Ghi thực tế và mức sử dụng băng thông chính thức từ Google.
+                      </p>
+                    </div>
                   </div>
-                  <h4 className="text-base font-black text-slate-900 group-hover:text-sky-700 transition-colors flex items-center gap-1.5">
-                    <span>Trình Duyệt Dữ Liệu Cloud</span>
-                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Trực tiếp xem các bảng documents <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">products</code>, <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">orders</code>, <code className="text-sky-700 bg-sky-50 px-1 py-0.5 rounded">sellers</code> trên Cloud.
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-sky-700">
-                  <span>Mở Firestore Database Explorer</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </div>
-              </a>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-sky-600 flex items-center gap-1">
+                    <span>Mở Báo Cáo Usage</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
 
-              {/* Card 3: Project Billing & Spark Plan Limits */}
-              <a
-                href={`https://console.firebase.google.com/project/${quotaStats.projectId || 'default'}/usage`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group bg-gradient-to-br from-emerald-500/10 via-white to-white p-5 rounded-2xl border border-emerald-200/80 hover:border-emerald-400 hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
-                      <Server className="w-5 h-5" />
-                    </span>
-                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                      Gói Spark Miễn Phí
-                    </span>
+                {/* 3. Cloud Storage */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/storage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                        <HardDrive className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                        Firebase Cloud Storage
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Quản lý thư mục chứa ảnh sản phẩm, ảnh hóa đơn thanh toán và file đính kèm.
+                      </p>
+                    </div>
                   </div>
-                  <h4 className="text-base font-black text-slate-900 group-hover:text-emerald-700 transition-colors flex items-center gap-1.5">
-                    <span>Hạn Mức & Băng Thông Dự Án</span>
-                    <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                  </h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Theo dõi 1.0 GB dung lượng lưu trữ miễn phí vĩnh viễn, 10 GB băng thông hàng tháng và tình trạng vận hành dự án.
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-emerald-700">
-                  <span>Mở Tổng Quan Gói Dự Án</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </div>
-              </a>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-indigo-600 flex items-center gap-1">
+                    <span>Mở Cloud Storage</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
+
+                {/* 4. Authentication Users */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/authentication/users"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                        <Users className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                        Xác Thực Người Dùng (Auth)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Danh sách tài khoản quản trị viên và phiên đăng nhập bảo mật.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                    <span>Mở Firebase Auth</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
+
+                {/* 5. Project Settings */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/settings/general"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+                        <Server className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors">
+                        Cài Đặt Dự Án (Project Settings)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Cấu hình chứng chỉ bảo mật, API keys và thông số môi trường.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    <span>Mở Cài Đặt Dự Án</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
+
+                {/* 6. Security Rules */}
+                <a
+                  href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/rules"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group bg-white p-4 rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-100">
+                        <ShieldAlert className="w-4 h-4" />
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-amber-700 transition-colors">
+                        Quy Tắc Bảo Mật (Firestore Rules)
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Kiểm tra và cập nhật quyền đọc/ghi phân quyền cho khách và người quản trị.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] font-bold text-amber-700 flex items-center gap-1">
+                    <span>Mở Security Rules</span>
+                    <ArrowRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                  </div>
+                </a>
+              </div>
             </div>
 
-            {/* Storage Quota Card - Dynamically Computed */}
-            {(() => {
-              const currentBytes = quotaStats.estimatedStorageBytes || 845000;
-              const storageMB = currentBytes / (1024 * 1024);
-              const storagePercent = (currentBytes / (1024 * 1024 * 1024)) * 100;
-              const remainingMB = Math.max(0, 1024 - storageMB).toFixed(1);
-              let productsBytes = 0;
-              let ordersBytes = 0;
-              let configBytes = 0;
-              try {
-                productsBytes = new TextEncoder().encode(JSON.stringify(products)).length;
-                ordersBytes = new TextEncoder().encode(JSON.stringify(orders)).length;
-                configBytes = new TextEncoder().encode(JSON.stringify({ c: localCategories, coll: localCollections, s: siteContent })).length;
-              } catch {
-                productsBytes = JSON.stringify(products).length;
-                ordersBytes = JSON.stringify(orders).length;
-              }
-
-              return (
-                <div className="space-y-4">
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Dung Lượng Dữ Liệu & Ảnh Firestore</span>
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                          Gói Miễn Phí Spark Plan (1,024 MB)
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">
-                          {storageMB < 1 ? `~${(currentBytes / 1024).toFixed(0)} KB` : `~${storageMB.toFixed(2)} MB`}
-                        </span>
-                        <span className="text-xs text-slate-500">/ 1.0 GB Free vĩnh viễn (Còn lại ~{remainingMB} MB trống)</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div
-                          className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(100, Math.max(0.8, storagePercent))}%` }}
-                        />
-                      </div>
-                      <span className="text-[11px] text-slate-400 block">
-                        Đã dùng {storagePercent < 0.01 ? '< 0.01%' : `${storagePercent.toFixed(2)}%`} tổng dung lượng 1,024 MB miễn phí của Google Firebase
-                      </span>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider block">Băng Thông Mạng (Egress Bandwidth)</span>
-                        <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
-                          10.0 GB Miễn Phí / Tháng
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-slate-900">~14.2 MB</span>
-                        <span className="text-xs text-slate-500">/ 10.0 GB Free mỗi tháng (Còn lại 99.86% trống)</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                        <div className="bg-indigo-500 h-full rounded-full w-[1.4%]" />
-                      </div>
-                      <span className="text-[11px] text-slate-400 block">
-                        Tự động làm mới chu kỳ 10 GB miễn phí vào ngày đầu tiên mỗi tháng
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Detailed Storage Breakdown Card */}
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-xs space-y-3">
-                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-slate-600" />
-                      <span>Chi Tiết Phân Bổ Dung Lượng Thực Tế Trong Cơ Sở Dữ Liệu</span>
-                    </h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                        <span className="text-slate-500 block text-[11px] font-medium">Sản phẩm & Ảnh tải lên:</span>
-                        <span className="text-base font-black text-slate-900 mt-1 block">
-                          ~{(productsBytes / (1024 * 1024)).toFixed(2)} MB
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">{products.length} sản phẩm trên web</span>
-                      </div>
-
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                        <span className="text-slate-500 block text-[11px] font-medium">Đơn hàng & Hóa đơn:</span>
-                        <span className="text-base font-black text-slate-900 mt-1 block">
-                          ~{(ordersBytes / 1024).toFixed(1)} KB
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">{orders.length} đơn hàng đã lưu</span>
-                      </div>
-
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                        <span className="text-slate-500 block text-[11px] font-medium">Giao diện, Danh mục & Banner:</span>
-                        <span className="text-base font-black text-slate-900 mt-1 block">
-                          ~{(configBytes / 1024).toFixed(1)} KB
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">{localCategories.length} danh mục, {localCollections.length} BST</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Session Activity Counters */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-emerald-600" />
-                    <span>Lượt Đọc / Ghi Ước Tính Trong Phiên Làm Việc Hiện Tại</span>
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Bộ đếm này chỉ ghi nhận các truy vấn đọc/ghi thực hiện trên trình duyệt của bạn trong phiên hiện tại.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleResetQuotaSession}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                  title="Đặt lại bộ đếm phiên này về 0"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Đặt Lại Bộ Đếm Phiên</span>
-                </button>
+            {/* Project Environment Details */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+              <div className="p-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Thông Số Cấu Hình Dự Án Firebase
+                </h3>
+                <span className="text-[11px] text-slate-500 font-mono">Environment: Production</span>
               </div>
+              <div className="divide-y divide-slate-100 text-xs">
+                {/* Item 1 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Tài khoản quản trị:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono text-slate-800">
+                    <span>nhunhuhao71@gmail.com</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFirebaseText('account', 'nhunhuhao71@gmail.com')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                    title="Sao chép email"
+                  >
+                    {copiedFirebaseKey === 'account' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-emerald-600">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Sao chép</span>
+                      </>
+                    )}
+                  </button>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Đọc (Reads / phiên)</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-black text-slate-900">{quotaStats.reads || 0}</span>
-                    <span className="text-xs text-slate-400">/ 50,000 free/ngày</span>
+                {/* Item 2 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Project ID:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono font-bold text-slate-900">
+                    <span>jittery-study-nzp2g</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFirebaseText('projectId', 'jittery-study-nzp2g')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                    title="Sao chép Project ID"
+                  >
+                    {copiedFirebaseKey === 'projectId' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-emerald-600">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Sao chép</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Item 3 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Database ID:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono text-slate-800 break-all">
+                    <span>ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFirebaseText('databaseId', 'ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                    title="Sao chép Database ID"
+                  >
+                    {copiedFirebaseKey === 'databaseId' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-emerald-600">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Sao chép</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Item 4 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Khu vực máy chủ:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono text-slate-800">
+                    <span>asia-southeast1 (Singapore)</span>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Ghi (Writes / phiên)</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-black text-slate-900">{quotaStats.writes || 0}</span>
-                    <span className="text-xs text-slate-400">/ 20,000 free/ngày</span>
+                {/* Item 5 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Storage Bucket:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono text-slate-800">
+                    <span>jittery-study-nzp2g.firebasestorage.app</span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFirebaseText('storageBucket', 'jittery-study-nzp2g.firebasestorage.app')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                    title="Sao chép Storage Bucket"
+                  >
+                    {copiedFirebaseKey === 'storageBucket' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-emerald-600">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Sao chép</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-slate-500 text-[11px] font-bold uppercase tracking-wider block">Lượt Xóa (Deletes / phiên)</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-2xl font-black text-slate-900">{quotaStats.deletes || 0}</span>
-                    <span className="text-xs text-slate-400">/ 20,000 free/ngày</span>
+                {/* Item 6 */}
+                <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
+                  <span className="font-medium text-slate-500 sm:w-44">Auth Domain:</span>
+                  <div className="flex items-center gap-2 flex-1 font-mono text-slate-800">
+                    <span>jittery-study-nzp2g.firebaseapp.com</span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyFirebaseText('authDomain', 'jittery-study-nzp2g.firebaseapp.com')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                    title="Sao chép Auth Domain"
+                  >
+                    {copiedFirebaseKey === 'authDomain' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] text-emerald-600">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="text-[11px]">Sao chép</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
+            </div>
 
-              <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
-                <span className="text-sm shrink-0">💡</span>
-                <div>
-                  <strong>Hướng dẫn xem thống kê chính thức từ Google:</strong> Thống kê reads/writes của toàn bộ khách hàng ghé thăm website được Google Firebase cập nhật liên tục trên Google Cloud Console. Để xem báo cáo chi tiết nhất với đồ thị thời gian thực, bạn vui lòng nhấp vào nút <strong>"Mở Firebase Console (Chính Thức)"</strong> ở trên hoặc <a href="https://console.firebase.google.com/project/jittery-study-nzp2g/firestore/usage" target="_blank" rel="noopener noreferrer" className="underline font-bold text-amber-950 hover:text-amber-800">truy cập trực tiếp tại đây ↗</a>.
+            {/* Firestore Collections Directory */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+              <div className="p-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Danh Mục Collections Dữ Liệu Trong Firestore
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 text-xs">
+                <div className="p-4 space-y-1">
+                  <span className="font-mono font-bold text-slate-900 block">/products</span>
+                  <p className="text-slate-500 text-[11px]">Lưu danh sách sản phẩm, giá bán, biến thể và thuộc tính.</p>
+                </div>
+                <div className="p-4 space-y-1">
+                  <span className="font-mono font-bold text-slate-900 block">/orders</span>
+                  <p className="text-slate-500 text-[11px]">Lưu đơn hàng khách đặt, trạng thái giao vận và hóa đơn.</p>
+                </div>
+                <div className="p-4 space-y-1">
+                  <span className="font-mono font-bold text-slate-900 block">/sellers</span>
+                  <p className="text-slate-500 text-[11px]">Tài khoản nhân viên, phân quyền và lịch sử hoạt động.</p>
+                </div>
+                <div className="p-4 space-y-1">
+                  <span className="font-mono font-bold text-slate-900 block">/siteContent</span>
+                  <p className="text-slate-500 text-[11px]">Cấu hình banner, liên hệ, câu chuyện thương hiệu và SEO.</p>
                 </div>
               </div>
             </div>
