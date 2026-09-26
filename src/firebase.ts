@@ -3133,6 +3133,38 @@ function sanitizeBackupForFirestore(backup: VersionBackup): any {
   return cleaned;
 }
 
+export const MAX_BACKUPS_LIMIT = 10;
+
+export const pruneOldBackupsFromFirestore = async (maxLimit: number = MAX_BACKUPS_LIMIT): Promise<void> => {
+  try {
+    const colRef = collection(db, 'backups');
+    const snap = await getDocs(colRef);
+    const fsDocs: { id: string; createdAt: string }[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      fsDocs.push({ id: d.id, createdAt: data?.createdAt || '' });
+    });
+    fsDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (fsDocs.length > maxLimit) {
+      const toDelete = fsDocs.slice(maxLimit);
+      for (const oldDoc of toDelete) {
+        try {
+          await deleteDoc(doc(db, 'backups', oldDoc.id));
+          try {
+            await deleteObject(ref(storage, `backups/${oldDoc.id}.json`));
+          } catch {}
+          recordOperation('delete', 1, -2500);
+        } catch (delErr) {
+          console.warn('Không thể xóa backup cũ vượt quá giới hạn:', delErr);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Lỗi khi thực hiện dọn dẹp backup cũ:', e);
+  }
+};
+
 export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
   const backupMap = new Map<string, VersionBackup>();
   const cloudDocIds = new Set<string>();
@@ -3218,7 +3250,12 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
 
   const result = Array.from(backupMap.values())
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 30);
+    .slice(0, MAX_BACKUPS_LIMIT);
+
+  // Auto-prune cloud backups if they exceed maximum retention limit (e.g. 10)
+  if (cloudDocIds.size > MAX_BACKUPS_LIMIT) {
+    void pruneOldBackupsFromFirestore(MAX_BACKUPS_LIMIT);
+  }
 
   if (result.length > 0) {
     saveBackupsToIDB(result);
@@ -3231,7 +3268,7 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
 };
 
 /**
- * Saves a backup to Firestore Cloud, Firebase Storage, IndexedDB, and localStorage cache, retaining the latest 30 backups.
+ * Saves a backup to Firestore Cloud, Firebase Storage, IndexedDB, and localStorage cache, retaining the latest 10 backups.
  */
 export const saveBackupToFirestore = async (backup: VersionBackup): Promise<VersionBackup[]> => {
   // 1. Save full, un-truncated backup to Firebase Storage bucket
@@ -3252,7 +3289,7 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
     cloudSuccess = true;
     backup.syncedToCloud = true;
 
-    // Enforce max 30 documents on Firestore
+    // Enforce max 10 documents on Firestore
     const colRef = collection(db, 'backups');
     const snap = await getDocs(colRef);
     const fsDocs: { id: string; createdAt: string }[] = [];
@@ -3262,8 +3299,8 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
     });
     fsDocs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    if (fsDocs.length > 30) {
-      const toDelete = fsDocs.slice(30);
+    if (fsDocs.length > MAX_BACKUPS_LIMIT) {
+      const toDelete = fsDocs.slice(MAX_BACKUPS_LIMIT);
       for (const oldDoc of toDelete) {
         try {
           await deleteDoc(doc(db, 'backups', oldDoc.id));
@@ -3273,7 +3310,7 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
           } catch {}
           recordOperation('delete', 1, -2500);
         } catch (delErr) {
-          console.warn('Không thể xóa backup cũ vượt quá giới hạn 30:', delErr);
+          console.warn('Không thể xóa backup cũ vượt quá giới hạn 10:', delErr);
         }
       }
     }
@@ -3301,7 +3338,7 @@ export const saveBackupToFirestore = async (backup: VersionBackup): Promise<Vers
     ...existingList.filter((b) => b.id !== backup.id)
   ]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 30);
+    .slice(0, MAX_BACKUPS_LIMIT);
 
   // 3. Immediately persist to IndexedDB and localStorage
   await saveBackupsToIDB(updatedList);

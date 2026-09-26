@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BannerItem, SiteHeroSlide } from '../types';
 import { HERO_BANNERS } from '../data/products';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
@@ -25,8 +25,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   onSelectBannerCategory,
   onOpen0209Event
 }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [direction, setDirection] = useState<number>(1); // 1 = right/next, -1 = left/prev
+  const [[currentIndex, direction], setSlideState] = useState<[number, number]>([0, 1]);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const isAnimatingRef = useRef(false);
   const [isAutoPlay, setIsAutoPlay] = useState(true);
   const [isBrightBg, setIsBrightBg] = useState(false);
   const [imageNaturalRatio, setImageNaturalRatio] = useState<number | null>(null);
@@ -66,26 +67,69 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
   const handleSelectCat = onSelectCategory || onSelectBannerCategory || (() => {});
   const handleNavEvent = onNavigateToEvent || onOpen0209Event || (() => {});
 
-  const handleNext = () => {
-    setDirection(1);
-    setCurrentIndex((prev) => (prev + 1) % activeSlides.length);
-  };
+  const lastSwitchTimeRef = useRef<number>(0);
 
-  const handlePrev = () => {
-    setDirection(-1);
-    setCurrentIndex((prev) => (prev - 1 + activeSlides.length) % activeSlides.length);
-  };
+  // Preload all active billboard images into memory so fast sliding has zero lag or blank frames
+  useEffect(() => {
+    if (activeSlides && activeSlides.length > 0) {
+      activeSlides.forEach((slide) => {
+        if (slide.bgImage) {
+          const img = new Image();
+          img.src = slide.bgImage;
+        }
+      });
+    }
+  }, [activeSlides]);
+
+  const handleNext = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSwitchTimeRef.current < 280) return;
+    lastSwitchTimeRef.current = now;
+    isAnimatingRef.current = true;
+    setIsAnimating(true);
+    setSlideState(([prev]) => [(prev + 1) % activeSlides.length, 1]);
+  }, [activeSlides.length]);
+
+  const handlePrev = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSwitchTimeRef.current < 280) return;
+    lastSwitchTimeRef.current = now;
+    isAnimatingRef.current = true;
+    setIsAnimating(true);
+    setSlideState(([prev]) => [(prev - 1 + activeSlides.length) % activeSlides.length, -1]);
+  }, [activeSlides.length]);
+
+  const goToSlide = useCallback((targetIndex: number) => {
+    const now = Date.now();
+    if (now - lastSwitchTimeRef.current < 280) return;
+    setSlideState(([prevIdx]) => {
+      if (targetIndex === prevIdx || targetIndex < 0 || targetIndex >= activeSlides.length) {
+        return [prevIdx, 1];
+      }
+      lastSwitchTimeRef.current = now;
+      isAnimatingRef.current = true;
+      setIsAnimating(true);
+      const dir = targetIndex > prevIdx ? 1 : -1;
+      return [targetIndex, dir];
+    });
+  }, [activeSlides.length]);
 
   useEffect(() => {
     if (!isAutoPlay || activeSlides.length <= 1) return;
     const interval = setInterval(() => {
       // Pause slide animation if the tab is inactive / hidden in browser
       if (typeof document !== 'undefined' && document.hidden) return;
-      setDirection(1);
-      setCurrentIndex((prev) => (prev + 1) % activeSlides.length);
+      handleNext();
     }, 6500);
     return () => clearInterval(interval);
-  }, [isAutoPlay, activeSlides.length]);
+  }, [isAutoPlay, activeSlides.length, handleNext]);
+
+  // Ensure index remains in bounds if activeSlides array dynamically resizes
+  useEffect(() => {
+    if (currentIndex >= activeSlides.length && activeSlides.length > 0) {
+      setSlideState([0, 1]);
+    }
+  }, [activeSlides.length, currentIndex]);
 
   if (activeSlides.length === 0) return null;
 
@@ -263,23 +307,23 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
 
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? '100%' : '-100%',
-      opacity: 0.4,
+      x: dir >= 0 ? '100%' : '-100%',
+      opacity: 1,
     }),
     center: {
-      x: 0,
+      x: '0%',
       opacity: 1,
       transition: {
-        x: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.6 },
-        opacity: { duration: 0.4 }
+        x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.35 },
+        opacity: { duration: 0.2 },
       }
     },
     exit: (dir: number) => ({
-      x: dir > 0 ? '-100%' : '100%',
-      opacity: 0.4,
+      x: dir >= 0 ? '-100%' : '100%',
+      opacity: 1,
       transition: {
-        x: { type: 'tween', ease: [0.22, 1, 0.36, 1], duration: 0.6 },
-        opacity: { duration: 0.4 }
+        x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.35 },
+        opacity: { duration: 0.2 },
       }
     })
   };
@@ -315,23 +359,27 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
         onMouseEnter={() => setIsAutoPlay(false)}
         onMouseLeave={() => setIsAutoPlay(true)}
       >
-        <AnimatePresence initial={false} custom={direction} mode="popLayout">
+        <AnimatePresence initial={false} mode="popLayout">
           <motion.div
-            key={currentSlide.id || currentIndex}
+            key={`hero-slide-${currentIndex}-${currentSlide.id || 'slide'}`}
             custom={direction}
             variants={slideVariants}
             initial="enter"
             animate="center"
             exit="exit"
-            drag="x"
+            onAnimationComplete={() => {
+              isAnimatingRef.current = false;
+              setIsAnimating(false);
+            }}
+            drag={isAnimating ? false : "x"}
             dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.15}
+            dragElastic={0.12}
             onDragEnd={(_e, { offset, velocity }) => {
-              const swipeConfidenceThreshold = 10000;
+              const swipeConfidenceThreshold = 8000;
               const swipe = Math.abs(offset.x) * velocity.x;
-              if (swipe < -swipeConfidenceThreshold || offset.x < -45) {
+              if (swipe < -swipeConfidenceThreshold || offset.x < -35) {
                 handleNext();
-              } else if (swipe > swipeConfidenceThreshold || offset.x > 45) {
+              } else if (swipe > swipeConfidenceThreshold || offset.x > 35) {
                 handlePrev();
               }
             }}
@@ -339,7 +387,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
             style={{
               WebkitBackfaceVisibility: 'hidden',
               backfaceVisibility: 'hidden',
-              transform: 'translateZ(0)'
+              willChange: 'transform'
             }}
           >
             {/* Background Image with Focal Point, Zoom & Fit Mode */}
@@ -381,7 +429,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         alt=""
                         aria-hidden="true"
                         onError={handleImgError}
-                        loading="lazy"
+                        loading="eager"
                         decoding="async"
                         sizes="100vw"
                         className={`absolute inset-0 w-full h-full object-cover blur-2xl ${isBrightBg ? 'opacity-20' : 'opacity-40'} scale-110 pointer-events-none`}
@@ -391,9 +439,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                         src={validSrc}
                         alt={altText}
                         onError={handleImgError}
-                        loading={isFirstSlide ? "eager" : "lazy"}
-                        fetchPriority={isFirstSlide ? "high" : "low"}
-                        decoding={isFirstSlide ? "sync" : "async"}
+                        loading="eager"
+                        fetchPriority="high"
+                        decoding="async"
                         sizes="100vw"
                         className="relative z-10 max-w-full max-h-full object-contain transition-transform duration-300"
                         style={{
@@ -413,9 +461,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                       src={validSrc}
                       alt={altText}
                       onError={handleImgError}
-                      loading={isFirstSlide ? "eager" : "lazy"}
-                      fetchPriority={isFirstSlide ? "high" : "low"}
-                      decoding={isFirstSlide ? "sync" : "async"}
+                      loading="eager"
+                      fetchPriority="high"
+                      decoding="async"
                       sizes="100vw"
                       className="absolute inset-0 w-full h-full object-fill transition-transform duration-300"
                       style={{
@@ -434,9 +482,9 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
                     src={validSrc}
                     alt={altText}
                     onError={handleImgError}
-                    loading={isFirstSlide ? "eager" : "lazy"}
-                    fetchPriority={isFirstSlide ? "high" : "low"}
-                    decoding={isFirstSlide ? "sync" : "async"}
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
                     sizes="100vw"
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-300"
                     style={{
@@ -631,10 +679,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
               {activeSlides.map((_, idx) => (
                 <button
                   key={idx}
-                  onClick={() => {
-                    setDirection(idx > currentIndex ? 1 : -1);
-                    setCurrentIndex(idx);
-                  }}
+                  onClick={() => goToSlide(idx)}
                   className={`h-1 rounded-full transition-all duration-300 cursor-pointer ${
                     idx === currentIndex
                       ? isBrightBg

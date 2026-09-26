@@ -570,7 +570,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                     className="w-4 h-4 rounded cursor-pointer text-rose-500 focus:ring-rose-400"
                   />
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <span>🙈 Ẩn bộ sưu tập này</span>
+                    <span>Ẩn bộ sưu tập này</span>
                     <span className="text-[10px] font-normal text-slate-500">(Khách hàng không thấy trên website)</span>
                   </span>
                 </label>

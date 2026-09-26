@@ -14,7 +14,7 @@ import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
 import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig, ComboItemSelection } from './types';
-import { CheckCircle2, ShoppingBag, Sparkles, X, Lock } from 'lucide-react';
+import { CheckCircle2, ShoppingBag, Sparkles, X, Lock, AlertCircle } from 'lucide-react';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser } from './utils/auth';
@@ -327,7 +327,21 @@ export default function App() {
   }, []);
 
   // Toast notification state
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  interface ToastState {
+    message: string;
+    showCartAction?: boolean;
+    type?: 'success' | 'warning' | 'info';
+  }
+  const [toastInfo, setToastInfo] = useState<ToastState | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Pending target refs for asynchronous direct link resolution (e.g. from SEO / QR codes)
   const pendingHashProductRef = useRef<string | null>(null);
@@ -621,8 +635,12 @@ export default function App() {
       }
     };
     void checkBackup();
-    const timer = setInterval(() => { void checkBackup(); }, 5 * 60 * 1000);
-    const handleVisibility = () => { void checkBackup(); };
+    const timer = setInterval(() => { void checkBackup(); }, 15 * 60 * 1000);
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        void checkBackup();
+      }
+    };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       cancelled = true;
@@ -1023,12 +1041,22 @@ export default function App() {
     }
   }, [cartItems]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
-  };
+  const showToast = useCallback((
+    msg: string,
+    options?: { showCartAction?: boolean; type?: 'success' | 'warning' | 'info'; duration?: number }
+  ) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToastInfo({
+      message: msg,
+      showCartAction: Boolean(options?.showCartAction),
+      type: options?.type || 'success',
+    });
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastInfo(null);
+    }, options?.duration ?? 3200);
+  }, []);
 
   const handleAddToCart = (
     product: Product,
@@ -1049,7 +1077,7 @@ export default function App() {
     selectedComboItems?: ComboItemSelection[]
   ) => {
     if (product.inStock === false) {
-      showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`);
+      showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`, { type: 'warning' });
       return;
     }
 
@@ -1061,19 +1089,19 @@ export default function App() {
     if (!selectedComboItems || selectedComboItems.length === 0) {
       if (hasRequiredCharm && (!selectedCharms || selectedCharms.length === 0) && !selectedCharm) {
         setSelectedProduct(product);
-        showToast(`Vui lòng chọn ${product.charmTitle?.trim() || 'charm'} trước khi thêm vào giỏ hàng.`);
+        showToast(`Vui lòng chọn ${product.charmTitle?.trim() || 'charm'} trước khi thêm vào giỏ hàng.`, { type: 'warning' });
         return;
       }
 
       if (hasRequiredOmamori && (!selectedOmamoris || selectedOmamoris.length === 0)) {
         setSelectedProduct(product);
-        showToast(`Vui lòng chọn ${product.omamoriTitle?.trim() || 'bùa Omamori'} trước khi thêm vào giỏ hàng.`);
+        showToast(`Vui lòng chọn ${product.omamoriTitle?.trim() || 'bùa Omamori'} trước khi thêm vào giỏ hàng.`, { type: 'warning' });
         return;
       }
 
       if (hasRequiredKhoen && !selectedKhoen) {
         setSelectedProduct(product);
-        showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`);
+        showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`, { type: 'warning' });
         return;
       }
     }
@@ -1086,7 +1114,7 @@ export default function App() {
 
     const availableToAdd = maxStock - currentInCartForProduct;
     if (availableToAdd <= 0 && maxStock < 99) {
-      showToast(`Bạn đã có đủ số lượng tồn kho (${maxStock} cái) của "${product.name}" trong giỏ!`);
+      showToast(`Bạn đã có đủ số lượng tồn kho (${maxStock} cái) của "${product.name}" trong giỏ!`, { type: 'warning' });
       return;
     }
 
@@ -1097,7 +1125,7 @@ export default function App() {
 
     if (selectedColorOpt && typeof selectedColorOpt.stock === 'number') {
       if (selectedColorOpt.stock <= 0) {
-        showToast(`Màu "${selectedColorOpt.name}" hiện đã hết hàng trong kho!`);
+        showToast(`Màu "${selectedColorOpt.name}" hiện đã hết hàng trong kho!`, { type: 'warning' });
         return;
       }
       const inCartForThisColor = cartItems
@@ -1105,7 +1133,7 @@ export default function App() {
         .reduce((sum, item) => sum + item.quantity, 0);
       const availableForColor = selectedColorOpt.stock - inCartForThisColor;
       if (availableForColor <= 0) {
-        showToast(`Bạn đã có đủ toàn bộ số lượng màu "${selectedColorOpt.name}" (${selectedColorOpt.stock} cái) trong giỏ!`);
+        showToast(`Bạn đã có đủ toàn bộ số lượng màu "${selectedColorOpt.name}" (${selectedColorOpt.stock} cái) trong giỏ!`, { type: 'warning' });
         return;
       }
     }
@@ -1114,7 +1142,7 @@ export default function App() {
     if (selectedCharms && selectedCharms.length > 0) {
       for (const ch of selectedCharms) {
         if (typeof ch.stock === 'number' && ch.stock <= 0) {
-          showToast(`Mẫu charm "${ch.name}" hiện đã hết hàng trong kho!`);
+          showToast(`Mẫu charm "${ch.name}" hiện đã hết hàng trong kho!`, { type: 'warning' });
           return;
         }
       }
@@ -1123,7 +1151,7 @@ export default function App() {
         (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
       );
       if (charmOpt && typeof charmOpt.stock === 'number' && charmOpt.stock <= 0) {
-        showToast(`Mẫu charm "${selectedCharm}" hiện đã hết hàng trong kho!`);
+        showToast(`Mẫu charm "${selectedCharm}" hiện đã hết hàng trong kho!`, { type: 'warning' });
         return;
       }
     }
@@ -1132,7 +1160,7 @@ export default function App() {
     if (selectedOmamoris && selectedOmamoris.length > 0) {
       for (const om of selectedOmamoris) {
         if (typeof om.stock === 'number' && om.stock <= 0) {
-          showToast(`Bùa "${om.name}" hiện đã hết hàng trong kho!`);
+          showToast(`Bùa "${om.name}" hiện đã hết hàng trong kho!`, { type: 'warning' });
           return;
         }
       }
@@ -1144,7 +1172,7 @@ export default function App() {
         (k) => k.name.trim().toLowerCase() === selectedKhoen.trim().toLowerCase()
       );
       if (khoenOpt && typeof khoenOpt.stock === 'number' && khoenOpt.stock <= 0) {
-        showToast(`Khoen "${selectedKhoen}" hiện đã hết hàng trong kho!`);
+        showToast(`Khoen "${selectedKhoen}" hiện đã hết hàng trong kho!`, { type: 'warning' });
         return;
       }
     }
@@ -1204,7 +1232,7 @@ export default function App() {
     });
 
     trackGA4AddToCart(product, qtyToAdd, selectedColor, selectedSize);
-    showToast(`Đã thêm "${product.name}" vào giỏ hàng!`);
+    showToast(`Đã thêm "${product.name}" vào giỏ hàng!`, { showCartAction: true });
 
     // Trigger flying product animation to cart icon
     try {
@@ -1250,7 +1278,7 @@ export default function App() {
         endY,
       };
 
-      setFlyingCartItems((prev) => [...prev, flyItem]);
+      setFlyingCartItems((prev) => [...prev.slice(-3), flyItem]);
     } catch (e) {
       console.warn('Lỗi hiệu ứng bay vào giỏ:', e);
     }
@@ -1303,7 +1331,7 @@ export default function App() {
 
       const updated = [...prev];
       if (quantity > maxForThisItem && maxStock < 99) {
-        showToast(`Sản phẩm/Charm chỉ còn ${maxStock} chiếc trong kho.`);
+        showToast(`Sản phẩm/Charm chỉ còn ${maxStock} chiếc trong kho.`, { type: 'warning' });
         updated[index].quantity = maxForThisItem;
       } else {
         updated[index].quantity = Math.max(1, quantity);
@@ -1671,18 +1699,38 @@ export default function App() {
       )}
 
       {/* Toast notification banner */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-amber-400/40 flex items-center gap-3 animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          <span className="text-xs font-bold">{toastMessage}</span>
+      {toastInfo && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl border border-amber-400/40 flex items-center gap-3 animate-fadeIn max-w-[92vw] sm:max-w-md"
+        >
+          {toastInfo.type === 'warning' ? (
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          )}
+          <span className="text-xs font-semibold leading-relaxed">{toastInfo.message}</span>
+          {toastInfo.showCartAction && (
+            <button
+              type="button"
+              onClick={handleOpenCartDrawer}
+              className="ml-2 text-xs font-black text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer shrink-0 px-2 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 transition-colors"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Xem giỏ</span>
+            </button>
+          )}
           <button
-            onClick={handleOpenCartDrawer}
-            className="ml-2 text-xs font-black text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+            type="button"
+            onClick={() => setToastInfo(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors ml-1 shrink-0 cursor-pointer"
+            aria-label="Đóng thông báo"
+            title="Đóng thông báo"
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Xem giỏ</span>
+            <X className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </aside>
       )}
 
       {/* Landing Page Exclusive Promo Announcement Banner (Full Width Infinite Continuous Loop) */}

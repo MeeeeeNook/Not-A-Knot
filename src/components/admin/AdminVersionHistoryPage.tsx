@@ -102,7 +102,10 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       ]);
       setBackups(fetchedBackups);
       if (fetchedSchedule) {
-        setSchedule(fetchedSchedule);
+        setSchedule({
+          ...fetchedSchedule,
+          lastBackupAt: fetchedSchedule.lastBackupAt || (fetchedBackups.length > 0 ? fetchedBackups[0].createdAt : undefined)
+        });
       } else if (fetchedBackups.length > 0) {
         setSchedule((prev) => ({
           ...prev,
@@ -216,7 +219,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
 
       notify(
         type === 'manual'
-          ? 'Đã tạo bản sao lưu mới thành công trên Firebase (Tối đa 5 bản)!'
+          ? 'Đã tạo bản sao lưu mới thành công trên Firebase (Tối đa 10 bản)!'
           : 'Hệ thống đã tự động sao lưu dữ liệu lên Firebase!'
       );
       setBackupNote('');
@@ -242,8 +245,12 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
   const handleSaveSchedule = async (newSchedule: BackupScheduleConfig) => {
     setIsSavingSchedule(true);
     try {
-      setSchedule(newSchedule);
-      await saveBackupScheduleToFirestore(newSchedule);
+      const scheduleToSave: BackupScheduleConfig = {
+        ...newSchedule,
+        lastBackupAt: newSchedule.lastBackupAt || schedule.lastBackupAt || (backups.length > 0 ? backups[0].createdAt : undefined)
+      };
+      setSchedule(scheduleToSave);
+      await saveBackupScheduleToFirestore(scheduleToSave);
       notify('Đã cập nhật cấu hình sao lưu tự động thành công!');
     } catch (err) {
       console.error('Lỗi cập nhật lịch sao lưu:', err);
@@ -488,7 +495,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
           </div>
 
           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-[11px] text-slate-600">
-            <strong>Quy tắc hệ thống:</strong> Luôn giữ tối đa <strong>5 bản sao lưu</strong> mới nhất trên Firebase. Khi có bản thứ 6, bản cũ nhất sẽ được tự động dọn dẹp.
+            <strong>Quy tắc hệ thống:</strong> Luôn giữ tối đa <strong>10 bản sao lưu</strong> mới nhất trên Firebase. Khi có bản thứ 11, bản cũ nhất sẽ được tự động dọn dẹp.
           </div>
         </div>
       </div>
@@ -498,11 +505,11 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
         <div className="flex items-center gap-2.5">
           <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />
           <div className="text-xs text-amber-950 font-medium">
-            <strong>Giới hạn lưu trữ:</strong> Hệ thống lưu trữ tối đa <strong>5 điểm khôi phục</strong>. Hiện có <strong>{backups.length}/5</strong> bản sao lưu trên Firebase Cloud.
+            <strong>Giới hạn lưu trữ:</strong> Hệ thống lưu trữ tối đa <strong>10 điểm khôi phục</strong>. Hiện có <strong>{backups.length}/10</strong> bản sao lưu trên Firebase Cloud.
           </div>
         </div>
         <span className="text-[11px] font-mono font-black px-2 py-0.5 rounded-md bg-amber-200/80 text-amber-900">
-          {backups.length}/5
+          {backups.length}/10
         </span>
       </div>
 

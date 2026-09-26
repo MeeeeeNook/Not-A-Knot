@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Product, SellerUser, OrderItemDetail, ProductOmamoriOption, ComboItemSelection } from '../types';
-import { StoredOrder, saveOrderToFirestore } from '../firebase';
+import { 
+  Product, 
+  SellerUser, 
+  OrderItemDetail, 
+  ProductOmamoriOption, 
+  ComboItemSelection, 
+  ProductColorOption, 
+  ProductCharmOption, 
+  ProductKhoenOption 
+} from '../types';
+import { StoredOrder } from '../firebase';
 import { 
   formatOrderDateWithoutSeconds, 
   getCleanOrderNote, 
   getOrderTrackingNumber, 
-  generateTrackingNumber, 
   getCarrierTrackingUrl,
   normalizeOrderStatus,
   formatToDatetimeLocal,
@@ -30,11 +38,15 @@ import {
   CreditCard, 
   Tag, 
   FileText, 
-  Image as ImageIcon,
-  Sparkles,
-  ShoppingBag,
-  Check,
-  X
+  Sparkles, 
+  ShoppingBag, 
+  Check, 
+  X, 
+  ChevronDown,
+  Palette,
+  Layers,
+  HeartHandshake,
+  ZoomIn
 } from 'lucide-react';
 
 interface EditableOrderItem {
@@ -53,6 +65,7 @@ interface EditableOrderItem {
   selectedKhoenImage?: string;
   selectedKhoenPrice?: number;
   selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriText?: string;
   selectedOmamoriPrice?: number;
   selectedComboItems?: ComboItemSelection[];
   customNote?: string;
@@ -76,6 +89,77 @@ const PROGRESS_STEPS = [
   { step: 5, id: 'completed', label: 'Giao thành công', desc: 'Đơn hàng đã hoàn tất', status: 'Đơn hàng giao thành công', icon: ShieldCheck },
 ];
 
+/**
+ * Intelligent helper to parse raw text item description into structured fields
+ * e.g. "Butterfly Knot (x1) - 39.000đ [Màu: Xanh Pastel | Charm: Sao chuông · Xanh | Khoen: Tròn Inox]"
+ */
+function parseRawItemString(rawStr: string): Partial<EditableOrderItem> {
+  let name = rawStr;
+  let qty = 1;
+  let price = 0;
+  let color = '';
+  let charm = '';
+  let khoen = '';
+  let omamori = '';
+  let size = '';
+  let note = '';
+
+  // Extract [options] block
+  const bracketMatch = rawStr.match(/\[(.*?)\]/);
+  if (bracketMatch) {
+    const optionsText = bracketMatch[1];
+    name = rawStr.replace(/\[.*?\]/, '').trim();
+
+    const parts = optionsText.split(/[|,;]/).map(p => p.trim());
+    for (const p of parts) {
+      const lower = p.toLowerCase();
+      if (lower.startsWith('màu:') || lower.startsWith('mau:')) {
+        color = p.replace(/^[^:]+:\s*/i, '').trim();
+      } else if (lower.startsWith('charm:')) {
+        charm = p.replace(/^[^:]+:\s*/i, '').trim();
+      } else if (lower.startsWith('khoen:')) {
+        khoen = p.replace(/^[^:]+:\s*/i, '').trim();
+      } else if (lower.startsWith('bùa:') || lower.startsWith('bua:') || lower.startsWith('omamori:')) {
+        omamori = p.replace(/^[^:]+:\s*/i, '').trim();
+      } else if (lower.startsWith('size:')) {
+        size = p.replace(/^[^:]+:\s*/i, '').trim();
+      } else if (lower.startsWith('ghi chú:') || lower.startsWith('note:')) {
+        note = p.replace(/^[^:]+:\s*/i, '').trim();
+      }
+    }
+  }
+
+  // Extract quantity (x2) or x2
+  const qtyMatch = name.match(/\(x(\d+)\)/i) || name.match(/x(\d+)/i);
+  if (qtyMatch) {
+    qty = parseInt(qtyMatch[1], 10) || 1;
+    name = name.replace(/\(x\d+\)/i, '').replace(/x\d+/i, '').trim();
+  }
+
+  // Extract price e.g. - 39.000đ or 39000d
+  const priceMatch = name.match(/-\s*([\d\.,]+)\s*đ?/i);
+  if (priceMatch) {
+    const rawNum = priceMatch[1].replace(/[\.,]/g, '');
+    price = parseInt(rawNum, 10) || 0;
+    name = name.replace(/-\s*[\d\.,]+\s*đ?/i, '').trim();
+  }
+
+  // Clean trailing punctuation or spaces
+  name = name.replace(/^[-–—\s]+|[-–—\s]+$/g, '').trim();
+
+  return {
+    productName: name || rawStr,
+    quantity: qty,
+    price: price,
+    selectedColor: color || undefined,
+    selectedCharm: charm || undefined,
+    selectedKhoen: khoen || undefined,
+    selectedOmamoriText: omamori || undefined,
+    selectedSize: size || undefined,
+    customNote: note || undefined,
+  };
+}
+
 export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   order,
   products: propProducts,
@@ -85,7 +169,46 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   onSaved,
   onSave
 }) => {
-  const products = propProducts || allProducts || [];
+  const products = useMemo(() => propProducts || allProducts || [], [propProducts, allProducts]);
+
+  // Aggregate shop-wide options from active products in store (as catalog fallbacks)
+  const shopCatalogOptions = useMemo(() => {
+    const colorSet = new Set<string>();
+    const charmMap = new Map<string, ProductCharmOption>();
+    const khoenMap = new Map<string, ProductKhoenOption>();
+    const omamoriMap = new Map<string, ProductOmamoriOption>();
+
+    products.forEach((p) => {
+      p.colorOptions?.forEach((c) => {
+        if (c.name) colorSet.add(c.name.trim());
+      });
+      p.availableColors?.forEach((c) => {
+        if (c) colorSet.add(c.trim());
+      });
+      p.charmOptions?.forEach((c) => {
+        if (c.name && !charmMap.has(c.name.trim())) {
+          charmMap.set(c.name.trim(), c);
+        }
+      });
+      p.khoenOptions?.forEach((k) => {
+        if (k.name && !khoenMap.has(k.name.trim())) {
+          khoenMap.set(k.name.trim(), k);
+        }
+      });
+      p.omamoriOptions?.forEach((o) => {
+        if (o.name && !omamoriMap.has(o.name.trim())) {
+          omamoriMap.set(o.name.trim(), o);
+        }
+      });
+    });
+
+    return {
+      colors: Array.from(colorSet),
+      charms: Array.from(charmMap.values()),
+      khoens: Array.from(khoenMap.values()),
+      omamoris: Array.from(omamoriMap.values()),
+    };
+  }, [products]);
 
   // Normalize source
   const normalizeSource = (s?: string): 'website' | 'mạng xã hội' | 'trực tiếp' => {
@@ -113,133 +236,251 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   const [status, setStatus] = useState<string>(normalizeOrderStatus(order.status) || 'Chờ xác nhận');
   const [craftingStageNote, setCraftingStageNote] = useState<string>(order.craftingStageNote || '');
 
-  // 4. Products List
+  // 4. Products List initialization with smart matching against catalog products
   const [items, setItems] = useState<EditableOrderItem[]>(() => {
-    if (order.itemDetails && order.itemDetails.length > 0) {
-      return order.itemDetails.map((it) => ({
-        productId: it.productId || 'custom',
-        productName: it.productName,
-        category: it.category || 'Khác',
-        price: it.unitPrice || it.price || 0,
-        quantity: it.quantity || 1,
-        selectedSize: it.selectedSize || '',
-        selectedColor: it.selectedColor || '',
-        selectedColorImage: it.selectedColorImage,
-        selectedCharm: typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : (it.selectedCharm || ''),
-        selectedCharmImage: it.selectedCharmImage,
-        selectedCharmPrice: it.selectedCharmPrice,
-        selectedKhoen: it.selectedKhoen || '',
-        selectedKhoenImage: it.selectedKhoenImage,
-        selectedKhoenPrice: it.selectedKhoenPrice,
-        selectedOmamoris: it.selectedOmamoris,
-        selectedOmamoriPrice: it.selectedOmamoriPrice,
-        selectedComboItems: it.selectedComboItems,
-        customNote: it.customNote || ''
-      }));
+    // A) If order.itemDetails already exists
+    if (order.itemDetails && Array.isArray(order.itemDetails) && order.itemDetails.length > 0) {
+      return order.itemDetails.map((it) => {
+        let omamoriText = '';
+        if (it.selectedOmamoris && it.selectedOmamoris.length > 0) {
+          omamoriText = it.selectedOmamoris.map(o => o.name).join(', ');
+        } else if (it.selectedOmamoriText) {
+          omamoriText = it.selectedOmamoriText;
+        }
+
+        // Try to match productId with catalog product
+        let pId = it.productId;
+        let matched = products.find(p => p.id === pId);
+        if (!matched && it.productName) {
+          const cleanPName = it.productName.trim().toLowerCase();
+          matched = products.find(p => p.name.trim().toLowerCase() === cleanPName)
+            || products.find(p => cleanPName.includes(p.name.trim().toLowerCase()))
+            || products.find(p => p.name.trim().toLowerCase().includes(cleanPName));
+          if (matched) {
+            pId = matched.id;
+          }
+        }
+
+        return {
+          productId: pId || 'custom',
+          productName: matched?.name || it.productName || 'Sản phẩm thủ công',
+          category: it.category || matched?.category || 'Thủ công',
+          price: it.price || it.unitPrice || matched?.price || 0,
+          quantity: it.quantity || 1,
+          selectedSize: it.selectedSize || '',
+          selectedColor: it.selectedColor || '',
+          selectedColorImage: it.selectedColorImage,
+          selectedCharm: typeof it.selectedCharm === 'object' ? (it.selectedCharm as any).name : (it.selectedCharm || ''),
+          selectedCharmImage: it.selectedCharmImage,
+          selectedCharmPrice: it.selectedCharmPrice,
+          selectedKhoen: it.selectedKhoen || '',
+          selectedKhoenImage: it.selectedKhoenImage,
+          selectedKhoenPrice: it.selectedKhoenPrice,
+          selectedOmamoris: it.selectedOmamoris,
+          selectedOmamoriText: omamoriText,
+          selectedOmamoriPrice: it.selectedOmamoriPrice,
+          selectedComboItems: it.selectedComboItems,
+          customNote: it.customNote || ''
+        };
+      });
     }
+
+    // B) If order has raw string items: parse each into structured fields
     if (order.items) {
       const itemsArr = Array.isArray(order.items)
         ? order.items
         : typeof order.items === 'string'
         ? [order.items]
         : [];
+
       if (itemsArr.length > 0) {
-        return itemsArr.map((itStr, idx) => ({
-          productId: `item-${idx}`,
-          productName: String(itStr),
-          price: order.totalPrice ? Math.round(order.totalPrice / itemsArr.length) : 39000,
-          quantity: 1,
-          selectedSize: '',
-          selectedColor: '',
-          selectedCharm: '',
-          selectedKhoen: '',
-          customNote: ''
-        }));
+        return itemsArr.map((itStr) => {
+          const parsed = parseRawItemString(String(itStr));
+          const cleanPName = (parsed.productName || '').trim().toLowerCase();
+
+          // Try finding product in catalog
+          const matched = products.find(p => p.name.trim().toLowerCase() === cleanPName)
+            || products.find(p => cleanPName.includes(p.name.trim().toLowerCase()))
+            || products.find(p => p.name.trim().toLowerCase().includes(cleanPName));
+
+          return {
+            productId: matched ? matched.id : 'custom',
+            productName: matched ? matched.name : (parsed.productName || 'Sản phẩm thủ công'),
+            category: matched?.category || 'Thủ công',
+            price: parsed.price && parsed.price > 0 ? parsed.price : (matched ? matched.price : (order.totalPrice ? Math.round(order.totalPrice / itemsArr.length) : 36000)),
+            quantity: parsed.quantity || 1,
+            selectedSize: parsed.selectedSize || '',
+            selectedColor: parsed.selectedColor || (matched?.colorOptions?.[0]?.name || matched?.availableColors?.[0] || ''),
+            selectedCharm: parsed.selectedCharm || '',
+            selectedKhoen: parsed.selectedKhoen || '',
+            selectedOmamoriText: parsed.selectedOmamoriText || '',
+            customNote: parsed.customNote || ''
+          };
+        });
       }
     }
+
+    // C) Fallback
+    const firstProd = products[0];
     return [
       {
-        productId: 'custom-1',
-        productName: 'Vòng Tay Handmade',
-        price: 39000,
+        productId: firstProd ? firstProd.id : 'custom',
+        productName: firstProd ? firstProd.name : 'Sản phẩm thủ công',
+        price: firstProd ? firstProd.price : 36000,
         quantity: 1,
-        selectedSize: '16cm',
-        selectedColor: 'Đỏ son & Vàng kim',
-        selectedCharm: 'Charm Hào Khí',
+        selectedSize: '',
+        selectedColor: firstProd?.colorOptions?.[0]?.name || firstProd?.availableColors?.[0] || '',
+        selectedCharm: '',
         selectedKhoen: '',
+        selectedOmamoriText: '',
         customNote: ''
       }
     ];
   });
 
+  // Track fields where the user explicitly switched to "Tự gõ tùy biến khác"
+  // Key: `${index}_${field}` -> boolean
+  const [customInputMode, setCustomInputMode] = useState<Record<string, boolean>>({});
+
+  const isCustomInput = (index: number, field: string) => !!customInputMode[`${index}_${field}`];
+  const setCustomInput = (index: number, field: string, val: boolean) => {
+    setCustomInputMode(prev => ({
+      ...prev,
+      [`${index}_${field}`]: val
+    }));
+  };
+
   // 5. Payment & Financials
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid'>(
     order.paymentStatus === 'paid' ? 'paid' : 'unpaid'
   );
-  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cash' | 'cod'>(
-    (order.paymentMethod as any) || (order.bankReceiptImage ? 'bank_transfer' : 'cod')
+  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'cod' | 'cash' | 'other'>(
+    order.paymentMethod || 'bank_transfer'
   );
-  const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 0);
-  const [discountAmount, setDiscountAmount] = useState<number>(order.discountAmount || 0);
-  const [voucherCode, setVoucherCode] = useState<string>(order.voucherCode || '');
-  const [customTotalOverride, setCustomTotalOverride] = useState<string>(
-    order.totalPrice !== undefined && order.totalPrice !== null ? String(order.totalPrice) : ''
-  );
-  const [isManualTotal, setIsManualTotal] = useState<boolean>(false);
   const [bankReceiptImage, setBankReceiptImage] = useState<string>(order.bankReceiptImage || '');
   const [bankTransferRef, setBankTransferRef] = useState<string>(order.bankTransferRef || '');
+  const [shippingFee, setShippingFee] = useState<number>(order.shippingFee || 0);
+  const [discountAmount, setDiscountAmount] = useState<number>(
+    order.discountAmount || order.voucherDiscountAmount || 0
+  );
+  const [voucherCode, setVoucherCode] = useState<string>(order.voucherCode || '');
 
-  // 6. Shipping Partner Details
-  const [shippingCarrier, setShippingCarrier] = useState<string>(order.shippingCarrier || '');
+  // 6. Partner Shipping Carrier
+  const [shippingCarrier, setShippingCarrier] = useState<string>(order.shippingCarrier || 'GHTK');
   const [shippingCode, setShippingCode] = useState<string>(order.shippingCode || '');
   const [estimatedDelivery, setEstimatedDelivery] = useState<string>(order.estimatedDelivery || '');
 
-  // 7. Seller / Handcrafter Assignment
-  const [sellerName, setSellerName] = useState<string>(order.sellerName || 'Mạnh Cường');
+  // 7. Seller Assignment
+  const uniqueSellers = useMemo(() => deduplicateSellers(sellers), [sellers]);
+  const [sellerName, setSellerName] = useState<string>(order.sellerName || '');
 
-  // UI state
+  // 8. Modals & UI States
+  const [isSaving, setIsSaving] = useState(false);
+  const [zoomReceipt, setZoomReceipt] = useState<string | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [productSearch, setProductSearch] = useState('');
+
+  // New product addition drawer state
   const [selectedAddProductId, setSelectedAddProductId] = useState<string>(products[0]?.id || 'custom');
   const [customAddName, setCustomAddName] = useState('');
-  const [addPrice, setAddPrice] = useState<number>(39000);
+  const [addPrice, setAddPrice] = useState<number>(products[0]?.price || 36000);
   const [addQty, setAddQty] = useState<number>(1);
-  const [addSize, setAddSize] = useState('');
   const [addColor, setAddColor] = useState('');
   const [addCharm, setAddCharm] = useState('');
+  const [addKhoen, setAddKhoen] = useState('');
+  const [addOmamori, setAddOmamori] = useState('');
   const [addCustomNote, setAddCustomNote] = useState('');
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [previewZoomReceipt, setPreviewZoomReceipt] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Update addition drawer defaults when product changes
+  useEffect(() => {
+    if (selectedAddProductId && selectedAddProductId !== 'custom') {
+      const p = products.find(x => x.id === selectedAddProductId);
+      if (p) {
+        setCustomAddName(p.name);
+        setAddPrice(p.price);
+        setAddColor(p.colorOptions?.[0]?.name || p.availableColors?.[0] || '');
+        setAddCharm('');
+        setAddKhoen('');
+        setAddOmamori('');
+      }
+    }
+  }, [selectedAddProductId, products]);
 
-  // Subtotal calculation of products
+  // Derived financial summary
   const itemsSubtotal = useMemo(() => {
-    return items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+    return items.reduce((sum, it) => {
+      const unit = (Number(it.price) || 0) + 
+        (Number(it.selectedCharmPrice) || 0) + 
+        (Number(it.selectedKhoenPrice) || 0) + 
+        (Number(it.selectedOmamoriPrice) || 0);
+      return sum + unit * (Number(it.quantity) || 1);
+    }, 0);
   }, [items]);
 
-  // Final Total Price
   const finalCalculatedTotal = useMemo(() => {
-    if (isManualTotal && customTotalOverride.trim() !== '') {
-      return Math.max(0, parseInt(customTotalOverride, 10) || 0);
-    }
-    return Math.max(0, itemsSubtotal + (Number(shippingFee) || 0) - (Number(discountAmount) || 0));
-  }, [itemsSubtotal, shippingFee, discountAmount, isManualTotal, customTotalOverride]);
+    return Math.max(0, itemsSubtotal - (Number(discountAmount) || 0)) + (Number(shippingFee) || 0);
+  }, [itemsSubtotal, discountAmount, shippingFee]);
 
-  // When items change and not in manual mode, update customTotalOverride placeholder
-  useEffect(() => {
-    if (!isManualTotal) {
-      setCustomTotalOverride(String(itemsSubtotal + (Number(shippingFee) || 0) - (Number(discountAmount) || 0)));
-    }
-  }, [itemsSubtotal, shippingFee, discountAmount, isManualTotal]);
+  const totalItemQuantity = useMemo(() => {
+    return items.reduce((sum, it) => sum + (Number(it.quantity) || 1), 0);
+  }, [items]);
 
-  // Handle product item changes
+  // Handlers for modifying order items
   const handleUpdateItemField = (index: number, field: keyof EditableOrderItem, value: any) => {
     setItems((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
-      return next;
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
     });
+  };
+
+  const handleSelectProductForItem = (index: number, newProductId: string) => {
+    if (newProductId === '__custom__') {
+      setItems((prev) => {
+        const updated = [...prev];
+        updated[index] = {
+          ...updated[index],
+          productId: 'custom',
+        };
+        return updated;
+      });
+      return;
+    }
+
+    const p = products.find((x) => x.id === newProductId);
+    if (!p) return;
+
+    setItems((prev) => {
+      const updated = [...prev];
+      const defaultColor = p.colorOptions?.[0]?.name || p.availableColors?.[0] || '';
+      const defaultColorImg = p.colorOptions?.[0]?.image || p.image || '';
+
+      updated[index] = {
+        ...updated[index],
+        productId: p.id,
+        productName: p.name,
+        category: p.category,
+        price: p.price,
+        selectedColor: defaultColor,
+        selectedColorImage: defaultColorImg,
+        selectedCharm: '',
+        selectedCharmImage: undefined,
+        selectedCharmPrice: undefined,
+        selectedKhoen: '',
+        selectedKhoenImage: undefined,
+        selectedKhoenPrice: undefined,
+        selectedOmamoriText: '',
+        selectedOmamoris: undefined,
+        selectedOmamoriPrice: undefined,
+        selectedSize: p.availableSizes?.[0] || ''
+      };
+      return updated;
+    });
+
+    // Reset any custom text input modes for this item
+    setCustomInput(index, 'color', false);
+    setCustomInput(index, 'charm', false);
+    setCustomInput(index, 'khoen', false);
+    setCustomInput(index, 'omamori', false);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -265,7 +506,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     }
 
     if (!name) {
-      alert('Vui lòng nhập tên sản phẩm.');
+      alert('Vui lòng chọn hoặc nhập tên sản phẩm.');
       return;
     }
 
@@ -277,21 +518,23 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         category: cat,
         price: Math.max(0, price),
         quantity: Math.max(1, addQty),
-        selectedSize: addSize.trim() || undefined,
         selectedColor: addColor.trim() || undefined,
         selectedCharm: addCharm.trim() || undefined,
+        selectedKhoen: addKhoen.trim() || undefined,
+        selectedOmamoriText: addOmamori.trim() || undefined,
         customNote: addCustomNote.trim() || undefined
       }
     ]);
 
-    // Reset add dialog
     setIsAddingProduct(false);
+    setSelectedAddProductId(products[0]?.id || 'custom');
     setCustomAddName('');
-    setAddPrice(39000);
+    setAddPrice(36000);
     setAddQty(1);
-    setAddSize('');
     setAddColor('');
     setAddCharm('');
+    setAddKhoen('');
+    setAddOmamori('');
     setAddCustomNote('');
   };
 
@@ -343,7 +586,6 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Clipboard paste support for receipt
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const clipboardItems = e.clipboardData?.items;
@@ -421,34 +663,46 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         paidAmount: paymentStatus === 'paid' ? finalTotal : 0,
         sellerId: finalSellerId,
         sellerName: finalSellerName,
-        itemDetails: items.map((it) => ({
-          productId: it.productId,
-          productName: it.productName,
-          category: it.category,
-          unitPrice: Number(it.price) || 0,
-          price: Number(it.price) || 0,
-          quantity: Number(it.quantity) || 1,
-          selectedSize: it.selectedSize || undefined,
-          selectedColor: it.selectedColor || undefined,
-          selectedColorImage: it.selectedColorImage || undefined,
-          selectedCharm: it.selectedCharm || undefined,
-          selectedCharmImage: it.selectedCharmImage || undefined,
-          selectedCharmPrice: it.selectedCharmPrice || undefined,
-          selectedKhoen: it.selectedKhoen || undefined,
-          selectedKhoenImage: it.selectedKhoenImage || undefined,
-          selectedKhoenPrice: it.selectedKhoenPrice || undefined,
-          selectedOmamoris: it.selectedOmamoris || undefined,
-          selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
-          selectedComboItems: it.selectedComboItems || undefined,
-          customNote: it.customNote || undefined
-        })),
+        itemDetails: items.map((it) => {
+          const omamoris = it.selectedOmamoriText?.trim()
+            ? [{ id: 'omamori-opt', name: it.selectedOmamoriText.trim(), priceDelta: 0 }]
+            : it.selectedOmamoris;
+
+          return {
+            productId: it.productId,
+            productName: it.productName,
+            category: it.category,
+            unitPrice: Number(it.price) || 0,
+            price: Number(it.price) || 0,
+            quantity: Number(it.quantity) || 1,
+            selectedSize: it.selectedSize || undefined,
+            selectedColor: it.selectedColor || undefined,
+            selectedColorImage: it.selectedColorImage || undefined,
+            selectedCharm: it.selectedCharm || undefined,
+            selectedCharmImage: it.selectedCharmImage || undefined,
+            selectedCharmPrice: it.selectedCharmPrice || undefined,
+            selectedKhoen: it.selectedKhoen || undefined,
+            selectedKhoenImage: it.selectedKhoenImage || undefined,
+            selectedKhoenPrice: it.selectedKhoenPrice || undefined,
+            selectedOmamoris: omamoris,
+            selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
+            selectedComboItems: it.selectedComboItems || undefined,
+            customNote: it.customNote || undefined
+          };
+        }),
         items: items.map((it) => {
+          const omamoriLabel = it.selectedOmamoriText?.trim()
+            ? `Bùa: ${it.selectedOmamoriText.trim()}`
+            : it.selectedOmamoris && it.selectedOmamoris.length > 0
+            ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}`
+            : '';
+
           const specs = [
             it.selectedSize ? `Size: ${it.selectedSize}` : '',
             it.selectedColor ? `Màu: ${it.selectedColor}` : '',
             it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
             it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
-            it.selectedOmamoris && it.selectedOmamoris.length > 0 ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}` : '',
+            omamoriLabel,
             it.selectedComboItems && it.selectedComboItems.length > 0
               ? `Combo: ${it.selectedComboItems.map((ci, i) => `[${ci.itemTitle || `Món ${i + 1}`}: ${[ci.selectedColor ? `Màu: ${ci.selectedColor}` : '', ci.selectedCharms && ci.selectedCharms.length > 0 ? `Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}` : '', ci.selectedOmamoris && ci.selectedOmamoris.length > 0 ? `Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}` : ''].filter(Boolean).join(', ')}]`).join(' + ')}`
               : ''
@@ -457,52 +711,45 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
         })
       };
 
-      // Notify parent immediately so local state & storage update without blocking
       if (typeof onSaved === 'function') {
-        onSaved(updatedOrder);
+        await onSaved(updatedOrder);
       } else if (typeof onSave === 'function') {
-        onSave(updatedOrder);
+        await onSave(updatedOrder);
       }
       onClose();
-
-      // Sync to Firestore
-      saveOrderToFirestore(updatedOrder).catch((err) => {
-        console.warn('Lỗi đồng bộ Firebase từ modal sửa đơn:', err);
-      });
-    } catch (err) {
-      console.error('Lỗi khi lưu chỉnh sửa đơn hàng:', err);
-      alert('Có lỗi xảy ra khi lưu đơn hàng. Vui lòng thử lại.');
+    } catch (err: any) {
+      console.error('Lỗi khi lưu đơn hàng:', err);
+      alert('Có lỗi xảy ra khi lưu: ' + (err.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-fadeIn">
       <div
-        className="bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] overflow-hidden flex flex-col border border-slate-200 shadow-2xl relative my-auto animate-fadeIn"
+        className="relative w-full max-w-4xl bg-slate-50 rounded-3xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
-              <FileText className="w-5 h-5" />
+        {/* ============================================================ */}
+        {/* MODAL HEADER                                                 */}
+        {/* ============================================================ */}
+        <div className="px-5 py-4 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center shadow-xs">
+              <ShoppingBag className="w-5 h-5 text-slate-950" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h3 className="font-black text-lg text-slate-900">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-slate-900">
                   Chỉnh Sửa Chi Tiết Đơn Hàng
-                </h3>
-                <span className="font-mono font-bold text-xs bg-slate-200 text-slate-800 px-2.5 py-0.5 rounded-lg">
-                  {trackingNumber || order.id}
+                </h2>
+                <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  #{order.id}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Mọi thông tin chỉnh sửa tại đây sẽ cập nhật trực tiếp lên trang tra cứu đơn của khách và hệ thống xưởng.
+              <p className="text-xs text-slate-500">
+                Toàn bộ màu sắc, charm, bùa và khoen được lấy trực tiếp từ sản phẩm đã cài đặt
               </p>
             </div>
           </div>
@@ -510,78 +757,99 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-200/60 transition-colors cursor-pointer"
-            title="Đóng"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+            title="Đóng modal"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSaveOrder} className="flex flex-col flex-1 overflow-hidden">
-          <div className="p-5 sm:p-7 overflow-y-auto space-y-6 text-xs text-slate-700">
-            
+        {/* ============================================================ */}
+        {/* MODAL SCROLLABLE BODY                                        */}
+        {/* ============================================================ */}
+        <form onSubmit={handleSaveOrder} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          <div className="space-y-6">
+
             {/* ============================================================ */}
-            {/* SECTION 1: HEADER, TRACKING CODE & SOURCE                    */}
+            {/* SECTION 1: CORE ORDER INFO & TRACKING                        */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
                 <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                   <Tag className="w-4 h-4 text-amber-600" />
-                  <span>1. Mã Đơn Hàng, Ngày Tạo & Nguồn Đơn</span>
+                  <span>1. Thông Tin Chung & Mã Tra Cứu</span>
                 </span>
-                <span className="text-[11px] font-bold text-slate-500">
-                  (Hiển thị trên đầu trang tra cứu)
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Mã đơn: <strong className="text-slate-700 font-mono">#{order.id}</strong>
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Tracking Number */}
+                {/* Tracking code */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-800">
-                      Mã đơn / Tra cứu *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setTrackingNumber(generateTrackingNumber())}
-                      className="text-[11px] font-bold text-amber-600 hover:text-amber-700 cursor-pointer"
-                    >
-                      Tạo mã NAK mới
-                    </button>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span>Mã vận đơn / Tra cứu:</span>
+                    <span className="text-[10px] text-amber-700 font-semibold">Khách dùng tra đơn</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={trackingNumber}
-                    onChange={(e) => setTrackingNumber(e.target.value.toUpperCase())}
-                    placeholder="NAK-260909-2065"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                    onChange={(e) => setTrackingNumber(e.target.value)}
+                    placeholder="VD: NAK-889922..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 shadow-2xs"
                   />
                 </div>
 
-                {/* Order Date & Time */}
+                {/* Order Date with quick presets */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Thời gian tạo đơn
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Ngày giờ tạo đơn:</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">Chọn lịch hoặc bấm nhanh</span>
                   </label>
                   <input
                     type="datetime-local"
                     value={orderDate}
                     onChange={(e) => setOrderDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 shadow-2xs"
                   />
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const pad = (n: number) => n < 10 ? '0' + n : n;
+                        setOrderDate(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`);
+                      }}
+                      className="text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      Bây giờ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const pad = (n: number) => n < 10 ? '0' + n : n;
+                        setOrderDate(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T09:00`);
+                      }}
+                      className="text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      Hôm nay 09:00
+                    </button>
+                  </div>
                 </div>
 
-                {/* Order Source */}
+                {/* Source */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Kênh đặt hàng (Nguồn đơn)
+                    Kênh đặt hàng:
                   </label>
                   <select
                     value={source}
-                    onChange={(e: any) => setSource(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                    onChange={(e) => setSource(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs"
                   >
                     <option value="website">Website (Online)</option>
                     <option value="mạng xã hội">Mạng xã hội (Facebook/Zalo/TikTok)</option>
@@ -592,129 +860,100 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 2: 5-STEP CRAFTING PROGRESS (TIẾN TRÌNH CHẾ TÁC)     */}
+            {/* SECTION 2: 5-STEP CRAFTING PROGRESS                          */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-slate-100 gap-2">
                 <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>2. Tiến Trình Chế Tác & Vận Chuyển Thủ Công (5 Bước)</span>
+                  <span>2. Tiến Trình Chế Tác & Vận Chuyển (5 Bước)</span>
                 </span>
-                <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-md">
+                <span className="px-2.5 py-0.5 rounded-lg text-xs font-extrabold bg-amber-50 text-amber-900 border border-amber-200 self-start sm:self-auto">
                   Đang ở: {status}
                 </span>
               </div>
 
-              {/* Interactive Stepper Selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">
-                  Bấm để chọn bước hiện tại của đơn:
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                  {PROGRESS_STEPS.map((step) => {
-                    const IconComp = step.icon;
-                    const isSelected = status === step.status;
-                    return (
-                      <button
-                        key={step.id}
-                        type="button"
-                        onClick={() => setStatus(step.status)}
-                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-amber-50 border-amber-400 shadow-xs ring-2 ring-amber-300/40'
-                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-black text-slate-400">
-                            BƯỚC 0{step.step}
-                          </span>
-                          <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${
-                            isSelected ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-200 text-slate-500'
-                          }`}>
-                            <IconComp className="w-3.5 h-3.5" />
-                          </div>
-                        </div>
-                        <div>
-                          <span className={`block font-black text-xs leading-tight ${isSelected ? 'text-amber-950' : 'text-slate-800'}`}>
-                            {step.label}
-                          </span>
-                          <span className="text-[10px] text-slate-500 mt-0.5 block leading-tight">
-                            {step.desc}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* 5 Step Selector Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {PROGRESS_STEPS.map((step) => {
+                  const Icon = step.icon;
+                  const isCurrent = status === step.status;
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      onClick={() => setStatus(step.status)}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                        isCurrent
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs ring-2 ring-amber-300'
+                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                          isCurrent ? 'bg-black/20 text-slate-950 font-black' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          Bước {step.step}
+                        </span>
+                        <Icon className={`w-3.5 h-3.5 ${isCurrent ? 'text-slate-950' : 'text-slate-400'}`} />
+                      </div>
+                      <div className="font-extrabold text-[11px] leading-tight">
+                        {step.label}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Dropdown status backup & Cancel option */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Trạng thái đơn hàng tổng quát
-                  </label>
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
-                  >
-                    <option value="Chờ xác nhận">Bước 1: Chờ xác nhận</option>
-                    <option value="Đã xác nhận">Bước 2: Đã xác nhận</option>
-                    <option value="Knot đang được sản xuất">Bước 3: Knot đang được sản xuất</option>
-                    <option value="Đang giao hàng">Bước 4: Đang giao hàng</option>
-                    <option value="Đơn hàng giao thành công">Bước 5: Đơn hàng giao thành công</option>
-                    <option value="Đã hủy">Đã hủy đơn hàng</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Ghi chú chi tiết tiến trình chế tác (Hiển thị cho khách)
-                  </label>
-                  <input
-                    type="text"
-                    value={craftingStageNote}
-                    onChange={(e) => setCraftingStageNote(e.target.value)}
-                    placeholder="VD: Đang đan mắt Snake Knot bản 16mm, charm mỏ neo titan..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500"
-                  />
-                </div>
+              {/* Stage Note */}
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Ghi chú chi tiết công đoạn chế tác (Nội bộ):
+                </label>
+                <input
+                  type="text"
+                  value={craftingStageNote}
+                  onChange={(e) => setCraftingStageNote(e.target.value)}
+                  placeholder="VD: Nghệ nhân đã thắt xong vòng, chờ gắn charm..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500"
+                />
               </div>
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 3: PRODUCTS IN ORDER (SẢN PHẨM CHẾ TÁC)              */}
+            {/* SECTION 3: PRODUCTS IN ORDER (REAL CONFIGURED OPTIONS ONLY)  */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <ShoppingBag className="w-4 h-4 text-amber-600" />
-                  <span>3. Danh Sách Sản Phẩm Chế Tác Trong Đơn</span>
-                </span>
-                
+                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                    3. Sản Phẩm Trong Đơn Hàng ({totalItemQuantity} món)
+                  </span>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setIsAddingProduct(!isAddingProduct)}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  onClick={() => setIsAddingProduct(true)}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
                 >
-                  <Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <Plus className="w-3.5 h-3.5 text-slate-950" />
                   <span>Thêm sản phẩm</span>
                 </button>
               </div>
 
-              {/* Add Product Modal Form */}
+              {/* Add Product Drawer */}
               {isAddingProduct && (
-                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-3 animate-fadeIn">
+                <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-3 animate-fadeIn">
                   <div className="flex items-center justify-between pb-2 border-b border-amber-200/70">
-                    <span className="font-black text-xs text-amber-950">
-                      Thêm Món Mới Vào Đơn Hàng
+                    <span className="font-black text-xs text-amber-950 flex items-center gap-1.5">
+                      <Plus className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Thêm Món Mới Vào Đơn</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsAddingProduct(false)}
-                      className="text-amber-900 hover:text-black text-xs font-bold cursor-pointer"
+                      className="text-slate-500 hover:text-slate-900 text-xs font-bold cursor-pointer"
                     >
                       Đóng
                     </button>
@@ -723,65 +962,65 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Chọn từ kho sản phẩm có sẵn:
+                        Chọn từ sản phẩm của shop:
                       </label>
                       <select
                         value={selectedAddProductId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedAddProductId(val);
-                          if (val !== 'custom') {
-                            const p = products.find((x) => x.id === val);
-                            if (p) {
-                              setCustomAddName(p.name);
-                              setAddPrice(p.price);
-                            }
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900"
+                        onChange={(e) => setSelectedAddProductId(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 cursor-pointer"
                       >
-                        <option value="custom">+ Tự nhập tên & món tùy biến</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name} — {p.price.toLocaleString('vi-VN')}đ
                           </option>
                         ))}
+                        <option value="custom">✏️ Tự nhập sản phẩm tùy biến...</option>
                       </select>
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Tên sản phẩm chế tác *:
+                        Tên hiển thị:
                       </label>
                       <input
                         type="text"
                         value={customAddName}
                         onChange={(e) => setCustomAddName(e.target.value)}
-                        placeholder="VD: Vòng Handmade 02/09 Edition"
+                        placeholder="VD: Butterfly Knot, Lucky Knot..."
                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
                       />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">Màu sắc:</label>
                       <input
                         type="text"
                         value={addColor}
                         onChange={(e) => setAddColor(e.target.value)}
-                        placeholder="VD: Đỏ son & Vàng kim"
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                        placeholder="VD: Xanh pastel, Đỏ..."
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Charm đính kèm:</label>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Charm:</label>
                       <input
                         type="text"
                         value={addCharm}
                         onChange={(e) => setAddCharm(e.target.value)}
-                        placeholder="VD: Charm Bạc 925"
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                        placeholder="VD: Sao chuông..."
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">Khoen:</label>
+                      <input
+                        type="text"
+                        value={addKhoen}
+                        onChange={(e) => setAddKhoen(e.target.value)}
+                        placeholder="VD: Tròn inox..."
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium"
                       />
                     </div>
                     <div>
@@ -791,7 +1030,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         min="0"
                         value={addPrice}
                         onChange={(e) => setAddPrice(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono"
                       />
                     </div>
                   </div>
@@ -808,114 +1047,233 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                 </div>
               )}
 
-              {/* Items List Table */}
-              <div className="space-y-3">
+              {/* Items List Cards */}
+              <div className="space-y-4">
                 {items.map((it, idx) => {
                   const lineTotal = (Number(it.price) || 0) * (Number(it.quantity) || 1);
+                  
+                  // Match product in catalog
+                  const matchedProduct = products.find(
+                    (p) => p.id === it.productId || p.name.trim().toLowerCase() === it.productName.trim().toLowerCase()
+                  );
+
+                  // 1. Color Options: Strictly from matched product (or shop catalog fallback if custom)
+                  const rawColors: string[] = [];
+                  if (matchedProduct?.colorOptions && matchedProduct.colorOptions.length > 0) {
+                    matchedProduct.colorOptions.forEach(c => {
+                      if (c.name) rawColors.push(c.name.trim());
+                    });
+                  } else if (matchedProduct?.availableColors && matchedProduct.availableColors.length > 0) {
+                    matchedProduct.availableColors.forEach(c => {
+                      if (c) rawColors.push(c.trim());
+                    });
+                  } else if (!matchedProduct && shopCatalogOptions.colors.length > 0) {
+                    rawColors.push(...shopCatalogOptions.colors);
+                  }
+                  if (it.selectedColor && !rawColors.includes(it.selectedColor.trim())) {
+                    rawColors.unshift(it.selectedColor.trim());
+                  }
+                  const itemColorList = Array.from(new Set(rawColors)).filter(Boolean);
+
+                  // 2. Charm Options: Strictly from matched product (or shop catalog fallback)
+                  const rawCharms: Array<{ name: string; priceDelta?: number; image?: string }> = [];
+                  if (matchedProduct?.charmOptions && matchedProduct.charmOptions.length > 0) {
+                    matchedProduct.charmOptions.forEach(c => {
+                      if (c.name) rawCharms.push(c);
+                    });
+                  } else if (!matchedProduct && shopCatalogOptions.charms.length > 0) {
+                    rawCharms.push(...shopCatalogOptions.charms);
+                  }
+                  if (it.selectedCharm && !rawCharms.some(c => c.name.trim() === it.selectedCharm?.trim())) {
+                    rawCharms.unshift({ name: it.selectedCharm.trim(), priceDelta: it.selectedCharmPrice || 0 });
+                  }
+
+                  // 3. Khoen Options: Strictly from matched product (or shop catalog fallback)
+                  const rawKhoens: Array<{ name: string; priceDelta?: number; image?: string }> = [];
+                  if (matchedProduct?.khoenOptions && matchedProduct.khoenOptions.length > 0) {
+                    matchedProduct.khoenOptions.forEach(k => {
+                      if (k.name) rawKhoens.push(k);
+                    });
+                  } else if (!matchedProduct && shopCatalogOptions.khoens.length > 0) {
+                    rawKhoens.push(...shopCatalogOptions.khoens);
+                  }
+                  if (it.selectedKhoen && !rawKhoens.some(k => k.name.trim() === it.selectedKhoen?.trim())) {
+                    rawKhoens.unshift({ name: it.selectedKhoen.trim(), priceDelta: it.selectedKhoenPrice || 0 });
+                  }
+
+                  // 4. Omamori Options: Strictly from matched product (or shop catalog fallback)
+                  const rawOmamoris: Array<{ name: string; priceDelta?: number; meaning?: string; image?: string }> = [];
+                  if (matchedProduct?.omamoriOptions && matchedProduct.omamoriOptions.length > 0) {
+                    matchedProduct.omamoriOptions.forEach(o => {
+                      if (o.name) rawOmamoris.push(o);
+                    });
+                  } else if (!matchedProduct && shopCatalogOptions.omamoris.length > 0) {
+                    rawOmamoris.push(...shopCatalogOptions.omamoris);
+                  }
+                  if (it.selectedOmamoriText && !rawOmamoris.some(o => o.name.trim() === it.selectedOmamoriText?.trim())) {
+                    rawOmamoris.unshift({ name: it.selectedOmamoriText.trim(), priceDelta: it.selectedOmamoriPrice || 0 });
+                  }
+
+                  // Check if product enables each option
+                  const hasColorFeature = matchedProduct ? (matchedProduct.enableColorSelection !== false && itemColorList.length > 0) : itemColorList.length > 0;
+                  const hasCharmFeature = matchedProduct ? (matchedProduct.enableCharmSelection !== false && rawCharms.length > 0) : rawCharms.length > 0;
+                  const hasKhoenFeature = matchedProduct ? (matchedProduct.enableKhoenSelection !== false && rawKhoens.length > 0) : rawKhoens.length > 0;
+                  const hasOmamoriFeature = matchedProduct ? (matchedProduct.enableOmamoriSelection !== false && rawOmamoris.length > 0) : rawOmamoris.length > 0;
+
+                  // Product image preview
+                  const colorImg = matchedProduct?.colorOptions?.find(c => c.name.trim().toLowerCase() === (it.selectedColor || '').trim().toLowerCase())?.image;
+                  const displayImg = colorImg || it.selectedColorImage || matchedProduct?.image || (matchedProduct?.images && matchedProduct.images[0]) || '';
 
                   return (
                     <div
                       key={idx}
-                      className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors space-y-3"
+                      className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 transition-all space-y-3.5 shadow-xs"
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
-                        <div className="flex-1">
-                          <span className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">
-                            Món #{idx + 1}
-                          </span>
+                      {/* CARD HEADER: Món # badge, Product title & Delete button */}
+                      <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {displayImg ? (
+                            <img
+                              src={displayImg}
+                              alt={it.productName}
+                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-50"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0 font-black text-xs">
+                              #{idx + 1}
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                                Món #{idx + 1}
+                              </span>
+                              <span className="text-sm font-black text-slate-900 truncate">
+                                {it.productName}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              {matchedProduct ? `Sản phẩm kho: ${matchedProduct.name}` : 'Món thủ công tự đặt'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          className="p-2 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                          title="Xóa món này khỏi đơn"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* ROW 1: Product Selector Dropdown */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                          <span>Sản phẩm trong kho:</span>
+                          {matchedProduct && (
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Đã kết nối dữ liệu mẫu
+                            </span>
+                          )}
+                        </label>
+                        <select
+                          value={matchedProduct ? matchedProduct.id : '__custom__'}
+                          onChange={(e) => handleSelectProductForItem(idx, e.target.value)}
+                          className="w-full font-bold text-xs text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.price.toLocaleString('vi-VN')}đ)
+                            </option>
+                          ))}
+                          <option value="__custom__">✏️ Tự đặt tên khác (Tùy biến ngoài danh mục)...</option>
+                        </select>
+
+                        {(!matchedProduct || it.productId === 'custom') && (
                           <input
                             type="text"
                             value={it.productName}
                             onChange={(e) => handleUpdateItemField(idx, 'productName', e.target.value)}
-                            placeholder="Tên sản phẩm..."
-                            className="w-full font-black text-sm text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg focus:outline-none focus:border-amber-500"
+                            placeholder="Nhập tên sản phẩm..."
+                            className="w-full mt-2 font-bold text-xs text-slate-900 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl focus:outline-none focus:border-amber-500 shadow-2xs"
                           />
-                        </div>
+                        )}
+                      </div>
 
-                        <div className="flex items-center gap-3 shrink-0">
-                          {/* Quantity */}
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-500">SL:</span>
+                      {/* ROW 2: Quantity, Unit Price & Line Total */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 bg-slate-50/90 rounded-xl border border-slate-100 text-xs">
+                        {/* Quantity Stepper */}
+                        <div>
+                          <span className="text-[11px] font-bold text-slate-600 block mb-1">Số lượng:</span>
+                          <div className="inline-flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateItemField(idx, 'quantity', Math.max(1, (Number(it.quantity) || 1) - 1))}
+                              className="w-8 h-8 flex items-center justify-center text-slate-700 hover:text-slate-950 hover:bg-slate-100 transition-colors cursor-pointer text-sm font-bold"
+                              title="Giảm số lượng"
+                            >
+                              -
+                            </button>
                             <input
                               type="number"
                               min="1"
                               value={it.quantity}
                               onChange={(e) => handleUpdateItemField(idx, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1))}
-                              className="w-14 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center"
+                              className="w-10 h-8 text-center font-bold text-xs border-x border-slate-200 focus:outline-none bg-transparent"
                             />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateItemField(idx, 'quantity', (Number(it.quantity) || 1) + 1)}
+                              className="w-8 h-8 flex items-center justify-center text-slate-700 hover:text-slate-950 hover:bg-slate-100 transition-colors cursor-pointer text-sm font-bold"
+                              title="Tăng số lượng"
+                            >
+                              +
+                            </button>
                           </div>
+                        </div>
 
-                          {/* Unit Price */}
+                        {/* Unit price */}
+                        <div>
+                          <span className="text-[11px] font-bold text-slate-600 block mb-1">Đơn giá cơ bản:</span>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-500">Đơn giá:</span>
                             <input
                               type="number"
                               min="0"
                               value={it.price}
                               onChange={(e) => handleUpdateItemField(idx, 'price', Math.max(0, parseInt(e.target.value, 10) || 0))}
-                              className="w-28 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-right"
+                              className="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-right"
                             />
-                            <span className="text-xs text-slate-500 font-bold">đ</span>
+                            <span className="text-slate-400 font-bold text-xs">đ</span>
                           </div>
+                        </div>
 
-                          {/* Subtotal */}
-                          <span className="font-mono font-black text-slate-950 text-sm min-w-[90px] text-right">
+                        {/* Line total */}
+                        <div className="col-span-2 sm:col-span-1 flex flex-col justify-center sm:items-end pt-1 sm:pt-0">
+                          <span className="text-[11px] font-bold text-slate-500">Thành tiền món:</span>
+                          <span className="font-mono font-black text-amber-900 text-sm sm:text-base">
                             {lineTotal.toLocaleString('vi-VN')}đ
                           </span>
-
-                          {/* Remove */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Xóa món này"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       </div>
 
-                      {/* Combo Breakdown Preview if item is a combo */}
+                      {/* Combo breakdown preview if applicable */}
                       {it.selectedComboItems && it.selectedComboItems.length > 0 && (
-                        <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200/90 space-y-2">
-                          <div className="text-xs font-black text-amber-950 flex items-center justify-between">
-                            <span>✨ CHI TIẾT TỪNG MÓN TRONG COMBO ({it.selectedComboItems.length} MÓN):</span>
-                          </div>
+                        <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200/90 space-y-1.5 text-xs">
+                          <span className="font-black text-amber-950 block">
+                            CÁC MÓN TRONG COMBO ({it.selectedComboItems.length} MÓN):
+                          </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {it.selectedComboItems.map((ci, cIdx) => (
-                              <div key={cIdx} className="bg-white p-2 rounded-lg border border-amber-200/60 shadow-2xs space-y-1 text-xs">
-                                <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                                  <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[10px] font-black flex items-center justify-center shrink-0">
-                                    {cIdx + 1}
-                                  </span>
-                                  <span>{ci.itemTitle || `Món ${cIdx + 1}`}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1 text-[11px] text-slate-600 pl-5">
-                                  {ci.selectedColor && (
-                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
-                                      🎨 Màu: {ci.selectedColor}
-                                    </span>
-                                  )}
-                                  {ci.selectedCharms && ci.selectedCharms.length > 0 && (
-                                    <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.5 rounded font-medium">
-                                      ✨ Charm: {ci.selectedCharms.map(c => c.name).join(', ')}
-                                    </span>
-                                  )}
-                                  {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
-                                    <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1.5 py-0.5 rounded font-medium">
-                                      🧧 Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}
-                                    </span>
-                                  )}
-                                  {ci.selectedKhoen && (
-                                    <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.5 rounded font-medium">
-                                      🔗 Khoen: {ci.selectedKhoen}
-                                    </span>
-                                  )}
-                                  {ci.selectedSize && (
-                                    <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1.5 py-0.5 rounded font-medium">
-                                      📏 Size: {ci.selectedSize}
-                                    </span>
-                                  )}
+                              <div key={cIdx} className="bg-white p-2.5 rounded-lg border border-amber-200/60 shadow-2xs space-y-1">
+                                <span className="font-bold text-slate-900 block">{ci.itemTitle || `Món ${cIdx + 1}`}</span>
+                                <div className="flex flex-wrap gap-1 text-[11px] text-slate-600">
+                                  {ci.selectedColor && <span className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-medium">Màu: {ci.selectedColor}</span>}
+                                  {ci.selectedCharms && ci.selectedCharms.length > 0 && <span className="bg-indigo-100 text-indigo-900 px-1.5 py-0.5 rounded font-medium">Charm: {ci.selectedCharms.map(c => c.name).join(', ')}</span>}
+                                  {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && <span className="bg-rose-100 text-rose-900 px-1.5 py-0.5 rounded font-medium">Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}</span>}
+                                  {ci.selectedKhoen && <span className="bg-sky-100 text-sky-900 px-1.5 py-0.5 rounded font-medium">Khoen: {ci.selectedKhoen}</span>}
                                 </div>
                               </div>
                             ))}
@@ -923,49 +1281,233 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         </div>
                       )}
 
-                      {/* Custom Attributes: Color, Charm, Khoen, Custom Note */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Màu sắc:</label>
-                          <input
-                            type="text"
-                            value={it.selectedColor || ''}
-                            onChange={(e) => handleUpdateItemField(idx, 'selectedColor', e.target.value)}
-                            placeholder="VD: Đen rằn ri"
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                          />
+                      {/* ============================================================ */}
+                      {/* ROW 3: REFINED 100% SELECT DROPDOWNS (REAL STORE DATA ONLY)  */}
+                      {/* ============================================================ */}
+                      <div className="pt-2 border-t border-slate-100 space-y-3">
+                        <div className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Tùy chọn chi tiết theo cấu hình sản phẩm:</span>
+                          </span>
                         </div>
 
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Charm đính kèm:</label>
-                          <input
-                            type="text"
-                            value={it.selectedCharm || ''}
-                            onChange={(e) => handleUpdateItemField(idx, 'selectedCharm', e.target.value)}
-                            placeholder="VD: Bạc 925"
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                          />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          
+                          {/* 1. MÀU SẮC */}
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <Palette className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Màu sắc:</span>
+                              </label>
+                              {itemColorList.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomInput(idx, 'color', !isCustomInput(idx, 'color'))}
+                                  className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
+                                >
+                                  {isCustomInput(idx, 'color') ? '← Chọn từ mẫu' : '✏️ Nhập khác'}
+                                </button>
+                              )}
+                            </div>
+
+                            {isCustomInput(idx, 'color') || itemColorList.length === 0 ? (
+                              <input
+                                type="text"
+                                value={it.selectedColor || ''}
+                                onChange={(e) => handleUpdateItemField(idx, 'selectedColor', e.target.value)}
+                                placeholder="Nhập màu sắc..."
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
+                              />
+                            ) : (
+                              <select
+                                value={it.selectedColor || ''}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomInput(idx, 'color', true);
+                                  } else {
+                                    handleUpdateItemField(idx, 'selectedColor', e.target.value);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">-- Chọn màu sắc --</option>
+                                {itemColorList.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                                <option value="__custom__">✏️ Nhập màu tùy biến khác...</option>
+                              </select>
+                            )}
+                          </div>
+
+                          {/* 2. CHARM ĐÍNH KÈM */}
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>{matchedProduct?.charmTitle || 'Charm đính kèm'}:</span>
+                              </label>
+                              {rawCharms.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomInput(idx, 'charm', !isCustomInput(idx, 'charm'))}
+                                  className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
+                                >
+                                  {isCustomInput(idx, 'charm') ? '← Chọn từ mẫu' : '✏️ Nhập khác'}
+                                </button>
+                              )}
+                            </div>
+
+                            {isCustomInput(idx, 'charm') || (!hasCharmFeature && rawCharms.length === 0) ? (
+                              <input
+                                type="text"
+                                value={it.selectedCharm || ''}
+                                onChange={(e) => handleUpdateItemField(idx, 'selectedCharm', e.target.value)}
+                                placeholder="Nhập tên charm..."
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
+                              />
+                            ) : (
+                              <select
+                                value={it.selectedCharm || ''}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomInput(idx, 'charm', true);
+                                  } else {
+                                    const selected = rawCharms.find(c => c.name === e.target.value);
+                                    handleUpdateItemField(idx, 'selectedCharm', e.target.value);
+                                    handleUpdateItemField(idx, 'selectedCharmPrice', selected?.priceDelta || 0);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">❌ Không gắn charm</option>
+                                {rawCharms.map((ch) => (
+                                  <option key={ch.name} value={ch.name}>
+                                    {ch.name} {ch.priceDelta && ch.priceDelta > 0 ? `(+${ch.priceDelta.toLocaleString('vi-VN')}đ)` : ''}
+                                  </option>
+                                ))}
+                                <option value="__custom__">✏️ Nhập charm tùy biến khác...</option>
+                              </select>
+                            )}
+                          </div>
+
+                          {/* 3. KHOEN ĐÍNH KÈM */}
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <Tag className="w-3.5 h-3.5 text-sky-600" />
+                                <span>{matchedProduct?.khoenTitle || 'Khoen móc khóa'}:</span>
+                              </label>
+                              {rawKhoens.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomInput(idx, 'khoen', !isCustomInput(idx, 'khoen'))}
+                                  className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
+                                >
+                                  {isCustomInput(idx, 'khoen') ? '← Chọn từ mẫu' : '✏️ Nhập khác'}
+                                </button>
+                              )}
+                            </div>
+
+                            {isCustomInput(idx, 'khoen') || (!hasKhoenFeature && rawKhoens.length === 0) ? (
+                              <input
+                                type="text"
+                                value={it.selectedKhoen || ''}
+                                onChange={(e) => handleUpdateItemField(idx, 'selectedKhoen', e.target.value)}
+                                placeholder="Nhập tên khoen..."
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
+                              />
+                            ) : (
+                              <select
+                                value={it.selectedKhoen || ''}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomInput(idx, 'khoen', true);
+                                  } else {
+                                    const selected = rawKhoens.find(k => k.name === e.target.value);
+                                    handleUpdateItemField(idx, 'selectedKhoen', e.target.value);
+                                    handleUpdateItemField(idx, 'selectedKhoenPrice', selected?.priceDelta || 0);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">❌ Không dùng khoen</option>
+                                {rawKhoens.map((kh) => (
+                                  <option key={kh.name} value={kh.name}>
+                                    {kh.name} {kh.priceDelta && kh.priceDelta > 0 ? `(+${kh.priceDelta.toLocaleString('vi-VN')}đ)` : ''}
+                                  </option>
+                                ))}
+                                <option value="__custom__">✏️ Nhập khoen tùy biến khác...</option>
+                              </select>
+                            )}
+                          </div>
+
+                          {/* 4. BÙA OMAMORI */}
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <HeartHandshake className="w-3.5 h-3.5 text-rose-600" />
+                                <span>{matchedProduct?.omamoriTitle || 'Bùa (Omamori)'}:</span>
+                              </label>
+                              {rawOmamoris.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCustomInput(idx, 'omamori', !isCustomInput(idx, 'omamori'))}
+                                  className="text-[10px] text-amber-800 hover:text-amber-950 font-bold cursor-pointer"
+                                >
+                                  {isCustomInput(idx, 'omamori') ? '← Chọn từ mẫu' : '✏️ Nhập khác'}
+                                </button>
+                              )}
+                            </div>
+
+                            {isCustomInput(idx, 'omamori') || (!hasOmamoriFeature && rawOmamoris.length === 0) ? (
+                              <input
+                                type="text"
+                                value={it.selectedOmamoriText || ''}
+                                onChange={(e) => handleUpdateItemField(idx, 'selectedOmamoriText', e.target.value)}
+                                placeholder="Nhập tên bùa..."
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
+                              />
+                            ) : (
+                              <select
+                                value={it.selectedOmamoriText || ''}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setCustomInput(idx, 'omamori', true);
+                                  } else {
+                                    const selected = rawOmamoris.find(o => o.name === e.target.value);
+                                    handleUpdateItemField(idx, 'selectedOmamoriText', e.target.value);
+                                    handleUpdateItemField(idx, 'selectedOmamoriPrice', selected?.priceDelta || 0);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer shadow-2xs"
+                              >
+                                <option value="">❌ Không kèm bùa</option>
+                                {rawOmamoris.map((om) => (
+                                  <option key={om.name} value={om.name}>
+                                    {om.name} {om.meaning ? `(${om.meaning})` : ''} {om.priceDelta && om.priceDelta > 0 ? `(+${om.priceDelta.toLocaleString('vi-VN')}đ)` : ''}
+                                  </option>
+                                ))}
+                                <option value="__custom__">✏️ Nhập bùa tùy biến khác...</option>
+                              </select>
+                            )}
+                          </div>
                         </div>
 
+                        {/* Ghi chú xưởng cho món này */}
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Khoen đính kèm:</label>
-                          <input
-                            type="text"
-                            value={it.selectedKhoen || ''}
-                            onChange={(e) => handleUpdateItemField(idx, 'selectedKhoen', e.target.value)}
-                            placeholder="VD: Khoen D-Ring Titan"
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-0.5">Ghi chú xưởng:</label>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            Ghi chú chế tác riêng cho món này (Nội bộ xưởng):
+                          </label>
                           <input
                             type="text"
                             value={it.customNote || ''}
                             onChange={(e) => handleUpdateItemField(idx, 'customNote', e.target.value)}
-                            placeholder="VD: Thắt lỏng 0.5cm..."
-                            className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium"
+                            placeholder="VD: Cắt ngắn dây 1cm, charm thắt chặt..."
+                            className="w-full px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
                           />
                         </div>
                       </div>
@@ -976,488 +1518,386 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 4: CUSTOMER & DELIVERY ADDRESS                       */}
+            {/* SECTION 4: CUSTOMER CONTACT & DELIVERY ADDRESS               */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-amber-600" />
-                  <span>4. Địa Chỉ & Người Nhận Kiện Hàng</span>
-                </span>
-              </div>
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <MapPin className="w-4 h-4 text-amber-600" />
+                <span>4. Thông Tin Người Nhận & Địa Chỉ Giao Hàng</span>
+              </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Người nhận (Họ tên khách) *
+                    Tên khách hàng *:
                   </label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="VD: Nguyễn Văn A"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                    placeholder="Họ và tên người nhận..."
+                    className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Số điện thoại nhận hàng *
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span>Số điện thoại *:</span>
+                    {phone && (
+                      <a
+                        href={`tel:${phone}`}
+                        className="text-[11px] font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>Gọi khách</span>
+                      </a>
+                    )}
                   </label>
                   <input
                     type="tel"
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="VD: 0987654321"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                    placeholder="Số điện thoại nhận hàng..."
+                    className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-bold font-mono text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Địa chỉ nhận kiện hàng chi tiết
-                </label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Ghi chú của khách hàng (Note)
+                  Địa chỉ giao hàng đầy đủ:
                 </label>
                 <textarea
                   rows={2}
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
+                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Ghi chú từ khách hàng:
+                </label>
+                <input
+                  type="text"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ghi chú thời gian giao hoặc yêu cầu riêng của khách..."
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                  placeholder="Lời dặn của khách khi giao hàng..."
+                  className="w-full px-3 py-2 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
                 />
               </div>
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 5: PAYMENT, SHIPPING FEE & FINANCIALS                */}
+            {/* SECTION 5: PAYMENT & FINANCIAL DETAILS                       */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-amber-600" />
-                  <span>5. Thanh Toán & Hóa Đơn Chi Tiết</span>
-                </span>
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <CreditCard className="w-4 h-4 text-amber-600" />
+                <span>5. Thanh Toán & Tài Chính</span>
+              </span>
+
+              {/* Status Segmented Buttons */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Trạng thái thanh toán:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('unpaid')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      paymentStatus === 'unpaid'
+                        ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs ring-2 ring-amber-300'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>⏳ Chờ thanh toán / Chưa thanh toán</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('paid')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      paymentStatus === 'paid'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-300'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span> Đã thanh toán đủ</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Payment Method */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Method */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Hình thức thanh toán
+                    Phương thức thanh toán:
                   </label>
                   <select
                     value={paymentMethod}
-                    onChange={(e: any) => setPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer"
+                    onChange={(e) => setPaymentMethod(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs"
                   >
-                    <option value="cod">Thanh toán COD khi nhận hàng</option>
-                    <option value="bank_transfer">Chuyển khoản VietQR</option>
+                    <option value="bank_transfer">Chuyển khoản ngân hàng (VietQR)</option>
+                    <option value="cod">Thu hộ tiền mặt (COD)</option>
                     <option value="cash">Tiền mặt tại xưởng</option>
+                    <option value="other">Phương thức khác</option>
                   </select>
                 </div>
 
-                {/* Payment Status */}
+                {/* Shipping Fee */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Trạng thái thanh toán
+                    Phí vận chuyển (đ):
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStatus('unpaid')}
-                      className={`py-2 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
-                        paymentStatus === 'unpaid'
-                          ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      Chờ thanh toán
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStatus('paid')}
-                      className={`py-2 px-3 rounded-xl border text-xs font-black transition-all cursor-pointer ${
-                        paymentStatus === 'paid'
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      Đã thanh toán đủ
-                    </button>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={shippingFee}
+                    onChange={(e) => setShippingFee(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 shadow-2xs"
+                  />
+                </div>
+
+                {/* Discount */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Giảm giá / Voucher (đ):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={discountAmount}
+                    onChange={(e) => setDiscountAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 shadow-2xs"
+                  />
                 </div>
               </div>
 
-              {/* Shipping Fee, Discount & Total Amount Breakdown */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                {/* Voucher display & edit row */}
-                <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="text-xs font-bold text-amber-950">Mã giảm giá (Voucher) sử dụng:</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={voucherCode}
-                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                      placeholder="Mã voucher (VD: KNOT10)"
-                      className="px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs font-mono uppercase font-black text-amber-950 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              {/* Bill Transfer Proof Image */}
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span>Ảnh chụp bill chuyển khoản (Kèm đơn):</span>
+                  <span className="text-[10px] text-slate-500">Kéo thả hoặc dán Ctrl+V</span>
+                </label>
+
+                {bankReceiptImage ? (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <img
+                      src={bankReceiptImage}
+                      alt="Bill CK"
+                      onClick={() => setZoomReceipt(bankReceiptImage)}
+                      className="w-16 h-16 rounded-lg object-cover border border-slate-300 cursor-pointer shadow-xs hover:opacity-90"
                     />
-                    {order.voucherType && (
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300 shrink-0">
-                        {order.voucherType === 'freeship' ? 'Freeship' : 'Giảm %'}
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Đã có ảnh chụp bill chuyển khoản</span>
                       </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Tổng tiền hàng (Sản phẩm):
-                    </label>
-                    <span className="font-mono font-black text-slate-900 text-sm block py-1.5">
-                      {itemsSubtotal.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Phí giao hàng (0 = Freeship):
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        value={shippingFee}
-                        onChange={(e) => setShippingFee(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono"
-                      />
-                      <span className="text-xs font-bold text-slate-500">đ</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                      Giảm giá / Chiết khấu:
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        value={discountAmount}
-                        onChange={(e) => setDiscountAmount(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-mono text-emerald-700"
-                      />
-                      <span className="text-xs font-bold text-slate-500">đ</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Final Total */}
-                <div className="pt-3 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black uppercase text-slate-900">
-                      TỔNG TIỀN ĐƠN HÀNG:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsManualTotal(!isManualTotal)}
-                      className="text-[10px] font-bold text-amber-600 hover:underline cursor-pointer"
-                    >
-                      {isManualTotal ? 'Quay lại tính tự động' : 'Tùy chỉnh số tiền thủ công'}
-                    </button>
-                  </div>
-
-                  {isManualTotal ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        value={customTotalOverride}
-                        onChange={(e) => setCustomTotalOverride(e.target.value)}
-                        className="w-36 px-3 py-1.5 bg-white border-2 border-amber-400 rounded-xl text-base font-black font-mono text-amber-900 text-right"
-                      />
-                      <span className="text-sm font-bold text-slate-700">đ</span>
-                    </div>
-                  ) : (
-                    <span className="text-xl sm:text-2xl font-black font-mono text-amber-900">
-                      {finalCalculatedTotal.toLocaleString('vi-VN')}đ
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Bank Transfer Details / Receipt Image */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Mã GD / Nội dung chuyển khoản ngân hàng
-                  </label>
-                  <input
-                    type="text"
-                    value={bankTransferRef}
-                    onChange={(e) => setBankTransferRef(e.target.value)}
-                    placeholder="VD: MB-883921 hoặc NGUYEN VAN A"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Ảnh Bill chuyển khoản (Hóa đơn)
-                  </label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        processImageFile(e.target.files[0]);
-                      }
-                    }}
-                    className="hidden"
-                  />
-
-                  {bankReceiptImage && bankReceiptImage.trim() ? (
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <img
-                          src={bankReceiptImage}
-                          alt="Bill Receipt"
-                          className="w-12 h-12 rounded-lg object-cover border border-slate-300 cursor-pointer"
-                          onClick={() => setPreviewZoomReceipt(true)}
-                        />
-                        <div>
-                          <span className="text-xs font-bold text-slate-900 block">Đã có ảnh bill</span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setPreviewZoomReceipt(true)}
-                              className="text-[11px] text-slate-600 hover:text-slate-900 font-bold underline"
-                            >
-                              Xem
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="text-[11px] text-amber-700 hover:text-amber-900 font-bold underline"
-                            >
-                              Đổi
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setBankReceiptImage('')}
-                              className="text-[11px] text-rose-600 hover:text-rose-800 font-bold underline"
-                            >
-                              Xóa
-                            </button>
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setZoomReceipt(bankReceiptImage)}
+                          className="text-amber-800 font-bold hover:underline cursor-pointer"
+                        >
+                          Phóng to xem
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => setBankReceiptImage('')}
+                          className="text-rose-600 font-bold hover:underline cursor-pointer"
+                        >
+                          Gỡ ảnh
+                        </button>
                       </div>
                     </div>
-                  ) : (
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className="border-2 border-dashed border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-white p-3 rounded-xl text-center cursor-pointer transition-colors"
+                  </div>
+                ) : (
+                  <div className="p-4 border-2 border-dashed border-slate-300 rounded-xl text-center bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          processImageFile(e.target.files[0]);
+                        }
+                      }}
+                      className="hidden"
+                      id="upload-receipt-edit"
+                    />
+                    <label
+                      htmlFor="upload-receipt-edit"
+                      className="text-xs font-bold text-amber-800 hover:underline cursor-pointer"
                     >
-                      <span className="text-xs font-bold text-slate-600 block">
-                        + Tải ảnh Bill hoặc dán Ctrl+V
-                      </span>
-                    </div>
-                  )}
-                </div>
+                      Bấm vào đây để tải ảnh bill lên
+                    </label>
+                    <span className="text-xs text-slate-500 block mt-0.5">
+                      hoặc sao chép ảnh chụp màn hình và nhấn Ctrl + V
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 6: SHIPPING CARRIER & PARTNER CODE                   */}
+            {/* SECTION 6: SHIPPING CARRIER & SELLER                         */}
             {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-amber-600" />
-                  <span>6. Thông Tin Vận Chuyển Đối Tác</span>
-                </span>
-              </div>
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2 pb-2.5 border-b border-slate-100">
+                <Truck className="w-4 h-4 text-amber-600" />
+                <span>6. Vận Chuyển Đối Tác & Phân Bổ Nhân Viên</span>
+              </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Carrier */}
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Đơn vị vận chuyển
+                    Đơn vị vận chuyển:
                   </label>
-                  <input
-                    type="text"
-                    list="carrier-suggestions"
+                  <select
                     value={shippingCarrier}
                     onChange={(e) => setShippingCarrier(e.target.value)}
-                    placeholder="Viettel Post, GHTK, GHN..."
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
-                  />
-                  <datalist id="carrier-suggestions">
-                    <option value="Viettel Post" />
-                    <option value="Giao Hàng Tiết Kiệm (GHTK)" />
-                    <option value="Giao Hàng Nhanh (GHN)" />
-                    <option value="J&T Express" />
-                    <option value="VNPost (Bưu Điện)" />
-                    <option value="Grab / Ahamove hỏa tốc" />
-                  </datalist>
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="GHTK">Giao Hàng Tiết Kiệm (GHTK)</option>
+                    <option value="GHN">Giao Hàng Nhanh (GHN)</option>
+                    <option value="ViettelPost">Viettel Post</option>
+                    <option value="ShopeeExpress">Shopee Xpress (SPX)</option>
+                    <option value="J&T">J&T Express</option>
+                    <option value="GrabExpress">GrabExpress / Be</option>
+                    <option value="Khác">Khác / Tự giao</option>
+                  </select>
                 </div>
 
+                {/* Tracking Code */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-slate-800">
-                      Mã vận đơn đối tác
-                    </label>
-                    {shippingCode && getCarrierTrackingUrl(shippingCarrier, shippingCode) && (
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span>Mã vận đơn đối tác:</span>
+                    {shippingCode && (
                       <a
-                        href={getCarrierTrackingUrl(shippingCarrier, shippingCode)!}
+                        href={getCarrierTrackingUrl(shippingCarrier, shippingCode)}
                         target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] font-bold text-blue-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        rel="noreferrer"
+                        className="text-[10px] text-amber-800 hover:text-amber-950 font-bold flex items-center gap-0.5"
                       >
                         <span>Tra cứu</span>
                         <ExternalLink className="w-2.5 h-2.5" />
                       </a>
                     )}
-                  </div>
+                  </label>
                   <input
                     type="text"
                     value={shippingCode}
                     onChange={(e) => setShippingCode(e.target.value)}
-                    placeholder="VD: 198273645"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
+                    placeholder="VD: S123456789.VTP..."
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 shadow-2xs"
                   />
                 </div>
 
+                {/* Seller Assignment */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Thời gian dự kiến giao
+                  <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Nhân viên phụ trách:</span>
+                    </span>
                   </label>
-                  <input
-                    type="text"
-                    value={estimatedDelivery}
-                    onChange={(e) => setEstimatedDelivery(e.target.value)}
-                    placeholder="VD: 1-2 ngày, hoặc 15/09/2026"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-950 focus:outline-none focus:bg-white focus:border-amber-500"
-                  />
+                  <select
+                    value={sellerName}
+                    onChange={(e) => setSellerName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="">-- Chưa phân bổ nhân viên --</option>
+                    {uniqueSellers.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name} ({s.username})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
 
-            {/* ============================================================ */}
-            {/* SECTION 7: SELLER / HANDCRAFTER IN CHARGE                    */}
-            {/* ============================================================ */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-              <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-amber-600" />
-                <span>7. Nhân Viên / Nghệ Nhân Phụ Trách Đơn Hàng</span>
-              </span>
-
-              {(() => {
-                const isLockedSeller = source === 'website' || source === 'mạng xã hội';
-                return (
-                  <div>
-                    <select
-                      disabled={isLockedSeller}
-                      value={isLockedSeller ? '' : sellerName}
-                      onChange={(e) => setSellerName(e.target.value)}
-                      className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        isLockedSeller
-                          ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'
-                          : 'bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer'
-                      }`}
-                    >
-                      {isLockedSeller ? (
-                        <option value="">🔒 Đơn từ {source === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động phân bổ xưởng</option>
-                      ) : sellers.length > 0 ? (
-                        deduplicateSellers(sellers).map((s, idx) => (
-                          <option key={`edit-order-seller-${s.id || s.username}-${idx}`} value={s.name}>
-                            {s.name}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="Mạnh Cường">Mạnh Cường</option>
-                          <option value="Thu Trang">Thu Trang</option>
-                          <option value="Hoàng Nam">Hoàng Nam</option>
-                          <option value="Minh Anh">Minh Anh</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-                );
-              })()}
-            </div>
-
           </div>
 
-          {/* Modal Footer Actions */}
-          <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3 shrink-0">
-            <span className="text-xs text-slate-500 hidden sm:inline">
-              Đảm bảo đã kiểm tra chi tiết đơn hàng trước khi lưu.
-            </span>
+          {/* ============================================================ */}
+          {/* MODAL STICKY FOOTER                                          */}
+          {/* ============================================================ */}
+          <div className="sticky bottom-0 bg-white -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 p-4 sm:p-5 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg z-20">
+            <div>
+              <div className="text-[11px] text-slate-500 font-bold">
+                Tổng thanh toán ({totalItemQuantity} món):
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-amber-900 font-mono leading-none">
+                {finalCalculatedTotal.toLocaleString('vi-VN')}đ
+              </div>
+            </div>
 
-            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+                disabled={isSaving}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
               >
-                Hủy Bỏ
+                Hủy bỏ
               </button>
-
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-md disabled:opacity-50"
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md shadow-amber-500/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
-                {isSaving ? 'Đang Lưu...' : 'Lưu Thay Đổi Đơn Hàng'}
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Đang lưu đơn...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4 text-slate-950" />
+                    <span>Lưu & Cập Nhật Đơn Hàng</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
         </form>
 
-        {/* Zoom Lightbox */}
-        {previewZoomReceipt && bankReceiptImage && bankReceiptImage.trim() && (
+        {/* Bill Zoom Modal */}
+        {zoomReceipt && (
           <div
             className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 animate-fadeIn"
-            onClick={() => setPreviewZoomReceipt(false)}
+            onClick={() => setZoomReceipt(null)}
           >
-            <div className="relative max-w-xl w-full bg-white p-4 rounded-3xl" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-3">
-                <span className="text-xs font-black text-slate-900">Ảnh Bill Hóa Đơn Chuyển Khoản</span>
+            <div className="relative max-w-2xl w-full bg-white rounded-3xl p-4 space-y-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className="font-bold text-sm text-slate-900">Chi tiết ảnh Bill chuyển khoản</span>
                 <button
-                  onClick={() => setPreviewZoomReceipt(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-800"
+                  type="button"
+                  onClick={() => setZoomReceipt(null)}
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center cursor-pointer text-slate-500"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-              <img
-                src={bankReceiptImage}
-                alt="Bill Full"
-                className="max-h-[70vh] w-auto mx-auto rounded-xl object-contain shadow-md"
-              />
+              <div className="max-h-[70vh] overflow-auto flex items-center justify-center">
+                <img
+                  src={zoomReceipt}
+                  alt="Bill chuyển khoản phóng to"
+                  className="max-h-[68vh] w-auto object-contain rounded-xl"
+                />
+              </div>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

@@ -25,7 +25,8 @@ import {
   Loader2,
   ChevronDown,
   Camera,
-  FileText
+  FileText,
+  EyeOff
 } from 'lucide-react';
 import { saveOrderToFirestore, saveCollectionToFirestore, deleteCollectionFromFirestore } from '../firebase';
 import { ProductCard } from './ProductCard';
@@ -534,8 +535,8 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
     return (
       <div id="collection-hidden-page" className="w-full bg-[#12141A] text-white min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
         <div className="max-w-md space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto text-3xl shadow-sm">
-            🙈
+          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-sm">
+            <EyeOff className="w-8 h-8 text-amber-400" />
           </div>
           <h2 className="text-2xl font-black tracking-tight">Bộ Sưu Tập Đang Tạm Ẩn</h2>
           <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
@@ -1266,7 +1267,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-1.5 font-bold mb-0.5">
-                          <span>🌟 Ảnh nền Hero tràn viền</span>
+                          <span>Ảnh nền Hero tràn viền</span>
                         </div>
                         <span className="block text-[11px] font-normal opacity-70">
                           Ảnh làm phông nền mờ phía sau tiêu đề & mô tả
@@ -1283,7 +1284,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-1.5 font-bold mb-0.5">
-                          <span>🖼️ Thẻ ảnh bìa riêng biệt</span>
+                          <span>Thẻ ảnh bìa riêng biệt</span>
                         </div>
                         <span className="block text-[11px] font-normal opacity-70">
                           Đóng khung ảnh như ảnh bìa tạp chí thời trang

@@ -201,51 +201,56 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Top Header Card */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-              formConfig.enabled
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'bg-amber-100 text-amber-700'
-            }`}
-          >
-            <Wrench className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-black text-slate-900">Chế độ bảo trì (Maintenance mode)</h1>
-              <button
-                type="button"
-                onClick={handleToggleEnabled}
-                disabled={isSaving}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black transition-all cursor-pointer ${
-                  formConfig.enabled
-                    ? 'bg-rose-500 text-white shadow-xs hover:bg-rose-600'
-                    : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
-                }`}
-                title="Bấm để Bật/Tắt chế độ bảo trì"
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    formConfig.enabled ? 'bg-white animate-pulse' : 'bg-slate-400'
-                  }`}
-                />
-                <span>{formConfig.enabled ? 'Đang bật (Khách bị chặn)' : 'Đang tắt (Web mở)'}</span>
-              </button>
+      {/* Top Header Card - Responsive Mobile & Desktop Layout */}
+      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div
+              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                formConfig.enabled
+                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                  : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              <Wrench className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Kiểm soát trạng thái hiển thị của website khi cần nâng cấp, sửa chữa hoặc bảo trì khẩn cấp
-            </p>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold text-slate-900">
+                  Chế độ bảo trì (Maintenance mode)
+                </h1>
+                <button
+                  type="button"
+                  onClick={handleToggleEnabled}
+                  disabled={isSaving}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    formConfig.enabled
+                      ? 'bg-rose-500 text-white shadow-xs hover:bg-rose-600'
+                      : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                  }`}
+                  title="Bấm để Bật/Tắt chế độ bảo trì"
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      formConfig.enabled ? 'bg-white animate-pulse' : 'bg-slate-400'
+                    }`}
+                  />
+                  <span>{formConfig.enabled ? 'Đang bật (Khách bị chặn)' : 'Đang tắt (Web mở)'}</span>
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 leading-snug">
+                Kiểm soát trạng thái hiển thị của website khi nâng cấp, sửa chữa hoặc bảo trì khẩn cấp.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Responsive Toolbar Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setIsPreviewModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+            className="w-full justify-center px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 transition-all border border-slate-200 cursor-pointer active:scale-95"
           >
             <Eye className="w-4 h-4 text-slate-500" />
             <span>Xem trước (Preview)</span>
@@ -254,8 +259,8 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
           <button
             type="button"
             onClick={handleDownloadStandaloneHtml}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
-            title="Tải về file HTML độc lập có thể lưu hoặc mở offline"
+            className="w-full justify-center px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-2 transition-all border border-amber-200 cursor-pointer active:scale-95"
+            title="Tải về file HTML độc lập có thể mở offline mà không cần server"
           >
             <FileCode className="w-4 h-4 text-amber-600" />
             <span>Tải file HTML khẩn cấp</span>
@@ -265,11 +270,46 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            className="w-full justify-center px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-2 transition-all shadow-xs cursor-pointer disabled:opacity-50 active:scale-95"
           >
             {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             <span>{isSaving ? 'Đang lưu...' : 'Lưu cài đặt'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Emergency Standalone HTML Instruction Guide */}
+      <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-4 sm:p-5 text-slate-900 space-y-3 shadow-2xs">
+        <div className="flex items-center gap-2 text-amber-950 font-bold text-xs sm:text-sm">
+          <FileCode className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>Hướng Dẫn Sử Dụng Tệp HTML Bảo Trì Khẩn Cấp (Emergency Offline Page)</span>
+        </div>
+        
+        <p className="text-xs text-slate-700 leading-relaxed">
+          Tệp HTML độc lập này hoạt động <strong>100% không cần máy chủ Node.js hay Firebase</strong>. Khi hosting bị sự cố, sập kết nối hoặc bạn muốn tắt hoàn toàn backend để nâng cấp hệ thống lớn, hãy thực hiện theo 3 bước nhanh:
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1">
+          <div className="bg-white p-3.5 rounded-xl border border-amber-200/80 shadow-2xs space-y-1">
+            <span className="font-bold text-amber-900 text-xs block">1. Tải tệp HTML</span>
+            <p className="text-slate-600 text-[11px] leading-snug">
+              Bấm nút <strong>"Tải file HTML khẩn cấp"</strong> phía trên. Tệp đã tích hợp sẵn hình ảnh Base64, logo và thông tin liên hệ.
+            </p>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-xl border border-amber-200/80 shadow-2xs space-y-1">
+            <span className="font-bold text-amber-900 text-xs block">2. Đặt vào Server / Hosting</span>
+            <p className="text-slate-600 text-[11px] leading-snug">
+              Đổi tên tệp vừa tải thành <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px] text-amber-900 font-bold">index.html</code> và upload ghi đè vào thư mục gốc (<code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px] text-amber-900 font-bold">public_html</code> hoặc root).
+            </p>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-xl border border-amber-200/80 shadow-2xs space-y-1">
+            <span className="font-bold text-amber-900 text-xs block">3. Khôi phục sau bảo trì</span>
+            <p className="text-slate-600 text-[11px] leading-snug">
+              Khi hoàn tất nâng cấp, chỉ cần xóa tệp <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px] text-amber-900 font-bold">index.html</code> khẩn cấp này là trang chính sẽ khôi phục ngay.
+            </p>
+          </div>
         </div>
       </div>
 

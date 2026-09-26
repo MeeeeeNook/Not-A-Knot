@@ -66,7 +66,7 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
           />
           <div>
             <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-              🔘 Bật tùy chọn Khoen (Móc khóa / Khoen cài kim loại)
+              <span>Bật tùy chọn Khoen (Móc khóa / Khoen cài kim loại)</span>
             </span>
             <span className="block text-[11px] text-slate-500">
               Khách hàng có thể chọn loại khoen (Khoen tròn Inox, Càng cua, Trái tim, Giọt nước, Chữ D...) và phụ thu / tồn kho.
@@ -142,7 +142,7 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
       {formEnableKhoenSelection && (
         <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 shadow-2xs">
           <label className="text-xs font-bold text-emerald-950 shrink-0 flex items-center gap-1.5">
-            🏷️ Đổi tên tiêu đề hiển thị:
+            <span>Đổi tên tiêu đề hiển thị:</span>
           </label>
           <input
             type="text"

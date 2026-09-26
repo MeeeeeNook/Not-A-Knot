@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage } from '../types';
-import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck, FileJson, CheckCircle2 } from 'lucide-react';
+import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck, FileJson, CheckCircle2, FileText } from 'lucide-react';
 import { StoredOrder, saveSiteContentToFirestore, saveCategoriesToFirestore, saveCollectionsToFirestore, saveProductsToFirestore, saveOrdersToFirestore } from '../firebase';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportMasterBackupWithImageOption } from '../utils/excelImageExporter';
@@ -698,8 +698,9 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
                   <div>
                     <span className="text-xs font-black text-amber-900 block">Chi Tiết Bản Sao Lưu</span>
                     {restorePreview.fileName && (
-                      <span className="text-[11px] text-amber-800 font-medium truncate max-w-[200px] block">
-                        📄 {restorePreview.fileName} ({restorePreview.fileSize})
+                      <span className="text-[11px] text-amber-800 font-medium truncate max-w-[200px] flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span className="truncate">{restorePreview.fileName}</span> ({restorePreview.fileSize})
                       </span>
                     )}
                   </div>

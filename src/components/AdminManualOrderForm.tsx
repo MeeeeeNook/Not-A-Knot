@@ -1073,7 +1073,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                         >
                           {isLockedSeller ? (
                             <option value="">
-                              🔒 Đơn {orderSource === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động ghi nhận
+                              Đơn {orderSource === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động ghi nhận
                             </option>
                           ) : (
                             sortedSellers.map((name) => (

@@ -76,17 +76,26 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
 
   // Last manual interaction timestamp to prevent auto-scroll collision
   const lastInteractionRef = useRef<number>(Date.now());
+  const lastSwitchRef = useRef<number>(0);
 
   const prevIndex = (activeIndex - 1 + total) % total;
   const nextIndex = (activeIndex + 1) % total;
 
   const handleNext = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSwitchRef.current < 260) return;
+    lastSwitchRef.current = now;
+    lastInteractionRef.current = now;
     setIsDescriptionOpen(false);
     setSlideDirection('left');
     setActiveIndex((prev) => (prev + 1) % total);
   }, [total]);
 
   const handlePrev = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSwitchRef.current < 260) return;
+    lastSwitchRef.current = now;
+    lastInteractionRef.current = now;
     setIsDescriptionOpen(false);
     setSlideDirection('right');
     setActiveIndex((prev) => (prev - 1 + total) % total);
@@ -94,7 +103,10 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
 
   const handleDotClick = (idx: number) => {
     if (idx === activeIndex) return;
-    lastInteractionRef.current = Date.now();
+    const now = Date.now();
+    if (now - lastSwitchRef.current < 260) return;
+    lastSwitchRef.current = now;
+    lastInteractionRef.current = now;
     setIsDescriptionOpen(false);
     setSlideDirection(idx > activeIndex ? 'left' : 'right');
     setActiveIndex(idx);
@@ -349,14 +361,14 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
                 transformStyle = `translate3d(calc(-50% + 63vw + ${swipeOffset}px), -50%, 0) scale(0.85)`;
               } else if (diff < -1) {
                 // Offscreen Left
-                zIndexStyle = 1;
+                zIndexStyle = 0;
                 opacityStyle = 0;
-                transformStyle = `translate3d(calc(-50% - 120vw + ${swipeOffset}px), -50%, 0) scale(0.75)`;
+                transformStyle = `translate3d(calc(-50% - 120vw), -50%, 0) scale(0.75)`;
               } else {
                 // Offscreen Right
-                zIndexStyle = 1;
+                zIndexStyle = 0;
                 opacityStyle = 0;
-                transformStyle = `translate3d(calc(-50% + 120vw + ${swipeOffset}px), -50%, 0) scale(0.75)`;
+                transformStyle = `translate3d(calc(-50% + 120vw), -50%, 0) scale(0.75)`;
               }
 
               return (
@@ -381,9 +393,10 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
                     height: cardDimension,
                     zIndex: zIndexStyle,
                     opacity: opacityStyle,
-                    transition: isSwiping 
+                    visibility: isVisible ? 'visible' : 'hidden',
+                    transition: (isSwiping || !isVisible)
                       ? 'none' 
-                      : 'transform 0.45s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease',
+                      : 'transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease',
                     pointerEvents: isVisible ? 'auto' : 'none'
                   }}
                   className={`rounded-3xl overflow-hidden cursor-pointer bg-white/95 backdrop-blur-md transition-shadow will-change-transform ${

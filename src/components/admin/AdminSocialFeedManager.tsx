@@ -208,11 +208,8 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
             <span>Quản trị Trang Chủ</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Quản Lý 5 Card Mạng Xã Hội (Facebook & Instagram)
+            Quản Lý Góc Tin Tức
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 max-w-2xl leading-relaxed">
-            Hỗ trợ kéo thả ảnh trực tiếp từ thiết bị. Tự động đồng bộ bố cục kính trắng mờ viền đen rõ nét (1+2×2 trên PC và Carousel tự cuộn 3s trên Mobile).
-          </p>
         </div>
 
         <div className="flex items-center gap-3">

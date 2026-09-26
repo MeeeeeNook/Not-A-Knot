@@ -18,9 +18,6 @@ html {
   overflow-x: clip;
   position: relative;
   background-color: #FAF9F6;
-  overscroll-behavior-y: none;
-  overscroll-behavior-x: none;
-  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -32,10 +29,7 @@ body {
   overflow-x: clip;
   position: relative;
   font-family: 'Montserrat', sans-serif;
-  overscroll-behavior-y: none;
-  overscroll-behavior-x: none;
-  overscroll-behavior: none;
-  touch-action: pan-y;
+  touch-action: manipulation;
 }
 
 #root {

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw } from 'lucide-react';
+import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb } from 'lucide-react';
 import {
   printOrderSlipDirectly,
   openOrderPrintTab,
@@ -381,8 +381,9 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             {(order.voucherCode || (order.voucherDiscountAmount && order.voucherDiscountAmount > 0) || discountAmount > 0) && (
               <div className="mt-2.5 p-2.5 bg-amber-50/90 border border-amber-300 rounded-xl flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-amber-950 flex items-center gap-1">
-                    🎟️ Mã giảm giá (Voucher):
+                  <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                    <Ticket className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span>Mã giảm giá (Voucher):</span>
                   </span>
                   {order.voucherCode ? (
                     <span className="font-mono font-black text-xs text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded border border-amber-300">
@@ -705,7 +706,8 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             {/* Notification alert banner */}
             <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200/70 text-amber-900 text-xs flex items-center justify-between gap-2 no-print">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold">💡 Mẹo in:</span>
+                <Lightbulb className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span className="font-bold">Mẹo in:</span>
                 <span>
                   {printSuccessToast || 'Bấm "Mở Tab In" để mở trang in chuẩn A4/A5 tự động, hoặc "Tải File In" nếu trình duyệt chặn popup.'}
                 </span>
@@ -1025,8 +1027,9 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                 </button>
               </div>
 
-              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed">
-                💡 <strong>Mẹo tiện lợi:</strong> Tự động bổ sung đuôi <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">@gmail.com</code> nếu không gõ tên miền (ví dụ: gõ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc</code> ➔ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc@gmail.com</code>).
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 font-medium leading-relaxed flex items-start gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <span><strong>Mẹo tiện lợi:</strong> Tự động bổ sung đuôi <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">@gmail.com</code> nếu không gõ tên miền (ví dụ: gõ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc</code> ➔ <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-bold">abc@gmail.com</code>).</span>
               </p>
 
               {emailModalError && (

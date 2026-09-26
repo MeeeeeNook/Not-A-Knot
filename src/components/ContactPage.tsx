@@ -138,14 +138,9 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                       </svg>
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900 group-hover:text-[#0078FF] transition-colors block">
-                          Messenger
-                        </span>
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-800">
-                          Chat nhanh
-                        </span>
-                      </div>
+                      <span className="font-bold text-sm text-slate-900 group-hover:text-[#0078FF] transition-colors block">
+                        Messenger
+                      </span>
                       <span className="text-xs text-slate-500 font-mono">
                         m.me/61593591390851
                       </span>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight, CheckSquare, Truck, User, Ticket, FileSpreadsheet, Lightbulb } from 'lucide-react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, ComboItemConfig } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -3202,6 +3202,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Danh mục';
       case 'site_editor':
         return 'Sửa giao diện';
+      case 'social_feed':
+        return 'Quản lý góc tin tức';
       case 'seo_audit':
         return 'Kiểm tra & Tối ưu SEO Meta';
       case 'bank_account':
@@ -3312,7 +3314,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* Main Workspace Tabs Container (Full width for maximum table space, with extra pb for mobile bottom nav) */}
-        <main className="flex-grow w-full px-2.5 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 pb-24 lg:pb-6">
+        <main className="flex-grow w-full px-2.5 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 pb-36 sm:pb-32 lg:pb-8">
         
         {/* Fake Loading Delay Indicator for Smooth Tab Switching */}
         {isTabLoading && (
@@ -3423,7 +3425,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* TAB 1: SẢN PHẨM & TỒN KHO */}
         {/* ======================================================== */}
         {activeTab === 'products' && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6 animate-fadeIn pb-24 sm:pb-8">
             
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -3489,7 +3491,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   title="Tạo gói sản phẩm Combo gộp nhiều món tùy biến (khách chọn từng món theo từng bước)"
                 >
                   <Layers className="w-4 h-4 text-purple-200" />
-                  <span>🎁 Tạo Combo Mới (Gộp Nhiều Món)</span>
+                  <span>Tạo Combo Mới (Gộp Nhiều Món)</span>
                 </button>
 
                 <button
@@ -3601,7 +3603,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                 >
                   <option value="all">Tất cả BST ({products.length})</option>
-                  <option value="combo">🎁 Gói Combo ({products.filter((p) => p.isCombo).length})</option>
+                  <option value="combo">Gói Combo ({products.filter((p) => p.isCombo).length})</option>
                   {localCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.label} ({products.filter((p) => p.category === cat.id).length})
@@ -3615,8 +3617,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                 >
                   <option value="all">Tất cả trạng thái ({products.length})</option>
-                  <option value="in_stock">🟢 Còn hàng ({inStockCount})</option>
-                  <option value="out_of_stock">🔴 Hết hàng ({outOfStockCount})</option>
+                  <option value="in_stock">Còn hàng ({inStockCount})</option>
+                  <option value="out_of_stock">Hết hàng ({outOfStockCount})</option>
                 </select>
               </div>
             </div>
@@ -3641,7 +3643,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </div>
                     <h3 className="font-black text-lg text-slate-900">
                       {isComboMode
-                        ? (editingProduct ? `Chỉnh Sửa Combo #${editingProduct.id}: ${editingProduct.name}` : '🎁 Tạo Sản Phẩm Combo Mới (Gộp Nhiều Món)')
+                        ? (editingProduct ? `Chỉnh Sửa Combo #${editingProduct.id}: ${editingProduct.name}` : 'Tạo Sản Phẩm Combo Mới (Gộp Nhiều Món)')
                         : (editingProduct ? `Chỉnh Sửa Sản Phẩm #${editingProduct.id}: ${editingProduct.name}` : 'Thêm Sản Phẩm Đơn Mới Vào Hệ Thống')}
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -3674,7 +3676,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                   >
-                    <span>{isComboMode ? '📝 1. Thông tin gói Combo & Ảnh bìa' : '📝 1. Thông tin chung & Ảnh'}</span>
+                    <span>{isComboMode ? '1. Thông tin gói Combo & Ảnh bìa' : '1. Thông tin chung & Ảnh'}</span>
                     {formImages.length > 0 && (
                       <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
                         {formImages.length} ảnh
@@ -3693,7 +3695,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                       }`}
                     >
-                      <span>🎨 2. Tùy chọn phối (Màu, Charm, Bùa, Khoen)</span>
+                      <span>2. Tùy chọn phối (Màu, Charm, Bùa, Khoen)</span>
                       {(formEnableColorSelection || formEnableCharmSelection || formEnableOmamoriSelection || formEnableKhoenSelection) && (
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
                           Đang bật
@@ -3714,7 +3716,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       }`}
                     >
                       <Layers className="w-3.5 h-3.5" />
-                      <span>📦 2. Các Món Trong Combo ({formComboItems.length} món)</span>
+                      <span>2. Các Món Trong Combo ({formComboItems.length} món)</span>
                       <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold">
                         {formComboItems.length} món
                       </span>
@@ -4226,7 +4228,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900">
-                              🎨 Bật tùy chọn Màu sắc (Color Options & Stock)
+                              Bật tùy chọn Màu sắc (Color Options & Stock)
                             </span>
                             <span className="block text-[11px] text-slate-500">
                               Quản lý màu sắc, ảnh liên kết và số lượng tồn kho theo từng màu (Tổng tồn kho sản phẩm = Tổng kho các màu)
@@ -4250,7 +4252,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               }}
                               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
                             >
-                              ⚡ Nạp 5 màu mẫu
+                              Nạp 5 màu mẫu
                             </button>
                             <button
                               type="button"
@@ -4274,7 +4276,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           {formColorOptions.length > 0 && (
                             <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2 bg-amber-50/90 border border-amber-200 rounded-xl text-xs">
                               <div className="flex items-center gap-2 font-bold text-amber-950 flex-wrap">
-                                <span>📦 Tổng tồn kho các màu:</span>
+                                <span>Tổng tồn kho các màu:</span>
                                 <span className="font-mono text-sm px-2.5 py-0.5 bg-amber-200 text-amber-950 rounded-lg font-black">
                                   {formColorOptions.reduce((s, c) => s + (typeof c.stock === 'number' ? c.stock : 0), 0)} chiếc
                                 </span>
@@ -4293,7 +4295,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   className="px-2 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
                                   title="Chia đều số lượng kho cho từng màu"
                                 >
-                                  ⚡ Chia đều kho ({formColorOptions.length > 0 ? Math.floor(formStock / formColorOptions.length) : 0}/màu)
+                                  Chia đều kho ({formColorOptions.length > 0 ? Math.floor(formStock / formColorOptions.length) : 0}/màu)
                                 </button>
                                 <button
                                   type="button"
@@ -4566,7 +4568,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900">
-                              ✨ Bật tùy chọn Phụ kiện 1 (Mặc định: Charm - Có thể đổi tên)
+                              Bật tùy chọn Phụ kiện 1 (Mặc định: Charm - Có thể đổi tên)
                             </span>
                             <span className="block text-[11px] text-slate-500">
                               Khách hàng có thể chọn mẫu charm/phụ kiện kèm theo có ảnh trực quan và quản lý tồn kho từng món
@@ -4625,7 +4627,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               }}
                               className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
                             >
-                              ⚡ Nạp 8 Charm mẫu có kho
+                              Nạp 8 Charm mẫu có kho
                             </button>
                             <button
                               type="button"
@@ -4654,7 +4656,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       {formEnableCharmSelection && (
                         <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 shadow-2xs">
                           <label className="text-xs font-bold text-amber-950 shrink-0 flex items-center gap-1.5">
-                            🏷️ Đổi tên tiêu đề hiển thị:
+                            Đổi tên tiêu đề hiển thị:
                           </label>
                           <input
                             type="text"
@@ -5122,7 +5124,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           />
                           <div>
                             <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                              📿 Bật tùy chọn Phụ kiện 2 (Mặc định: Bùa Omamori - Có thể đổi tên)
+                              Bật tùy chọn Phụ kiện 2 (Mặc định: Bùa Omamori - Có thể đổi tên)
                             </span>
                             <span className="block text-[11px] text-slate-500">
                               Khách hàng có thể chọn nhiều mẫu bùa may mắn / quà tặng kèm và quản lý tồn kho. Admin có thể đổi tên hiển thị tùy ý.
@@ -5211,7 +5213,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       {formEnableOmamoriSelection && (
                         <div className="bg-red-50/80 border border-red-200/80 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 shadow-2xs">
                           <label className="text-xs font-bold text-red-950 shrink-0 flex items-center gap-1.5">
-                            🏷️ Đổi tên tiêu đề hiển thị:
+                            Đổi tên tiêu đề hiển thị:
                           </label>
                           <input
                             type="text"
@@ -6202,7 +6204,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* TAB 2: QUẢN LÝ DANH MỤC / BỘ SƯU TẬP (NEW FEATURE) */}
         {/* ======================================================== */}
         {activeTab === 'categories' && (
-          <div className="space-y-6 animate-fadeIn">
+          <div className="space-y-6 animate-fadeIn pb-24 sm:pb-8">
             {/* Header & Actions */}
             <div className="bg-gradient-to-r from-amber-50 to-amber-100/60 p-6 rounded-3xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
               <div>
@@ -6500,11 +6502,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* TAB 3: QUẢN LÝ ĐƠN HÀNG & THANH TOÁN */}
         {/* ======================================================== */}
         {activeTab === 'orders' && (
-          <div className="space-y-4 animate-fadeIn">
+          <div className="space-y-4 animate-fadeIn pb-24 sm:pb-8">
             
             {/* Quick Status Funnel Bar & Top "Tạo Đơn" Action */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 sm:pb-0">
+            <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-2.5">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
                 {[
                   { id: 'all', label: 'Tất cả đơn', count: activeOrders.length },
                   { id: 'Chờ xác nhận', label: 'Chờ xác nhận', count: activeOrders.filter((o) => getNormalizedStatus(o.status) === 'Chờ xác nhận').length },
@@ -6517,7 +6519,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     key={st.id}
                     type="button"
                     onClick={() => setOrderStatusFilter(st.id as any)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                       orderStatusFilter === st.id
                         ? 'bg-amber-400 text-slate-950 shadow-xs'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -6531,43 +6533,59 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 ))}
               </div>
 
-              {/* Right Action Group: Reload Orders & Tạo Đơn */}
-              <div className="flex items-center gap-2">
+              {/* Right Action Group: Tạo Đơn & Tải lại đơn */}
+              <div className="flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t border-slate-100 sm:border-0">
                 <button
                   type="button"
                   onClick={handleReloadOrders}
                   disabled={loadingOrders}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
-                  title="Tải lại và đồng bộ danh sách đơn hàng mới nhất từ cơ sở dữ liệu"
+                  className="px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
+                  title="Tải lại danh sách đơn hàng"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
-                  <span>{loadingOrders ? 'Đang tải lại...' : 'Tải lại đơn'}</span>
+                  <span>{loadingOrders ? 'Đang tải...' : 'Tải lại đơn'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSwitchTab('manual_order')}
-                  className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer"
+                  className="px-3.5 sm:px-4 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer"
                 >
-                  <span>+ Tạo đơn</span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tạo đơn</span>
                 </button>
               </div>
             </div>
 
             {/* Filter & Controls Bar */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-              {/* Left group: View Modes, Multi-Select, Export Excel, Reload, Table Zoom */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Reload Button */}
-                <button
-                  type="button"
-                  onClick={handleReloadOrders}
-                  disabled={loadingOrders}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer shadow-2xs disabled:opacity-60"
-                  title="Tải lại và đồng bộ danh sách đơn hàng mới nhất"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
-                  <span>{loadingOrders ? 'Đang tải...' : 'Tải lại'}</span>
-                </button>
+            <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+              {/* Search Bar: Full-width on mobile & tablet, guaranteed ample width on desktop */}
+              <div className="relative w-full xl:w-80 shrink-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  ref={orderSearchInputRef}
+                  type="text"
+                  value={orderSearchQuery}
+                  onChange={(e) => setOrderSearchQuery(e.target.value)}
+                  placeholder="Tìm tên, SĐT, mã đơn..."
+                  className="w-full pl-8.5 pr-8 py-2 bg-slate-50 border border-slate-200 focus:border-amber-500 focus:bg-white rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none transition-colors"
+                />
+                {orderSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderSearchQuery('');
+                      orderSearchInputRef.current?.focus();
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer text-xs font-bold"
+                    title="Xóa tìm kiếm"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* View Modes, Multi-Select, Export Excel, Filter Dropdown */}
+              <div className="flex flex-wrap items-center gap-2 justify-between xl:justify-end w-full xl:w-auto">
                 {/* View Mode Toggle: Cards vs Table */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                   <button
@@ -6598,7 +6616,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </button>
                 </div>
 
-                {/* Multi-Select Button: "chọn nhiều đơn hàng chuyển thành chọn nhiều" */}
+                {/* Product Category Filter (Desktop & Tablet) */}
+                <select
+                  id="admin-order-filter-category"
+                  value={orderCategoryFilter}
+                  onChange={(e: any) => setOrderCategoryFilter(e.target.value)}
+                  className="hidden sm:inline-block px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer max-w-[130px] truncate"
+                  title="Lọc đơn hàng theo danh mục sản phẩm"
+                >
+                  <option value="all">Tất cả danh mục</option>
+                  {localCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Source Filter (Desktop & Tablet) */}
+                <select
+                  value={orderSourceFilter}
+                  onChange={(e: any) => setOrderSourceFilter(e.target.value)}
+                  className="hidden sm:inline-block px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  title="Lọc đơn hàng theo nguồn đơn"
+                >
+                  <option value="all">Tất cả nguồn</option>
+                  <option value="website">Website</option>
+                  <option value="mạng xã hội">Mạng xã hội</option>
+                  <option value="trực tiếp">Trực tiếp</option>
+                </select>
+
+                {/* Multi-Select Button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -6612,103 +6659,34 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       return next;
                     });
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
                     isSelectionMode
                       ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-500 font-extrabold shadow-sm'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                   }`}
                   title="Bật hoặc tắt chế độ chọn nhiều"
                 >
-                  <span className={`w-2 h-2 rounded-full ${isSelectionMode ? 'bg-slate-950 animate-pulse' : 'bg-slate-400'}`} />
-                  <span>{isSelectionMode ? '✓ Đang chọn nhiều' : '☑ Chọn nhiều'}</span>
+                  <CheckSquare className="w-3.5 h-3.5 text-slate-600" />
+                  <span>{isSelectionMode ? 'Đang chọn' : 'Chọn nhiều'}</span>
                 </button>
 
-                {/* Export Excel Button: "xuất file excel chuyển thành Export Excel" */}
+                {/* Export Excel Button */}
                 <button
                   onClick={handleExportOrdersExcel}
-                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-emerald-200 cursor-pointer shadow-2xs"
+                  className="px-2.5 sm:px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border border-emerald-200 cursor-pointer shadow-2xs"
                   title="Xuất danh sách đơn hàng sang bảng tính Excel .xlsx"
                 >
-                  <span>📊 Export Excel</span>
+                  <Download className="w-3.5 h-3.5 text-emerald-700" />
+                  <span className="hidden sm:inline">Xuất Excel</span>
                 </button>
 
                 {tableZoom !== 100 && (
-                  <span className="px-2.5 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold">
-                    Thu phóng: {tableZoom}%
+                  <span className="hidden sm:inline px-2 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold">
+                    Zoom: {tableZoom}%
                   </span>
                 )}
-              </div>
 
-              {/* Right group: Search icon (expands on click), Categories filter, Source filter, and "Bộ lọc khác" slide dropdown */}
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Search: "Nút tìm kiếm chuyển thành Icon Search, khi ấn vào mới hiện to ra" */}
-                {!isOrderSearchExpanded && !orderSearchQuery ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOrderSearchExpanded(true);
-                      setTimeout(() => orderSearchInputRef.current?.focus(), 50);
-                    }}
-                    className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-colors cursor-pointer flex items-center justify-center shadow-2xs"
-                    title="Tìm kiếm đơn hàng"
-                  >
-                    <Search className="w-4 h-4" />
-                  </button>
-                ) : (
-                  <div className="relative flex items-center">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
-                    <input
-                      ref={orderSearchInputRef}
-                      type="text"
-                      value={orderSearchQuery}
-                      onChange={(e) => setOrderSearchQuery(e.target.value)}
-                      placeholder="Tìm tên, SĐT, mã đơn..."
-                      className="pl-8 pr-7 py-1.5 bg-white border border-amber-400 focus:border-amber-500 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none w-48 sm:w-60 shadow-2xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderSearchQuery('');
-                        setIsOrderSearchExpanded(false);
-                      }}
-                      className="absolute right-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer text-xs font-bold"
-                      title="Đóng tìm kiếm"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )}
-
-                {/* Product Category Filter */}
-                <select
-                  id="admin-order-filter-category"
-                  value={orderCategoryFilter}
-                  onChange={(e: any) => setOrderCategoryFilter(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer max-w-[140px] sm:max-w-none truncate"
-                  title="Lọc đơn hàng theo danh mục sản phẩm"
-                >
-                  <option value="all">Tất cả danh mục</option>
-                  {localCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      🏷️ {cat.label}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Source Filter */}
-                <select
-                  value={orderSourceFilter}
-                  onChange={(e: any) => setOrderSourceFilter(e.target.value)}
-                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                  title="Lọc đơn hàng theo nguồn đơn"
-                >
-                  <option value="all">Tất cả nguồn</option>
-                  <option value="website">Website</option>
-                  <option value="mạng xã hội">Mạng xã hội</option>
-                  <option value="trực tiếp">Trực tiếp</option>
-                </select>
-
-                {/* "Bộ lọc khác" Slide Dropdown Menu (Chứa Sắp xếp, Người bán, Thanh toán, Bill CK, Lọc theo ngày) */}
+                {/* "Bộ lọc khác" Slide Dropdown Menu */}
                 <div className="relative" ref={orderExtraFiltersRef}>
                   <button
                     type="button"
@@ -6721,7 +6699,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     title="Bộ lọc khác: Khoảng ngày tạo đơn, Sắp xếp, Người bán, Thanh toán, Bill chuyển khoản"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span>Bộ lọc khác</span>
+                    <span>Bộ lọc</span>
                     {activeOrderExtraFiltersCount > 0 && (
                       <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black flex items-center justify-center">
                         {activeOrderExtraFiltersCount}
@@ -6732,7 +6710,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
                   {/* Dropdown panel */}
                   {showOrderExtraFilters && (
-                    <div className="absolute right-0 top-full mt-2 w-72 sm:w-84 bg-white rounded-2xl border border-slate-200 shadow-xl p-4 z-40 space-y-3.5 animate-fadeIn max-h-[85vh] overflow-y-auto">
+                    <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-[calc(100vw-2.5rem)] max-w-xs sm:w-84 bg-white rounded-2xl border border-slate-200 shadow-2xl p-4 z-50 space-y-3.5 animate-fadeIn max-h-[80vh] overflow-y-auto">
                       <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                         <div className="flex items-center gap-1.5">
                           <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600" />
@@ -6748,12 +6726,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               setOrderHasReceiptFilter('all');
                               setOrderDateFromFilter('');
                               setOrderDateToFilter('');
+                              setOrderCategoryFilter('all');
+                              setOrderSourceFilter('all');
                             }}
                             className="text-[11px] font-bold text-amber-700 hover:underline cursor-pointer"
                           >
                             Đặt lại ({activeOrderExtraFiltersCount})
                           </button>
                         )}
+                      </div>
+
+                      {/* Mobile-only Category & Source Filter inside modal */}
+                      <div className="sm:hidden space-y-2.5 pb-2 border-b border-slate-100">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            Danh mục sản phẩm:
+                          </label>
+                          <select
+                            value={orderCategoryFilter}
+                            onChange={(e: any) => setOrderCategoryFilter(e.target.value)}
+                            className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer"
+                          >
+                            <option value="all">Tất cả danh mục</option>
+                            {localCategories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>
+                                {cat.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                            Nguồn đơn hàng:
+                          </label>
+                          <select
+                            value={orderSourceFilter}
+                            onChange={(e: any) => setOrderSourceFilter(e.target.value)}
+                            className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer"
+                          >
+                            <option value="all">Tất cả nguồn</option>
+                            <option value="website">Website</option>
+                            <option value="mạng xã hội">Mạng xã hội</option>
+                            <option value="trực tiếp">Trực tiếp</option>
+                          </select>
+                        </div>
                       </div>
 
                       {/* 1. Lọc theo ngày (Từ ngày đến ngày & Chọn nhanh) */}
@@ -6857,15 +6873,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           onChange={(e: any) => setOrderSortBy(e.target.value)}
                           className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                         >
-                          <option value="date_desc">⏳ Mới nhất trước</option>
-                          <option value="date_asc">⌛ Cũ nhất trước</option>
-                          <option value="category_asc">🏷️ Danh mục SP (A → Z)</option>
-                          <option value="category_desc">🏷️ Danh mục SP (Z → A)</option>
-                          <option value="seller_asc">👤 Người bán (A → Z)</option>
-                          <option value="seller_desc">👤 Người bán (Z → A)</option>
-                          <option value="total_desc">💰 Tổng tiền (Cao → Thấp)</option>
-                          <option value="total_asc">💵 Tổng tiền (Thấp → Cao)</option>
-                          <option value="name_asc">🔤 Tên KH (A → Z)</option>
+                          <option value="date_desc">Mới nhất trước</option>
+                          <option value="date_asc">Cũ nhất trước</option>
+                          <option value="category_asc">Danh mục SP (A → Z)</option>
+                          <option value="category_desc">Danh mục SP (Z → A)</option>
+                          <option value="seller_asc">Người bán (A → Z)</option>
+                          <option value="seller_desc">Người bán (Z → A)</option>
+                          <option value="total_desc">Tổng tiền (Cao → Thấp)</option>
+                          <option value="total_asc">Tổng tiền (Thấp → Cao)</option>
+                          <option value="name_asc">Tên khách hàng (A → Z)</option>
                         </select>
                       </div>
 
@@ -6880,13 +6896,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           onChange={(e) => setOrderSellerFilter(e.target.value)}
                           className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                         >
-                          <option value="all">👤 Tất cả người bán ({sellers.length} người)</option>
-                          <option value="website">🌐 Đơn Website (Tự động / Không người bán)</option>
-                          <option value="social">📱 Đơn Mạng xã hội (Không người bán)</option>
-                          <option value="unassigned">🔒 Đơn không tính người bán (Website + MXH)</option>
+                          <option value="all">Tất cả người bán ({sellers.length} người)</option>
+                          <option value="website">Đơn Website (Tự động)</option>
+                          <option value="social">Đơn Mạng xã hội</option>
+                          <option value="unassigned">Đơn không tính người bán (Website + MXH)</option>
                           {deduplicateSellers(sellers).map((s, idx) => (
                             <option key={`admin-seller-filter-${s.id}-${idx}`} value={s.id}>
-                              👤 {s.name}
+                              {s.name}
                             </option>
                           ))}
                         </select>
@@ -6973,10 +6989,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <button
                     type="button"
                     onClick={handleExportOrdersExcel}
-                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
                     title="Xuất các đơn đã chọn sang Excel theo mẫu chuẩn"
                   >
-                    <span>📊 Xuất Excel ({selectedOrderIds.length})</span>
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Xuất Excel ({selectedOrderIds.length})</span>
                   </button>
                   <button
                     type="button"
@@ -7000,10 +7017,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             {orderViewMode === 'table' && (
               <div className="md:hidden flex items-center justify-between px-3.5 py-2.5 bg-amber-50/90 border border-amber-200 rounded-xl text-xs font-semibold text-amber-900 shadow-xs">
                 <span className="flex items-center gap-1.5">
-                  <span>👉</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                   <span>Vuốt ngang bảng để xem tất cả cột thông tin</span>
                 </span>
-                <span className="text-[10px] bg-amber-200/70 text-amber-950 px-2 py-0.5 rounded-full font-bold">
+                <span className="text-[10px] bg-amber-200/70 text-amber-950 px-2 py-0.5 rounded-md font-bold">
                   Chạm dòng để xem
                 </span>
               </div>
@@ -7014,10 +7031,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               {/* Top Table Control Bar with Quick Scroll & Pagination Summary */}
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-800">
-                    {orderViewMode === 'cards' ? 'Danh Sách Đơn Hàng' : 'Bảng Đơn Hàng'}
-                  </span>
-                  <span className="text-slate-400">•</span>
                   <span className="text-slate-600">
                     Trang <strong className="text-slate-800 font-bold">{safeOrderPage}</strong> / {totalOrderPages}
                   </span>
@@ -7027,65 +7040,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </span>
                 </div>
 
-                {/* View Switcher & Horizontal Scroll Quick Buttons */}
-                <div className="flex items-center gap-2.5">
-                  {/* Mode switcher */}
-                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                {/* Horizontal Scroll Quick Buttons (in Table Mode) */}
+                {orderViewMode === 'table' && (
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setOrderViewMode('cards')}
-                      className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                        orderViewMode === 'cards'
-                          ? 'bg-amber-400 text-slate-950 shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      onClick={() => {
+                        if (tableContainerRef.current) {
+                          tableContainerRef.current.scrollBy({ left: -360, behavior: 'smooth' });
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Cuộn bảng sang trái"
                     >
-                      <Smartphone className="w-3 h-3" />
-                      <span>Thẻ</span>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Trái</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setOrderViewMode('table')}
-                      className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
-                        orderViewMode === 'table'
-                          ? 'bg-amber-400 text-slate-950 shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      onClick={() => {
+                        if (tableContainerRef.current) {
+                          tableContainerRef.current.scrollBy({ left: 360, behavior: 'smooth' });
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Cuộn bảng sang phải"
                     >
-                      <TableIcon className="w-3 h-3" />
-                      <span>Bảng</span>
+                      <span>Phải</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
-
-                  {orderViewMode === 'table' && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (tableContainerRef.current) {
-                            tableContainerRef.current.scrollBy({ left: -360, behavior: 'smooth' });
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                        title="Cuộn bảng sang trái"
-                      >
-                        <span>◀ Cuộn trái</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (tableContainerRef.current) {
-                            tableContainerRef.current.scrollBy({ left: 360, behavior: 'smooth' });
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                        title="Cuộn bảng sang phải"
-                      >
-                        <span>Cuộn phải ▶</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
 
               {orderViewMode === 'cards' ? (
@@ -7132,7 +7117,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         >
                           {/* Card Top: Order Code, Date, Source, Selection Checkbox */}
                           <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               {isSelectionMode && (
                                 <input
                                   type="checkbox"
@@ -7142,11 +7127,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer"
                                 />
                               )}
-                              <span className="text-[11px] font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg">
+                              <span className="text-[11px] font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
                                 #{ord.id?.slice(-8) || ord.orderCode || 'ORD'}
                               </span>
-                              <span 
-                                className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-lg font-mono font-bold cursor-pointer inline-flex items-center gap-1"
+                              <button 
+                                type="button"
+                                className="text-[10px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-md font-mono font-bold cursor-pointer inline-flex items-center gap-1 transition-colors"
                                 title="Bấm để sao chép mã tra cứu đơn hàng"
                                 onClick={async (e) => {
                                   e.stopPropagation();
@@ -7157,25 +7143,36 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   } catch {}
                                 }}
                               >
-                                🚚 {getOrderTrackingNumber(ord)}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${srcConf.badgeClass}`}>
+                                <Truck className="w-3 h-3 text-blue-600 shrink-0" />
+                                <span>{getOrderTrackingNumber(ord)}</span>
+                              </button>
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${srcConf.badgeClass}`}>
                                 {srcConf.shortLabel}
                               </span>
                             </div>
 
-                            <span className="text-[11px] text-slate-500 font-medium">
+                            <span className="text-[11px] text-slate-500 font-medium shrink-0">
                               {formatOrderDateWithoutSeconds(ord.date || ord.createdAt)}
                             </span>
                           </div>
 
                           {/* Customer Info & Direct Call Action */}
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 space-y-1">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="font-extrabold text-sm text-slate-900 truncate">
                                 {ord.name || ord.customerName || 'Khách vãng lai'}
                               </div>
-                              {ord.phone ? (
+                              {/* Seller Badge */}
+                              <div className="text-right shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  <User className="w-2.5 h-2.5 text-slate-500" />
+                                  <span>{displayName}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {ord.phone ? (
+                              <div>
                                 <a
                                   href={`tel:${ord.phone}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -7184,31 +7181,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 >
                                   <Phone className="w-3 h-3 text-amber-700" />
                                   <span className="font-mono">{ord.phone}</span>
-                                  <span className="text-[10px] text-amber-600 font-normal">(Gọi)</span>
                                 </a>
-                              ) : (
-                                <span className="text-xs text-slate-400 italic">Chưa có SĐT</span>
-                              )}
-                              {ord.address && (
-                                <div className="flex items-start gap-1 text-[11px] text-slate-600 pt-0.5 line-clamp-2">
-                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
-                                  <span>{ord.address}</span>
-                                </div>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">Chưa có SĐT</span>
+                            )}
 
-                            {/* Seller Badge */}
-                            <div className="text-right shrink-0">
-                              <span className="inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                                👤 {displayName}
-                              </span>
-                            </div>
+                            {ord.address && (
+                              <div className="flex items-start gap-1 text-[11px] text-slate-600 pt-0.5 w-full break-words">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                <span className="leading-snug">{ord.address}</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Items Preview */}
                           <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1.5 text-xs">
                             <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold">
-                              <span>Sản phẩm ({totalQty} món)</span>
+                              <span>Sản phẩm <span className="font-bold text-slate-700">({totalQty} món)</span></span>
                               <span className="text-slate-900 font-black text-sm text-amber-700">
                                 {totalAmount.toLocaleString('vi-VN')}đ
                               </span>
@@ -7240,28 +7230,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               </div>
                                               <div className="flex flex-wrap gap-1 pl-4 text-[9px] text-slate-600">
                                                 {cItem.selectedColor && (
-                                                  <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium">
-                                                    🎨 {cItem.selectedColor}
+                                                  <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium inline-flex items-center">
+                                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                                                    {cItem.selectedColor}
                                                   </span>
                                                 )}
                                                 {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
                                                   <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1 py-0.2 rounded font-medium">
-                                                    ✨ {cItem.selectedCharms.map(c => c.name).join(', ')}
+                                                    Charm: {cItem.selectedCharms.map(c => c.name).join(', ')}
                                                   </span>
                                                 )}
                                                 {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
                                                   <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1 py-0.2 rounded font-medium">
-                                                    🧧 {cItem.selectedOmamoris.map(o => o.name).join(', ')}
+                                                    Bùa: {cItem.selectedOmamoris.map(o => o.name).join(', ')}
                                                   </span>
                                                 )}
                                                 {cItem.selectedKhoen && (
                                                   <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1 py-0.2 rounded font-medium">
-                                                    🔗 {cItem.selectedKhoen}
+                                                    Khoen: {cItem.selectedKhoen}
                                                   </span>
                                                 )}
                                                 {cItem.selectedSize && (
                                                   <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1 py-0.2 rounded font-medium">
-                                                    📏 {cItem.selectedSize}
+                                                    Size: {cItem.selectedSize}
                                                   </span>
                                                 )}
                                               </div>
@@ -7272,28 +7263,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     ) : (item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) ? (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded">
-                                            🎨 {item.selectedColor}
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
+                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                                            {item.selectedColor}
                                           </span>
                                         )}
                                         {item.selectedCharm && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded">
-                                            ✨ {typeof item.selectedCharm === 'object' ? item.selectedCharm.name : item.selectedCharm}
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded font-medium">
+                                            Charm: {typeof item.selectedCharm === 'object' ? item.selectedCharm.name : item.selectedCharm}
                                           </span>
                                         )}
                                         {item.selectedKhoen && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-sky-50 text-sky-900 border border-sky-200 rounded">
-                                            🔗 {item.selectedKhoen}
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-sky-50 text-sky-900 border border-sky-200 rounded font-medium">
+                                            Khoen: {item.selectedKhoen}
                                           </span>
                                         )}
                                         {item.selectedOmamoris && item.selectedOmamoris.length > 0 && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-rose-50 text-rose-900 border border-rose-200 rounded">
-                                            🧧 {item.selectedOmamoris.map((o) => o.name).join(', ')}
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
+                                            Bùa: {item.selectedOmamoris.map((o) => o.name).join(', ')}
                                           </span>
                                         )}
                                         {item.selectedSize && (
-                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded">
-                                            📏 {item.selectedSize}
+                                          <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded font-medium">
+                                            Size: {item.selectedSize}
                                           </span>
                                         )}
                                       </div>
@@ -7324,7 +7316,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             {ord.voucherCode && (
                               <div className="text-[11px] text-amber-950 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md mt-1 flex items-center justify-between font-medium">
                                 <span className="flex items-center gap-1 font-bold">
-                                  <span>🎟️ Voucher:</span>
+                                  <Ticket className="w-3 h-3 text-amber-700 inline" />
+                                  <span>Voucher:</span>
                                   <span className="font-mono bg-amber-200 px-1.5 py-0.2 rounded border border-amber-300">
                                     {ord.voucherCode}
                                   </span>
@@ -7338,16 +7331,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             )}
                           </div>
 
-                          {/* Status & Payment Badges */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              {/* Quick Mobile Status Select */}
+                          {/* Row 1: Status & Payment Control */}
+                          <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5 flex-1">
                               <select
                                 value={currentStatus}
                                 onChange={(e) => {
                                   if (ord.id) handleUpdateOrderStatus(ord.id, e.target.value);
                                 }}
-                                className={`text-xs font-bold px-2 py-1.5 rounded-xl border cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 ${statusConf.badgeClass}`}
+                                className={`flex-1 sm:flex-initial text-xs font-bold px-2.5 py-1.5 rounded-xl border cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 ${statusConf.badgeClass}`}
                               >
                                 <option value="Chờ xác nhận">Chờ xác nhận</option>
                                 <option value="Đã xác nhận">Đã xác nhận</option>
@@ -7355,44 +7347,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 <option value="Đang giao hàng">Đang giao hàng</option>
                                 <option value="Đơn hàng giao thành công">Đơn hàng giao thành công</option>
                               </select>
+                            </div>
 
-                              {/* Quick Toggle Button for Knot đang được sản xuất */}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (ord.id) {
-                                    const nextSt = currentStatus === 'Knot đang được sản xuất' ? 'Đã xác nhận' : 'Knot đang được sản xuất';
-                                    handleUpdateOrderStatus(ord.id, nextSt);
-                                  }
-                                }}
-                                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer whitespace-nowrap ${
-                                  currentStatus === 'Knot đang được sản xuất'
-                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                    : 'bg-white hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 border-slate-300'
-                                }`}
-                                title={currentStatus === 'Knot đang được sản xuất' ? 'Đang làm Knot - Bấm để chuyển về Đã xác nhận' : 'Bấm để đánh dấu: Knot đang được sản xuất'}
-                              >
-                                {currentStatus === 'Knot đang được sản xuất' ? '✓ Đang làm' : 'Làm Knot'}
-                              </button>
-
-                              <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
                                 currentPayment === 'paid'
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}>
-                                {currentPayment === 'paid' ? 'Đã TT' : 'Chưa TT'}
+                                {currentPayment === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
                               </span>
-                            </div>
 
-                            {/* Action Buttons */}
-                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              {/* Bill button */}
                               {ord.bankReceiptImage ? (
                                 <button
                                   type="button"
                                   onClick={() => setZoomReceiptImage(ord.bankReceiptImage!)}
-                                  className="px-2 py-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 text-xs font-bold"
+                                  className="px-2.5 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 text-xs font-bold cursor-pointer transition-colors"
                                   title="Xem bill chuyển khoản"
                                 >
                                   Bill ✓
@@ -7401,55 +7371,58 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setReceiptPromptModal({ order: ord })}
-                                  className="px-2 py-1.5 text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs"
+                                  className="px-2.5 py-1 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 text-xs font-semibold cursor-pointer transition-colors"
                                   title="Tải bill"
                                 >
                                   + Bill
                                 </button>
                               )}
-
-                              {/* Sửa đơn */}
-                              <button
-                                type="button"
-                                onClick={() => setEditingOrder(ord)}
-                                className="p-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200"
-                                title="Chỉnh sửa đơn hàng"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-
-                              {/* Gửi email (Chỉ Root Admin) */}
-                              {isRootAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenSendEmailModal(ord)}
-                                  className="p-2 text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 cursor-pointer"
-                                  title="Gửi email đơn hàng"
-                                >
-                                  <Mail className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-
-                              {/* Chi tiết */}
-                              <button
-                                type="button"
-                                onClick={() => setInspectingOrder(ord)}
-                                className="p-2 text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-xl border border-sky-200"
-                                title="Chi tiết đơn hàng"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-
-                              {/* Xóa */}
-                              <button
-                                type="button"
-                                onClick={() => ord.id && handleDeleteOrder(ord.id)}
-                                className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200"
-                                title="Xóa đơn hàng"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
                             </div>
+                          </div>
+
+                          {/* Row 2: Action Buttons */}
+                          <div className={`pt-2 border-t border-slate-100 grid ${isRootAdmin ? 'grid-cols-4' : 'grid-cols-3'} sm:flex sm:justify-end gap-1.5`} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => setInspectingOrder(ord)}
+                              className="py-2 px-2 text-sky-700 bg-sky-50 hover:bg-sky-100 active:bg-sky-200 rounded-xl border border-sky-200 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                              title="Xem chi tiết đơn hàng & In hóa đơn"
+                              aria-label="Chi tiết đơn hàng"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setEditingOrder(ord)}
+                              className="py-2 px-2 text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl border border-slate-200 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                              title="Chỉnh sửa thông tin đơn hàng"
+                              aria-label="Chỉnh sửa đơn hàng"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+
+                            {isRootAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSendEmailModal(ord)}
+                                className="py-2 px-2 text-amber-800 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 rounded-xl border border-amber-200 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                                title="Gửi email đơn hàng"
+                                aria-label="Gửi email đơn hàng"
+                              >
+                                <Mail className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => ord.id && handleDeleteOrder(ord.id)}
+                              className="py-2 px-2 text-rose-600 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 rounded-xl border border-rose-200 text-sm font-semibold flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                              title="Xóa đơn hàng"
+                              aria-label="Xóa đơn hàng"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -7459,10 +7432,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               ) : (
                 <div
                   ref={tableContainerRef}
-                  className="overflow-x-auto min-h-[360px] transition-all touch-pan-x"
+                  className="overflow-x-auto min-h-[360px] transition-all"
                   style={{
                     WebkitOverflowScrolling: 'touch',
-                    zoom: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : `${tableZoom}%`
+                    touchAction: 'pan-x pan-y',
+                    zoom: typeof window !== 'undefined' && (window.innerWidth < 1024 || 'ontouchstart' in window) ? undefined : `${tableZoom}%`
                   }}
                 >
                 <table className="w-full text-left text-xs text-slate-800 border-separate border-spacing-0 min-w-[1450px]">
@@ -7652,7 +7626,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               </span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span 
-                                  className="text-[9px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1 py-0.2 rounded font-mono font-bold cursor-pointer inline-flex items-center gap-0.5"
+                                  className="text-[9px] text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-1 py-0.2 rounded font-mono font-bold cursor-pointer inline-flex items-center gap-1"
                                   title="Bấm để sao chép mã tra cứu"
                                   onClick={async (e) => {
                                     e.stopPropagation();
@@ -7663,7 +7637,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     } catch {}
                                   }}
                                 >
-                                  🚚 {getOrderTrackingNumber(ord)}
+                                  <Truck className="w-2.5 h-2.5 text-blue-600 shrink-0" />
+                                  <span>{getOrderTrackingNumber(ord)}</span>
                                 </span>
                                 {(() => {
                                   const srcConf = getSourceBadgeConfig(ord.source);
@@ -7732,28 +7707,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                                 </div>
                                                 <div className="flex flex-wrap gap-1 pl-4 text-[9px] text-slate-600">
                                                   {cItem.selectedColor && (
-                                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium">
-                                                      🎨 {cItem.selectedColor}
+                                                    <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-medium inline-flex items-center">
+                                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                                                      {cItem.selectedColor}
                                                     </span>
                                                   )}
                                                   {cItem.selectedCharms && cItem.selectedCharms.length > 0 && (
                                                     <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1 py-0.2 rounded font-medium">
-                                                      ✨ {cItem.selectedCharms.map(c => c.name).join(', ')}
+                                                      Charm: {cItem.selectedCharms.map(c => c.name).join(', ')}
                                                     </span>
                                                   )}
                                                   {cItem.selectedOmamoris && cItem.selectedOmamoris.length > 0 && (
                                                     <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1 py-0.2 rounded font-medium">
-                                                      🧧 {cItem.selectedOmamoris.map(o => o.name).join(', ')}
+                                                      Bùa: {cItem.selectedOmamoris.map(o => o.name).join(', ')}
                                                     </span>
                                                   )}
                                                   {cItem.selectedKhoen && (
                                                     <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1 py-0.2 rounded font-medium">
-                                                      🔗 {cItem.selectedKhoen}
+                                                      Khoen: {cItem.selectedKhoen}
                                                     </span>
                                                   )}
                                                   {cItem.selectedSize && (
                                                     <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1 py-0.2 rounded font-medium">
-                                                      📏 {cItem.selectedSize}
+                                                      Size: {cItem.selectedSize}
                                                     </span>
                                                   )}
                                                 </div>
@@ -7765,27 +7741,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         <div className="flex flex-wrap items-center gap-1 text-[10px] pt-0.5">
                                           {it.selectedColor && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
-                                              🎨 {it.selectedColor}
+                                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>
+                                              {it.selectedColor}
                                             </span>
                                           )}
                                           {it.selectedCharm && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded font-medium">
-                                              ✨ {typeof it.selectedCharm === 'object' ? it.selectedCharm.name : it.selectedCharm}
+                                              Charm: {typeof it.selectedCharm === 'object' ? it.selectedCharm.name : it.selectedCharm}
                                             </span>
                                           )}
                                           {it.selectedKhoen && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-sky-50 text-sky-900 border border-sky-200 rounded font-medium">
-                                              🔗 {it.selectedKhoen}
+                                              Khoen: {it.selectedKhoen}
                                             </span>
                                           )}
                                           {it.selectedOmamoris && it.selectedOmamoris.length > 0 && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
-                                              🧧 {it.selectedOmamoris.map((o) => o.name).join(', ')}
+                                              Bùa: {it.selectedOmamoris.map((o) => o.name).join(', ')}
                                             </span>
                                           )}
                                           {it.selectedSize && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-blue-50 text-blue-900 border border-blue-200 rounded font-medium">
-                                              📏 {it.selectedSize}
+                                              Size: {it.selectedSize}
                                             </span>
                                           )}
                                         </div>
@@ -7818,8 +7795,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 {(ord.totalPrice || ord.totalAmount || 0).toLocaleString('vi-VN')}đ
                               </span>
                               {ord.voucherCode && (
-                                <div className="text-[9px] font-bold text-amber-950 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded mt-0.5 inline-block font-mono shadow-2xs">
-                                  🎟️ {ord.voucherCode}
+                                <div className="text-[9px] font-bold text-amber-950 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded mt-0.5 inline-flex items-center gap-1 font-mono shadow-2xs">
+                                  <Ticket className="w-2.5 h-2.5 text-amber-700 inline" />
+                                  <span>{ord.voucherCode}</span>
                                 </div>
                               )}
                               <button
@@ -8903,8 +8881,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   placeholder="Nhập email nhận đơn (ví dụ: abc hoặc abc@gmail.com)..."
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white focus:border-amber-500 focus:outline-none"
                 />
-                <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50/80 border border-amber-200/80 rounded-lg px-2.5 py-1.5 font-medium flex items-center gap-1">
-                  <span>💡 Tự động điền <strong className="font-bold">@gmail.com</strong> nếu không nhập tên miền (ví dụ: gõ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc</code> ➔ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc@gmail.com</code>).</span>
+                <p className="mt-1.5 text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/80 rounded-lg px-2.5 py-1.5 font-medium flex items-center gap-1.5">
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Tự động điền <strong className="font-bold">@gmail.com</strong> nếu không nhập tên miền (ví dụ: gõ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc</code> ➔ <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-bold font-mono">abc@gmail.com</code>).</span>
                 </p>
               </div>
             </div>
@@ -9056,6 +9035,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         id="admin-mobile-bottom-nav"
         aria-label="Thanh điều hướng nhanh quản trị viên trên di động"
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+        style={{ paddingBottom: 'calc(0.375rem + env(safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex items-center justify-around max-w-md mx-auto">
           {/* Dashboard */}

@@ -316,7 +316,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <span>Social Media</span>
+                <span>Góc Tin Tức</span>
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
                     activeTab === 'social_feed'

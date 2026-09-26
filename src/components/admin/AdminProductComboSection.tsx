@@ -338,8 +338,9 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                           {item.title || `Món #${idx + 1}`}
                         </h5>
                         {linkedProduct && (
-                          <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-extrabold border border-purple-300 shrink-0">
-                            🔗 SP: {linkedProduct.name}
+                          <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-extrabold border border-purple-300 shrink-0 inline-flex items-center gap-1">
+                            <LinkIcon className="w-2.5 h-2.5" />
+                            <span>SP: {linkedProduct.name}</span>
                           </span>
                         )}
                         {item.colorOptions && item.colorOptions.length > 0 && (
@@ -603,7 +604,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                           <div>
                             <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
                               <Palette className="w-4 h-4 text-purple-600" />
-                              <span>🎨 Tùy chọn Màu sắc / Mẫu dây ({item.colorOptions?.length || 0} màu)</span>
+                              <span>Tùy chọn Màu sắc / Mẫu dây ({item.colorOptions?.length || 0} màu)</span>
                             </span>
                             <span className="text-[10px] text-slate-500 block">
                               Mỗi màu có ảnh riêng (khách click tự chuyển ảnh) và số lượng tồn kho riêng.
@@ -1128,7 +1129,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                           />
                           <div>
                             <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                              <span>🏮 Tùy chọn Bùa Omamori May Mắn ({item.omamoriOptions?.length || 0} loại)</span>
+                              <span>Tùy chọn Bùa Omamori May Mắn ({item.omamoriOptions?.length || 0} loại)</span>
                             </span>
                             <span className="text-[10px] text-slate-500 block">
                               Mỗi bùa có ảnh minh họa, phụ thu và tồn kho riêng.
@@ -1203,7 +1204,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                                     </div>
                                   ) : (
                                     <div className="w-11 h-11 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
-                                      <span className="text-sm">🏮</span>
+                                      <Sparkles className="w-4 h-4 text-slate-400" />
                                     </div>
                                   )}
 
@@ -1341,7 +1342,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                           />
                           <div>
                             <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                              <span>🔗 Tùy chọn Khoen Móc Khóa ({item.khoenOptions?.length || 0} loại)</span>
+                              <span>Tùy chọn Khoen Móc Khóa ({item.khoenOptions?.length || 0} loại)</span>
                             </span>
                             <span className="text-[10px] text-slate-500 block">
                               Mỗi loại khoen có ảnh minh họa, phụ thu và tồn kho riêng.
@@ -1416,7 +1417,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                                     </div>
                                   ) : (
                                     <div className="w-11 h-11 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
-                                      <span className="text-sm">🔗</span>
+                                      <LinkIcon className="w-4 h-4 text-slate-400" />
                                     </div>
                                   )}
 

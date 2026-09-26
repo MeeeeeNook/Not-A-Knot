@@ -5,6 +5,7 @@ import {
   fetchCategoriesFromFirestore,
   fetchCollectionsFromFirestore,
   fetchSiteContentFromFirestore,
+  fetchBackupsFromFirestore,
   saveBackupToFirestore
 } from '../firebase';
 import { VersionBackup, BackupScheduleConfig } from '../types';
@@ -14,7 +15,8 @@ let isBackupRunning = false;
 
 /**
  * Checks auto-backup schedule and executes automatic version backup if due.
- * Works seamlessly in the background whenever the application is online or loaded by any visitor/admin.
+ * Verifies both schedule configuration and actual existing backup records
+ * to guarantee that backups only run when the full interval (e.g. 6 hours) has elapsed.
  */
 export async function checkAndRunAutoBackup(): Promise<boolean> {
   if (isBackupRunning) return false;
@@ -31,17 +33,44 @@ export async function checkAndRunAutoBackup(): Promise<boolean> {
     const intervalMs = intervalHours * 60 * 60 * 1000;
     const now = Date.now();
 
+    // Check actual latest backup timestamp from Firestore records
+    const existingBackups = await fetchBackupsFromFirestore().catch(() => []);
+    let latestBackupTimestamp: number | null = null;
+
+    if (existingBackups.length > 0 && existingBackups[0]?.createdAt) {
+      const topTime = new Date(existingBackups[0].createdAt).getTime();
+      if (!isNaN(topTime) && topTime > 0) {
+        latestBackupTimestamp = topTime;
+      }
+    }
+
+    if (schedule.lastBackupAt) {
+      const schedTime = new Date(schedule.lastBackupAt).getTime();
+      if (!isNaN(schedTime) && schedTime > 0) {
+        latestBackupTimestamp = Math.max(latestBackupTimestamp || 0, schedTime);
+      }
+    }
+
     let isDue = false;
-    if (!schedule.lastBackupAt) {
+    if (!latestBackupTimestamp || latestBackupTimestamp === 0) {
       isDue = true;
     } else {
-      const lastTime = new Date(schedule.lastBackupAt).getTime();
-      if (isNaN(lastTime) || (now - lastTime >= intervalMs)) {
+      const elapsedMs = now - latestBackupTimestamp;
+      if (elapsedMs >= intervalMs) {
         isDue = true;
+      } else {
+        isDue = false;
       }
     }
 
     if (!isDue) {
+      // If schedule was missing lastBackupAt, keep it synced with latest existing backup
+      if (!schedule.lastBackupAt && latestBackupTimestamp) {
+        await saveBackupScheduleToFirestore({
+          ...schedule,
+          lastBackupAt: new Date(latestBackupTimestamp).toISOString()
+        });
+      }
       isBackupRunning = false;
       return false;
     }

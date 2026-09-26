@@ -24,7 +24,8 @@ import {
   Download,
   AlertCircle,
   X,
-  Mail
+  Mail,
+  User
 } from 'lucide-react';
 import { StoredOrder, SiteContentConfig } from '../types';
 import { 
@@ -1212,7 +1213,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     </strong>
                   </div>
                   <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
-                    <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold shrink-0">👤</span>
+                    <User className="w-4 h-4 text-slate-500 shrink-0" />
                     <span className="text-slate-500">Khách nhận:</span>
                     <strong className="text-slate-900 font-bold truncate max-w-[150px] sm:max-w-none ml-auto sm:ml-0">
                       {activeOrder.customerName || activeOrder.name}
@@ -1500,27 +1501,27 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                                           <div className="flex flex-wrap gap-1 text-[11px] text-slate-600 pl-4.5">
                                             {ci.selectedColor && (
                                               <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded font-medium">
-                                                🎨 Màu: {ci.selectedColor}
+                                                Màu: {ci.selectedColor}
                                               </span>
                                             )}
                                             {ci.selectedCharms && ci.selectedCharms.length > 0 && (
                                               <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded font-medium">
-                                                ✨ Charm: {ci.selectedCharms.map(c => c.name).join(', ')}
+                                                Charm: {ci.selectedCharms.map(c => c.name).join(', ')}
                                               </span>
                                             )}
                                             {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
                                               <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1.5 py-0.2 rounded font-medium">
-                                                🧧 Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}
+                                                Bùa: {ci.selectedOmamoris.map(o => o.name).join(', ')}
                                               </span>
                                             )}
                                             {ci.selectedKhoen && (
                                               <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded font-medium">
-                                                🔗 Khoen: {ci.selectedKhoen}
+                                                Khoen: {ci.selectedKhoen}
                                               </span>
                                             )}
                                             {ci.selectedSize && (
                                               <span className="bg-blue-50 text-blue-900 border border-blue-200 px-1.5 py-0.2 rounded font-medium">
-                                                📏 Size: {ci.selectedSize}
+                                                Size: {ci.selectedSize}
                                               </span>
                                             )}
                                           </div>
