@@ -36,7 +36,7 @@ export const AdminReceiptUploadModal: React.FC<AdminReceiptUploadModalProps> = (
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 1080; // Optimized for razor-sharp receipt readability & ultra-compact Firestore storage

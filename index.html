@@ -14,10 +14,39 @@
         }
       }
 
-      // Gracefully prevent benign Vite HMR websocket connection notices in sandbox dev preview
+      // Filter benign Firestore idle stream disconnect notices
+      (function() {
+        var origError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var str = args.map(function(a) {
+            return typeof a === 'string' ? a : (a && a.message ? a.message : '');
+          }).join(' ');
+          if (
+            str.indexOf('Disconnecting idle stream') !== -1 ||
+            str.indexOf('Timed out waiting for new targets') !== -1 ||
+            str.indexOf("RPC 'Listen' stream") !== -1 ||
+            str.indexOf('GrpcConnection RPC') !== -1
+          ) {
+            return;
+          }
+          return origError.apply(console, arguments);
+        };
+      })();
+
+      // Gracefully prevent benign Vite HMR websocket connection notices and sandbox Illegal Constructor errors
+      window.addEventListener('error', function(event) {
+        var errStr = String((event && event.message) || (event && event.error && event.error.message) || '');
+        if (errStr.includes('Illegal constructor')) {
+          if (event.preventDefault) event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          return true;
+        }
+      }, true);
+
       window.addEventListener('unhandledrejection', function(event) {
         var errStr = String((event && event.reason && event.reason.message) || (event && event.reason) || '');
-        if (errStr.includes('WebSocket') || errStr.includes('websocket') || errStr.includes('[vite]')) {
+        if (errStr.includes('Illegal constructor') || errStr.includes('WebSocket') || errStr.includes('websocket') || errStr.includes('[vite]')) {
           event.preventDefault();
         }
       });
@@ -34,6 +63,14 @@
     <!-- Canonical URL & Sitemap -->
     <link rel="canonical" href="https://www.notaknot.id.vn/" />
     <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+    <!-- Google Cloud CDN & High-Speed Media Acceleration Preconnect Hints -->
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
+    <link rel="preconnect" href="https://storage.googleapis.com" crossorigin />
+    <link rel="dns-prefetch" href="https://storage.googleapis.com" />
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
 
     <!-- Favicon & Brand Icons -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -396,14 +433,21 @@
       function loadGtag() {
         if (window.__gtag_injected) return;
         window.__gtag_injected = true;
+        // Do not inject external GA4 script in sandbox iframes or local/dev preview environments
+        var host = window.location.hostname || '';
+        if (window.self !== window.top || host.includes('run.app') || host.includes('localhost') || host.includes('127.0.0.1')) {
+          return;
+        }
         ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function(ev) {
           window.removeEventListener(ev, loadGtag, { passive: true });
         });
-        var s = document.createElement('script');
-        s.async = true;
-        s.defer = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-G8Z5Z8R1CF';
-        document.head.appendChild(s);
+        try {
+          var s = document.createElement('script');
+          s.async = true;
+          s.defer = true;
+          s.src = 'https://www.googletagmanager.com/gtag/js?id=G-G8Z5Z8R1CF';
+          document.head.appendChild(s);
+        } catch (e) {}
       }
 
       ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function(ev) {

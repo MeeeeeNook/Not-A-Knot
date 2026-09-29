@@ -1,6 +1,7 @@
 import React from 'react';
 import { CustomElementBlock } from '../types';
 import { Sparkles, ArrowRight, CheckCircle2, HelpCircle, ShieldCheck, Star } from 'lucide-react';
+import { dispatchSafeEvent } from '../firebase';
 
 interface DynamicCustomElementsProps {
   elements?: CustomElementBlock[];
@@ -27,7 +28,7 @@ export const DynamicCustomElements: React.FC<DynamicCustomElementsProps> = ({
       const clean = link.startsWith('#') ? '/' + link.replace(/^#\/?/, '') : link;
       try {
         window.history.pushState(null, '', clean);
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        dispatchSafeEvent('popstate');
       } catch (e) {
         window.location.href = clean;
       }

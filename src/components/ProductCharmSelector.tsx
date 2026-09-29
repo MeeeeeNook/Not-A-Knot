@@ -39,7 +39,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
         if (c.image) {
           const resolved = resolveAssetUrl(c.image);
           if (resolved && resolved !== '/assets/bracelet.jpg') {
-            const img = new Image();
+            const img = document.createElement('img');
             img.src = resolved;
           }
         }

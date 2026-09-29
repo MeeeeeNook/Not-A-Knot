@@ -117,21 +117,34 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
     const el = sectionRef.current;
     if (!el) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          setIsInViewport(entry.isIntersecting);
-        });
-      },
-      {
-        threshold: 0.15,
-        rootMargin: '0px'
-      }
-    );
+    if (typeof window === 'undefined' || typeof (window as any).IntersectionObserver !== 'function') {
+      setIsInViewport(true);
+      return;
+    }
 
-    observer.observe(el);
+    let observer: IntersectionObserver | null = null;
+    try {
+      observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            setIsInViewport(entry.isIntersecting);
+          });
+        },
+        {
+          threshold: 0.15,
+          rootMargin: '0px'
+        }
+      );
+      observer.observe(el);
+    } catch {
+      setIsInViewport(true);
+      return;
+    }
+
     return () => {
-      observer.disconnect();
+      if (observer) {
+        try { observer.disconnect(); } catch {}
+      }
     };
   }, []);
 
@@ -208,7 +221,7 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
       ref={sectionRef}
       id="landing-social-feed" 
       aria-label="Khám phá tin tức mạng xã hội Not A Knot" 
-      className="w-full bg-[#FAF9F6] py-12 sm:py-16 md:py-20 text-stone-900 font-sans overflow-hidden"
+      className="w-full bg-[#FAF8F5] py-12 sm:py-16 md:py-20 text-stone-900 font-sans overflow-hidden"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
@@ -227,7 +240,7 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
           {/* Card 1: Large Featured Portrait (Spans 5 cols, Full Height) */}
           <div 
             onClick={() => openPost(posts[0].url)}
-            className="col-span-5 h-full relative rounded-3xl overflow-hidden border border-black shadow-md hover:shadow-2xl transition-all duration-500 bg-white/80 backdrop-blur-xl cursor-pointer group"
+            className="col-span-5 h-full relative rounded-3xl overflow-hidden border border-[#2C241D]/90 shadow-[0_4px_24px_-4px_rgba(44,36,29,0.12)] hover:border-amber-700/60 hover:shadow-2xl transition-all duration-500 bg-white/80 backdrop-blur-xl cursor-pointer group"
           >
             {/* Specular Highlight Top Edge */}
             <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none z-30" />
@@ -272,7 +285,7 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
               <div
                 key={post.id}
                 onClick={() => openPost(post.url)}
-                className="h-[258px] lg:h-[277px] relative rounded-3xl overflow-hidden border border-black shadow-md hover:shadow-2xl transition-all duration-500 bg-white/80 backdrop-blur-xl cursor-pointer group"
+                className="h-[258px] lg:h-[277px] relative rounded-3xl overflow-hidden border border-[#2C241D]/90 shadow-[0_4px_24px_-4px_rgba(44,36,29,0.12)] hover:border-amber-700/60 hover:shadow-2xl transition-all duration-500 bg-white/80 backdrop-blur-xl cursor-pointer group"
               >
                 {/* Specular Highlight Top Edge */}
                 <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-white/80 to-transparent pointer-events-none z-30" />
@@ -401,8 +414,8 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
                   }}
                   className={`rounded-3xl overflow-hidden cursor-pointer bg-white/95 backdrop-blur-md transition-shadow will-change-transform ${
                     isCenter 
-                      ? 'border-2 border-black shadow-2xl ring-1 ring-black/10' 
-                      : 'border border-black/85 shadow-lg'
+                      ? 'border-2 border-[#2C241D] shadow-2xl ring-1 ring-amber-900/10' 
+                      : 'border border-[#2C241D]/75 shadow-lg'
                   }`}
                   title={isCenter ? 'Chạm để xem chi tiết bài viết' : isLeft ? 'Xem bài trước' : 'Xem bài tiếp theo'}
                 >

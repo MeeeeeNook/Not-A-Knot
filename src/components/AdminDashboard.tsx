@@ -12,7 +12,6 @@ import {
   ArrowUp, 
   ArrowDown, 
   PieChart, 
-  ExternalLink, 
   BarChart3, 
   EyeOff,
   Calendar,
@@ -872,7 +871,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div id="admin-dashboard-section" className="space-y-5">
-      
       {/* Top Controls & Comprehensive Filters */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3.5">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -1127,95 +1125,95 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* KPI Highlight Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
         
         {/* Total Gross Revenue */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+        <div className="col-span-2 sm:col-span-1 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
               Tổng Doanh Thu
             </span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200">
-              Không tính phí ship
+            <span className="text-[9px] sm:text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shrink-0">
+              Không ship
             </span>
           </div>
-          <span className="text-2xl font-bold text-slate-900 block mt-2">
+          <span className="text-xl sm:text-2xl font-black text-slate-900 block mt-1.5 sm:mt-2">
             {totalGrossRevenue.toLocaleString('vi-VN')}đ
           </span>
-          <div className="text-xs text-slate-500 mt-1">
-            Doanh thu sản phẩm trên <strong>{validOrders.length} đơn hợp lệ</strong>
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1">
+            Trên <strong>{validOrders.length} đơn hợp lệ</strong>
           </div>
         </div>
 
         {/* Real Collected / Paid Revenue */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-              Doanh Thu Thực Thu
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
+              Thực Thu
             </span>
-            <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
-              Sản phẩm
+            <span className="text-[9px] sm:text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-medium">
+              Đã nhận
             </span>
           </div>
-          <span className="text-2xl font-bold text-slate-900 block mt-2">
+          <span className="text-lg sm:text-2xl font-black text-emerald-600 block mt-1.5 sm:mt-2">
             {totalPaidRevenue.toLocaleString('vi-VN')}đ
           </span>
-          <div className="text-xs text-slate-500 mt-1">
-            Đã thu: <strong>{totalGrossRevenue > 0 ? Math.round((totalPaidRevenue / totalGrossRevenue) * 100) : 0}% tổng giá trị</strong>
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1">
+            Đạt <strong>{totalGrossRevenue > 0 ? Math.round((totalPaidRevenue / totalGrossRevenue) * 100) : 0}%</strong>
           </div>
         </div>
 
         {/* Pending COD / Uncollected Revenue */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Tiền Chờ Thu
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Chờ Thu
           </span>
-          <span className="text-2xl font-bold text-slate-900 block mt-2">
+          <span className="text-lg sm:text-2xl font-black text-amber-600 block mt-1.5 sm:mt-2">
             {pendingRevenue.toLocaleString('vi-VN')}đ
           </span>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1">
             Chờ giao & thu tiền
           </div>
         </div>
 
         {/* Total Orders Count */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Tổng Số Đơn Hàng
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Số Đơn Hàng
           </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-bold text-slate-900">{validOrders.length}</span>
-            <span className="text-xs text-slate-500">đơn</span>
+          <div className="flex items-baseline gap-1.5 mt-1.5 sm:mt-2">
+            <span className="text-lg sm:text-2xl font-black text-slate-900">{validOrders.length}</span>
+            <span className="text-[11px] sm:text-xs text-slate-500">đơn</span>
           </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Đã hoàn thành: <strong>{completedOrdersCount} ({completionRate}%)</strong>
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">
+            Xong: <strong>{completedOrdersCount} ({completionRate}%)</strong>
           </div>
         </div>
 
         {/* Average Order Value */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Giá Trị Đơn Trung Bình
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            AOV (TB/Đơn)
           </span>
-          <span className="text-2xl font-bold text-slate-900 block mt-2">
+          <span className="text-lg sm:text-2xl font-black text-slate-900 block mt-1.5 sm:mt-2">
             {averageOrderValue.toLocaleString('vi-VN')}đ
           </span>
-          <div className="text-xs text-slate-500 mt-1">
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1">
             ~{(totalUnitsSold / Math.max(1, validOrders.length)).toFixed(1)} món/đơn
           </div>
         </div>
 
         {/* Total Units Sold */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-            Số Lượng Sản Phẩm Đã Bán
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block">
+            Đã Bán
           </span>
-          <div className="flex items-baseline gap-2 mt-2">
-            <span className="text-2xl font-bold text-slate-900">{totalUnitsSold}</span>
-            <span className="text-xs text-slate-500">chiếc / phụ kiện</span>
+          <div className="flex items-baseline gap-1.5 mt-1.5 sm:mt-2">
+            <span className="text-lg sm:text-2xl font-black text-slate-900">{totalUnitsSold}</span>
+            <span className="text-[11px] sm:text-xs text-slate-500">món</span>
           </div>
-          <div className="text-xs text-slate-500 mt-1">
-            Được gia công & giao từ xưởng
+          <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">
+            Sản phẩm & phụ kiện
           </div>
         </div>
 
@@ -1431,7 +1429,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile View: Product Cards */}
+        <div className="md:hidden space-y-2.5">
+          {topProductsRanking.length === 0 ? (
+            <div className="p-6 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-200">
+              Chưa có sản phẩm nào phát sinh lượt bán trong khoảng thời gian này.
+            </div>
+          ) : (
+            topProductsRanking.slice(0, 10).map((prod, idx) => (
+              <div
+                key={`mobile-prod-rank-${prod.id}`}
+                className="bg-slate-50/70 p-3 rounded-xl border border-slate-200 space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black shrink-0 ${
+                      idx === 0 ? 'bg-amber-400 text-slate-950 shadow-2xs' : idx === 1 ? 'bg-slate-200 text-slate-800' : idx === 2 ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      #{idx + 1}
+                    </span>
+                    {prod.image && (
+                      <img
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-900 text-xs truncate block">{prod.name}</span>
+                      <span className="text-[11px] font-bold text-amber-700">{prod.price.toLocaleString('vi-VN')}đ</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="font-black text-slate-900 text-xs block">
+                      {prod.totalRevenue.toLocaleString('vi-VN')}đ
+                    </span>
+                    <span className="text-[10px] text-slate-500 block">Doanh thu</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-200/80 text-center text-[11px]">
+                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/80">
+                    <span className="text-[10px] text-slate-400 block font-medium">Đã bán</span>
+                    <span className="font-bold text-slate-800">{prod.quantitySold} cái</span>
+                  </div>
+                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/80">
+                    <span className="text-[10px] text-slate-400 block font-medium">Số đơn</span>
+                    <span className="font-bold text-slate-800">{prod.ordersCount} đơn</span>
+                  </div>
+                  <div className="bg-white p-1.5 rounded-lg border border-slate-200/80">
+                    <span className="text-[10px] text-slate-400 block font-medium">Tồn kho</span>
+                    <span className={`font-bold ${prod.stock > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {prod.stock > 0 ? `${prod.stock} cái` : 'Hết hàng'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop View: Full Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-[10px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
               <tr>
@@ -1705,8 +1765,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Right (Col 6-12): Sortable Leaderboard Table */}
-          <div className="lg:col-span-7 overflow-x-auto">
+          {/* Right (Col 6-12): Sortable Leaderboard */}
+          <div className="lg:col-span-7 space-y-3">
+            {/* Mobile View: Seller Cards */}
+            <div className="md:hidden space-y-2">
+              <div className="flex items-center justify-between px-1 text-[11px] font-bold text-slate-500">
+                <span>Xếp hạng nhân sự</span>
+                <span>Doanh thu / Tỷ lệ</span>
+              </div>
+              {sortedSellerRanking.map((seller, sIdx) => {
+                const isHovered = hoveredSellerKey === seller.username;
+                return (
+                  <div
+                    key={`mobile-seller-rank-${seller.id || seller.username}-${sIdx}`}
+                    onClick={() => setHoveredSellerKey(isHovered ? null : seller.username)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                      isHovered
+                        ? 'bg-amber-50 border-amber-300 shadow-xs'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-black text-xs flex items-center justify-center shrink-0">
+                          #{seller.rank}
+                        </span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-slate-900 text-xs truncate block">{seller.name}</span>
+                          <span className="text-[10px] text-slate-500 block">{seller.orderCount} đơn đã ghi nhận</span>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-slate-900 text-xs block">
+                          {seller.totalRevenue.toLocaleString('vi-VN')}đ
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100/70 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                          {seller.percent}% doanh số
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Sortable Leaderboard Table */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700 border border-slate-200 rounded-lg overflow-hidden">
               <thead className="bg-slate-50 text-[10px] font-bold text-slate-600 uppercase tracking-wider border-b border-slate-200">
                 <tr>
@@ -1845,43 +1950,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tbody>
             </table>
           </div>
+          </div>
 
         </div>
       </div>
 
       {/* Sales Activity & Regional Heatmap */}
       <AdminHeatmapSection orders={teamValidOrders.length > 0 ? teamValidOrders : orders} />
-
-      {/* Google Analytics 4 Dashboard External Link Button */}
-      <div className="bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-transparent p-5 rounded-2xl border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-        <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-900">
-            <BarChart3 className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-slate-900 tracking-tight">Google Analytics 4</h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300/80">
-                G-G8Z5Z8R1CF
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Theo dõi realtime khách truy cập, lưu lượng truy cập, tỷ lệ chuyển đổi và hành vi người dùng trên Google Analytics chính thức.
-            </p>
-          </div>
-        </div>
-
-        <a
-          href="https://analytics.google.com/analytics/web/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-sm hover:shadow transition-all shrink-0 cursor-pointer"
-        >
-          <span>Mở Google Analytics</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-      </div>
-
     </div>
   );
 };

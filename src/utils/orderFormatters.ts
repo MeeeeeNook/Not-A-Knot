@@ -349,8 +349,8 @@ export const isWebOrder = (order?: Partial<StoredOrder> | null): boolean => {
  */
 export const playWebOrderChime = () => {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
+    const AudioContextClass = typeof window !== 'undefined' ? (window.AudioContext || (window as any).webkitAudioContext) : null;
+    if (typeof AudioContextClass !== 'function') return;
     const ctx = new AudioContextClass();
 
     if (ctx.state === 'suspended') {

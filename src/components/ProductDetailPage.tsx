@@ -32,7 +32,7 @@ import {
   ZoomIn
 } from 'lucide-react';
 import { trackGA4ViewItem, trackGA4PageView } from '../utils/analytics';
-import { resolveAssetUrl } from '../firebase';
+import { resolveAssetUrl, dispatchSafeEvent } from '../firebase';
 import { useProductSEO } from '../utils/seo';
 import { getProductSlug } from '../utils/slugify';
 import { buildProductGalleryImages, findGalleryImageIndex, isSameImageUrl } from '../utils/imageUtils';
@@ -716,7 +716,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     if (images && images.length > 0) {
       images.slice(0, 4).forEach((imgSrc) => {
         if (imgSrc) {
-          const img = new Image();
+          const img = document.createElement('img');
           img.src = resolveAssetUrl(imgSrc);
         }
       });
@@ -734,7 +734,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
     optionImageUrls.forEach((url) => {
       if (url && url !== '/assets/bracelet.jpg') {
-        const img = new Image();
+        const img = document.createElement('img');
         img.src = url;
       }
     });
@@ -779,24 +779,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
           <button
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-neutral-950 hover:text-neutral-700 transition-colors cursor-pointer py-1.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:scale-95 border border-neutral-200/80 shadow-2xs"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-stone-900 hover:text-stone-700 transition-colors cursor-pointer py-1.5 px-3 rounded-xl bg-[#F4F1EA] hover:bg-[#EAE6DE] active:scale-95 border border-[#EAE6DE] shadow-2xs"
             title="Quay lại cửa hàng (Về shop)"
           >
-            <ArrowLeft className="w-4 h-4 text-neutral-950 stroke-[2.5]" />
+            <ArrowLeft className="w-4 h-4 text-stone-950 stroke-[2.5]" />
             <span>Về shop</span>
-            <span className="hidden sm:inline font-normal text-neutral-500">• {backLabel || 'Danh mục sản phẩm'}</span>
+            <span className="hidden sm:inline font-normal text-stone-600">• {backLabel || 'Danh mục sản phẩm'}</span>
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-xs font-bold text-neutral-700 bg-neutral-100/90 border border-neutral-200/80 px-2.5 py-1 rounded-lg truncate max-w-[160px] sm:max-w-none">
+            <span className="text-xs font-bold text-stone-800 bg-[#F4F1EA] border border-[#EAE6DE] px-2.5 py-1 rounded-lg truncate max-w-[160px] sm:max-w-none">
               {categoryName}
             </span>
             <button
               onClick={() => setIsShareModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors cursor-pointer active:scale-95 border border-neutral-200/60 shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F4F1EA] hover:bg-[#EAE6DE] text-stone-800 transition-colors cursor-pointer active:scale-95 border border-[#EAE6DE] shadow-2xs"
               title="Chia sẻ sản phẩm"
             >
-              <Share2 className="w-3.5 h-3.5 text-slate-800" />
+              <Share2 className="w-3.5 h-3.5 text-stone-800" />
               <span>Chia sẻ</span>
             </button>
           </div>
@@ -812,7 +812,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="lg:col-span-5 xl:col-span-5 max-w-md mx-auto w-full lg:max-w-none space-y-3">
             <div 
               onClick={() => setProductCompareModalOpen(true)}
-              className="relative aspect-square w-full sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-white border border-neutral-200/90 shadow-xs group select-none touch-pan-y mx-auto cursor-zoom-in isolate"
+              className="relative aspect-square w-full sm:max-h-[440px] rounded-2xl sm:rounded-3xl overflow-hidden bg-[#FFFDFB] border border-[#EAE6DE] shadow-[0_4px_24px_-4px_rgba(44,38,30,0.06)] group select-none touch-pan-y mx-auto cursor-zoom-in isolate"
               style={{ touchAction: 'pan-y' }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
@@ -1020,7 +1020,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
               {/* Short Description */}
               {product.description && (
-                <p className="text-sm text-neutral-600 leading-relaxed">
+                <p className="text-base text-slate-800 font-medium leading-relaxed">
                   {product.description}
                 </p>
               )}
@@ -1662,7 +1662,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    window.dispatchEvent(new CustomEvent('open-chat-widget'));
+                    dispatchSafeEvent('open-chat-widget');
                   }}
                   className="flex flex-col items-center justify-center w-12 py-1 text-neutral-600 hover:text-amber-700 active:scale-90 transition-transform cursor-pointer"
                   title="Chat tư vấn ngay"

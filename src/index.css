@@ -5,25 +5,30 @@
   --font-serif: 'Lora', Georgia, Cambria, 'Times New Roman', Times, serif;
   --color-brand-red: #B41C1A;
   --color-brand-gold: #DDB652;
-  --color-brand-dark: #1a1a1a;
-  --color-brand-light: #fdfbf7;
+  --color-brand-dark: #191716;
+  --color-brand-light: #FAF8F5;
+  --color-craft-linen: #FAF8F5;
+  --color-craft-eggshell: #FFFDFB;
+  --color-craft-sand: #F4F1EA;
+  --color-craft-border: #EAE6DE;
+  --color-craft-border-subtle: #F2EFE9;
 }
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  scrollbar-color: rgba(44, 38, 30, 0.2) transparent;
   -webkit-overflow-scrolling: touch;
   width: 100%;
   max-width: 100vw;
   overflow-x: clip;
   position: relative;
-  background-color: #FAF9F6;
+  background-color: #FAF8F5;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background-color: #FAF9F6;
-  color: var(--color-brand-dark);
+  background-color: #FAF8F5;
+  color: #191716;
   width: 100%;
   max-width: 100vw;
   overflow-x: clip;

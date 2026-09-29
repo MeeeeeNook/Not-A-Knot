@@ -3,11 +3,28 @@ import {
   Users, UserPlus, Key, ShieldCheck, UserCheck, UserX, Trash2, Edit2, 
   Search, Check, Eye, EyeOff, AlertTriangle, Phone, 
   TrendingUp, ShoppingBag, ShieldAlert, X, Sparkles, RefreshCw,
-  Globe, MapPin, Clock, Laptop, Smartphone, CheckCircle2, XCircle, History, Copy
+  Globe, MapPin, Clock, Laptop, Smartphone, CheckCircle2, XCircle, History, Copy,
+  LayoutGrid, Table as TableIcon, PhoneCall, ChevronDown
 } from 'lucide-react';
+import { Lock } from './common/LockIcon';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { SellerUser, SystemLogItem } from '../types';
-import { db, StoredOrder, saveSellerToFirestore, deleteSellerFromFirestore, updateSellerPresence } from '../firebase';
+import { SellerUser, SystemLogItem, AuthorizedSellerItem, UnauthorizedLoginAttemptItem } from '../types';
+import { 
+  db, 
+  firebaseConfig, 
+  StoredOrder, 
+  saveSellerToFirestore, 
+  deleteSellerFromFirestore, 
+  updateSellerPresence, 
+  fetchAuthorizedSellersFromFirestore, 
+  saveAuthorizedSellerToFirestore, 
+  deleteAuthorizedSellerFromFirestore,
+  fetchUnauthorizedLoginAttemptsFromFirestore,
+  deleteUnauthorizedLoginAttemptFromFirestore,
+  clearAllUnauthorizedLoginAttemptsFromFirestore
+} from '../firebase';
 import { 
   hashPassword, 
   generateSalt, 
@@ -17,7 +34,11 @@ import {
   isRootAdminUser, 
   isRootAdminUsername, 
   verifyAdminAction,
-  refreshAdminSession
+  refreshAdminSession,
+  canChangeUserPassword,
+  linkGoogleAccountWithSeller,
+  unlinkGoogleAccountFromSeller,
+  AUTHORIZED_ROOT_ADMIN_EMAILS
 } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
@@ -118,8 +139,16 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   onUpdateSellers
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState<'all' | 'root_admin' | 'member'>('all');
+  const [filterRole, setFilterRole] = useState<'all' | 'root_admin' | 'deputy_admin' | 'member'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  
+  // Mobile / Desktop View Mode (Card vs Table)
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'cards';
+    }
+    return 'table';
+  });
 
   // Member Login Logs Drawer / Modal State
   const [selectedSellerForLogs, setSelectedSellerForLogs] = useState<SellerUser | null>(null);
@@ -136,7 +165,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     return () => unsub();
   }, []);
 
-  // Inline action states (strictly NO POPUPS / MODALS)
+  // Inline action states
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [editingSellerId, setEditingSellerId] = useState<string | null>(null);
   const [passwordTargetSellerId, setPasswordTargetSellerId] = useState<string | null>(null);
@@ -150,7 +179,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     username: '',
     password: '',
     phone: '',
-    role: 'member' as 'root_admin' | 'member',
+    googleEmail: '',
+    role: 'member' as 'root_admin' | 'deputy_admin' | 'member',
     isActive: true
   });
   const [showFormPassword, setShowFormPassword] = useState(false);
@@ -158,6 +188,233 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState('');
+
+  // Authorized Google Emails State & Handlers
+  const [authorizedEmails, setAuthorizedEmails] = useState<AuthorizedSellerItem[]>([]);
+  const [isLoadingAuthEmails, setIsLoadingAuthEmails] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState('');
+  const [newNameInput, setNewNameInput] = useState('');
+  const [newRoleInput, setNewRoleInput] = useState<'deputy_admin' | 'member'>('member');
+  const [authEmailError, setAuthEmailError] = useState('');
+  const [authEmailSuccess, setAuthEmailSuccess] = useState('');
+  const [isSubmittingAuthEmail, setIsSubmittingAuthEmail] = useState(false);
+
+  // Unauthorized Login Attempts Log State
+  const [unauthorizedAttempts, setUnauthorizedAttempts] = useState<UnauthorizedLoginAttemptItem[]>([]);
+  const [isLoadingAttempts, setIsLoadingAttempts] = useState(false);
+  const [attemptSuccessMsg, setAttemptSuccessMsg] = useState('');
+
+  // Editable display names for Root Admins (Tổng bí thư)
+  const [adminCustomNames, setAdminCustomNames] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('nak_admin_custom_names');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return {
+      'nhunhuhao71@gmail.com': 'Như Hảo',
+      'manhcuong2006ht@gmail.com': 'Vũ Ngọc Mạnh Cường'
+    };
+  });
+
+  // Modal / Inline Rename State for Tổng bí thư
+  const [editingTarget, setEditingTarget] = useState<{
+    email: string;
+    currentName: string;
+    isRoot: boolean;
+    role?: 'deputy_admin' | 'member';
+  } | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editRoleValue, setEditRoleValue] = useState<'deputy_admin' | 'member'>('member');
+
+  // Load authorized emails from Firestore
+  const loadAuthorizedEmails = async () => {
+    try {
+      setIsLoadingAuthEmails(true);
+      const list = await fetchAuthorizedSellersFromFirestore();
+      setAuthorizedEmails(list);
+    } catch (e) {
+      console.warn('Lỗi tải danh sách email ủy quyền:', e);
+    } finally {
+      setIsLoadingAuthEmails(false);
+    }
+  };
+
+  const loadUnauthorizedAttempts = async () => {
+    try {
+      setIsLoadingAttempts(true);
+      const list = await fetchUnauthorizedLoginAttemptsFromFirestore();
+      setUnauthorizedAttempts(list);
+    } catch (e) {
+      console.warn('Lỗi tải danh sách nỗ lực đăng nhập bất thường:', e);
+    } finally {
+      setIsLoadingAttempts(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAuthorizedEmails();
+    loadUnauthorizedAttempts();
+  }, []);
+
+  const handleStartEditTarget = (email: string, currentName: string, isRoot: boolean, role?: 'deputy_admin' | 'member') => {
+    setEditingTarget({ email, currentName, isRoot, role });
+    setEditNameValue(currentName);
+    setEditRoleValue(role || 'member');
+  };
+
+  const handleSaveEditTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTarget) return;
+    const cleanName = editNameValue.trim();
+    if (!cleanName) return;
+
+    if (editingTarget.isRoot) {
+      const updated = { ...adminCustomNames, [editingTarget.email]: cleanName };
+      setAdminCustomNames(updated);
+      try {
+        localStorage.setItem('nak_admin_custom_names', JSON.stringify(updated));
+      } catch {}
+      setEditingTarget(null);
+      setAuthEmailSuccess(`Đã cập nhật tên thành công cho: ${editingTarget.email}`);
+      setTimeout(() => setAuthEmailSuccess(''), 3000);
+      return;
+    }
+
+    try {
+      setIsSubmittingAuthEmail(true);
+      const existing = authorizedEmails.find(a => a.email.toLowerCase() === editingTarget.email.toLowerCase());
+      if (existing) {
+        const updatedItem: AuthorizedSellerItem = {
+          ...existing,
+          name: cleanName,
+          role: editRoleValue
+        };
+        await saveAuthorizedSellerToFirestore(updatedItem);
+        setAuthorizedEmails(prev => prev.map(a => a.email.toLowerCase() === editingTarget.email.toLowerCase() ? updatedItem : a));
+      }
+      setEditingTarget(null);
+      setAuthEmailSuccess(`Đã cập nhật tài khoản: ${editingTarget.email}`);
+      setTimeout(() => setAuthEmailSuccess(''), 3000);
+    } catch (err: any) {
+      setAuthEmailError('Lỗi cập nhật tài khoản: ' + err.message);
+    } finally {
+      setIsSubmittingAuthEmail(false);
+    }
+  };
+
+  const handleDeleteUnauthorizedAttempt = async (id: string) => {
+    try {
+      await deleteUnauthorizedLoginAttemptFromFirestore(id);
+      setUnauthorizedAttempts(prev => prev.filter(item => item.id !== id));
+      setAttemptSuccessMsg('Đã xóa 1 bản ghi cảnh báo.');
+      setTimeout(() => setAttemptSuccessMsg(''), 3000);
+    } catch (err) {
+      console.warn('Lỗi xóa bản ghi cảnh báo:', err);
+    }
+  };
+
+  const handleClearAllUnauthorizedAttempts = async () => {
+    if (typeof window !== 'undefined' && window.confirm && !window.confirm('Bạn có chắc muốn xóa toàn bộ lịch sử cảnh báo đăng nhập bất thường?')) {
+      return;
+    }
+    try {
+      await clearAllUnauthorizedLoginAttemptsFromFirestore();
+      setUnauthorizedAttempts([]);
+      setAttemptSuccessMsg('Đã dọn sạch toàn bộ nhật ký cảnh báo.');
+      setTimeout(() => setAttemptSuccessMsg(''), 3000);
+    } catch (err) {
+      console.warn('Lỗi dọn sạch cảnh báo:', err);
+    }
+  };
+
+  const handleAddAuthorizedEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthEmailError('');
+    setAuthEmailSuccess('');
+
+    const cleanEmail = newEmailInput.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setAuthEmailError('Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+
+    if (AUTHORIZED_ROOT_ADMIN_EMAILS.includes(cleanEmail)) {
+      setAuthEmailError('Email này đã là Quản trị viên Tối cao (Root Admin).');
+      return;
+    }
+
+    if (authorizedEmails.some(a => a.email.toLowerCase() === cleanEmail)) {
+      setAuthEmailError('Email này đã có trong danh sách được ủy quyền.');
+      return;
+    }
+
+    try {
+      setIsSubmittingAuthEmail(true);
+      const newAuthItem: AuthorizedSellerItem = {
+        email: cleanEmail,
+        name: newNameInput.trim() || cleanEmail.split('@')[0],
+        role: newRoleInput,
+        addedBy: currentAdmin?.googleEmail || currentAdmin?.username || 'Root Admin',
+        createdAt: new Date().toISOString(),
+        isActive: true
+      };
+
+      await saveAuthorizedSellerToFirestore(newAuthItem);
+      setAuthorizedEmails(prev => [...prev.filter(a => a.email !== cleanEmail), newAuthItem]);
+      setNewEmailInput('');
+      setNewNameInput('');
+      setAuthEmailSuccess(`Đã cấp quyền truy cập thành công cho: ${cleanEmail}`);
+      setTimeout(() => setAuthEmailSuccess(''), 4000);
+    } catch (err: any) {
+      setAuthEmailError(err.message || 'Lỗi khi lưu ủy quyền vào Firestore.');
+    } finally {
+      setIsSubmittingAuthEmail(false);
+    }
+  };
+
+  const handleRevokeAuthorizedEmail = async (emailToRevoke: string) => {
+    const confirmMsg = `Bạn có chắc chắn muốn thu hồi quyền truy cập quản trị của email: ${emailToRevoke}?`;
+    if (typeof window !== 'undefined' && window.confirm && !window.confirm(confirmMsg)) {
+      return;
+    }
+
+    try {
+      await deleteAuthorizedSellerFromFirestore(emailToRevoke);
+      setAuthorizedEmails(prev => prev.filter(a => a.email !== emailToRevoke));
+      setAuthEmailSuccess(`Đã thu hồi quyền của ${emailToRevoke}.`);
+      setTimeout(() => setAuthEmailSuccess(''), 4000);
+    } catch (err: any) {
+      console.error('Lỗi thu hồi quyền:', err);
+    }
+  };
+
+  const handleOpenLogsForEmail = (
+    email: string,
+    name: string,
+    isRoot: boolean,
+    role: 'root_admin' | 'deputy_admin' | 'member' = isRoot ? 'root_admin' : 'member'
+  ) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const matchedSeller = sellers.find(s => 
+      (s.googleEmail && s.googleEmail.toLowerCase() === cleanEmail) ||
+      s.username.toLowerCase() === cleanEmail.split('@')[0]
+    );
+    if (matchedSeller) {
+      setSelectedSellerForLogs(matchedSeller);
+    } else {
+      setSelectedSellerForLogs({
+        id: `staff-${cleanEmail.replace(/[^a-z0-9]/g, '')}`,
+        username: cleanEmail.split('@')[0],
+        name: name,
+        role: role,
+        isRootAdmin: isRoot,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        avatarColor: isRoot ? '#B41C1A' : (role === 'deputy_admin' ? '#7C3AED' : '#2563EB'),
+        googleEmail: cleanEmail
+      });
+    }
+  };
 
   const isRootAdmin = isRootAdminUser(currentAdmin);
 
@@ -191,7 +448,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         map[key].totalOrders += 1;
         const netAmt = Math.max(0, (o.totalPrice || o.totalAmount || 0) - (Number(o.shippingFee) || 0));
         map[key].totalRevenue += netAmt;
-        if (o.status === 'completed' || o.status === 'Đã giao') {
+        if (o.status === 'completed' || o.status === 'Đã giao' || o.status === 'Đơn hàng giao thành công') {
           map[key].completedOrders += 1;
         }
       }
@@ -206,9 +463,19 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       const matchSearch = 
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (s.phone && s.phone.includes(searchTerm));
+        (s.phone && s.phone.includes(searchTerm)) ||
+        (s.googleEmail && s.googleEmail.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        ((s as any).email && (s as any).email.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      const matchRole = filterRole === 'all' || s.role === filterRole;
+      let matchRole = true;
+      if (filterRole === 'root_admin') {
+        matchRole = isRootAdminUser(s);
+      } else if (filterRole === 'deputy_admin') {
+        matchRole = !isRootAdminUser(s) && s.role === 'deputy_admin';
+      } else if (filterRole === 'member') {
+        matchRole = !isRootAdminUser(s) && s.role !== 'deputy_admin';
+      }
+
       const matchStatus = filterStatus === 'all' || (filterStatus === 'active' ? s.isActive : !s.isActive);
 
       return matchSearch && matchRole && matchStatus;
@@ -231,6 +498,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         username: '',
         password: '',
         phone: '',
+        googleEmail: '',
         role: 'member',
         isActive: true
       });
@@ -238,6 +506,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       setEditingSellerId(null);
       setPasswordTargetSellerId(null);
       setDeletingSellerId(null);
+      setPromotingSellerId(null);
+      setDemotingSellerId(null);
       setIsAddFormOpen(true);
     }
   };
@@ -250,12 +520,14 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     setPromotingSellerId(null);
     setDemotingSellerId(null);
     setIsAddFormOpen(false);
+    const isRoot = isRootAdminUser(seller);
     setFormData({
       name: seller.name,
       username: seller.username,
       password: '',
       phone: seller.phone || '',
-      role: (seller.isRootAdmin || seller.role === 'root_admin') ? 'root_admin' : 'member',
+      googleEmail: seller.googleEmail || (seller as any).email || '',
+      role: isRoot ? 'root_admin' : (seller.role === 'deputy_admin' ? 'deputy_admin' : 'member'),
       isActive: seller.isActive
     });
   };
@@ -288,6 +560,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     const cleanUsername = formData.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const cleanName = formData.name.trim();
     const cleanPassword = formData.password.trim();
+    const cleanGoogleEmail = formData.googleEmail ? formData.googleEmail.trim().toLowerCase() : '';
 
     if (!cleanName || !cleanUsername) {
       alert('Vui lòng nhập đầy đủ họ tên và tên đăng nhập.');
@@ -299,8 +572,18 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       return;
     }
 
+    if (cleanGoogleEmail && !cleanGoogleEmail.includes('@')) {
+      alert('Email Google không đúng định dạng.');
+      return;
+    }
+
     if (sellers.some((s) => s.username.toLowerCase() === cleanUsername)) {
       alert('Tên đăng nhập này đã tồn tại trong hệ thống. Vui lòng chọn tên khác.');
+      return;
+    }
+
+    if (cleanGoogleEmail && sellers.some((s) => s.googleEmail?.toLowerCase() === cleanGoogleEmail || (s as any).email?.toLowerCase() === cleanGoogleEmail)) {
+      alert('Email Google này đã được liên kết với một tài khoản khác trong hệ thống.');
       return;
     }
 
@@ -311,7 +594,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       const colors = ['#B41C1A', '#D97706', '#059669', '#2563EB', '#7C3AED', '#DB2777', '#0891B2', '#4F46E5'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-      
       // Create Firebase Auth Account using a temporary secondary app to avoid logging out the admin
       try {
         const tempApp = initializeApp(firebaseConfig, 'TempApp-' + Date.now());
@@ -319,105 +601,253 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         
         const email = `${cleanUsername}@notaknot.local`;
         await createUserWithEmailAndPassword(tempAuth, email, cleanPassword);
-        
-        await deleteApp(tempApp);
-      } catch (authErr: any) {
-        console.warn("Firebase Auth account creation skipped/failed:", authErr?.code || authErr?.message);
+      } catch (authErr) {
+        console.warn('Firebase Auth user creation info:', authErr);
       }
 
-      const newSeller: SellerUser = {       id: `seller-${cleanUsername}`,
-        username: cleanUsername,
-        usernameHash: await hashUsername(cleanUsername),
+      const assignedRole = formData.role === 'deputy_admin' ? 'deputy_admin' : 'member';
+
+      const newSeller: SellerUser = {
+        id: `seller_${Date.now()}_${cleanUsername}`,
         name: cleanName,
+        username: cleanUsername,
         passwordHash: hash,
         passwordSalt: salt,
-        isRootAdmin: formData.role === 'root_admin',
-        role: formData.role,
+        phone: formData.phone.trim() || undefined,
+        googleEmail: cleanGoogleEmail || undefined,
+        role: assignedRole,
+        isRootAdmin: false,
         isActive: formData.isActive,
         createdAt: new Date().toISOString(),
         avatarColor: randomColor,
-        phone: formData.phone.trim()
+        isAutoCreated: false,
+        lastLoginIp: '127.0.0.1',
+        lastLoginCountry: 'Việt Nam',
+        lastLoginCountryCode: 'VN',
+        lastLoginCity: 'Hà Nội'
       };
 
       await saveSellerToFirestore(newSeller);
+
       const updated = deduplicateSellers([...sellers, newSeller]);
       onUpdateSellers(updated);
+
       setIsAddFormOpen(false);
-      triggerSuccess(`Đã tạo thành công tài khoản người bán "${cleanName}" (@${cleanUsername}).`);
-    } catch {
-      alert('Lỗi tạo tài khoản người bán.');
+      setFormData({
+        name: '',
+        username: '',
+        password: '',
+        phone: '',
+        googleEmail: '',
+        role: 'member',
+        isActive: true
+      });
+      triggerSuccess(`Đã tạo thành công tài khoản "${cleanName}" (@${cleanUsername})!`);
+    } catch (err: any) {
+      console.error('Lỗi khi tạo người bán:', err);
+      alert('Lỗi tạo tài khoản: ' + (err?.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Save edited seller info (Inline form)
+  // Save edited seller info
   const handleSaveEdit = async (seller: SellerUser, e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = formData.name.trim();
+    const cleanGoogleEmail = formData.googleEmail ? formData.googleEmail.trim().toLowerCase() : '';
+
     if (!cleanName) {
-      alert('Vui lòng nhập họ tên người bán.');
+      alert('Họ tên không được để trống.');
+      return;
+    }
+
+    if (cleanGoogleEmail && !cleanGoogleEmail.includes('@')) {
+      alert('Email Google không đúng định dạng.');
+      return;
+    }
+
+    if (cleanGoogleEmail && sellers.some((s) => s.id !== seller.id && (s.googleEmail?.toLowerCase() === cleanGoogleEmail || (s as any).email?.toLowerCase() === cleanGoogleEmail))) {
+      alert('Email Google này đã được liên kết với một tài khoản khác trong hệ thống.');
       return;
     }
 
     setIsSaving(true);
     try {
-      const isPermanentRoot = isRootAdminUsername(seller.username);
-      const isPromotingToAdmin = formData.role === 'root_admin';
-      const finalRole: 'root_admin' | 'member' = (isPermanentRoot || isPromotingToAdmin) ? 'root_admin' : 'member';
-      const finalIsRootAdmin = isPermanentRoot || isPromotingToAdmin;
+      const isRoot = isRootAdminUsername(seller.username) || isRootAdminUser(seller);
+      const assignedRole = isRoot ? 'root_admin' : (formData.role === 'deputy_admin' ? 'deputy_admin' : 'member');
 
       const updatedSeller: SellerUser = {
         ...seller,
         name: cleanName,
-        phone: formData.phone.trim(),
-        role: finalRole,
-        isRootAdmin: finalIsRootAdmin,
-        isActive: finalIsRootAdmin ? true : formData.isActive
+        phone: formData.phone.trim() || undefined,
+        googleEmail: cleanGoogleEmail || undefined,
+        role: assignedRole,
+        isRootAdmin: isRoot
       };
 
       await saveSellerToFirestore(updatedSeller);
+
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
-      onUpdateSellers(updatedList);
-      refreshAdminSession(updatedSeller).catch(() => {});
+      onUpdateSellers(deduplicateSellers(updatedList));
+
       setEditingSellerId(null);
-      triggerSuccess(`Đã cập nhật thông tin tài khoản "${cleanName}" (${finalIsRootAdmin ? 'Quản trị viên' : 'Người bán'}).`);
-    } catch {
-      alert('Lỗi cập nhật tài khoản.');
+      triggerSuccess(`Đã cập nhật thông tin tài khoản "${cleanName}" thành công.`);
+    } catch (err: any) {
+      console.error('Lỗi cập nhật người bán:', err);
+      alert('Lỗi khi lưu thông tin: ' + (err?.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Promote Member to Admin
+  // Save changed password
+  const handleChangePassword = async (seller: SellerUser, e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (isRootAdminUser(seller)) {
+      alert('Không ai được quyền đổi mật khẩu của tài khoản Admin Root. Mật khẩu của Admin Root được bảo vệ tuyệt đối.');
+      return;
+    }
+
+    if (!canChangeUserPassword(currentAdmin, seller)) {
+      alert('Bạn không có quyền đổi mật khẩu cho tài khoản này.');
+      return;
+    }
+
+    const cleanPass = newPasswordInput.trim();
+    if (!cleanPass || cleanPass.length < 6) {
+      alert('Mật khẩu mới cần tối thiểu 6 ký tự.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const salt = generateSalt();
+      const hash = await hashPassword(cleanPass, salt);
+
+      const updatedSeller: SellerUser = {
+        ...seller,
+        passwordHash: hash,
+        passwordSalt: salt
+      };
+
+      await saveSellerToFirestore(updatedSeller);
+
+      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
+      onUpdateSellers(deduplicateSellers(updatedList));
+
+      setPasswordTargetSellerId(null);
+      setNewPasswordInput('');
+      triggerSuccess(`Đã đổi mật khẩu cho tài khoản "${seller.name}" thành công!`);
+    } catch (err: any) {
+      console.error('Lỗi đổi mật khẩu:', err);
+      alert('Lỗi khi đổi mật khẩu: ' + (err?.message || 'Vui lòng thử lại.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Link Google Account directly
+  const handleLinkGoogle = async (seller: SellerUser) => {
+    setIsSaving(true);
+    try {
+      const res = await linkGoogleAccountWithSeller(seller);
+      if (!res.success || !res.updatedSeller) {
+        alert(res.error || 'Liên kết Google thất bại.');
+        setIsSaving(false);
+        return;
+      }
+      const updatedList = sellers.map((s) => (s.id === seller.id ? res.updatedSeller! : s));
+      onUpdateSellers(deduplicateSellers(updatedList));
+      triggerSuccess(`Đã liên kết Google (${res.updatedSeller.googleEmail}) cho tài khoản "${seller.name}"!`);
+    } catch (err: any) {
+      alert('Lỗi: ' + (err?.message || 'Không thể liên kết Google.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Unlink Google Account
+  const handleUnlinkGoogle = async (seller: SellerUser) => {
+    if (!confirm(`Xác nhận hủy liên kết tài khoản Google khỏi "${seller.name}"?`)) return;
+    setIsSaving(true);
+    try {
+      const res = await unlinkGoogleAccountFromSeller(seller);
+      if (!res.success || !res.updatedSeller) {
+        alert(res.error || 'Hủy liên kết thất bại.');
+        setIsSaving(false);
+        return;
+      }
+      const updatedList = sellers.map((s) => (s.id === seller.id ? res.updatedSeller! : s));
+      onUpdateSellers(deduplicateSellers(updatedList));
+      triggerSuccess(`Đã hủy liên kết Google của "${seller.name}".`);
+    } catch (err: any) {
+      alert('Lỗi: ' + (err?.message || 'Không thể hủy liên kết Google.'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Toggle active/inactive status
+  const handleToggleStatus = async (seller: SellerUser) => {
+    if (isRootAdminUsername(seller.username) || isRootAdminUser(seller)) {
+      alert('Không thể khóa tài khoản Quản trị viên Tối cao (Root Admin).');
+      return;
+    }
+
+    const nextStatus = !seller.isActive;
+    try {
+      const updatedSeller: SellerUser = {
+        ...seller,
+        isActive: nextStatus
+      };
+
+      await saveSellerToFirestore(updatedSeller);
+
+      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
+      onUpdateSellers(deduplicateSellers(updatedList));
+
+      triggerSuccess(
+        nextStatus 
+          ? `Đã mở khóa tài khoản "${seller.name}".` 
+          : `Đã tạm khóa tài khoản "${seller.name}".`
+      );
+    } catch (err: any) {
+      console.error('Lỗi khóa tài khoản:', err);
+      alert('Lỗi cập nhật trạng thái: ' + (err?.message || 'Vui lòng thử lại.'));
+    }
+  };
+
+  // Confirm promote to Deputy Admin
   const handleConfirmPromote = async (seller: SellerUser) => {
     setIsSaving(true);
     try {
       const updatedSeller: SellerUser = {
         ...seller,
-        role: 'root_admin',
-        isRootAdmin: true,
-        isActive: true
+        role: 'deputy_admin',
+        isRootAdmin: false
       };
 
       await saveSellerToFirestore(updatedSeller);
+
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
-      onUpdateSellers(updatedList);
-      refreshAdminSession(updatedSeller).catch(() => {});
+      onUpdateSellers(deduplicateSellers(updatedList));
+
       setPromotingSellerId(null);
-      triggerSuccess(`Đã nâng quyền người bán "${seller.name}" (@${seller.username}) thành Quản trị viên thành công!`);
-    } catch {
-      alert('Lỗi khi nâng quyền người bán.');
+      triggerSuccess(`Đã nâng cấp tài khoản "${seller.name}" lên Phó Admin.`);
+    } catch (err: any) {
+      console.error('Lỗi nâng cấp:', err);
+      alert('Lỗi nâng cấp tài khoản: ' + (err?.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Demote Admin back to Member
+  // Confirm demote to member
   const handleConfirmDemote = async (seller: SellerUser) => {
-    if (isRootAdminUsername(seller.username)) {
-      alert('Không thể hạ quyền Quản trị viên tối cao của hệ thống.');
-      setDemotingSellerId(null);
+    if (isRootAdminUsername(seller.username) || isRootAdminUser(seller)) {
+      alert('Không thể hạ quyền Quản trị viên Tối cao (Root Admin).');
       return;
     }
 
@@ -430,173 +860,54 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       };
 
       await saveSellerToFirestore(updatedSeller);
+
       const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
-      onUpdateSellers(updatedList);
-      refreshAdminSession(updatedSeller).catch(() => {});
+      onUpdateSellers(deduplicateSellers(updatedList));
+
       setDemotingSellerId(null);
-      triggerSuccess(`Đã chuyển vai trò của "${seller.name}" (@${seller.username}) về Người bán thông thường.`);
-    } catch {
-      alert('Lỗi khi hạ quyền tài khoản.');
+      triggerSuccess(`Đã chuyển tài khoản "${seller.name}" về Người bán thông thường.`);
+    } catch (err: any) {
+      console.error('Lỗi hạ quyền:', err);
+      alert('Lỗi hạ quyền tài khoản: ' + (err?.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Change Password (Inline form)
-  const handleChangePassword = async (seller: SellerUser, e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanPassword = newPasswordInput.trim();
-    if (!cleanPassword || cleanPassword.length < 6) {
-      alert('Mật khẩu mới phải có tối thiểu 6 ký tự.');
-      return;
-    }
-
-    const authorized = await verifyAdminAction('change_password', seller.id);
-    if (!authorized) {
-      alert('Thao tác đổi mật khẩu bị từ chối: Phiên làm việc không có đủ quyền.');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const salt = generateSalt();
-      const hash = await hashPassword(cleanPassword, salt);
-
-      const updatedSeller: SellerUser = {
-        ...seller,
-        passwordHash: hash,
-        passwordSalt: salt
-      };
-
-      await saveSellerToFirestore(updatedSeller);
-      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
-      onUpdateSellers(updatedList);
-      setPasswordTargetSellerId(null);
-      setNewPasswordInput('');
-      triggerSuccess(`Đã đổi mật khẩu thành công cho "${seller.name}" (@${seller.username}).`);
-    } catch {
-      alert('Lỗi đổi mật khẩu.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Toggle Active/Inactive status
-  const handleToggleStatus = async (seller: SellerUser) => {
-    if (isRootAdminUser(seller)) {
-      alert('Không thể khóa tài khoản Quản trị viên gốc.');
-      return;
-    }
-
-    const authorized = await verifyAdminAction('toggle_seller_status', seller.id);
-    if (!authorized) {
-      alert('Thao tác thay đổi trạng thái bị từ chối: Phiên làm việc không có đủ quyền.');
-      return;
-    }
-
-    const nextState = !seller.isActive;
-    try {
-      const updatedSeller: SellerUser = { ...seller, isActive: nextState };
-      await saveSellerToFirestore(updatedSeller);
-      const updatedList = sellers.map((s) => (s.id === seller.id ? updatedSeller : s));
-      onUpdateSellers(updatedList);
-      triggerSuccess(`Đã ${nextState ? 'kích hoạt' : 'tạm khóa'} tài khoản "${seller.name}".`);
-    } catch {
-      alert('Lỗi thay đổi trạng thái tài khoản.');
-    }
-  };
-
-  // Confirm Delete Seller (Inline)
+  // Confirm delete seller
   const handleConfirmDelete = async (seller: SellerUser) => {
-    if (isRootAdminUser(seller)) {
-      alert('Không thể xóa tài khoản Quản trị viên gốc.');
-      setDeletingSellerId(null);
-      return;
-    }
-
-    const authorized = await verifyAdminAction('delete_seller', seller.id);
-    if (!authorized) {
-      alert('Thao tác xóa người bán bị từ chối: Bạn không có quyền Root Admin.');
-      setDeletingSellerId(null);
+    if (isRootAdminUsername(seller.username) || isRootAdminUser(seller)) {
+      alert('Không thể xóa tài khoản Quản trị viên Tối cao (Root Admin).');
       return;
     }
 
     setIsSaving(true);
     try {
-      await deleteSellerFromFirestore(seller.id);
+      await deleteSellerFromFirestore(seller.id, seller.googleEmail);
+
       const updatedList = sellers.filter((s) => s.id !== seller.id);
-      onUpdateSellers(updatedList);
+      onUpdateSellers(deduplicateSellers(updatedList));
+
       setDeletingSellerId(null);
-      triggerSuccess(`Đã xóa tài khoản người bán "${seller.name}".`);
-    } catch {
-      alert('Lỗi xóa người bán.');
+      triggerSuccess(`Đã xóa vĩnh viễn tài khoản người bán "${seller.name}".`);
+    } catch (err: any) {
+      console.error('Lỗi xóa người bán:', err);
+      alert('Lỗi khi xóa tài khoản: ' + (err?.message || 'Vui lòng thử lại.'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Auto-fetch fresh seller presence and ipHistory directly from Firestore when modal opens
-  useEffect(() => {
-    if (!selectedSellerForLogs?.id) return;
-    let isMounted = true;
-
-    const fetchLatestSellerData = async () => {
-      try {
-        const docRef = doc(db, 'sellers', selectedSellerForLogs.id);
-        const snap = await getDoc(docRef);
-        if (snap.exists() && isMounted) {
-          const freshData = snap.data();
-          let parsedHistory: Array<{ ip: string; city?: string; country?: string; device?: string; timestamp: string }> = [];
-          if (Array.isArray(freshData.ipHistory)) {
-            parsedHistory = freshData.ipHistory.filter((item: any) => item && typeof item === 'object' && item.ip);
-          } else if (freshData.ipHistory && typeof freshData.ipHistory === 'object') {
-            if (Array.isArray((freshData.ipHistory as any)._elements)) {
-              parsedHistory = (freshData.ipHistory as any)._elements.filter((item: any) => item && typeof item === 'object' && item.ip);
-            }
-          }
-
-          if (parsedHistory.length === 0 && freshData.lastLoginIp && freshData.lastLoginIp !== 'Unknown') {
-            parsedHistory.push({
-              ip: freshData.lastLoginIp,
-              city: freshData.lastLoginCity || 'Hà Nội',
-              country: freshData.lastLoginCountry || 'Vietnam',
-              device: freshData.lastDevice || 'Thiết bị quản trị',
-              timestamp: freshData.lastLoginAt || freshData.lastSeenAt || freshData.createdAt || new Date().toISOString()
-            });
-          }
-
-          setSelectedSellerForLogs((prev) => {
-            if (!prev || prev.id !== selectedSellerForLogs.id) return prev;
-            return {
-              ...prev,
-              lastLoginIp: freshData.lastLoginIp || prev.lastLoginIp,
-              lastLoginCity: freshData.lastLoginCity || prev.lastLoginCity,
-              lastLoginCountry: freshData.lastLoginCountry || prev.lastLoginCountry,
-              lastSeenAt: freshData.lastSeenAt || prev.lastSeenAt,
-              lastLoginAt: freshData.lastLoginAt || prev.lastLoginAt,
-              lastDevice: freshData.lastDevice || prev.lastDevice,
-              ipHistory: parsedHistory.length > 0 ? parsedHistory : prev.ipHistory
-            };
-          });
-        }
-      } catch (err) {
-        console.warn('Lỗi đọc dữ liệu người bán từ Firestore:', err);
-      }
-    };
-
-    fetchLatestSellerData();
-    return () => { isMounted = false; };
-  }, [selectedSellerForLogs?.id]);
-
-  // Filtered logs for currently selected seller (merging system_logs, seller.ipHistory and seller document presence)
+  // Real-time login logs for selected seller
   const selectedSellerLogs = useMemo(() => {
     if (!selectedSellerForLogs) return [];
+
     const username = (selectedSellerForLogs.username || '').toLowerCase().trim();
     const name = (selectedSellerForLogs.name || '').toLowerCase().trim();
 
-    // 1. Logs from system_logs collection
+    // 1. Filter matching system logs
     const matchedSystemLogs = allLogs.filter((l) => {
-      if (l.type !== 'admin_login') return false;
+      if (l.type !== 'admin_login' && l.source !== 'AdminAuth' && l.source !== 'AdminPresence') return false;
       const uId = (l.userId || '').toLowerCase().trim();
       const uName = (l.userName || '').toLowerCase().trim();
       const uTitle = (l.title || '').toLowerCase();
@@ -679,7 +990,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     const uniqueMap = new Map<string, SystemLogItem>();
 
     combined.forEach((item) => {
-      // Group by IP and approximately same hour / date to prevent duplicate records
       const timeKey = item.timestamp ? new Date(item.timestamp).toISOString().slice(0, 14) : item.formattedDate;
       const key = `${item.ip || 'noip'}-${timeKey}`;
       if (!uniqueMap.has(key)) {
@@ -823,697 +1133,627 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
     );
   }
 
+  const staffAuthorizedList = useMemo(() => {
+    return authorizedEmails.filter(a => !AUTHORIZED_ROOT_ADMIN_EMAILS.includes(a.email.trim().toLowerCase()));
+  }, [authorizedEmails]);
+  const totalCount = 2 + staffAuthorizedList.length;
+  const deputyCount = staffAuthorizedList.filter(a => a.role === 'deputy_admin').length;
+  const memberCount = staffAuthorizedList.filter(a => a.role !== 'deputy_admin').length;
+
   return (
-    <div className="space-y-6 text-slate-900">
+    <div className="space-y-6 sm:space-y-8 text-slate-900 animate-fadeIn pb-24 sm:pb-12">
       
-      {/* 1. Header Banner & Quick Actions - Light Mode */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. Header Banner & Quick Actions - 100% Light Theme */}
+      <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <span className="p-2 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">
-              <Users className="w-5 h-5" />
+          <div className="flex items-center gap-2 sm:gap-2.5 mb-1.5 flex-wrap">
+            <span className="p-2 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
             </span>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-              Quản Trị Hệ Thống & Tài Khoản Người Bán
+            <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight">
+              Quản Trị Hệ Thống & Phân Quyền (Firebase Auth)
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 text-xs font-black">
-              {sellers.length} Thành viên
-            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200 text-xs font-black">
+                {totalCount} Tài khoản
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+                2 Tổng bí thư
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold">
+                {deputyCount} Chủ tịch nước
+              </span>
+              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold">
+                {memberCount} Bộ trưởng
+              </span>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Quản trị danh sách tài khoản, phân quyền đăng nhập nội bộ và quản lý trạng thái bảo mật hệ thống.
+          <p className="text-xs sm:text-sm text-slate-500 line-clamp-2">
+            Quản trị quyền truy cập Google Authentication cấp Cloud. Chỉ những email được phê duyệt dưới đây mới có quyền đăng nhập vào hệ thống.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleToggleAddForm}
-          className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl shadow-xs transition-all cursor-pointer shrink-0 ${
-            isAddFormOpen 
-              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' 
-              : 'bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-sm'
-          }`}
-        >
-          {isAddFormOpen ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-          <span>{isAddFormOpen ? 'Đóng Biểu Mẫu' : 'Thêm Người Bán Mới'}</span>
-        </button>
+        <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={loadAuthorizedEmails}
+            disabled={isLoadingAuthEmails}
+            className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm border border-slate-300 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Tải lại danh sách từ Firestore Cloud"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoadingAuthEmails ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Đồng bộ Cloud</span>
+          </button>
+
+          {isRootAdmin && (
+            <button
+              type="button"
+              onClick={handleToggleAddForm}
+              className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl shadow-xs transition-all cursor-pointer ${
+                isAddFormOpen 
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' 
+                  : 'bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-sm active:scale-95'
+              }`}
+            >
+              {isAddFormOpen ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+              <span>{isAddFormOpen ? 'Đóng Biểu Mẫu' : 'Cấp quyền'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Success Notification Alert */}
-      {actionSuccessMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in slide-in-from-top-2 shadow-xs">
+      {/* Notifications */}
+      {authEmailSuccess && (
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in slide-in-from-top-2 shadow-xs">
           <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="font-semibold">{actionSuccessMessage}</span>
+          <span className="font-semibold">{authEmailSuccess}</span>
+        </div>
+      )}
+      {authEmailError && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in slide-in-from-top-2 shadow-xs">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span className="font-semibold">{authEmailError}</span>
+        </div>
+      )}
+      {attemptSuccessMsg && (
+        <div className="p-3.5 rounded-2xl bg-sky-50 border border-sky-200 text-sky-800 text-xs sm:text-sm flex items-center gap-2.5 animate-in slide-in-from-top-2 shadow-xs">
+          <Check className="w-4 h-4 text-sky-600 shrink-0" />
+          <span className="font-semibold">{attemptSuccessMsg}</span>
         </div>
       )}
 
-      {/* 2. INLINE ADD SELLER FORM (No Popup!) */}
-      {isAddFormOpen && (
-        <div className="bg-white border-2 border-amber-400/80 rounded-2xl p-5 sm:p-6 shadow-md animate-in fade-in slide-in-from-top-3">
+      {/* Inline Add Google Email Form (100% Light Theme) */}
+      {isAddFormOpen && isRootAdmin && (
+        <form onSubmit={handleAddAuthorizedEmail} className="bg-white border-2 border-amber-400 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-md animate-in fade-in slide-in-from-top-3">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
             <div className="flex items-center gap-2">
               <span className="p-1.5 rounded-lg bg-amber-100 text-amber-900">
                 <UserPlus className="w-4 h-4" />
               </span>
               <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                Tạo Tài Khoản Người Bán Mới (Nhập Trực Tiếp)
+                Cấp quyền truy cập (Google Firebase Auth)
               </h3>
             </div>
             <button
               type="button"
               onClick={() => setIsAddFormOpen(false)}
-              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <form onSubmit={handleCreateSeller} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div>
-                <label className="block text-slate-700 font-bold mb-1.5">
-                  Họ và tên người bán <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Ví dụ: Nguyễn Thu Trang"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1.5">
-                  Tên đăng nhập (Username) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase() })}
-                  placeholder="vd: nguyenvana"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-mono"
-                />
-                <span className="text-[10px] text-slate-400 mt-1 block">Chữ thường, viết liền không dấu</span>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-bold mb-1.5">
-                  Mật khẩu khởi tạo <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type={showFormPassword ? 'text' : 'password'}
-                    required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Tối thiểu 6 ký tự"
-                    className="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowFormPassword(!showFormPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
-                  >
-                    {showFormPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 text-xs">
+            <div className="sm:col-span-5">
+              <label className="block text-slate-700 font-bold mb-1.5">
+                Địa chỉ Email Google *
+              </label>
+              <input
+                type="email"
+                required
+                value={newEmailInput}
+                onChange={(e) => setNewEmailInput(e.target.value)}
+                placeholder="ví dụ: nhanvien@gmail.com"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-mono"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">Nhân viên sẽ dùng Gmail này để bấm Đăng nhập bằng Google</span>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+            <div className="sm:col-span-4">
+              <label className="block text-slate-700 font-bold mb-1.5">
+                Tên nhân viên (tùy chọn)
+              </label>
+              <input
+                type="text"
+                value={newNameInput}
+                onChange={(e) => setNewNameInput(e.target.value)}
+                placeholder="Nguyễn Văn A"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-medium"
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="block text-slate-700 font-bold mb-1.5">
+                Phân quyền vai trò
+              </label>
+              <select
+                value={newRoleInput}
+                onChange={(e) => setNewRoleInput(e.target.value as any)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs font-bold cursor-pointer"
+              >
+                <option value="member">Bộ trưởng</option>
+                <option value="deputy_admin">Chủ tịch nước</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
+            <button
+              type="button"
+              onClick={() => setIsAddFormOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmittingAuthEmail}
+              className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isSubmittingAuthEmail ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              <span>Cấp quyền</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* RENAME / EDIT MODAL FOR TỔNG BÍ THƯ */}
+      {editingTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-5 sm:p-6 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-sky-100 text-sky-800">
+                  <Edit2 className="w-4 h-4" />
+                </span>
+                <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                  Đổi thông tin tài khoản
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsAddFormOpen(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors cursor-pointer"
+                onClick={() => setEditingTarget(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition-all disabled:opacity-50 cursor-pointer shadow-xs"
-              >
-                {isSaving ? 'Đang tạo...' : 'Lưu & Kích Hoạt Tài Khoản'}
+                <X className="w-4 h-4" />
               </button>
             </div>
-          </form>
+
+            <form onSubmit={handleSaveEditTarget} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-600 font-semibold mb-1">Email Google:</label>
+                <div className="font-mono text-xs text-slate-800 bg-slate-100 p-2.5 rounded-xl border border-slate-200 font-bold">
+                  {editingTarget.email}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Họ và tên hiển thị:</label>
+                <input
+                  type="text"
+                  required
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-medium focus:outline-none focus:border-amber-500 focus:bg-white"
+                  placeholder="Nhập họ và tên mới"
+                />
+              </div>
+
+              {!editingTarget.isRoot && (
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Phân quyền vai trò:</label>
+                  <select
+                    value={editRoleValue}
+                    onChange={(e) => setEditRoleValue(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="member">Bộ trưởng</option>
+                    <option value="deputy_admin">Chủ tịch nước</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingTarget(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAuthEmail}
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingAuthEmail ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* 3. Search & Filters Bar - Light Mode */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Tìm người bán theo tên, tài khoản hoặc SĐT..."
-            className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-          />
+      {/* 2. THE ONLY UNIFIED ADMIN & SELLERS TABLE (100% LIGHT THEME) */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-amber-100 text-amber-900">
+                <ShieldCheck className="w-4 h-4" />
+              </span>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                Danh Sách Quản Trị Viên & Nhân Viên Được Phép Truy Cập
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Chỉ những tài khoản trong bảng này mới có thể đăng nhập bằng Google. Mọi tài khoản khác đều bị Firebase Auth từ chối truy cập.
+            </p>
+          </div>
+
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Google Auth 100%</span>
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="active">Đang hoạt động</option>
-            <option value="inactive">Tạm khóa</option>
-          </select>
-
-          <select
-            value={filterRole}
-            onChange={(e) => setFilterRole(e.target.value as any)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-          >
-            <option value="all">Tất cả vai trò</option>
-            <option value="root_admin">Quản trị viên</option>
-            <option value="member">Người bán (Thành viên)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* 4. MAIN TABLE PRESENTATION (Pure Light Mode Table) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* The Single Responsive Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold select-none">
-                <th className="p-3.5 whitespace-nowrap min-w-[200px]">Thành viên</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[140px]">Tài khoản</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[220px]">Trực tuyến & IP gần nhất</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[120px]">Trạng thái</th>
-                <th className="p-3.5 whitespace-nowrap min-w-[250px] text-center sticky right-0 bg-slate-50 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
-                  Thao tác
-                </th>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <th className="p-3.5 sm:p-4">Tài khoản & Email Google</th>
+                <th className="p-3.5 sm:p-4">Vai trò</th>
+                <th className="p-3.5 sm:p-4">Bảo mật</th>
+                <th className="p-3.5 sm:p-4">Trạng thái / Ngày cấp</th>
+                <th className="p-3.5 sm:p-4 text-center">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {deduplicateSellers(filteredSellers).map((seller, sIdx) => {
-                const stats = sellerStatsMap[seller.username.toLowerCase()] || { totalOrders: 0, totalRevenue: 0, completedOrders: 0 };
-                const isRoot = isRootAdminUser(seller);
-                const isEditing = editingSellerId === seller.id;
-                const isChangingPassword = passwordTargetSellerId === seller.id;
-                const isDeleting = deletingSellerId === seller.id;
-                const isPromoting = promotingSellerId === seller.id;
-                const isDemoting = demotingSellerId === seller.id;
-                const presence = getSellerPresenceInfo(seller, allLogs);
+              {/* ROOT ADMIN 1: nhunhuhao71@gmail.com */}
+              <tr className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
+                <td className="p-3.5 sm:p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
+                      H
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900">
+                        {adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo'}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">nhunhuhao71@gmail.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    Tổng bí thư
+                  </span>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Google Firebase Auth</span>
+                  </span>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <div className="text-xs text-slate-600">
+                    <span className="font-semibold text-emerald-700">Toàn quyền hệ thống</span>
+                    <div className="text-[10px] text-slate-400">Security Rules & Cloud DB</div>
+                  </div>
+                </td>
+                <td className="p-3.5 sm:p-4 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditTarget('nhunhuhao71@gmail.com', adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo', true)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                      title="Đổi tên hiển thị"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Đổi tên</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLogsForEmail('nhunhuhao71@gmail.com', adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo', true)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                      title="Xem lịch sử đăng nhập & IP"
+                    >
+                      <History className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Log IP</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
 
-                return (
-                  <React.Fragment key={`seller-mgr-frag-${seller.id || seller.username}-${sIdx}`}>
-                    <tr className={`hover:bg-slate-50/80 transition-colors ${
-                      isEditing || isChangingPassword || isDeleting || isPromoting || isDemoting ? 'bg-amber-50/40' : ''
+              {/* ROOT ADMIN 2: manhcuong2006ht@gmail.com */}
+              <tr className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
+                <td className="p-3.5 sm:p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
+                      C
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900">
+                        {adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường'}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">manhcuong2006ht@gmail.com</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    Tổng bí thư
+                  </span>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Google Firebase Auth</span>
+                  </span>
+                </td>
+                <td className="p-3.5 sm:p-4">
+                  <div className="text-xs text-slate-600">
+                    <span className="font-semibold text-emerald-700">Toàn quyền hệ thống</span>
+                    <div className="text-[10px] text-slate-400">Security Rules & Cloud DB</div>
+                  </div>
+                </td>
+                <td className="p-3.5 sm:p-4 text-center">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditTarget('manhcuong2006ht@gmail.com', adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường', true)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                      title="Đổi tên hiển thị"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Đổi tên</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLogsForEmail('manhcuong2006ht@gmail.com', adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường', true)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                      title="Xem lịch sử đăng nhập & IP"
+                    >
+                      <History className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Log IP</span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+
+              {/* STAFF ROWS (NO DUPLICATES) */}
+              {staffAuthorizedList.map((item) => (
+                <tr key={item.email} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3.5 sm:p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center shrink-0 shadow-xs ${
+                        item.role === 'deputy_admin' ? 'bg-purple-600' : 'bg-blue-600'
+                      }`}>
+                        {(item.name || item.email).slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 truncate">
+                          {item.name || item.email.split('@')[0]}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">{item.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      item.role === 'deputy_admin'
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : 'bg-blue-100 text-blue-800 border border-blue-200'
                     }`}>
-                      {/* Column 1: Member Info & Avatar */}
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSellerForLogs(seller)}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0 shadow-2xs hover:opacity-85 hover:scale-105 transition-all cursor-pointer group relative"
-                            style={{ backgroundColor: seller.avatarColor || '#B41C1A' }}
-                            title="Bấm để xem lịch sử đăng nhập & IP của thành viên này"
-                          >
-                            <span>{seller.name.slice(0, 1).toUpperCase()}</span>
-                            {presence.isOnline ? (
-                              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-                            ) : (
-                              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-slate-400 border-2 border-white rounded-full" />
-                            )}
-                          </button>
-                          <div>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSellerForLogs(seller)}
-                              className="font-bold text-slate-900 hover:text-amber-800 flex items-center gap-1.5 text-sm transition-colors cursor-pointer text-left group"
-                              title="Bấm để xem lịch sử đăng nhập, IP & vị trí của thành viên này"
-                            >
-                              <span className="group-hover:underline">{seller.name}</span>
-                              {isRoot && (
-                                <span title="Quản trị viên tối cao">
-                                  <ShieldCheck className="w-4 h-4 text-amber-500 inline shrink-0" />
-                                </span>
-                              )}
-                            </button>
-                            <span className="text-[11px] text-slate-400">
-                              Tạo: {new Date(seller.createdAt).toLocaleDateString('vi-VN')}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
+                      {item.role === 'deputy_admin' ? 'Chủ tịch nước' : 'Bộ trưởng'}
+                    </span>
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span>Google Firebase Auth</span>
+                    </span>
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <div className="text-xs text-slate-600">
+                      <div>Cấp bởi: <span className="font-semibold text-slate-800">{item.addedBy || 'Tổng bí thư'}</span></div>
+                      <div className="text-[10px] text-slate-400">Ngày: {new Date(item.createdAt).toLocaleDateString('vi-VN')}</div>
+                    </div>
+                  </td>
+                  <td className="p-3.5 sm:p-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditTarget(item.email, item.name || item.email.split('@')[0], false, item.role)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                        title="Đổi tên & Phân quyền"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Đổi tên</span>
+                      </button>
 
-                      {/* Column 2: Username & Role */}
-                      <td className="p-3.5">
-                        <div className="space-y-1">
-                          <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 block w-fit">
-                            {seller.username}
-                          </span>
-                          {isRoot ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
-                              <span>Quản trị viên</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                              <span>Người bán</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLogsForEmail(item.email, item.name || item.email.split('@')[0], false, item.role)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                        title="Xem lịch sử đăng nhập & IP"
+                      >
+                        <History className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Log IP</span>
+                      </button>
 
-                      {/* Column 3: Real Online Presence & IP */}
-                      <td className="p-3.5">
-                        <div className="space-y-1">
-                          {presence.isOnline ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                              <span>Đang online</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
-                              <span>Ngoại tuyến ({presence.lastSeenText})</span>
-                            </span>
-                          )}
+                      {isRootAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleRevokeAuthorizedEmail(item.email)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1"
+                          title="Xóa tài khoản này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Xóa</span>
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
 
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-mono">
-                            <Globe className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="font-bold text-slate-700">{presence.latestIp}</span>
-                            {presence.location && (
-                              <span className="text-slate-400 text-[10px]">({presence.location})</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Column 4: Account Active Status */}
-                      <td className="p-3.5">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                          seller.isActive 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${seller.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                          <span>{seller.isActive ? 'Đang mở' : 'Tạm khóa'}</span>
-                        </span>
-                      </td>
-
-                      {/* Column 5: Actions */}
-                      <td className="p-3.5 text-center sticky right-0 bg-white/95 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.04)]">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* View Member Login Logs Trigger */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedSellerForLogs(seller)}
-                            className="px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 shadow-2xs"
-                            title="Xem lịch sử đăng nhập & IP của thành viên"
-                          >
-                            <History className="w-3.5 h-3.5 text-amber-700" />
-                            <span>Log IP</span>
-                          </button>
-
-                          {/* Edit Inline Trigger */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingSellerId(null);
-                              } else {
-                                handleStartEdit(seller);
-                              }
-                            }}
-                            className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
-                              isEditing
-                                ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                            }`}
-                            title="Sửa thông tin"
-                          >
-                            <Edit2 className="w-3.5 h-3.5 text-sky-600" />
-                            <span>Sửa</span>
-                          </button>
-
-                          {/* Change Password Inline Trigger */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isChangingPassword) {
-                                setPasswordTargetSellerId(null);
-                                setNewPasswordInput('');
-                              } else {
-                                handleStartPasswordChange(seller);
-                              }
-                            }}
-                            className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
-                              isChangingPassword
-                                ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                            }`}
-                            title="Đổi mật khẩu"
-                          >
-                            <Key className={`w-3.5 h-3.5 ${isChangingPassword ? 'text-white' : 'text-amber-700'}`} />
-                            <span>Đổi MK</span>
-                          </button>
-
-                          {/* Promote to Admin Trigger */}
-                          {!isRoot && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isPromoting) {
-                                  setPromotingSellerId(null);
-                                } else {
-                                  setPromotingSellerId(seller.id);
-                                  setEditingSellerId(null);
-                                  setPasswordTargetSellerId(null);
-                                  setDeletingSellerId(null);
-                                  setDemotingSellerId(null);
-                                }
-                              }}
-                              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
-                                isPromoting
-                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                                  : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
-                              }`}
-                              title="Nâng quyền người bán này lên Quản trị viên"
-                            >
-                              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Thăng QTV</span>
-                            </button>
-                          )}
-
-                          {/* Demote Admin Trigger (only for promoted admins, not root admin) */}
-                          {isRoot && !isRootAdminUsername(seller.username) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (isDemoting) {
-                                  setDemotingSellerId(null);
-                                } else {
-                                  setDemotingSellerId(seller.id);
-                                  setEditingSellerId(null);
-                                  setPasswordTargetSellerId(null);
-                                  setDeletingSellerId(null);
-                                  setPromotingSellerId(null);
-                                }
-                              }}
-                              className={`px-2.5 py-1.5 rounded-lg font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer border ${
-                                isDemoting
-                                  ? 'bg-slate-700 text-white border-slate-700 shadow-xs'
-                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                              }`}
-                              title="Hạ quyền xuống Người bán thông thường"
-                            >
-                              <ShieldAlert className="w-3.5 h-3.5 text-slate-500" />
-                              <span>Hạ quyền</span>
-                            </button>
-                          )}
-
-                          {/* Toggle Active / Inactive status */}
-                          {!isRoot && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleToggleStatus(seller)}
-                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-                                  seller.isActive
-                                    ? 'bg-slate-100 hover:bg-amber-100 text-amber-700 border-slate-200 hover:border-amber-300'
-                                    : 'bg-slate-100 hover:bg-emerald-100 text-emerald-700 border-slate-200 hover:border-emerald-300'
-                                }`}
-                                title={seller.isActive ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}
-                              >
-                                {seller.isActive ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                              </button>
-
-                              {/* Delete Inline Trigger */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (isDeleting) {
-                                    setDeletingSellerId(null);
-                                  } else {
-                                    handleStartDelete(seller);
-                                  }
-                                }}
-                                className={`p-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
-                                  isDeleting
-                                    ? 'bg-rose-600 text-white border-rose-600'
-                                    : 'bg-slate-100 hover:bg-rose-100 text-rose-600 border-slate-200 hover:border-rose-300'
-                                }`}
-                                title="Xóa tài khoản"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-
-                    {/* INLINE ROW SUB-PANEL: EDIT SELLER (NO POPUP) */}
-                    {isEditing && (
-                      <tr className="bg-sky-50/50 border-y-2 border-sky-300">
-                        <td colSpan={5} className="p-4">
-                          <form onSubmit={(e) => handleSaveEdit(seller, e)} className="space-y-3">
-                            <div className="flex items-center gap-2 text-sky-900 font-bold text-xs pb-1 border-b border-sky-200">
-                              <Edit2 className="w-3.5 h-3.5 text-sky-700" />
-                              <span>Chỉnh sửa thông tin tài khoản: {seller.name} (@{seller.username})</span>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs flex-wrap">
-                              <div className="w-full sm:w-64">
-                                <label className="block text-slate-700 font-semibold mb-1">Họ và tên</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={formData.name}
-                                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                  className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
-                                />
-                              </div>
-                              <div className="w-full sm:w-48">
-                                <label className="block text-slate-700 font-semibold mb-1">Số điện thoại</label>
-                                <input
-                                  type="text"
-                                  value={formData.phone}
-                                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                  placeholder="0912..."
-                                  className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs focus:outline-none focus:border-sky-600"
-                                />
-                              </div>
-                              {!isRootAdminUsername(seller.username) && (
-                                <div className="w-full sm:w-52">
-                                  <label className="block text-slate-700 font-semibold mb-1">Vai trò</label>
-                                  <select
-                                    value={formData.role}
-                                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                                    className="w-full px-3 py-1.5 bg-white border border-sky-300 rounded-lg text-slate-900 text-xs font-bold focus:outline-none focus:border-sky-600 cursor-pointer"
-                                  >
-                                    <option value="member">Người bán (Member)</option>
-                                    <option value="root_admin">Quản trị viên (Admin)</option>
-                                  </select>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2 sm:mt-5">
-                                <button
-                                  type="submit"
-                                  disabled={isSaving}
-                                  className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                                >
-                                  {isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingSellerId(null)}
-                                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 font-semibold rounded-lg text-xs border border-slate-300 cursor-pointer"
-                                >
-                                  Đóng
-                                </button>
-                              </div>
-                            </div>
-                          </form>
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* INLINE ROW SUB-PANEL: CHANGE PASSWORD (NO POPUP) */}
-                    {isChangingPassword && (
-                      <tr className="bg-amber-50/70 border-y-2 border-amber-300">
-                        <td colSpan={5} className="p-4">
-                          <form onSubmit={(e) => handleChangePassword(seller, e)} className="space-y-3">
-                            <div className="flex items-center gap-2 text-amber-950 font-bold text-xs pb-1 border-b border-amber-200">
-                              <Key className="w-3.5 h-3.5 text-amber-700" />
-                              <span>Đổi mật khẩu tài khoản: {seller.name}</span>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-xs">
-                              <div className="relative w-full sm:w-80">
-                                <input
-                                  type={showNewPassword ? 'text' : 'password'}
-                                  required
-                                  value={newPasswordInput}
-                                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
-                                  className="w-full pl-3 pr-8 py-1.5 bg-white border border-amber-300 rounded-lg text-slate-900 text-xs font-mono focus:outline-none focus:border-amber-600"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowNewPassword(!showNewPassword)}
-                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
-                                >
-                                  {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                </button>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="submit"
-                                  disabled={isSaving}
-                                  className="px-4 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                                >
-                                  {isSaving ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setPasswordTargetSellerId(null);
-                                    setNewPasswordInput('');
-                                  }}
-                                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 font-semibold rounded-lg text-xs border border-slate-300 cursor-pointer"
-                                >
-                                  Đóng
-                                </button>
-                              </div>
-                            </div>
-                          </form>
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* INLINE ROW SUB-PANEL: PROMOTE TO ADMIN CONFIRMATION (NO POPUP) */}
-                    {isPromoting && (
-                      <tr className="bg-amber-50/90 border-y-2 border-amber-400">
-                        <td colSpan={5} className="p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                            <div className="flex items-start sm:items-center gap-2.5 text-amber-950 font-medium">
-                              <div className="w-8 h-8 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0">
-                                <ShieldCheck className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <div className="font-bold text-amber-900 text-sm">
-                                  Xác nhận nâng quyền Quản trị viên cho "{seller.name}" (@{seller.username})?
-                                </div>
-                                <p className="text-amber-800/90 text-[11px] mt-0.5">
-                                  Tài khoản này sẽ có toàn quyền quản trị: duyệt đơn hàng, quản lý người bán, cấu hình hệ thống và Bật/Tắt chế độ bảo trì toàn shop.
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmPromote(seller)}
-                                disabled={isSaving}
-                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                              >
-                                <ShieldCheck className="w-4 h-4" />
-                                <span>{isSaving ? 'Đang nâng quyền...' : 'Xác Nhận Thăng QTV'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setPromotingSellerId(null)}
-                                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs border border-slate-300 cursor-pointer"
-                              >
-                                Hủy
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* INLINE ROW SUB-PANEL: DEMOTE ADMIN CONFIRMATION (NO POPUP) */}
-                    {isDemoting && (
-                      <tr className="bg-slate-100 border-y-2 border-slate-400">
-                        <td colSpan={5} className="p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                            <div className="flex items-start sm:items-center gap-2.5 text-slate-900 font-medium">
-                              <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center shrink-0">
-                                <ShieldAlert className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <div className="font-bold text-slate-900 text-sm">
-                                  Xác nhận hạ quyền tài khoản "{seller.name}" xuống Người bán thông thường?
-                                </div>
-                                <p className="text-slate-600 text-[11px] mt-0.5">
-                                  Tài khoản sẽ không còn quyền truy cập các tab Quản trị hệ thống và không thể Bật/Tắt chế độ bảo trì.
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmDemote(seller)}
-                                disabled={isSaving}
-                                className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
-                              >
-                                <ShieldAlert className="w-4 h-4" />
-                                <span>{isSaving ? 'Đang hạ quyền...' : 'Xác Nhận Hạ Quyền'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDemotingSellerId(null)}
-                                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs border border-slate-300 cursor-pointer"
-                              >
-                                Hủy
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* INLINE ROW SUB-PANEL: DELETE CONFIRMATION (NO POPUP) */}
-                    {isDeleting && (
-                      <tr className="bg-rose-50 border-y-2 border-rose-300">
-                        <td colSpan={5} className="p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-2 text-rose-900 font-semibold">
-                              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                              <span>
-                                Xác nhận xóa vĩnh viễn tài khoản người bán <strong>{seller.name}</strong>?
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmDelete(seller)}
-                                disabled={isSaving}
-                                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                              >
-                                {isSaving ? 'Đang xóa...' : 'Xác Nhận Xóa'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingSellerId(null)}
-                                className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-lg text-xs border border-slate-300 cursor-pointer"
-                              >
-                                Hủy
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-
-              {filteredSellers.length === 0 && (
+              {staffAuthorizedList.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400">
-                    Không tìm thấy tài khoản người bán nào phù hợp.
+                  <td colSpan={5} className="p-8 text-center text-slate-400 bg-slate-50/30">
+                    Chưa có nhân viên nào khác được cấp quyền. Bấm nút "Cấp quyền" ở trên để thêm nhân viên bằng Gmail.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 3. BẢNG NHẬT KÝ CÁC LƯỢT ĐĂNG NHẬP KHÔNG ĐƯỢC XÁC THỰC (UNAUTHORIZED ATTEMPTS LOG) */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-50/40">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-rose-100 text-rose-800">
+                <ShieldAlert className="w-4 h-4" />
+              </span>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                Nhật Ký Cảnh Báo: Các Lượt Đăng Nhập Không Được Xác Thực
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                {unauthorizedAttempts.length} Lượt bị chặn
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Ghi nhận tự động mọi tài khoản Google lạ hoặc nỗ lực truy cập vào trang Quản trị không nằm trong danh sách được Tổng bí thư cấp quyền.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={loadUnauthorizedAttempts}
+              disabled={isLoadingAttempts}
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-2xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAttempts ? 'animate-spin' : ''}`} />
+              <span>Tải lại</span>
+            </button>
+
+            {isRootAdmin && unauthorizedAttempts.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllUnauthorizedAttempts}
+                className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-rose-200"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Xóa sạch lịch sử</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Table of unauthorized login attempts */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs sm:text-sm">
+            <thead>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <th className="p-3.5 sm:p-4">Thời gian</th>
+                <th className="p-3.5 sm:p-4">Tên Email</th>
+                <th className="p-3.5 sm:p-4">Địa chỉ IP</th>
+                <th className="p-3.5 sm:p-4">Địa chỉ vật lý (từ IP)</th>
+                <th className="p-3.5 sm:p-4">Thiết bị</th>
+                <th className="p-3.5 sm:p-4">Trạng thái</th>
+                {isRootAdmin && <th className="p-3.5 sm:p-4 text-center">Thao tác</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {unauthorizedAttempts.map((attempt) => (
+                <tr key={attempt.id} className="hover:bg-rose-50/20 transition-colors">
+                  <td className="p-3.5 sm:p-4 text-slate-600 whitespace-nowrap font-mono text-xs">
+                    <div className="font-semibold text-slate-800">
+                      {new Date(attempt.timestamp).toLocaleTimeString('vi-VN')}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {new Date(attempt.timestamp).toLocaleDateString('vi-VN')}
+                    </div>
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <div className="font-mono text-xs font-bold text-rose-900 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
+                      {attempt.email}
+                    </div>
+                    {attempt.name && (
+                      <div className="text-[10px] text-slate-500 mt-0.5">Tên: {attempt.name}</div>
+                    )}
+                  </td>
+                  <td className="p-3.5 sm:p-4 font-mono text-xs text-slate-800">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-bold">{attempt.ip}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyIpText(attempt.ip)}
+                        className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer rounded"
+                        title="Copy IP"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>{attempt.location || 'Không xác định'}</span>
+                    </div>
+                  </td>
+                  <td className="p-3.5 sm:p-4 text-slate-600 text-xs">
+                    {attempt.device || 'Trình duyệt Web'}
+                  </td>
+                  <td className="p-3.5 sm:p-4">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                      <XCircle className="w-3 h-3 text-rose-500" />
+                      <span>Đã chặn</span>
+                    </span>
+                  </td>
+                  {isRootAdmin && (
+                    <td className="p-3.5 sm:p-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUnauthorizedAttempt(attempt.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Xóa bản ghi này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+
+              {unauthorizedAttempts.length === 0 && (
+                <tr>
+                  <td colSpan={isRootAdmin ? 7 : 6} className="p-8 text-center text-slate-400 bg-slate-50/20">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500 mb-1" />
+                      <span className="font-semibold text-slate-700">Hệ thống an toàn tuyệt đối</span>
+                      <span className="text-xs text-slate-400">Chưa ghi nhận nỗ lực đăng nhập trái phép nào.</span>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -1524,31 +1764,32 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
       {/* ======================================================== */}
       {/* DRAWER / MODAL: MEMBER LOGIN LOGS & IP SECURITY TRACKING */}
+      {/* (Fully responsive bottom-sheet/modal for Mobile) */}
       {/* ======================================================== */}
       {selectedSellerForLogs && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-4xl max-h-[92vh] sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
             
             {/* 1. Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/50">
-              <div className="flex items-center gap-3.5">
+            <div className="p-4 sm:p-6 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50/70 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
                 <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-base shrink-0 shadow-xs"
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm sm:text-base shrink-0 shadow-xs"
                   style={{ backgroundColor: selectedSellerForLogs.avatarColor || '#B41C1A' }}
                 >
                   {selectedSellerForLogs.name.slice(0, 1).toUpperCase()}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-lg font-black text-slate-900 tracking-tight">
-                      Lịch Sử Đăng Nhập: {selectedSellerForLogs.name}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                      {selectedSellerForLogs.name}
                     </h3>
                     {isRootAdminUser(selectedSellerForLogs) ? (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-200">
                         Quản trị viên
                       </span>
                     ) : (
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                         Người bán
                       </span>
                     )}
@@ -1556,23 +1797,23 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                       @{selectedSellerForLogs.username}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                    <span>IP & Vị trí thực tế của các phiên đăng nhập vào trang quản trị</span>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>Lịch sử phiên IP đăng nhập trang quản trị</span>
                     <span>•</span>
                     <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 inline" />
                       Chỉ chấp nhận IP Việt Nam 🇻🇳
                     </span>
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleRefreshSellerLogs}
                   disabled={isLoadingLogs}
-                  className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors cursor-pointer active:scale-95"
                   title="Làm mới dữ liệu nhật ký"
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoadingLogs ? 'animate-spin' : ''}`} />
@@ -1583,7 +1824,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     setSelectedSellerForLogs(null);
                     setTestLoginLogMessage(null);
                   }}
-                  className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 transition-colors cursor-pointer"
+                  className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 transition-colors cursor-pointer active:scale-95"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1592,86 +1833,66 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
             {/* Test Status Banner */}
             {testLoginLogMessage && (
-              <div className="mx-6 mt-4 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <div className="mx-4 sm:mx-6 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in shrink-0">
                 <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>{testLoginLogMessage}</span>
               </div>
             )}
 
-            {/* 2. Quick Metrics */}
-            <div className="px-5 sm:px-6 py-4 bg-slate-50/80 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 block">Tổng Lượt Đăng Nhập</span>
-                <span className="text-xl font-black text-slate-900 font-mono mt-0.5 block">
+            {/* 2. Quick Metrics Grid */}
+            <div className="px-4 sm:px-6 py-3 bg-slate-50/80 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 shrink-0">
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 block">Tổng Lượt Đăng Nhập</span>
+                <span className="text-lg sm:text-xl font-black text-slate-900 font-mono mt-0.5 block">
                   {selectedSellerLogs.length}
                 </span>
               </div>
 
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 block">Hợp Lệ (Việt Nam 🇻🇳)</span>
-                <span className="text-xl font-black text-emerald-600 font-mono mt-0.5 block">
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 block">Hợp Lệ (Việt Nam 🇻🇳)</span>
+                <span className="text-lg sm:text-xl font-black text-emerald-600 font-mono mt-0.5 block">
                   {selectedSellerLogs.filter((l) => l.status === 'success' && (!l.countryCode || l.countryCode === 'VN')).length}
                 </span>
               </div>
 
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 block">Bị Chặn / Cảnh Báo</span>
-                <span className="text-xl font-black text-amber-600 font-mono mt-0.5 block">
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 block">Cảnh Báo / Chặn</span>
+                <span className="text-lg sm:text-xl font-black text-amber-600 font-mono mt-0.5 block">
                   {selectedSellerLogs.filter((l) => l.status === 'blocked_geo' || (l.countryCode && l.countryCode !== 'VN') || l.status === 'failed_password').length}
                 </span>
               </div>
 
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
-                <span className="text-[11px] font-bold text-slate-400 block">Vị Trí Gần Nhất</span>
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 block">Vị Trí Gần Nhất</span>
                 <span className="text-xs font-bold text-slate-800 mt-1 block truncate">
                   {selectedSellerLogs[0] ? (
-                    `${selectedSellerLogs[0].city || 'Amsterdam'}, ${selectedSellerLogs[0].country || 'Netherlands'} ${getCountryFlagEmoji(selectedSellerLogs[0].countryCode, selectedSellerLogs[0].country)}`
+                    `${selectedSellerLogs[0].city || 'Hà Nội'}, ${selectedSellerLogs[0].country || 'Vietnam'} ${getCountryFlagEmoji(selectedSellerLogs[0].countryCode, selectedSellerLogs[0].country)}`
                   ) : selectedSellerForLogs.lastLoginCity ? (
-                    `${selectedSellerForLogs.lastLoginCity}, ${selectedSellerForLogs.lastLoginCountry || 'Netherlands'} ${getCountryFlagEmoji(selectedSellerForLogs.lastLoginCountryCode, selectedSellerForLogs.lastLoginCountry)}`
+                    `${selectedSellerForLogs.lastLoginCity}, ${selectedSellerForLogs.lastLoginCountry || 'Vietnam'} ${getCountryFlagEmoji(selectedSellerForLogs.lastLoginCountryCode, selectedSellerForLogs.lastLoginCountry)}`
                   ) : 'Chưa có dữ liệu'}
                 </span>
               </div>
             </div>
 
-            {/* Firebase Sync & Presence Status Banner */}
-            <div className="px-5 sm:px-6 py-2.5 bg-emerald-50/70 border-b border-emerald-100 flex items-center justify-between gap-3 text-xs flex-wrap">
-              <div className="flex items-center gap-2 text-emerald-950 font-semibold">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Firebase Cloud Firestore:</span>
-                <span className="text-emerald-800 font-medium">
-                  Đang hoạt động & lưu trữ lịch sử IP / tài khoản người bán
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-700 text-xs font-medium">
-                {selectedSellerForLogs.lastLoginIp ? (
-                  <span>
-                    IP trên Firebase: <strong className="font-mono text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-200">{selectedSellerForLogs.lastLoginIp}</strong> ({selectedSellerForLogs.lastLoginCity || 'Việt Nam'})
-                  </span>
-                ) : (
-                  <span className="text-slate-500 italic">Chưa ghi nhận IP phiên đăng nhập</span>
-                )}
-              </div>
-            </div>
-
             {/* 3. Action Toolbar */}
-            <div className="px-5 sm:px-6 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+            <div className="px-4 sm:px-6 py-2 bg-white border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="text-xs text-slate-500 font-medium">
-                Danh sách chi tiết các phiên đăng nhập của <strong className="text-slate-900">{selectedSellerForLogs.name}</strong>:
+                Chi tiết các phiên đăng nhập:
               </div>
               <button
                 type="button"
                 onClick={() => handleCreateTestMemberLogin(selectedSellerForLogs)}
-                className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Ghi log đăng nhập thử nghiệm</span>
+                <span>Thêm log thử nghiệm</span>
               </button>
             </div>
 
             {/* 4. Logs List */}
-            <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
               {selectedSellerLogs.length === 0 ? (
-                <div className="py-16 text-center text-slate-400 space-y-3">
+                <div className="py-12 text-center text-slate-400 space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                     <History className="w-6 h-6" />
                   </div>
@@ -1682,7 +1903,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCreateTestMemberLogin(selectedSellerForLogs)}
-                    className="mt-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                    className="mt-2 px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs active:scale-95"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Tạo bản ghi kiểm tra ngay</span>
@@ -1697,7 +1918,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                   return (
                     <div
                       key={log.id}
-                      className={`p-4 rounded-2xl border transition-all ${
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all ${
                         isBlockedGeo
                           ? 'bg-rose-50/50 border-rose-200'
                           : isFailedPass
@@ -1705,23 +1926,22 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           : 'bg-white border-slate-200/80 hover:border-slate-300 shadow-2xs'
                       }`}
                     >
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {/* Status Badge */}
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {isSuccess && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                               <span>Đăng nhập thành công</span>
                             </span>
                           )}
                           {isBlockedGeo && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
                               <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                              <span>Chặn IP Ngoại Quốc (Bảo vệ)</span>
+                              <span>Chặn IP Ngoại Quốc</span>
                             </span>
                           )}
                           {isFailedPass && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                               <span>Sai mật khẩu</span>
                             </span>
@@ -1735,11 +1955,10 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                           </span>
                         </div>
 
-                        {/* Security check note */}
                         <div className="text-[11px] font-semibold">
                           {isBlockedGeo ? (
                             <span className="text-rose-600 font-bold flex items-center gap-1">
-                              <span>🚫 Chặn IP Ngoại Quốc</span>
+                              <span>🚫 Ngoại quốc</span>
                               <span>({getCountryFlagEmoji(log.countryCode, log.country)} {log.country || 'Nước ngoài'})</span>
                             </span>
                           ) : (
@@ -1751,10 +1970,10 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                       </div>
 
                       {/* Details Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 text-xs">
                         {/* IP & Network */}
-                        <div className="space-y-1">
-                          <span className="text-slate-400 text-[10px] font-bold block">ĐỊA CHỈ IP & NHÀ MẠNG</span>
+                        <div className="space-y-0.5">
+                          <span className="text-slate-400 text-[10px] font-bold block">ĐỊA CHỈ IP</span>
                           <div className="flex items-center gap-1.5 font-mono font-bold text-slate-800">
                             <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span>{log.ip || 'Chưa ghi nhận IP'}</span>
@@ -1774,42 +1993,37 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                             )}
                           </div>
                           {log.isp && (
-                            <span className="text-[11px] text-slate-500 block truncate" title={log.isp}>
+                            <span className="text-[10px] text-slate-500 block truncate" title={log.isp}>
                               {log.isp}
                             </span>
                           )}
                         </div>
 
                         {/* Location */}
-                        <div className="space-y-1">
-                          <span className="text-slate-400 text-[10px] font-bold block">VỊ TRÍ ĐỊA LÝ (GEOLOCATION)</span>
+                        <div className="space-y-0.5">
+                          <span className="text-slate-400 text-[10px] font-bold block">VỊ TRÍ</span>
                           <div className="flex items-center gap-1.5 font-bold text-slate-800">
                             <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                             <span>
-                              {log.city || 'Amsterdam'}, {log.country || 'Netherlands'} {getCountryFlagEmoji(log.countryCode, log.country)}
+                              {log.city || 'Hà Nội'}, {log.country || 'Vietnam'} {getCountryFlagEmoji(log.countryCode, log.country)}
                             </span>
                           </div>
                           {log.region && (
-                            <span className="text-[11px] text-slate-500 block truncate">
-                              Khu vực: {log.region}
+                            <span className="text-[10px] text-slate-500 block truncate">
+                              {log.region}
                             </span>
                           )}
                         </div>
 
                         {/* Device & Browser */}
-                        <div className="space-y-1">
-                          <span className="text-slate-400 text-[10px] font-bold block">THIẾT BỊ & TRÌNH DUYỆT</span>
+                        <div className="space-y-0.5">
+                          <span className="text-slate-400 text-[10px] font-bold block">THIẾT BỊ</span>
                           <div className="flex items-center gap-1.5 font-semibold text-slate-800">
                             <Laptop className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>
-                              {log.browser || 'Trình duyệt Web'} trên {log.os || 'Hệ điều hành'}
+                            <span className="truncate">
+                              {log.browser || 'Trình duyệt Web'}
                             </span>
                           </div>
-                          {log.userAgent && (
-                            <span className="text-[10px] text-slate-400 font-mono block truncate" title={log.userAgent}>
-                              {log.userAgent.slice(0, 45)}...
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1819,14 +2033,14 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
             </div>
 
             {/* 5. Modal Footer */}
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs">
+            <div className="p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs shrink-0">
               <span className="text-slate-500">
-                Hiển thị <strong className="text-slate-800">{selectedSellerLogs.length}</strong> bản ghi đăng nhập.
+                Hiển thị <strong className="text-slate-800">{selectedSellerLogs.length}</strong> bản ghi.
               </span>
               <button
                 type="button"
                 onClick={() => setSelectedSellerForLogs(null)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-colors cursor-pointer active:scale-95"
               >
                 Đóng
               </button>
@@ -1838,7 +2052,4 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
     </div>
   );
-};import { initializeApp, deleteApp } from 'firebase/app';
-import { firebaseConfig } from '../firebase';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-
+};

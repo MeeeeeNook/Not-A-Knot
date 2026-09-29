@@ -33,6 +33,7 @@ import {
   subscribeToSystemLogs, 
   deleteSystemLogFromFirestore, 
   clearAllSystemLogsFromFirestore,
+  cleanUpOldLogsFromFirestore,
   logClientError,
   logSystemActivity
 } from '../../utils/logger';
@@ -54,9 +55,10 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [testLogStatus, setTestLogStatus] = useState<string | null>(null);
 
-  // Subscribe to real-time logs
+  // Subscribe to real-time logs and clean up old/ignorable logs
   useEffect(() => {
     setIsLoading(true);
+    cleanUpOldLogsFromFirestore().catch(() => {});
     const unsubscribe = subscribeToSystemLogs((updatedLogs) => {
       setLogs(updatedLogs);
       setIsLoading(false);

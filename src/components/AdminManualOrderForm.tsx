@@ -12,9 +12,9 @@ import {
 } from '../types';
 import { StoredOrder, saveOrderToFirestore, saveProductToFirestore } from '../firebase';
 import { formatOrderDateWithoutSeconds, generateTrackingNumber } from '../utils/orderFormatters';
+import { Lock } from './common/LockIcon';
 import {
   UserCheck,
-  Lock,
   MapPin,
   Building2,
   Tag,
@@ -233,7 +233,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 2048;

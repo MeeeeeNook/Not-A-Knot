@@ -1,3 +1,5 @@
+import { safeTimeoutSignal } from './timeoutSignal';
+
 export interface GeoLocationInfo {
   ip: string;
   country: string;
@@ -58,7 +60,7 @@ export async function getClientGeoLocation(forceRefresh: boolean = false): Promi
   const fetchGeoWithProviders = async (): Promise<GeoLocationInfo> => {
     // Provider 1: ipwho.is (fast, CORS-friendly, full public geo)
     try {
-      const res = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(1500) });
+      const res = await fetch('https://ipwho.is/', { signal: safeTimeoutSignal(1500) });
       if (res.ok) {
         const data = await res.json();
         if (data && data.success !== false && isPublicIp(data.ip)) {
@@ -87,7 +89,7 @@ export async function getClientGeoLocation(forceRefresh: boolean = false): Promi
 
     // Provider 2: ipapi.co
     try {
-      const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(1500) });
+      const res = await fetch('https://ipapi.co/json/', { signal: safeTimeoutSignal(1500) });
       if (res.ok) {
         const data = await res.json();
         if (data && isPublicIp(data.ip) && !data.error) {
@@ -113,7 +115,7 @@ export async function getClientGeoLocation(forceRefresh: boolean = false): Promi
 
     // Provider 3: api.ipify.org
     try {
-      const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(1500) });
+      const res = await fetch('https://api.ipify.org?format=json', { signal: safeTimeoutSignal(1500) });
       if (res.ok) {
         const data = await res.json();
         if (data && isPublicIp(data.ip)) {
@@ -138,7 +140,7 @@ export async function getClientGeoLocation(forceRefresh: boolean = false): Promi
 
     // Provider 4: Backend /api/client-ip
     try {
-      const res = await fetch('/api/client-ip', { signal: AbortSignal.timeout(1000) });
+      const res = await fetch('/api/client-ip', { signal: safeTimeoutSignal(1000) });
       if (res.ok) {
         const data = await res.json();
         if (data && isPublicIp(data.ip)) {

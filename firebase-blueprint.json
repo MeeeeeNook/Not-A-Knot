@@ -96,8 +96,8 @@
         "id": { "type": "string", "description": "Mã định danh tài khoản" },
         "username": { "type": "string", "description": "Tên đăng nhập" },
         "name": { "type": "string", "description": "Họ và tên người bán" },
-        "passwordHash": { "type": "string", "description": "Mật khẩu băm SHA-256" },
-        "passwordSalt": { "type": "string", "description": "Muối mã hóa" },
+        "passwordHash": { "type": "string", "description": "Mật khẩu băm SHA-256", "optional": true },
+        "passwordSalt": { "type": "string", "description": "Muối mã hóa", "optional": true },
         "isRootAdmin": { "type": "boolean", "description": "Quyền Admin Gốc" },
         "role": { "type": "string", "description": "Vai trò tài khoản (root_admin, manager, member)" },
         "isActive": { "type": "boolean", "description": "Trạng thái hoạt động" },
@@ -105,6 +105,17 @@
         "lastLoginAt": { "type": "string", "description": "Thời gian đăng nhập gần nhất", "optional": true },
         "avatarColor": { "type": "string", "description": "Màu đại diện avatar", "optional": true },
         "phone": { "type": "string", "description": "Số điện thoại", "optional": true }
+      }
+    },
+    "AuthorizedSeller": {
+      "description": "Danh sách email Google được Root Admin cấp quyền truy cập quản trị hệ thống",
+      "fields": {
+        "email": { "type": "string", "description": "Địa chỉ Email Google được cấp quyền" },
+        "name": { "type": "string", "description": "Họ tên hoặc bí danh nhân viên", "optional": true },
+        "role": { "type": "string", "description": "Vai trò (deputy_admin, manager, member)" },
+        "addedBy": { "type": "string", "description": "Email của Root Admin cấp quyền" },
+        "createdAt": { "type": "string", "description": "Thời gian cấp quyền ISO" },
+        "isActive": { "type": "boolean", "description": "Trạng thái hiệu lực của quyền" }
       }
     },
     "EmailLog": {
@@ -128,6 +139,34 @@
         "adminNotificationEmail": { "type": "string", "description": "Email nhận thông báo admin" },
         "smtpPass": { "type": "string", "description": "Mật khẩu ứng dụng SMTP (lưu bảo mật)", "optional": true },
         "updatedAt": { "type": "string", "description": "Thời gian cập nhật" }
+      }
+    },
+    "SystemLog": {
+      "description": "Nhật ký hệ thống, lỗi client và hoạt động quản trị viên",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh log" },
+        "timestamp": { "type": "number", "description": "Thời gian Unix" },
+        "type": { "type": "string", "description": "Loại nhật ký (info, warning, error, activity)" },
+        "message": { "type": "string", "description": "Nội dung tóm tắt log" },
+        "source": { "type": "string", "description": "Nguồn phát sinh (ClientRuntime, Admin, System)" }
+      }
+    },
+    "VersionBackup": {
+      "description": "Bản sao lưu dữ liệu hệ thống điểm khôi phục",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh bản sao lưu" },
+        "createdAt": { "type": "string", "description": "Thời gian tạo sao lưu" },
+        "backupType": { "type": "string", "description": "Loại sao lưu: auto hoặc manual" },
+        "createdByName": { "type": "string", "description": "Người hoặc tiến trình thực hiện sao lưu" }
+      }
+    },
+    "Voucher": {
+      "description": "Mã ưu đãi, giảm giá và khuyến mãi",
+      "fields": {
+        "id": { "type": "string", "description": "Mã voucher ID" },
+        "code": { "type": "string", "description": "Mã code áp dụng" },
+        "type": { "type": "string", "description": "Loại giảm giá (percent, fixed, shipping)" },
+        "isActive": { "type": "boolean", "description": "Trạng thái kích hoạt" }
       }
     }
   },
@@ -186,6 +225,12 @@
         "write": "true"
       }
     },
+    "/authorized_sellers/{email}": {
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
     "/email_logs/{logId}": {
       "schema": "EmailLog",
       "allow": {
@@ -195,6 +240,39 @@
     },
     "/system_settings/{settingId}": {
       "schema": "SystemSetting",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/system_logs/{logId}": {
+      "schema": "SystemLog",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/backups/{backupId}": {
+      "schema": "VersionBackup",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/vouchers/{voucherId}": {
+      "schema": "Voucher",
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/product_assets/{assetId}": {
+      "allow": {
+        "read": "true",
+        "write": "true"
+      }
+    },
+    "/product_asset_chunks/{chunkId}": {
       "allow": {
         "read": "true",
         "write": "true"

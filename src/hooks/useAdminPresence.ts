@@ -3,6 +3,7 @@ import { SellerUser, SystemLogItem } from '../types';
 import { updateSellerPresence } from '../firebase';
 import { getClientDeviceInfo } from '../utils/ipGeo';
 import { writeSystemLog } from '../utils/logger';
+import { safeTimeoutSignal } from '../utils/timeoutSignal';
 
 export interface AdminPresenceInfo {
   ip: string;
@@ -31,7 +32,7 @@ export async function fetchPublicIpAndLocation(): Promise<{
 }> {
   // Provider 1: ipapi.co (recommended by user)
   try {
-    const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3500) });
+    const res = await fetch('https://ipapi.co/json/', { signal: safeTimeoutSignal(3500) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.ip && !data.error) {
@@ -51,7 +52,7 @@ export async function fetchPublicIpAndLocation(): Promise<{
 
   // Provider 2: ipwho.is (fast, CORS-friendly)
   try {
-    const res = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(3000) });
+    const res = await fetch('https://ipwho.is/', { signal: safeTimeoutSignal(3000) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.success !== false && data.ip) {
@@ -71,7 +72,7 @@ export async function fetchPublicIpAndLocation(): Promise<{
 
   // Provider 3: api.ipify.org (ultra reliable for public IP)
   try {
-    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) });
+    const res = await fetch('https://api.ipify.org?format=json', { signal: safeTimeoutSignal(3000) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.ip) {
@@ -91,7 +92,7 @@ export async function fetchPublicIpAndLocation(): Promise<{
 
   // Provider 4: freeipapi.com
   try {
-    const res = await fetch('https://freeipapi.com/api/json', { signal: AbortSignal.timeout(3000) });
+    const res = await fetch('https://freeipapi.com/api/json', { signal: safeTimeoutSignal(3000) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.ipAddress) {
@@ -111,7 +112,7 @@ export async function fetchPublicIpAndLocation(): Promise<{
 
   // Provider 5: Backend /api/client-ip
   try {
-    const res = await fetch('/api/client-ip', { signal: AbortSignal.timeout(2000) });
+    const res = await fetch('/api/client-ip', { signal: safeTimeoutSignal(2000) });
     if (res.ok) {
       const data = await res.json();
       if (data && data.ip && data.ip !== '127.0.0.1' && data.ip !== '::1') {

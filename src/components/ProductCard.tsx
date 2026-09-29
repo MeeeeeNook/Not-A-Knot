@@ -187,12 +187,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       onClick={() => onOpenDetail(product)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`bg-white rounded-xl sm:rounded-2xl border border-neutral-200/90 hover:border-neutral-400/80 transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-xl relative hover:z-20 overflow-hidden flex flex-col group cursor-pointer shadow-xs ${
+      className={`bg-[#FFFDFB] rounded-2xl border border-[#EAE6DE] hover:border-amber-700/40 transition-all duration-300 ease-out transform hover:scale-105 shadow-[0_2px_12px_-2px_rgba(44,38,30,0.05)] hover:shadow-[0_12px_28px_-4px_rgba(44,38,30,0.1)] relative hover:z-20 overflow-hidden flex flex-col group cursor-pointer ${
         isSoldOut ? 'opacity-85' : ''
       } ${className}`}
     >
       {/* Product Image Container with Zoom, Skeleton and Silky Horizontal Slide on Hover */}
-      <div className="relative aspect-square overflow-hidden bg-neutral-100">
+      <div className="relative aspect-square overflow-hidden bg-[#F6F3EB]">
         <div className="w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out">
           {isHovered && images.length > 1 ? (
             <AnimatePresence initial={false} custom={direction} mode="popLayout">
@@ -292,7 +292,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
 
         {/* Price & Action Row */}
-        <div className="pt-2 border-t border-neutral-100 space-y-1.5">
+        <div className="pt-2 border-t border-[#F2EFE9] space-y-1.5">
           <div className="flex items-center justify-between gap-1">
             <div className="min-w-0">
               <div className="text-sm sm:text-base font-extrabold text-neutral-950 font-mono truncate">

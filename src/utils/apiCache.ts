@@ -61,9 +61,9 @@ export async function cachedApiFetch<T = any>(
   // 3. Initiate network request
   const fetchPromise = (async () => {
     try {
-      const headers = new Headers(fetchOptions?.headers || {});
+      const headers: Record<string, string> = { ...(fetchOptions?.headers as any || {}) };
       if (cached?.etag && !forceRefresh) {
-        headers.set('If-None-Match', cached.etag);
+        headers['If-None-Match'] = cached.etag;
       }
 
       const res = await fetch(url, {

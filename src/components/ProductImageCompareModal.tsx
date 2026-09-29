@@ -15,6 +15,8 @@ export interface CompareItem {
   originalData?: any;
 }
 
+import { dispatchSafeEvent } from '../firebase';
+
 interface ProductImageCompareModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -38,13 +40,13 @@ export const ProductImageCompareModal: React.FC<ProductImageCompareModalProps> =
     if (isOpen) {
       const validIdx = Math.max(0, Math.min(initialIndex, items.length - 1));
       setCurrentIndex(validIdx);
-      window.dispatchEvent(new CustomEvent('nak-image-zoom-opened'));
+      dispatchSafeEvent('nak-image-zoom-opened');
     } else {
-      window.dispatchEvent(new CustomEvent('nak-image-zoom-closed'));
+      dispatchSafeEvent('nak-image-zoom-closed');
     }
     return () => {
       if (isOpen) {
-        window.dispatchEvent(new CustomEvent('nak-image-zoom-closed'));
+        dispatchSafeEvent('nak-image-zoom-closed');
       }
     };
   }, [isOpen, initialIndex, items.length]);

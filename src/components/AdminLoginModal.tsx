@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 import { SellerUser } from '../types';
-import { loginWithServer, ROOT_ADMIN_USERNAME, isRootAdminUsername, hashUsername } from '../utils/auth';
+import { signInWithGoogle } from '../utils/auth';
 import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
-import { updateSellerPresence, fetchSellerByUsername } from '../firebase';
-import { safeStorageGetItem } from '../utils/storageHelper';
+import { updateSellerPresence } from '../firebase';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -24,10 +24,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   brandName = 'NOT A KNOT',
   logoUrl
 }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [clientGeo, setClientGeo] = useState<GeoLocationInfo | null>(null);
@@ -40,138 +36,48 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setErrorMessage('');
-
-    const cleanUsername = username.trim().toLowerCase();
-    const cleanPassword = password.trim();
-
-    if (!cleanUsername) {
-      setErrorMessage('Vui lòng nhập tên đăng nhập.');
-      return;
-    }
-    if (!cleanPassword) {
-      setErrorMessage('Vui lòng nhập mật khẩu.');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      // 1. Fetch or reuse IP Geolocation (instant if already cached)
-      const geo = clientGeo || await getClientGeoLocation();
-      if (!clientGeo) {
+      const geo = clientGeo || await getClientGeoLocation().catch(() => null);
+      if (geo && !clientGeo) {
         setClientGeo(geo);
       }
 
-      // Security check: Strictly require Vietnam IP for ALL admin logins (including Root Admin) to prevent unauthorized international access
-      if (!geo.isVietnam) {
-        await logAdminLogin({
-          username: cleanUsername,
-          status: 'blocked_geo',
-          customGeo: geo,
-          reason: `Truy cập quản trị từ ngoài lãnh thổ Việt Nam (${geo.countryCode}) bị chặn đối với tất cả tài khoản`
-        });
-
-        setErrorMessage(
-          `Cảnh báo bảo mật: Cổng quản trị chỉ chấp nhận kết nối từ địa chỉ IP thuộc Việt Nam (VN). Tất cả tài khoản quản trị (bao gồm Root Admin @${cleanUsername}) đều bị chặn khi kết nối từ ngoài Việt Nam (${geo.country || 'Nước ngoài'} - ${geo.countryCode || 'Quốc tế'}).`
-        );
+      const res = await signInWithGoogle();
+      if (!res.success || !res.user) {
+        setErrorMessage(res.error || 'Đăng nhập Google qua Firebase thất bại.');
         setIsLoading(false);
         return;
       }
 
-      // Find seller in list (supports matching by plain username or hashed username)
-      const cleanUsernameHash = await hashUsername(cleanUsername);
-      let matchedSeller = sellers.find(
-        (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
-      );
-
-      // Query Firestore directly for freshest seller credentials (with safe 3.5s timeout)
-      try {
-        const freshSeller = await fetchSellerByUsername(cleanUsername);
-        if (freshSeller) {
-          matchedSeller = freshSeller;
-        }
-      } catch (e) {
-        console.warn('Could not fetch fresh seller from Firestore:', e);
-      }
-
-      // If still not found, check local storage
-      if (!matchedSeller) {
-        try {
-          const cached = safeStorageGetItem('nak_sellers_list');
-          if (cached) {
-            const list: SellerUser[] = JSON.parse(cached);
-            matchedSeller = list.find(
-              (s) => s.username.toLowerCase() === cleanUsername || (s.usernameHash && s.usernameHash === cleanUsernameHash)
-            );
-          }
-        } catch {}
-      }
-
-      // Perform authentication (Rate-limited, authoritative bcrypt & salted SHA256)
-      const loginRes = await loginWithServer(cleanUsername, cleanPassword, matchedSeller, rememberMe);
-
-      if (!loginRes.success || !loginRes.user) {
-        await logAdminLogin({
-          username: cleanUsername,
-          name: matchedSeller?.name || cleanUsername,
-          status: 'failed_password',
-          customGeo: geo,
-          reason: loginRes.error || 'Mật khẩu hoặc tài khoản không hợp lệ'
-        });
-        setErrorMessage(loginRes.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Success authenticated
+      const authenticatedUser: SellerUser = res.user;
       const devInfo = getClientDeviceInfo();
       const nowIso = new Date().toISOString();
-      const authenticatedUser: SellerUser = {
-        ...(matchedSeller || {
-          id: loginRes.user.id || `seller-${cleanUsername}`,
-          username: cleanUsername,
-          name: loginRes.user.name || cleanUsername,
-          role: loginRes.user.role || (loginRes.user.isRootAdmin ? 'root_admin' : 'member'),
-          isRootAdmin: Boolean(loginRes.user.isRootAdmin),
-          isActive: true,
-          createdAt: nowIso,
-          avatarColor: loginRes.user.avatarColor || '#B41C1A'
-        }),
-        ...(loginRes.user as any),
-        lastLoginAt: nowIso,
-        lastSeenAt: nowIso,
-        lastLoginIp: geo.ip,
-        lastLoginCity: geo.city || geo.region || 'Hà Nội',
-        lastLoginCountry: geo.country || 'Vietnam',
-        lastDevice: `${devInfo.browser} trên ${devInfo.os}`
-      };
 
       logAdminLogin({
         username: authenticatedUser.username,
         name: authenticatedUser.name,
         isRoot: Boolean(authenticatedUser.isRootAdmin),
         status: 'success',
-        customGeo: geo
+        customGeo: geo || undefined
       }).catch(() => {});
 
       updateSellerPresence(authenticatedUser.id, {
         lastLoginAt: nowIso,
         lastSeenAt: nowIso,
-        lastLoginIp: geo.ip,
-        lastLoginCity: geo.city || geo.region || 'Hà Nội',
-        lastLoginCountry: geo.country || 'Vietnam',
+        lastLoginIp: geo?.ip || '127.0.0.1',
+        lastLoginCity: geo?.city || geo?.region || 'Hà Nội',
+        lastLoginCountry: geo?.country || 'Vietnam',
         lastDevice: `${devInfo.browser} trên ${devInfo.os}`
       }).catch(() => {});
 
       setIsLoading(false);
       onLoginSuccess(authenticatedUser);
-    } catch {
-      setErrorMessage('Có lỗi xảy ra khi xác thực. Vui lòng thử lại.');
-      setIsLoading(false);
-    } finally {
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Có lỗi xảy ra khi xác thực Google. Vui lòng thử lại.');
       setIsLoading(false);
     }
   };
@@ -199,7 +105,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             Cổng Quản Trị & Người Bán
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-            Đăng nhập tài khoản nội bộ {brandName}
+            Đăng nhập tài khoản nội bộ {brandName} (Firebase Authentication)
           </p>
         </div>
 
@@ -211,95 +117,69 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           </div>
         )}
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4 relative">
-          {/* Username Input */}
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Tên đăng nhập
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-500">
-                <User className="w-4 h-4" />
-              </div>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Nhập tên đăng nhập"
-                autoComplete="username"
-                autoFocus
-                className="w-full pl-9 pr-3 py-2.5 bg-neutral-950/80 border border-neutral-700/80 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-white placeholder-neutral-500 transition-all outline-hidden"
-              />
-            </div>
-          </div>
-
-          {/* Password Input */}
-          <div>
-            <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-              Mật khẩu
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-500">
-                <Lock className="w-4 h-4" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Nhập mật khẩu"
-                autoComplete="current-password"
-                className="w-full pl-9 pr-10 py-2.5 bg-neutral-950/80 border border-neutral-700/80 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-sm text-white placeholder-neutral-500 transition-all outline-hidden"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Remember me & Helper */}
-          <div className="flex items-center justify-between text-xs pt-1">
-            <label className="flex items-center gap-2 cursor-pointer text-neutral-300 select-none">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded-sm border-neutral-700 bg-neutral-950 text-amber-500 focus:ring-amber-500/40 w-3.5 h-3.5 cursor-pointer"
-              />
-              <span>Ghi nhớ đăng nhập trên máy này</span>
-            </label>
-          </div>
-
-          {/* Submit Button */}
+        {/* Primary & Exclusive Authentication Method: Google Sign-In via Firebase Auth */}
+        <div className="space-y-4">
           <button
-            type="submit"
+            type="button"
+            onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full mt-2 py-3 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-neutral-950 font-bold text-sm rounded-xl transition-all shadow-lg hover:shadow-amber-500/20 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            className="w-full py-3.5 px-4 bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 active:scale-[0.99] border border-white"
           >
-            {isLoading ? (
-              <div className="w-5 h-5 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <>
-                <span>Đăng nhập hệ thống</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.67v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.16z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.26v3.15C3.25 21.36 7.34 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.26C.46 8.16 0 9.94 0 12s.46 3.84 1.26 5.42l4.02-3.15z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.25 2.64 1.26 6.58l4.02 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+              />
+            </svg>
+            <span>{isLoading ? 'Đang xác thực Google...' : 'Đăng nhập bằng tài khoản Google'}</span>
           </button>
-        </form>
 
-        {/* Confidential Security Status - IP is verified silently without displaying on screen */}
-        <div className="mt-4 p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
+          {/* Access Policy Explainer Card */}
+          <div className="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 text-xs space-y-2 text-neutral-300">
+            <div className="font-bold text-amber-400 flex items-center gap-1.5 text-xs">
+              <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Cơ chế bảo mật Firebase Authentication</span>
+            </div>
+            <p className="text-[11px] text-neutral-400 leading-relaxed">
+              Hệ thống đã loại bỏ hoàn toàn mật khẩu nội bộ để bảo vệ tối đa dữ liệu. Chỉ các tài khoản Google được Root Admin cấp quyền mới có thể truy cập:
+            </p>
+            <div className="space-y-1 pt-1 text-[11px]">
+              <div className="flex items-center gap-2 text-amber-300 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>nhunhuhao71@gmail.com (Root Admin)</span>
+              </div>
+              <div className="flex items-center gap-2 text-amber-300 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span>manhcuong2006ht@gmail.com (Root Admin)</span>
+              </div>
+              <div className="flex items-center gap-2 text-neutral-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-600" />
+                <span>Các Gmail nhân viên được duyệt trong trang Quản trị</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Security Status */}
+        <div className="mt-5 p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-neutral-400">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>Xác thực hệ thống nội bộ bảo mật</span>
+            <span>Xác thực RSA Token mã hóa cấp Google Cloud</span>
           </div>
           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 flex items-center gap-1">
-            <Lock className="w-2.5 h-2.5" /> Mã hóa & Kín đáo
+            <Lock className="w-2.5 h-2.5" /> 100% Google Auth
           </span>
         </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
  * Custom hook to debounce any value by delay milliseconds
@@ -27,15 +27,27 @@ export function useDebouncedCallback<T extends (...args: any[]) => any>(
   callback: T,
   delayMs = 300
 ): (...args: Parameters<T>) => void {
-  const [timeoutId, setTimeoutId] = useState<any>(null);
+  const timeoutRef = useRef<any>(null);
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
 
-  return (...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    const newTimeout = setTimeout(() => {
-      callback(...args);
-    }, delayMs);
-    setTimeoutId(newTimeout);
-  };
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        callbackRef.current(...args);
+      }, delayMs);
+    },
+    [delayMs]
+  );
 }

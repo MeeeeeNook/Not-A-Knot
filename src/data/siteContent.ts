@@ -5,7 +5,50 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   brandTagline: 'Xưởng Chế Tác Phụ Kiện Handmade Thủ Công',
   announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!',
   announcementLink: '#products',
-  announcementActive: false,
+  announcementActive: true,
+  announcementTheme: 'obsidian',
+  announcementMode: 'carousel',
+  announcementShowClose: false,
+  announcementShowControls: false,
+  announcementItems: [
+    {
+      id: 'announcement-1',
+      badge: 'Ưu Đãi',
+      text: '🇻🇳 Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!',
+      link: '#products',
+      voucherCode: '',
+      isActive: true
+    },
+    {
+      id: 'announcement-2',
+      badge: 'Freeship 0đ',
+      text: 'Miễn phí giao hàng toàn bộ Hà Nội • Đồng giá 20k toàn quốc',
+      link: '#about',
+      voucherCode: '',
+      isActive: true
+    },
+    {
+      id: 'announcement-3',
+      badge: 'Mã Giảm Giá',
+      text: 'Giảm ngay 10.000đ cho đơn từ 199k',
+      link: '',
+      voucherCode: 'NOTAKNOT',
+      isActive: true
+    },
+    {
+      id: 'announcement-4',
+      badge: 'Cam Kết 100%',
+      text: 'Bảo hành trọn đời nút thắt thủ công • Dây dù Paracord 550',
+      link: '#about',
+      voucherCode: '',
+      isActive: true
+    }
+  ],
+  announcementShowVoucher: true,
+  announcementVoucherCode: 'NOTAKNOT',
+  announcementShowFreeship: true,
+  announcementShowWarranty: true,
+  announcementSpeed: 4.5,
   phone: '079 655 5636',
   zalo: '',
   address: 'Hanoi, Vietnam',

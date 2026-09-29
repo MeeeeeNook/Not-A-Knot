@@ -269,8 +269,8 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           
           {/* LEFT SIDEBAR: Category & Collection Box */}
           <aside className="w-full lg:w-64 xl:w-72 flex-shrink-0">
-            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-neutral-200 shadow-xs lg:sticky lg:top-20 space-y-3">
-              <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+            <div className="bg-[#FFFDFB] rounded-3xl p-4 sm:p-5 border border-[#EAE6DE] shadow-[0_2px_16px_-4px_rgba(44,38,30,0.05)] lg:sticky lg:top-20 space-y-3">
+              <div className="flex items-center justify-between pb-3 border-b border-[#F2EFE9]">
                 <h3 className="text-xs font-black uppercase tracking-wider text-neutral-900">
                   Danh Mục & BST
                 </h3>
@@ -295,14 +295,14 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                       className={`w-full text-left px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all duration-200 flex items-center justify-between group ${
                         isSelected
                           ? 'bg-neutral-950 text-white shadow-sm font-bold'
-                          : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950'
+                          : 'text-stone-700 hover:bg-[#F4F1EA] hover:text-stone-950'
                       }`}
                     >
                       <span className="truncate">{cat.label}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ml-2 ${
                         isSelected
                           ? 'bg-amber-400 text-neutral-950'
-                          : 'bg-neutral-100 text-neutral-500 group-hover:bg-neutral-200 group-hover:text-neutral-800'
+                          : 'bg-[#F4F1EA] text-stone-600 group-hover:bg-[#EAE6DE] group-hover:text-stone-900'
                       }`}>
                         {matchingCount}
                       </span>
@@ -317,7 +317,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           <main className="flex-1 w-full min-w-0 space-y-4">
             
             {/* Search and Filters Bar */}
-            <div className="bg-white p-3.5 sm:p-4 rounded-3xl border border-neutral-200 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="bg-[#FFFDFB] p-3.5 sm:p-4 rounded-3xl border border-[#EAE6DE] shadow-[0_2px_16px_-4px_rgba(44,38,30,0.05)] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
               
               {/* Search Bar */}
               <div className="relative flex-1 min-w-[200px]">

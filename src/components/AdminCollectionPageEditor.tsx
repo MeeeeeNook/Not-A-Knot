@@ -20,11 +20,11 @@ import {
   Clock,
   ShieldCheck,
   Flag,
-  Lock,
   UploadCloud,
   Camera,
   Loader2
 } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 
 interface AdminCollectionPageEditorProps {
   collections: CollectionInfo[];

@@ -193,7 +193,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
 
   // Background style configuration
   const customBgStyle: React.CSSProperties = {
-    backgroundColor: config?.backgroundColor || (sectionIndex % 2 === 1 ? '#ffffff' : '#FAF9F6'),
+    backgroundColor: config?.backgroundColor || (sectionIndex % 2 === 1 ? '#FAF8F5' : '#F4F1EA'),
   };
 
   return (
@@ -202,7 +202,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
       aria-label={title}
       style={customBgStyle}
       className={`relative w-full py-12 sm:py-16 md:py-20 font-sans border-t transition-colors ${
-        isDarkBg ? 'text-white border-white/10' : 'text-slate-900 border-slate-200/60'
+        isDarkBg ? 'text-white border-white/10' : 'text-stone-900 border-[#EAE6DE]'
       }`}
     >
       {/* Optional Background Image Layer with custom opacity */}
@@ -299,7 +299,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                     className="group flex flex-col items-center text-center cursor-pointer relative shrink-0 snap-start w-[160px] sm:w-[220px] md:w-[250px] lg:w-[270px]"
                   >
                     {/* Product Image Stage */}
-                    <div className="relative w-full aspect-square bg-white flex items-center justify-center overflow-hidden border border-slate-100/80 mb-3 sm:mb-4 rounded-lg">
+                    <div className="relative w-full aspect-square bg-[#FFFDFB] flex items-center justify-center overflow-hidden border border-[#EAE6DE] mb-3 sm:mb-4 rounded-xl sm:rounded-2xl shadow-[0_2px_10px_-2px_rgba(44,38,30,0.05)]">
                       {/* Chic Top-Left Badge */}
                       {isOutOfStock ? (
                         <span className="absolute top-2 left-2 z-10 bg-slate-800 text-white text-[9px] sm:text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 select-none pointer-events-none">
@@ -320,7 +320,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                         priority={sectionIndex === 0 && pIdx < 3}
                         objectFit="contain"
                         className="p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
-                        wrapperClassName="w-full h-full bg-white"
+                        wrapperClassName="w-full h-full bg-[#FFFDFB]"
                       />
                     </div>
 
@@ -390,7 +390,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                   className="group flex flex-col items-center text-center cursor-pointer relative w-[calc(50%-0.5rem)] sm:w-[220px] md:w-[250px] lg:w-[260px] shrink-0"
                 >
                   {/* Product Image Stage */}
-                  <div className="relative w-full aspect-square bg-white flex items-center justify-center overflow-hidden border border-slate-100/80 mb-3 sm:mb-4 rounded-lg">
+                  <div className="relative w-full aspect-square bg-[#FFFDFB] flex items-center justify-center overflow-hidden border border-[#EAE6DE] mb-3 sm:mb-4 rounded-xl sm:rounded-2xl shadow-[0_2px_10px_-2px_rgba(44,38,30,0.05)]">
                     {/* Chic Top-Left Badge */}
                     {isOutOfStock ? (
                       <span className="absolute top-2 left-2 z-10 bg-slate-800 text-white text-[9px] sm:text-[10px] font-bold tracking-widest uppercase px-2 py-0.5 select-none pointer-events-none">
@@ -411,7 +411,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
                       priority={sectionIndex === 0 && pIdx < 4}
                       objectFit="contain"
                       className="p-3 sm:p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
-                      wrapperClassName="w-full h-full bg-white"
+                      wrapperClassName="w-full h-full bg-[#FFFDFB]"
                     />
                   </div>
 

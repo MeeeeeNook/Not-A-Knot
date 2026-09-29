@@ -45,18 +45,28 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   // Track container size
   useEffect(() => {
     if (!isOpen || !containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect) {
-          setContainerSize({
-            width: entry.contentRect.width,
-            height: entry.contentRect.height
-          });
+    if (typeof window === 'undefined' || typeof (window as any).ResizeObserver !== 'function') return;
+    let observer: ResizeObserver | null = null;
+    try {
+      observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect) {
+            setContainerSize({
+              width: entry.contentRect.width,
+              height: entry.contentRect.height
+            });
+          }
         }
+      });
+      observer.observe(containerRef.current);
+    } catch {
+      return;
+    }
+    return () => {
+      if (observer) {
+        try { observer.disconnect(); } catch {}
       }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    };
   }, [isOpen]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {

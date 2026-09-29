@@ -61,7 +61,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 2560;
@@ -171,7 +171,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
 
       const reader = new FileReader();
       reader.onload = (event) => {
-        const img = new Image();
+        const img = document.createElement('img');
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const maxDim = 2560;

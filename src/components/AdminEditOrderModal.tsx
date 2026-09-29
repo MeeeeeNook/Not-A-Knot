@@ -20,9 +20,9 @@ import {
   safeIsoDateString
 } from '../utils/orderFormatters';
 import { deduplicateSellers } from '../utils/auth';
+import { Lock } from './common/LockIcon';
 import { 
   UserCheck, 
-  Lock, 
   Truck, 
   Package, 
   ExternalLink, 
@@ -546,7 +546,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
     }
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 2048;

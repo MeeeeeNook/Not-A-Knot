@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import { SiteContentConfig } from '../types';
+import { dispatchSafeEvent } from '../firebase';
 
 interface AboutUsSectionProps {
   content?: SiteContentConfig['aboutSection'];
@@ -16,8 +17,12 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
   onOpenAboutPage
 }) => {
   const handleOpenAbout = onOpenFullAbout || onOpenAboutPage || (() => {
-    window.history.pushState(null, '', '/about');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    try {
+      window.history.pushState(null, '', '/about');
+      dispatchSafeEvent('popstate');
+    } catch {
+      window.location.href = '/about';
+    }
   });
   const title = content?.title || 'Hành Trình Gắn Kết Những Nút Thắt Bản Lĩnh';
   const subtitle = content?.subtitle || 'Xưởng chế tác phụ kiện handmade & thời trang thủ công hàng đầu tại Việt Nam.';

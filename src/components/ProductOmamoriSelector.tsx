@@ -39,7 +39,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
         if (o.image) {
           const resolved = resolveAssetUrl(o.image);
           if (resolved && resolved !== '/assets/bracelet.jpg') {
-            const img = new Image();
+            const img = document.createElement('img');
             img.src = resolved;
           }
         }

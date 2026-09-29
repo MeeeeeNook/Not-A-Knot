@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, Lock, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight, CheckSquare, Truck, User, Ticket, FileSpreadsheet, Lightbulb } from 'lucide-react';
+import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight, CheckSquare, Truck, User, Ticket, FileSpreadsheet, Lightbulb, Globe, Zap, Camera, Image as ImageIcon } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, ProductColorOption, ProductCharmOption, ProductOmamoriOption, ProductKhoenOption, ComboItemConfig } from '../types';
 import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { DEFAULT_CATEGORIES } from '../data/categories';
@@ -92,6 +93,7 @@ import {
   saveSiteContentToFirestore,
   clearFirestoreMemoryCache,
   canonicalOrderKey,
+  auth,
   isMatchingOrderDoc,
   resolveAssetUrl,
   StoredOrder
@@ -1386,6 +1388,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
     setProductFormTab('basic');
     setIsAddingNew(true);
+    setTimeout(() => {
+      document.getElementById('admin-product-form-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
   };
 
   // Open dedicated form for creating a multi-product Combo
@@ -1433,6 +1438,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormComboItems([]);
     setProductFormTab('basic');
     setIsAddingNew(true);
+    setTimeout(() => {
+      document.getElementById('admin-product-form-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
   };
 
   // Open form for editing existing product
@@ -1502,6 +1510,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormEnableSizeSelection(false);
     setProductFormTab(isCombo ? 'combo' : 'basic');
     setIsAddingNew(true);
+    setTimeout(() => {
+      document.getElementById('admin-product-form-container')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
   };
 
   // Image Drag & Drop / File Upload handler with automatic resizing & compression (Base64)
@@ -1518,7 +1529,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     reader.onload = (event) => {
       const rawResult = event.target?.result;
       if (typeof rawResult === 'string') {
-        const img = new Image();
+        const img = document.createElement('img');
         img.onload = () => {
           try {
             const maxDim = 1280;
@@ -1604,7 +1615,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     reader.onload = (event) => {
       const rawResult = event.target?.result;
       if (typeof rawResult === 'string') {
-        const img = new Image();
+        const img = document.createElement('img');
         img.onload = () => {
           try {
             let width = img.width || 400;
@@ -3206,8 +3217,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return 'Quản lý góc tin tức';
       case 'seo_audit':
         return 'Kiểm tra & Tối ưu SEO Meta';
-      case 'bank_account':
-        return 'Tài khoản ngân hàng';
       case 'banners':
         return 'Banners & Bộ sưu tập';
       case 'version_history':
@@ -3313,8 +3322,63 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
         )}
 
-        {/* Main Workspace Tabs Container (Full width for maximum table space, with extra pb for mobile bottom nav) */}
-        <main className="flex-grow w-full px-2.5 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 pb-36 sm:pb-32 lg:pb-8">
+        {/* Legacy Session Warning Banner */}
+        {!auth.currentUser && (
+          <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 sm:px-6 py-2.5 text-amber-950 text-xs font-semibold flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded-md bg-amber-500/20 text-amber-800 font-bold shrink-0">⚠️ Thông báo bảo mật:</span>
+              <span>
+                Bạn đang duy trì phiên đăng nhập cũ (chưa liên kết Google). Để kích hoạt toàn bộ quyền hạn Cloud (Đồng bộ bản sao lưu & Nhật ký hệ thống), hãy <strong>Đăng xuất</strong> và bấm <strong>"Đăng nhập bằng tài khoản Google"</strong> ({isRootAdmin ? 'nhunhuhao71@gmail.com' : 'Gmail được duyệt'}).
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="self-start sm:self-auto px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-[11px] shrink-0 cursor-pointer transition-all shadow-xs"
+            >
+              Đăng xuất & Đăng nhập Google
+            </button>
+          </div>
+        )}
+
+        {/* Mobile Quick Tab Strip (< lg) */}
+        <div className="lg:hidden bg-white/95 border-b border-slate-200 px-3 py-2 overflow-x-auto scrollbar-none flex items-center gap-1.5 shrink-0 select-none shadow-2xs">
+          {[
+            { id: 'dashboard', label: 'Tổng quan' },
+            { id: 'orders', label: `Đơn hàng (${activeOrders.length})` },
+            { id: 'manual_order', label: '+ Nhập đơn' },
+            { id: 'products', label: `Sản phẩm (${products.length})` },
+            { id: 'categories', label: `Danh mục (${localCategories.length})` },
+            { id: 'vouchers', label: 'Vouchers' },
+            { id: 'messages', label: unreadMessagesCount > 0 ? `Tin nhắn (${unreadMessagesCount} mới)` : 'Tin nhắn' },
+            { id: 'sellers', label: `Quản trị (${sellers.length})`, rootOnly: true },
+            { id: 'site_editor', label: 'Giao diện' },
+            { id: 'social_feed', label: 'Social' },
+            { id: 'trash', label: trashOrders.length > 0 ? `Thùng rác (${trashOrders.length})` : 'Thùng rác' },
+            { id: 'backup', label: 'Sao lưu' },
+            { id: 'logs', label: 'Logs' },
+            { id: 'email', label: 'Email', rootOnly: true },
+            { id: 'maintenance', label: 'Bảo trì', rootOnly: true }
+          ]
+            .filter((tab) => !tab.rootOnly || isRootAdmin)
+            .map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleSwitchTab(tab.id as AdminTabType)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 cursor-pointer active:scale-95 ${
+                  activeTab === tab.id
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-2xs'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+        </div>
+
+        {/* Main Workspace Tabs Container (Mobile-first responsive padding & safe-area margin) */}
+        <main className="flex-grow w-full max-w-full px-2.5 sm:px-4 lg:px-6 py-3 sm:py-4 space-y-4 pb-36 sm:pb-32 lg:pb-8 overflow-x-hidden">
         
         {/* Fake Loading Delay Indicator for Smooth Tab Switching */}
         {isTabLoading && (
@@ -3472,91 +3536,93 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </div>
 
             {/* Product Control Action Bar */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-2.5">
                 <button
                   id="admin-add-product-btn"
                   onClick={handleOpenAddForm}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer hover:scale-[1.01]"
                   title="Thêm sản phẩm đơn lẻ (vòng tay, charm hoặc móc khóa đơn)"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 text-slate-950" />
                   <span>+ Thêm Sản Phẩm Đơn</span>
                 </button>
 
                 <button
                   id="admin-add-combo-btn"
                   onClick={handleOpenAddComboForm}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm cursor-pointer hover:shadow-purple-500/20 hover:scale-[1.02]"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:from-purple-700 active:to-indigo-700 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer hover:shadow-purple-500/20 hover:scale-[1.01]"
                   title="Tạo gói sản phẩm Combo gộp nhiều món tùy biến (khách chọn từng món theo từng bước)"
                 >
                   <Layers className="w-4 h-4 text-purple-200" />
                   <span>Tạo Combo Mới (Gộp Nhiều Món)</span>
                 </button>
 
-                <button
-                  onClick={() => handleSwitchTab('categories')}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
-                >
-                  <span>Sửa Danh Mục BST</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5 col-span-full sm:col-span-2 lg:col-auto pt-1 sm:pt-0">
+                  <button
+                    onClick={() => handleSwitchTab('categories')}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
+                  >
+                    <span>Sửa Danh Mục BST</span>
+                  </button>
 
-                <button
-                  onClick={handlePushAllToCloud}
-                  disabled={isCloudSyncing}
-                  className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                  title="Đẩy danh sách sản phẩm hiện tại lên Firebase Cloud (Dọn sạch các sản phẩm đã xóa trên Cloud để Cloud khớp chính xác với máy bạn)"
-                >
-                  <CloudUpload className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
-                  <span>{isCloudSyncing ? 'Đang Đẩy...' : 'Đẩy Lên Cloud'}</span>
-                </button>
+                  <button
+                    onClick={handlePushAllToCloud}
+                    disabled={isCloudSyncing}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Đẩy danh sách sản phẩm hiện tại lên Firebase Cloud"
+                  >
+                    <CloudUpload className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-bounce' : ''}`} />
+                    <span>{isCloudSyncing ? 'Đang Đẩy...' : 'Đẩy Lên Cloud'}</span>
+                  </button>
 
-                <button
-                  onClick={handleFetchFromCloud}
-                  disabled={isCloudSyncing}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer disabled:opacity-50"
-                  title="Kéo dữ liệu sản phẩm từ Firebase Firestore về máy"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
-                  <span>Đồng Bộ Từ Cloud</span>
-                </button>
+                  <button
+                    onClick={handleFetchFromCloud}
+                    disabled={isCloudSyncing}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer disabled:opacity-50"
+                    title="Kéo dữ liệu sản phẩm từ Firebase Firestore về máy"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                    <span>Đồng Bộ</span>
+                  </button>
 
-                <button
-                  onClick={handleExportProductsJSON}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
-                  title="Xuất file JSON sao lưu danh sách sản phẩm"
-                >
-                  <Download className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Sao Lưu JSON</span>
-                </button>
+                  <button
+                    onClick={handleExportProductsJSON}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-200 cursor-pointer"
+                    title="Xuất file JSON sao lưu danh sách sản phẩm"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Xuất JSON</span>
+                  </button>
 
-                <button
-                  onClick={() => productJsonInputRef.current?.click()}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 cursor-pointer"
-                  title="Nhập và cập nhật danh sách sản phẩm từ file .JSON (có thể chỉnh sửa thủ công trước khi nạp)"
-                >
-                  <Upload className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Nhập JSON</span>
-                </button>
-                <input
-                  ref={productJsonInputRef}
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleImportProductsJSONFile}
-                  className="hidden"
-                />
+                  <button
+                    onClick={() => productJsonInputRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-200 cursor-pointer"
+                    title="Nhập và cập nhật danh sách sản phẩm từ file .JSON"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Nhập JSON</span>
+                  </button>
+                  <input
+                    ref={productJsonInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportProductsJSONFile}
+                    className="hidden"
+                  />
 
-                <button
-                  onClick={handleResetDefaults}
-                  className="px-3 py-2 text-slate-500 hover:text-rose-600 text-xs font-medium transition-colors cursor-pointer"
-                  title="Khôi phục danh sách gốc"
-                >
-                  Khôi phục gốc
-                </button>
+                  <button
+                    onClick={handleResetDefaults}
+                    className="px-2.5 py-1.5 text-slate-400 hover:text-rose-600 text-xs font-medium transition-colors cursor-pointer ml-auto sm:ml-0"
+                    title="Khôi phục danh sách gốc"
+                  >
+                    Khôi phục
+                  </button>
+                </div>
               </div>
 
               {/* Search & Dynamic Filters (Category + Stock status) + View Switcher */}
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                 {/* View Mode Toggle: Cards vs Table */}
                 <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                   <button
@@ -3587,12 +3653,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </button>
                 </div>
 
-                <div className="relative flex-grow sm:flex-grow-0">
+                <div className="relative flex-grow sm:flex-grow-0 min-w-[140px]">
                   <input
                     type="text"
                     value={adminSearch}
                     onChange={(e) => setAdminSearch(e.target.value)}
-                    placeholder="Tìm tên, mã sản phẩm..."
+                    placeholder="Tìm tên, mã SP..."
                     className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white w-full sm:w-48"
                   />
                 </div>
@@ -3600,7 +3666,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <select
                   value={adminCategoryFilter}
                   onChange={(e) => setAdminCategoryFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  className="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                 >
                   <option value="all">Tất cả BST ({products.length})</option>
                   <option value="combo">Gói Combo ({products.filter((p) => p.isCombo).length})</option>
@@ -3614,9 +3680,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <select
                   value={adminStockFilter}
                   onChange={(e: any) => setAdminStockFilter(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                  className="px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
                 >
-                  <option value="all">Tất cả trạng thái ({products.length})</option>
+                  <option value="all">Tất cả kho ({products.length})</option>
                   <option value="in_stock">Còn hàng ({inStockCount})</option>
                   <option value="out_of_stock">Hết hàng ({outOfStockCount})</option>
                 </select>
@@ -3625,8 +3691,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
             {/* Add / Edit Form Modal/Drawer Area */}
             {isAddingNew && (
-              <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-amber-400 shadow-xl space-y-6 animate-fadeIn">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div
+                id="admin-product-form-container"
+                className="bg-white p-3.5 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl border-2 border-amber-400 shadow-xl space-y-5 sm:space-y-6 animate-fadeIn relative"
+              >
+                <div className="flex items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       {isComboMode ? (
@@ -3641,12 +3710,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         </span>
                       )}
                     </div>
-                    <h3 className="font-black text-lg text-slate-900">
+                    <h3 className="font-black text-base sm:text-lg text-slate-900">
                       {isComboMode
-                        ? (editingProduct ? `Chỉnh Sửa Combo #${editingProduct.id}: ${editingProduct.name}` : 'Tạo Sản Phẩm Combo Mới (Gộp Nhiều Món)')
-                        : (editingProduct ? `Chỉnh Sửa Sản Phẩm #${editingProduct.id}: ${editingProduct.name}` : 'Thêm Sản Phẩm Đơn Mới Vào Hệ Thống')}
+                        ? (editingProduct ? `Chỉnh Sửa Combo #${editingProduct.id}: ${editingProduct.name}` : 'Tạo Gói Combo Mới (Gộp Nhiều Món)')
+                        : (editingProduct ? `Chỉnh Sửa Sản Phẩm #${editingProduct.id}: ${editingProduct.name}` : 'Thêm Sản Phẩm Đơn Mới Vào Cửa Hàng')}
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                       {isComboMode
                         ? 'Gói combo gộp các sản phẩm/phụ kiện lại để khách chọn phối từng món và mua với giá ưu đãi.'
                         : 'Thông tin sẽ tự động đồng bộ lên Firebase Firestore và cập nhật ngay vào cửa hàng.'}
@@ -3658,19 +3727,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       setIsAddingNew(false);
                       setEditingProduct(null);
                     }}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer shrink-0 border border-slate-200"
                   >
-                    Hủy Bỏ
+                    ✕ Đóng
                   </button>
                 </div>
 
                 {/* Workflow Tabs: Separated for Single Product vs Combo */}
-                <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200">
                   {/* TAB 1: Common for both modes */}
                   <button
                     type="button"
                     onClick={() => setProductFormTab('basic')}
-                    className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
                       productFormTab === 'basic'
                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -3689,7 +3758,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setProductFormTab('customizations')}
-                      className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
                         productFormTab === 'customizations'
                           ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
@@ -3709,7 +3778,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setProductFormTab('combo')}
-                      className={`flex-1 min-w-[150px] px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
                         productFormTab === 'combo'
                           ? 'bg-purple-600 text-white shadow-xs'
                           : 'bg-purple-100 text-purple-900 hover:bg-purple-200'
@@ -3727,462 +3796,473 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <form onSubmit={handleSaveProduct} className="space-y-6">
                   {/* TAB 1: THÔNG TIN CƠ BẢN & HÌNH ẢNH */}
                   {productFormTab === 'basic' && (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Left Column: Core Product Info */}
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Tên sản phẩm *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formName}
-                          onChange={(e) => setFormName(e.target.value)}
-                          placeholder="Ví dụ: Vòng Tay Handmade 02.09 Hào Khí Non Sông"
-                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-                        />
-                      </div>
-
-                      {/* FIXED PRICE & STOCK & SOLD INPUTS: Resilient 4-column layout */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Giá bán (VNĐ) *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={formPriceInput}
-                            onChange={(e) => setFormPriceInput(e.target.value)}
-                            placeholder="150000"
-                            className="w-full px-3.5 py-2.5 bg-amber-50/50 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 focus:outline-none focus:border-amber-500 focus:bg-white"
-                          />
-                          <span className="text-[10px] text-amber-700 block mt-1 font-mono font-medium">
-                            → {formatCurrency(parsePrice(formPriceInput))}
-                          </span>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Giá gốc niêm yết
-                          </label>
-                          <input
-                            type="text"
-                            value={formOriginalPriceInput}
-                            onChange={(e) => setFormOriginalPriceInput(e.target.value)}
-                            placeholder="220000"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-500 focus:bg-white"
-                          />
-                          {formOriginalPriceInput && (
-                            <span className="text-[10px] text-slate-400 block mt-1 line-through font-mono">
-                              → {formatCurrency(parsePrice(formOriginalPriceInput))}
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="block text-xs font-bold text-amber-800">
-                              Số lượng tồn kho *
-                            </label>
-                            {formEnableColorSelection && formColorOptions.length > 0 && (
-                              <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded">
-                                Tổng {formColorOptions.length} màu
-                              </span>
-                            )}
-                          </div>
-                          <input
-                            type="number"
-                            required
-                            min="0"
-                            readOnly={formEnableColorSelection && formColorOptions.length > 0}
-                            value={formStock}
-                            onChange={(e) => {
-                              const val = Math.max(0, Number(e.target.value));
-                              setFormStock(val);
-                              setFormInStock(val > 0);
-                            }}
-                            className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-black focus:outline-none transition-colors ${
-                              formEnableColorSelection && formColorOptions.length > 0
-                                ? 'bg-amber-100/70 border border-amber-300 text-amber-950 cursor-not-allowed select-none'
-                                : 'bg-amber-50 border border-amber-300 text-amber-900 focus:border-amber-500'
-                            }`}
-                            title={
-                              formEnableColorSelection && formColorOptions.length > 0
-                                ? 'Tồn kho tổng tự động tính từ tổng số lượng tồn của các phân loại màu bên dưới'
-                                : undefined
-                            }
-                          />
-                          {formEnableColorSelection && formColorOptions.length > 0 && (
-                            <span className="text-[10px] text-amber-800 block mt-1 font-medium">
-                              ✨ Tự động tính từ tổng tồn kho của {formColorOptions.length} màu bên dưới ({formStock} chiếc).
-                            </span>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Số lượng đã bán
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={formSoldCount}
-                            onChange={(e) => setFormSoldCount(Math.max(0, Number(e.target.value) || 0))}
-                            placeholder="0"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white"
-                          />
-                          <span className="text-[10px] text-slate-400 block mt-1">
-                            Khởi tạo / cộng dồn
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Dynamic Category Selector & Inline Manager */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="block text-xs font-bold text-slate-700">
-                              Bộ sưu tập / Phân loại *
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsAddingNew(false);
-                                handleSwitchTab('categories');
-                              }}
-                              className="text-[10px] text-amber-700 hover:underline font-bold"
-                            >
-                              Sửa BST
-                            </button>
-                          </div>
-                          <select
-                            value={formCategory}
-                            onChange={(e) => setFormCategory(e.target.value)}
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
-                          >
-                            {localCategories.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Huy hiệu giảm giá / Tag
-                          </label>
-                          <input
-                            type="text"
-                            value={formDiscountBadge}
-                            onChange={(e) => setFormDiscountBadge(e.target.value)}
-                            placeholder="Ví dụ: -20% hoặc Pre-order"
-                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Mô tả ngắn sản phẩm
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={formDescription}
-                          onChange={(e) => setFormDescription(e.target.value)}
-                          placeholder="Mô tả phong cách, ý nghĩa và chất liệu..."
-                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                          <span>Link liên kết riêng của sản phẩm (Tùy chọn)</span>
-                          <span className="text-[10px] text-slate-400 font-normal">Shopee, TikTok Shop, Web ngoài...</span>
-                        </label>
-                        <input
-                          type="url"
-                          value={formCustomUrl}
-                          onChange={(e) => setFormCustomUrl(e.target.value)}
-                          placeholder="https://shopee.vn/... (nút Chi tiết trên bộ sưu tập sẽ bay đến đây nếu bật)"
-                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Right Column: Specs, Image */}
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Đặc điểm chế tác (mỗi dòng 1 đặc điểm)
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={formDetailsText}
-                          onChange={(e) => setFormDetailsText(e.target.value)}
-                          placeholder="Dây đan thủ công cao cấp&#10;Khóa kim loại titan chống gỉ"
-                          className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white font-mono text-[11px]"
-                        />
-                      </div>
-
-                      {/* Image Upload & Reorder Section */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
+                    <div className="space-y-5 sm:space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                        {/* Left Column: Core Product Info */}
+                        <div className="space-y-4">
                           <div>
-                            <label className="block text-xs font-bold text-slate-800">
-                              Hình ảnh sản phẩm & Thứ tự hiển thị *
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                              Tên sản phẩm *
                             </label>
-                            <p className="text-[11px] text-slate-500 mt-0.5">
-                              Tải ảnh trực tiếp từ máy tính hoặc kéo thả ảnh vào khung. Ảnh đầu tiên (#1) là <span className="font-bold text-amber-700">ảnh đại diện</span>.
-                            </p>
+                            <input
+                              type="text"
+                              required
+                              value={formName}
+                              onChange={(e) => setFormName(e.target.value)}
+                              placeholder="Ví dụ: Vòng Tay Handmade 02.09 Hào Khí Non Sông"
+                              className="w-full px-3.5 py-3 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                            />
                           </div>
-                          {formImages.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormImages([]);
-                                setFormImage('');
-                              }}
-                              className="text-[11px] text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
-                            >
-                              Xóa tất cả ({formImages.length} ảnh)
-                            </button>
-                          )}
-                        </div>
 
-                        {/* Drag and Drop Zone for multiple files */}
-                        <div
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            setIsImageDragging(true);
-                          }}
-                          onDragLeave={() => setIsImageDragging(false)}
-                          onDrop={handleImageDrop}
-                          onClick={() => fileInputRef.current?.click()}
-                          className={`relative border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 group ${
-                            isImageDragging
-                              ? 'border-amber-500 bg-amber-100/90 scale-[1.01] ring-4 ring-amber-400/30'
-                              : 'border-amber-300/80 bg-amber-50/50 hover:border-amber-500 hover:bg-amber-50/90'
-                          }`}
-                        >
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handleImageFileChange}
-                            className="hidden"
-                          />
-                          <div className="flex flex-col items-center justify-center space-y-2">
-                            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-                              <Upload className="w-6 h-6 text-amber-700" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-black text-slate-900">
-                                Kéo thả ảnh vào đây hoặc <span className="text-amber-700 underline underline-offset-2">Bấm để tải từ máy</span>
-                              </div>
-                              <div className="text-xs text-slate-500 mt-0.5">
-                                Hỗ trợ PNG, JPG, JPEG, WEBP • Có thể chọn & kéo thả nhiều ảnh cùng lúc
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Images list with reordering */}
-                        {formImages.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <div className="text-[11px] font-bold text-slate-700">
-                              Danh sách ảnh đã tải ({formImages.length} ảnh) — dùng ← → để đổi thứ tự:
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                              {formImages.map((imgSrc, idx) => (
-                                <div
-                                  key={idx}
-                                  className={`relative rounded-xl overflow-hidden border p-1.5 transition-all ${
-                                    idx === 0
-                                      ? 'bg-amber-50/70 border-amber-400 ring-1 ring-amber-400/40'
-                                      : 'bg-white border-slate-200'
-                                  }`}
-                                >
-                                  <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
-                                    <img
-                                      src={imgSrc || '/assets/bracelet.jpg'}
-                                      alt={`Ảnh ${idx + 1}`}
-                                      className="w-full h-full object-cover"
-                                    />
-                                    <div className="absolute top-1.5 left-1.5">
-                                      {idx === 0 ? (
-                                        <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow-xs">
-                                          ★ Đại diện (#1)
-                                        </span>
-                                      ) : (
-                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900/80 text-white">
-                                          #{idx + 1}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Reorder & Action buttons */}
-                                  <div className="flex items-center justify-between gap-1 mt-1.5 pt-1 border-t border-slate-100">
-                                    <div className="flex items-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        disabled={idx === 0}
-                                        onClick={() => handleMoveImage(idx, idx - 1)}
-                                        className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
-                                        title="Dời lên trước"
-                                      >
-                                        ←
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={idx === formImages.length - 1}
-                                        onClick={() => handleMoveImage(idx, idx + 1)}
-                                        className="p-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[10px] text-slate-700 font-bold"
-                                        title="Dời xuống sau"
-                                      >
-                                        →
-                                      </button>
-                                    </div>
-
-                                    {idx !== 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSetDefaultImage(idx)}
-                                        className="text-[10px] font-bold text-amber-800 hover:underline px-1"
-                                        title="Đặt ảnh này làm ảnh mặc định"
-                                      >
-                                        Làm ảnh chính
-                                      </button>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveImage(idx)}
-                                      className="p-1 text-slate-400 hover:text-rose-600 rounded text-[10px] font-bold"
-                                      title="Xóa ảnh này"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Collapsible secondary URL option */}
-                        <div className="pt-0.5">
-                          {!showUrlInput ? (
-                            <button
-                              type="button"
-                              onClick={() => setShowUrlInput(true)}
-                              className="text-[11px] text-slate-400 hover:text-amber-700 font-medium transition-colors"
-                            >
-                              + Dán link URL ảnh nếu có
-                            </button>
-                          ) : (
-                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                          {/* FIXED PRICE & STOCK & SOLD INPUTS: Resilient 4-column layout with quick chips */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                            <div className="col-span-1">
+                              <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Giá bán (VNĐ) *
+                              </label>
                               <input
                                 type="text"
-                                value={newImageUrlInput}
-                                onChange={(e) => setNewImageUrlInput(e.target.value)}
-                                placeholder="Dán URL ảnh trực tiếp (https://...)"
-                                className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                                required
+                                value={formPriceInput}
+                                onChange={(e) => setFormPriceInput(e.target.value)}
+                                placeholder="150000"
+                                className="w-full px-3 py-2.5 bg-amber-50/50 border border-amber-300 rounded-xl text-sm sm:text-xs font-bold text-amber-900 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
                               />
+                              <span className="text-[10px] text-amber-700 block mt-1 font-mono font-bold">
+                                → {formatCurrency(parsePrice(formPriceInput))}
+                              </span>
+                            </div>
+
+                            <div className="col-span-1">
+                              <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Giá gốc niêm yết
+                              </label>
+                              <input
+                                type="text"
+                                value={formOriginalPriceInput}
+                                onChange={(e) => setFormOriginalPriceInput(e.target.value)}
+                                placeholder="220000"
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                              />
+                              {formOriginalPriceInput ? (
+                                <span className="text-[10px] text-slate-400 block mt-1 line-through font-mono">
+                                  → {formatCurrency(parsePrice(formOriginalPriceInput))}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 block mt-1">
+                                  Không bắt buộc
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="col-span-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-xs font-bold text-amber-800">
+                                  Tồn kho *
+                                </label>
+                                {formEnableColorSelection && formColorOptions.length > 0 && (
+                                  <span className="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1 py-0.5 rounded">
+                                    {formColorOptions.length} màu
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="number"
+                                required
+                                min="0"
+                                readOnly={formEnableColorSelection && formColorOptions.length > 0}
+                                value={formStock}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Number(e.target.value));
+                                  setFormStock(val);
+                                  setFormInStock(val > 0);
+                                }}
+                                className={`w-full px-3 py-2.5 rounded-xl text-sm sm:text-xs font-black focus:outline-none transition-colors font-mono ${
+                                  formEnableColorSelection && formColorOptions.length > 0
+                                    ? 'bg-amber-100/70 border border-amber-300 text-amber-950 cursor-not-allowed select-none'
+                                    : 'bg-amber-50 border border-amber-300 text-amber-900 focus:border-amber-500'
+                                }`}
+                              />
+                              <span className="text-[10px] text-amber-700 block mt-1 font-medium">
+                                {formEnableColorSelection && formColorOptions.length > 0
+                                  ? `Tổng ${formColorOptions.length} màu`
+                                  : `${formStock} chiếc`}
+                              </span>
+                            </div>
+
+                            <div className="col-span-1">
+                              <label className="block text-xs font-bold text-slate-700 mb-1">
+                                Đã bán
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={formSoldCount}
+                                onChange={(e) => setFormSoldCount(Math.max(0, Number(e.target.value) || 0))}
+                                placeholder="0"
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm sm:text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                              />
+                              <span className="text-[10px] text-slate-400 block mt-1">
+                                Khởi tạo
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Category Selector & Inline Manager */}
+                          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-xs font-bold text-slate-700">
+                                  Bộ sưu tập / BST *
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsAddingNew(false);
+                                    handleSwitchTab('categories');
+                                  }}
+                                  className="text-[10px] text-amber-700 hover:underline font-bold"
+                                >
+                                  + Sửa BST
+                                </button>
+                              </div>
+                              <select
+                                value={formCategory}
+                                onChange={(e) => setFormCategory(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                              >
+                                {localCategories.map((cat) => (
+                                  <option key={cat.id} value={cat.id}>
+                                    {cat.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                Huy hiệu giảm giá / Tag
+                              </label>
+                              <input
+                                type="text"
+                                value={formDiscountBadge}
+                                onChange={(e) => setFormDiscountBadge(e.target.value)}
+                                placeholder="Ví dụ: -20% hoặc Pre-order"
+                                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                              Mô tả ngắn sản phẩm
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={formDescription}
+                              onChange={(e) => setFormDescription(e.target.value)}
+                              placeholder="Mô tả phong cách, ý nghĩa và chất liệu..."
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                              <span>Link liên kết ngoài (Tùy chọn)</span>
+                              <span className="text-[10px] text-slate-400 font-normal">Shopee, TikTok Shop...</span>
+                            </label>
+                            <input
+                              type="url"
+                              value={formCustomUrl}
+                              onChange={(e) => setFormCustomUrl(e.target.value)}
+                              placeholder="https://shopee.vn/... (nếu có)"
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Right Column: Specs, Image */}
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                              Đặc điểm chế tác (mỗi dòng 1 đặc điểm)
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={formDetailsText}
+                              onChange={(e) => setFormDetailsText(e.target.value)}
+                              placeholder="Dây đan thủ công cao cấp&#10;Khóa kim loại titan chống gỉ"
+                              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white font-mono text-[11px]"
+                            />
+                          </div>
+
+                          {/* Image Upload & Reorder Section */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <label className="block text-xs font-bold text-slate-800">
+                                  Hình ảnh sản phẩm & Thứ tự hiển thị *
+                                </label>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  Ảnh đầu tiên (#1) là <span className="font-bold text-amber-700">ảnh đại diện</span>.
+                                </p>
+                              </div>
+                              {formImages.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormImages([]);
+                                    setFormImage('');
+                                  }}
+                                  className="text-[11px] text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+                                >
+                                  Xóa hết ({formImages.length} ảnh)
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Mobile-first Prominent Upload Button */}
+                            <div>
                               <button
                                 type="button"
-                                onClick={handleAddImageUrl}
-                                disabled={!newImageUrlInput.trim()}
-                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white rounded-lg text-xs font-bold shrink-0 transition-colors"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-500 active:scale-[0.99] text-slate-950 font-black rounded-2xl flex items-center justify-center gap-2 shadow-sm text-xs cursor-pointer border border-amber-400/80 transition-all"
                               >
-                                + Thêm Link
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowUrlInput(false)}
-                                className="px-2 py-1.5 text-slate-400 hover:text-slate-600 text-xs font-semibold"
-                              >
-                                Đóng
+                                <Camera className="w-4 h-4 text-slate-950" />
+                                <span>📸 Chụp Ảnh Ngay / Chọn Từ Thư Viện Điện Thoại</span>
                               </button>
                             </div>
-                          )}
+
+                            {/* Drag and Drop Zone for desktop */}
+                            <div
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                setIsImageDragging(true);
+                              }}
+                              onDragLeave={() => setIsImageDragging(false)}
+                              onDrop={handleImageDrop}
+                              onClick={() => fileInputRef.current?.click()}
+                              className={`relative border-2 border-dashed rounded-2xl p-4 sm:p-6 text-center cursor-pointer transition-all duration-200 group ${
+                                isImageDragging
+                                  ? 'border-amber-500 bg-amber-100/90 scale-[1.01] ring-4 ring-amber-400/30'
+                                  : 'border-amber-300/80 bg-amber-50/50 hover:border-amber-500 hover:bg-amber-50/90'
+                              }`}
+                            >
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={handleImageFileChange}
+                                className="hidden"
+                              />
+                              <div className="flex flex-col items-center justify-center space-y-2">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                                  <Upload className="w-5 h-5 text-amber-700" />
+                                </div>
+                                <div>
+                                  <div className="text-xs sm:text-sm font-black text-slate-900">
+                                    Kéo thả ảnh vào đây hoặc <span className="text-amber-700 underline underline-offset-2">Bấm để tải từ máy</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5">
+                                    Hỗ trợ PNG, JPG, WEBP • Có thể chọn nhiều ảnh cùng lúc
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Images list with reordering */}
+                            {formImages.length > 0 && (
+                              <div className="space-y-1.5 pt-1">
+                                <div className="text-[11px] font-bold text-slate-700">
+                                  Danh sách ảnh đã tải ({formImages.length} ảnh) — dùng ← → để đổi thứ tự:
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-2.5 bg-slate-50 p-2.5 sm:p-3 rounded-2xl border border-slate-200">
+                                  {formImages.map((imgSrc, idx) => (
+                                    <div
+                                      key={idx}
+                                      className={`relative rounded-xl overflow-hidden border p-1.5 transition-all ${
+                                        idx === 0
+                                          ? 'bg-amber-50/70 border-amber-400 ring-1 ring-amber-400/40'
+                                          : 'bg-white border-slate-200'
+                                      }`}
+                                    >
+                                      <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
+                                        <img
+                                          src={imgSrc || '/assets/bracelet.jpg'}
+                                          alt={`Ảnh ${idx + 1}`}
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute top-1.5 left-1.5">
+                                          {idx === 0 ? (
+                                            <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 shadow-xs">
+                                              ★ Đại diện (#1)
+                                            </span>
+                                          ) : (
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-900/80 text-white">
+                                              #{idx + 1}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Reorder & Action buttons */}
+                                      <div className="flex items-center justify-between gap-1 mt-1.5 pt-1 border-t border-slate-100">
+                                        <div className="flex items-center gap-0.5">
+                                          <button
+                                            type="button"
+                                            disabled={idx === 0}
+                                            onClick={() => handleMoveImage(idx, idx - 1)}
+                                            className="p-1.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[11px] text-slate-700 font-bold"
+                                            title="Dời lên trước"
+                                          >
+                                            ←
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={idx === formImages.length - 1}
+                                            onClick={() => handleMoveImage(idx, idx + 1)}
+                                            className="p-1.5 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-[11px] text-slate-700 font-bold"
+                                            title="Dời xuống sau"
+                                          >
+                                            →
+                                          </button>
+                                        </div>
+
+                                        {idx !== 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSetDefaultImage(idx)}
+                                            className="text-[10px] font-bold text-amber-800 hover:underline px-1"
+                                            title="Đặt ảnh này làm ảnh mặc định"
+                                          >
+                                            Làm ảnh chính
+                                          </button>
+                                        )}
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveImage(idx)}
+                                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded text-xs font-bold"
+                                          title="Xóa ảnh này"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Collapsible secondary URL option */}
+                            <div className="pt-0.5">
+                              {!showUrlInput ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowUrlInput(true)}
+                                  className="text-[11px] text-slate-400 hover:text-amber-700 font-medium transition-colors"
+                                >
+                                  + Dán link URL ảnh nếu có
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                                  <input
+                                    type="text"
+                                    value={newImageUrlInput}
+                                    onChange={(e) => setNewImageUrlInput(e.target.value)}
+                                    placeholder="Dán URL ảnh trực tiếp (https://...)"
+                                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={handleAddImageUrl}
+                                    disabled={!newImageUrlInput.trim()}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white rounded-lg text-xs font-bold shrink-0 transition-colors"
+                                  >
+                                    + Thêm Link
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowUrlInput(false)}
+                                    className="px-2 py-1.5 text-slate-400 hover:text-slate-600 text-xs font-semibold"
+                                  >
+                                    Đóng
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Badges and check flags */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer bg-slate-50 p-2 rounded-xl border border-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={formIsEvent0209}
+                                onChange={(e) => setFormIsEvent0209(e.target.checked)}
+                                className="rounded text-amber-600 focus:ring-amber-500"
+                              />
+                              <span>BST Quốc Khánh 02.09</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer bg-slate-50 p-2 rounded-xl border border-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={formIsBestSeller}
+                                onChange={(e) => setFormIsBestSeller(e.target.checked)}
+                                className="rounded text-amber-600 focus:ring-amber-500"
+                              />
+                              <span>Best Seller</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer bg-slate-50 p-2 rounded-xl border border-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={formIsNew}
+                                onChange={(e) => setFormIsNew(e.target.checked)}
+                                className="rounded text-amber-600 focus:ring-amber-500"
+                              />
+                              <span>Gắn nhãn Mới</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 text-xs font-bold text-rose-700 cursor-pointer bg-rose-50 p-2 rounded-xl border border-rose-200 hover:bg-rose-100 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={formIsHidden}
+                                onChange={(e) => setFormIsHidden(e.target.checked)}
+                                className="rounded text-rose-600 focus:ring-rose-500"
+                              />
+                              <span>Ẩn khỏi web</span>
+                            </label>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Badges and check flags */}
-                      <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formIsEvent0209}
-                            onChange={(e) => setFormIsEvent0209(e.target.checked)}
-                            className="rounded text-amber-600 focus:ring-amber-500"
-                          />
-                          <span>Bộ Sưu Tập Quốc Khánh 02.09</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formIsBestSeller}
-                            onChange={(e) => setFormIsBestSeller(e.target.checked)}
-                            className="rounded text-amber-600 focus:ring-amber-500"
-                          />
-                          <span>Gắn nhãn Best Seller</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formIsNew}
-                            onChange={(e) => setFormIsNew(e.target.checked)}
-                            className="rounded text-amber-600 focus:ring-amber-500"
-                          />
-                          <span>Gắn nhãn Mới</span>
-                        </label>
-
-                        <label className="flex items-center gap-2 text-xs font-bold text-rose-700 cursor-pointer bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={formIsHidden}
-                            onChange={(e) => setFormIsHidden(e.target.checked)}
-                            className="rounded text-rose-600 focus:ring-rose-500"
-                          />
-                          <span>Ẩn sản phẩm khỏi website</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
                       {/* Bottom navigation helper for Tab 1 */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200">
                         <div className="text-xs text-slate-500 font-medium">
                           {isComboMode
-                            ? 'Bước 1/2: Đã hoàn tất thông tin gói Combo & ảnh bìa đại diện.'
-                            : 'Bước 1/2: Đã hoàn tất thông tin cơ bản & album ảnh sản phẩm.'}
+                            ? 'Bước 1/2: Đã hoàn tất thông tin gói Combo & ảnh bìa.'
+                            : 'Bước 1/2: Đã hoàn tất thông tin cơ bản & album ảnh.'}
                         </div>
                         <div className="flex items-center gap-2">
                           {isComboMode ? (
                             <button
                               type="button"
                               onClick={() => setProductFormTab('combo')}
-                              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                             >
                               <Layers className="w-3.5 h-3.5" />
-                              <span>Tiếp tục: Cấu hình Các Món Trong Combo ({formComboItems.length} món) ➔</span>
+                              <span>Tiếp tục: Cấu hình Combo ({formComboItems.length} món) ➔</span>
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => setProductFormTab('customizations')}
-                              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                             >
-                              <span>Tiếp tục: Tùy chọn phối (Màu, Charm, Bùa, Size) ➔</span>
+                              <span>Tiếp tục: Tùy chọn phối (Màu, Charm, Bùa) ➔</span>
                             </button>
                           )}
                         </div>
@@ -5634,21 +5714,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               )}
 
                   {/* Form Submit Button */}
-                  <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <div className="pt-4 border-t border-slate-100 flex items-center justify-between sm:justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => {
                         setIsAddingNew(false);
                         setEditingProduct(null);
                       }}
-                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      className="px-4 sm:px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
-                      Hủy
+                      Hủy Bỏ
                     </button>
 
                     <button
                       type="submit"
-                      className={`px-6 py-2.5 font-black rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer ${
+                      className={`px-5 sm:px-6 py-2.5 font-black rounded-xl text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer ${
                         isComboMode
                           ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-500/25'
                           : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
@@ -5663,6 +5743,73 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </button>
                   </div>
                 </form>
+
+                {/* Mobile Sticky Action Bar for quick Save on phone */}
+                <div className="sm:hidden fixed bottom-3 left-3 right-3 z-40 bg-slate-950/95 backdrop-blur-md p-2.5 rounded-2xl border border-amber-400/50 shadow-2xl flex items-center justify-between gap-2 animate-fadeIn">
+                  {/* Step quick switcher */}
+                  {!isComboMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab(productFormTab === 'basic' ? 'customizations' : 'basic')}
+                      className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 border border-slate-700"
+                    >
+                      {productFormTab === 'basic' ? (
+                        <>
+                          <span>Bước 2 (Phối)</span>
+                          <ArrowRight className="w-3 h-3 text-amber-400" />
+                        </>
+                      ) : (
+                        <>
+                          <ArrowLeft className="w-3 h-3 text-amber-400" />
+                          <span>Bước 1 (Ảnh/Giá)</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab(productFormTab === 'basic' ? 'combo' : 'basic')}
+                      className="px-2.5 py-2 bg-purple-900/80 hover:bg-purple-800 text-white rounded-xl text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 border border-purple-700"
+                    >
+                      {productFormTab === 'basic' ? (
+                        <>
+                          <span>Bước 2 (Món)</span>
+                          <ArrowRight className="w-3 h-3 text-purple-300" />
+                        </>
+                      ) : (
+                        <>
+                          <ArrowLeft className="w-3 h-3 text-purple-300" />
+                          <span>Bước 1 (Ảnh/Giá)</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNew(false);
+                        setEditingProduct(null);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleSaveProduct(e as any)}
+                      className={`px-3.5 py-2 font-black rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer ${
+                        isComboMode
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 active:from-purple-500 active:to-indigo-500 text-white'
+                          : 'bg-amber-500 active:bg-amber-400 text-slate-950 shadow-amber-500/30'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{editingProduct ? 'Lưu' : 'Tạo SP'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -8633,6 +8780,61 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </div>
             </div>
 
+            {/* Google Cloud CDN & Global Edge Acceleration Details */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+              <div className="p-4 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border-b border-blue-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-2xs">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      Google Cloud CDN & Tăng Tốc Media Toàn Cầu
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Mạng phân phối nội dung biên (Edge CDN) cho hình ảnh sản phẩm và tài nguyên tĩnh</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Global Edge Caching
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 text-xs">
+                <div className="p-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-blue-700 font-bold">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Tốc độ tải ảnh</span>
+                  </div>
+                  <p className="text-slate-800 font-mono text-sm font-black">&lt; 20ms</p>
+                  <p className="text-slate-500 text-[11px]">Ảnh tải từ trạm máy chủ Google gần nhất (Hà Nội, TP.HCM, Singapore).</p>
+                </div>
+                <div className="p-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                    <HardDrive className="w-3.5 h-3.5" />
+                    <span>Cache-Control Header</span>
+                  </div>
+                  <p className="text-slate-800 font-mono text-[11px] font-bold truncate" title="public, max-age=31536000, immutable">max-age=31536000, immutable</p>
+                  <p className="text-slate-500 text-[11px]">Trình duyệt và trạm CDN lưu đệm vĩnh viễn, xem lại không tốn data.</p>
+                </div>
+                <div className="p-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Định dạng tối ưu</span>
+                  </div>
+                  <p className="text-slate-800 font-mono text-xs font-bold">WebP &amp; AVIF Auto</p>
+                  <p className="text-slate-500 text-[11px]">Tự động nén dung lượng ảnh nhẹ hơn 70% mà không giảm chất lượng nét.</p>
+                </div>
+                <div className="p-4 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-purple-700 font-bold">
+                    <Server className="w-3.5 h-3.5" />
+                    <span>DNS Preconnect</span>
+                  </div>
+                  <p className="text-slate-800 font-mono text-xs font-bold">Preconnect Enabled</p>
+                  <p className="text-slate-500 text-[11px]">Kết nối ngầm sẵn sàng tới Firebase Storage và Google CDN.</p>
+                </div>
+              </div>
+            </div>
+
             {/* Firestore Collections Directory */}
             <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
               <div className="p-4 bg-slate-50/80 border-b border-slate-200/80 flex items-center justify-between">
@@ -9006,11 +9208,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       {/* TOAST: ADMIN NOTIFICATION BANNER */}
       {/* ======================================================== */}
       {adminToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-amber-400/40 flex items-center gap-3 animate-fadeIn">
-          <span className="text-xs font-bold">{adminToast}</span>
+        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 bg-slate-900 text-white px-4 sm:px-5 py-3 rounded-2xl shadow-2xl border border-amber-400/40 flex items-center gap-3 animate-fadeIn text-xs max-w-[calc(100vw-2rem)]">
+          <span className="font-bold flex-1">{adminToast}</span>
           <button
             onClick={() => setAdminToast(null)}
-            className="px-2 py-0.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white ml-1 text-xs"
+            className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white shrink-0 cursor-pointer"
           >
             ✕
           </button>
@@ -9034,99 +9236,99 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       <nav
         id="admin-mobile-bottom-nav"
         aria-label="Thanh điều hướng nhanh quản trị viên trên di động"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
-        style={{ paddingBottom: 'calc(0.375rem + env(safe-area-inset-bottom, 0px))' }}
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/90 px-2 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.09)]"
+        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="flex items-center justify-around max-w-md mx-auto">
+        <div className="grid grid-cols-5 gap-1 max-w-md mx-auto items-center">
           {/* Dashboard */}
           <button
             type="button"
             onClick={() => handleSwitchTab('dashboard')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
               activeTab === 'dashboard'
-                ? 'text-amber-700 font-extrabold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-amber-100/80 text-amber-950 font-black shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5 font-medium">Tổng quan</span>
+            <LayoutDashboard className={`w-5 h-5 transition-transform ${activeTab === 'dashboard' ? 'scale-110 text-amber-700' : ''}`} />
+            <span className="text-[10px] mt-0.5 tracking-tight font-bold">Tổng quan</span>
           </button>
 
           {/* Orders */}
           <button
             type="button"
             onClick={() => handleSwitchTab('orders')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all relative cursor-pointer select-none active:scale-95 ${
               activeTab === 'orders'
-                ? 'text-amber-700 font-extrabold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-amber-100/80 text-amber-950 font-black shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
             <div className="relative">
-              <ShoppingBag className="w-5 h-5" />
+              <ShoppingBag className={`w-5 h-5 transition-transform ${activeTab === 'orders' ? 'scale-110 text-amber-700' : ''}`} />
               {orders.length > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-amber-500 text-slate-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                <span className="absolute -top-1.5 -right-3 bg-amber-500 text-slate-950 text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
                   {orders.length > 99 ? '99+' : orders.length}
                 </span>
               )}
             </div>
-            <span className="text-[10px] mt-0.5 font-medium">Đơn hàng</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-bold">Đơn hàng</span>
           </button>
 
           {/* Products */}
           <button
             type="button"
             onClick={() => handleSwitchTab('products')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
               activeTab === 'products'
-                ? 'text-amber-700 font-extrabold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-amber-100/80 text-amber-950 font-black shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
             <div className="relative">
-              <Package className="w-5 h-5" />
+              <Package className={`w-5 h-5 transition-transform ${activeTab === 'products' ? 'scale-110 text-amber-700' : ''}`} />
               {products.length > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-slate-800 text-white text-[9px] font-bold px-1 py-0.5 rounded flex items-center justify-center shadow-xs font-mono">
+                <span className="absolute -top-1.5 -right-3 bg-slate-800 text-white text-[9px] font-bold px-1 rounded flex items-center justify-center shadow-xs font-mono">
                   {products.length > 99 ? '99+' : products.length}
                 </span>
               )}
             </div>
-            <span className="text-[10px] mt-0.5 font-medium">Sản phẩm</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-bold">Sản phẩm</span>
           </button>
 
           {/* Messages */}
           <button
             type="button"
             onClick={() => handleSwitchTab('messages')}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all relative cursor-pointer select-none active:scale-95 ${
               activeTab === 'messages'
-                ? 'text-amber-700 font-extrabold scale-105'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-amber-100/80 text-amber-950 font-black shadow-2xs'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
             <div className="relative">
-              <Mail className="w-5 h-5" />
+              <Mail className={`w-5 h-5 transition-transform ${activeTab === 'messages' ? 'scale-110 text-amber-700' : ''}`} />
               {unreadMessagesCount > 0 && (
                 <span className="absolute -top-1.5 -right-2.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse shadow-xs">
                   {unreadMessagesCount}
                 </span>
               )}
             </div>
-            <span className="text-[10px] mt-0.5 font-medium">Tin nhắn</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-bold">Tin nhắn</span>
           </button>
 
           {/* Menu Drawer Toggle */}
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-2xl transition-all cursor-pointer select-none active:scale-95 ${
               sidebarOpen
-                ? 'text-amber-700 font-extrabold'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-amber-100/80 text-amber-950 font-black'
+                : 'text-slate-500 hover:text-slate-900'
             }`}
           >
             <Menu className="w-5 h-5" />
-            <span className="text-[10px] mt-0.5 font-medium">Menu</span>
+            <span className="text-[10px] mt-0.5 tracking-tight font-bold">Menu</span>
           </button>
         </div>
       </nav>

@@ -1,5 +1,5 @@
 import { MaintenanceConfig } from '../types';
-import { db } from '../firebase';
+import { db, dispatchSafeEvent } from '../firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 export const DEFAULT_MAINTENANCE_CONFIG: MaintenanceConfig = {
@@ -66,7 +66,7 @@ export async function compressImageFileToBase64(
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Không thể đọc file ảnh'));
     reader.onload = (e) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onerror = () => reject(new Error('Không thể tải dữ liệu ảnh'));
       img.onload = () => {
         let { width, height } = img;
@@ -126,7 +126,7 @@ export async function saveMaintenanceConfig(
   try {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: payload }));
+      dispatchSafeEvent(EVENT_NAME, payload);
     }
   } catch (localErr) {
     console.warn('Lỗi ghi LocalStorage bảo trì:', localErr);

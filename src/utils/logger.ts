@@ -1,5 +1,5 @@
 import { collection, doc, setDoc, getDocs, deleteDoc, query, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
-import { db, cleanFirestoreData, isQuotaExhaustedError } from '../firebase';
+import { db, auth, cleanFirestoreData, isQuotaExhaustedError } from '../firebase';
 import { SystemLogItem, LogType, LogLevel } from '../types';
 import { getClientGeoLocation, getClientDeviceInfo } from './ipGeo';
 
@@ -46,6 +46,57 @@ export function getLocalLogs(): SystemLogItem[] {
 }
 
 /**
+ * Determines whether an error message is benign browser noise
+ * (e.g. AbortController cancellations, Vite HMR WebSocket disconnects, ResizeObserver)
+ * that should never be logged or stored.
+ */
+export function isIgnorableClientError(message: string, stack?: string): boolean {
+  if (!message) return false;
+  const lowerMsg = (message + ' ' + (stack || '')).toLowerCase();
+  
+  // 1. User aborts (e.g. user cancellations, switching routes, debounced search requests)
+  if (
+    lowerMsg.includes('aborted') ||
+    lowerMsg.includes('the user aborted a request') ||
+    lowerMsg.includes('the operation was aborted') ||
+    lowerMsg.includes('aborterror') ||
+    lowerMsg.includes('signal is aborted')
+  ) {
+    return true;
+  }
+
+  // 2. Dev server WebSocket / HMR noise
+  if (
+    lowerMsg.includes('websocket closed without opened') ||
+    lowerMsg.includes('websocket is already in closing') ||
+    lowerMsg.includes('websocket connection') ||
+    lowerMsg.includes('vite') && lowerMsg.includes('ws')
+  ) {
+    return true;
+  }
+
+  // 3. Benign DOM observation / cross-origin script error / sandbox constructor restriction
+  if (
+    lowerMsg.includes('resizeobserver') ||
+    lowerMsg.includes('script error.') ||
+    lowerMsg.includes('illegal constructor')
+  ) {
+    return true;
+  }
+
+  // 4. Page unload / background tab network drops
+  if (
+    (lowerMsg.includes('failed to fetch') || lowerMsg.includes('load failed') || lowerMsg.includes('networkerror')) &&
+    typeof document !== 'undefined' &&
+    (document.visibilityState === 'hidden' || (typeof navigator !== 'undefined' && !navigator.onLine))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Purges Firestore and local storage log entries older than 30 days.
  */
 export async function cleanUpOldLogsFromFirestore(): Promise<void> {
@@ -55,48 +106,57 @@ export async function cleanUpOldLogsFromFirestore(): Promise<void> {
   try {
     const local = getLocalLogs().filter((l) => {
       const t = new Date(l.timestamp).getTime();
-      return !isNaN(t) && t >= cutoffTime;
+      return !isNaN(t) && t >= cutoffTime && !isIgnorableClientError(l.message || l.title || '');
     });
     localStorage.setItem(LOCAL_STORAGE_LOGS_KEY, JSON.stringify(local));
   } catch {}
 
-  // Clean Firestore system_logs (only items older than 30 days)
-  try {
-    const snapshot = await getDocs(query(collection(db, 'system_logs'), limit(150)));
-    const batch = writeBatch(db);
-    let count = 0;
+  // Clean Firestore system_logs only if authenticated as staff/admin
+  if (auth.currentUser) {
+    try {
+      const snapshot = await getDocs(query(collection(db, 'system_logs'), limit(200)));
+      const batch = writeBatch(db);
+      let count = 0;
 
-    snapshot.docs.forEach((docSnap) => {
-      const data = docSnap.data();
-      const t = new Date(data.timestamp || 0).getTime();
-      // Keep admin_login logs longer, only delete if older than cutoffTime
-      if (isNaN(t) || t < cutoffTime) {
-        batch.delete(docSnap.ref);
-        count++;
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const t = new Date(data.timestamp || 0).getTime();
+        const isExpired = isNaN(t) || t < cutoffTime;
+        const isBenignNoise = data.type === 'client_error' && isIgnorableClientError(data.message || data.title || '');
+
+        if (isExpired || isBenignNoise) {
+          batch.delete(docSnap.ref);
+          count++;
+        }
+      });
+
+      if (count > 0) {
+        await batch.commit();
+        console.log(`[SystemLog] Cleaned ${count} expired or ignorable log items.`);
       }
-    });
-
-    if (count > 0) {
-      await batch.commit();
-      console.log(`[SystemLog] Cleaned ${count} expired log items older than 30 days.`);
-    }
-  } catch (err) {
-    if (!isQuotaExhaustedError(err)) {
-      console.warn('Could not clean old logs from Firestore:', err);
+    } catch (err: any) {
+      if (!isQuotaExhaustedError(err) && err?.code !== 'permission-denied') {
+        console.warn('Could not clean old logs from Firestore:', err);
+      }
     }
   }
 }
 
 /**
- * Filters out logs older than 30 days and compresses consecutive / similar adjacent logs into single entries.
+ * Filters out logs older than 30 days, removes ignorable browser noise,
+ * and compresses consecutive / similar adjacent logs into single entries.
  */
 export function compressAndFilterLogs(rawLogs: SystemLogItem[]): SystemLogItem[] {
   const cutoffTime = Date.now() - LOG_RETENTION_MS;
 
-  // 1. Filter out logs older than 30 days
+  // 1. Filter out logs older than 30 days and ignorable benign browser noise
   const validLogs = rawLogs.filter((l) => {
     const t = new Date(l.timestamp).getTime();
-    return !isNaN(t) && t >= cutoffTime;
+    if (isNaN(t) || t < cutoffTime) return false;
+    if (l.type === 'client_error' && isIgnorableClientError(l.message || l.title || '')) {
+      return false;
+    }
+    return true;
   });
 
   // Sort descending by timestamp
@@ -223,9 +283,15 @@ export async function logClientError(
   error: Error | string,
   source: string = 'ClientRuntime',
   extra?: Record<string, any>
-): Promise<SystemLogItem> {
+): Promise<SystemLogItem | null> {
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error ? error.stack : undefined;
+
+  // Immediately discard ignorable browser noise (aborts, websocket reloads, etc.)
+  if (isIgnorableClientError(message, stack)) {
+    return null;
+  }
+
   const deviceInfo = getClientDeviceInfo();
   const url = typeof window !== 'undefined' ? window.location.href : '';
 
@@ -379,6 +445,12 @@ export function subscribeToSystemLogs(
   onUpdate: (logs: SystemLogItem[]) => void,
   limitCount: number = 100
 ): () => void {
+  // If not authenticated with Firebase Auth, return local logs immediately and do not open a forbidden cloud stream
+  if (!auth.currentUser) {
+    onUpdate(compressAndFilterLogs(getLocalLogs()));
+    return () => {};
+  }
+
   try {
     const q = query(
       collection(db, 'system_logs'),
@@ -405,8 +477,10 @@ export function subscribeToSystemLogs(
 
         onUpdate(compressed.slice(0, limitCount));
       },
-      (err) => {
-        console.warn('Logs subscription error:', err);
+      (err: any) => {
+        if (err?.code !== 'permission-denied') {
+          console.warn('Logs subscription error:', err);
+        }
         onUpdate(compressAndFilterLogs(getLocalLogs()));
       }
     );
@@ -463,12 +537,13 @@ export function initGlobalErrorLogging() {
   isGlobalErrorLoggingInitialized = true;
 
   window.addEventListener('error', (event) => {
-    // Ignore benign cross-origin script error noise or react HMR websocket noise
-    if (event.message?.includes('ResizeObserver') || event.message?.includes('Script error.')) {
+    const error = event.error || event.message || 'Window Error';
+    const message = typeof error === 'string' ? error : error.message || '';
+    if (isIgnorableClientError(message, error instanceof Error ? error.stack : undefined)) {
       return;
     }
     logClientError(
-      event.error || event.message || 'Window Error',
+      error,
       'WindowErrorHandler',
       { filename: event.filename, lineno: event.lineno, colno: event.colno }
     );
@@ -476,11 +551,12 @@ export function initGlobalErrorLogging() {
 
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
-    if (reason && typeof reason === 'object' && reason.message?.includes('ResizeObserver')) {
+    const message = reason instanceof Error ? reason.message : String(reason || '');
+    if (isIgnorableClientError(message, reason instanceof Error ? reason.stack : undefined)) {
       return;
     }
     logClientError(
-      reason instanceof Error ? reason : String(reason || 'Unhandled Promise Rejection'),
+      reason instanceof Error ? reason : message || 'Unhandled Promise Rejection',
       'UnhandledPromiseRejection'
     );
   });

@@ -1,7 +1,9 @@
 import React from 'react';
-import { Lock, Cookie } from 'lucide-react';
+import { Cookie } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 import { CategoryItem, SiteContentConfig } from '../types';
 import { slugify } from '../utils/slugify';
+import { dispatchSafeEvent } from '../firebase';
 
 interface FooterProps {
   siteContent?: SiteContentConfig;
@@ -44,7 +46,7 @@ export const Footer: React.FC<FooterProps> = ({
       role="contentinfo"
       itemScope
       itemType="https://schema.org/OnlineStore"
-      className="bg-slate-950 text-slate-400 border-t border-slate-800/80 pt-10 pb-8 text-xs font-sans"
+      className="bg-[#131211] text-stone-400 border-t border-[#29221B] pt-10 pb-8 text-xs font-sans shadow-[0_-4px_24px_rgba(0,0,0,0.12)]"
     >
       {/* Hidden Rich Semantic Microdata for Search Engines (GoogleBot / Bing) */}
       <div className="sr-only">
@@ -60,7 +62,7 @@ export const Footer: React.FC<FooterProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Multi-Column Internal Links & Brand Bio */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 pb-10 border-b border-slate-800/80">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 pb-10 border-b border-[#29221B]">
           
           {/* Col 1 & 2: Brand Story & Socials */}
           <div className="lg:col-span-2 space-y-4">
@@ -196,7 +198,7 @@ export const Footer: React.FC<FooterProps> = ({
                     e.preventDefault();
                     onOpenOrderTracker?.();
                   }}
-                  className="text-amber-400 hover:text-amber-300 font-bold inline-block"
+                  className="hover:text-amber-400 transition-colors inline-block"
                 >
                   Tra cứu đơn hàng
                 </a>
@@ -256,7 +258,7 @@ export const Footer: React.FC<FooterProps> = ({
                     e.preventDefault();
                     if (onOpenPolicy) onOpenPolicy('transparency');
                   }}
-                  className="hover:text-amber-400 transition-colors inline-block text-amber-400/90"
+                  className="hover:text-amber-400 transition-colors inline-block"
                 >
                   Minh bạch dự án (ĐH KTQD)
                 </a>
@@ -311,8 +313,8 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
 
             {/* Social Media Logos (Moved to the Right) */}
-            <div className="pt-2 border-t border-slate-800/80">
-              <span className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-2.5">
+            <div className="pt-2 border-t border-[#29221B]">
+              <span className="block text-[11px] font-semibold text-stone-300 uppercase tracking-wider mb-2.5">
                 Kênh kết nối
               </span>
               <div className="flex items-center gap-2.5">
@@ -322,7 +324,7 @@ export const Footer: React.FC<FooterProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   itemProp="sameAs"
-                  className="w-8 h-8 rounded-xl bg-slate-900 hover:bg-[#1877F2] border border-slate-800 hover:border-[#1877F2] text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs"
+                  className="w-8 h-8 rounded-xl bg-[#1C1A17] hover:bg-[#1877F2] border border-[#2E2822] hover:border-[#1877F2] text-stone-300 hover:text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs"
                   title={`Facebook ${brandName}`}
                   aria-label="Facebook Fanpage NOT A KNOT"
                 >
@@ -337,7 +339,7 @@ export const Footer: React.FC<FooterProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   itemProp="sameAs"
-                  className="w-8 h-8 rounded-xl bg-slate-900 hover:bg-[#E1306C] border border-slate-800 hover:border-[#E1306C] text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs"
+                  className="w-8 h-8 rounded-xl bg-[#1C1A17] hover:bg-[#E1306C] border border-[#2E2822] hover:border-[#E1306C] text-stone-300 hover:text-white flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs"
                   title={`Instagram ${brandName}`}
                   aria-label="Instagram NOT A KNOT"
                 >
@@ -352,7 +354,7 @@ export const Footer: React.FC<FooterProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   itemProp="sameAs"
-                  className="w-8 h-8 rounded-xl bg-slate-900 hover:bg-white border border-slate-800 hover:border-white flex items-center justify-center transition-all duration-200 p-2 group cursor-pointer shadow-xs"
+                  className="w-8 h-8 rounded-xl bg-[#1C1A17] hover:bg-white border border-[#2E2822] hover:border-white flex items-center justify-center transition-all duration-200 p-2 group cursor-pointer shadow-xs"
                   title={`Threads ${brandName}`}
                   aria-label="Threads NOT A KNOT"
                 >
@@ -381,9 +383,7 @@ export const Footer: React.FC<FooterProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('open-cookie-settings'));
-                }
+                dispatchSafeEvent('open-cookie-settings');
               }}
               className="text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer"
               title="Cài đặt & Xóa Cookie"

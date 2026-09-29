@@ -1,5 +1,8 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { ShoppingBag, ChevronDown, Menu, X, ArrowRight, ShieldCheck, Package } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { 
+  ShoppingBag, ChevronDown, ChevronRight, ArrowRight, ShieldCheck, 
+  Package, Home, Compass, Info, Phone, Search, X 
+} from 'lucide-react';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../types';
 import { stripBstPrefix } from '../utils/orderFormatters';
@@ -45,8 +48,43 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileCollectionsExpanded, setMobileCollectionsExpanded] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Close mobile menu when resizing to desktop (xl: >= 1280px)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1280) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Lock body scroll when mobile menu is open on phones/tablets
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [mobileMenuOpen]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        setDropdownOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleMouseEnter = () => {
     if (dropdownTimeoutRef.current) {
@@ -78,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, [collections, hiddenCatKeys]);
 
   return (
-    <header className="sticky top-0 z-40 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 text-white transition-all shadow-md">
+    <header className="sticky top-0 z-40 bg-[#141210]/95 backdrop-blur-md border-b border-[#29221B] text-stone-100 transition-all shadow-[0_4px_20px_-4px_rgba(20,16,10,0.15)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 py-2">
           
@@ -86,7 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div
             id="brand-logo-btn"
             onClick={onNavigateLanding}
-            className="flex items-center gap-2.5 cursor-pointer group py-1"
+            className="flex items-center gap-2.5 cursor-pointer group py-1 shrink-0"
           >
             {siteContent?.logoUrl ? (
               <img
@@ -95,23 +133,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="h-8 sm:h-9 w-auto max-w-[120px] sm:max-w-[160px] object-contain rounded-sm"
               />
             ) : null}
-            <span className="font-black text-base sm:text-lg tracking-wider text-white group-hover:text-amber-400 transition-colors uppercase">
+            <span className="font-black text-base sm:text-lg tracking-wider text-white group-hover:text-amber-400 transition-colors uppercase whitespace-nowrap">
               {brandName}
             </span>
           </div>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center gap-1 text-xs font-bold">
+          {/* Desktop Navigation Links - Shown only on xl screens (>= 1280px) to prevent two-line wrapping */}
+          <nav className="hidden xl:flex items-center gap-1.5 text-xs font-bold shrink-0">
             {/* 1. Bộ Sưu Tập Dropdown Trigger */}
             <div
-              className="relative"
+              className="relative shrink-0"
               onMouseEnter={handleMouseEnter}
               onMouseLeave={handleMouseLeave}
             >
               <button
                 id="nav-dropdown-collections-btn"
                 onClick={() => setDropdownOpen((prev) => !prev)}
-                className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                   currentView === 'collection' || dropdownOpen
                     ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
                     : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
@@ -221,7 +259,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-all-products-btn"
               onClick={() => handleNavClick(() => onOpenAllCatalog('all'))}
-              className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                 currentView === 'catalog'
                   ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
@@ -234,26 +272,26 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-about-btn"
               onClick={onOpenAbout}
-              className={`px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 currentView === 'about'
                   ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
               }`}
             >
-              Về Chúng Tôi
+              <span>Về Chúng Tôi</span>
             </button>
 
             {/* 4. Liên Hệ */}
             <button
               id="nav-contact-btn"
               onClick={onOpenContact}
-              className={`px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 currentView === 'contact'
                   ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
                   : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
               }`}
             >
-              Liên Hệ
+              <span>Liên Hệ</span>
             </button>
 
             {/* 5. Tra Cứu Đơn */}
@@ -261,30 +299,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 id="nav-track-order-btn"
                 onClick={() => handleNavClick(onOpenOrderTracker)}
-                className={`px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-full transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   currentView === 'order-tracker' || (currentView as any) === 'track-order'
                     ? 'bg-neutral-800 text-amber-400 font-bold ring-1 ring-amber-400/40'
                     : 'text-neutral-300 hover:text-white hover:bg-neutral-900'
                 }`}
               >
-                Tra Cứu Đơn
+                <span>Tra Cứu Đơn</span>
               </button>
             )}
           </nav>
 
-          {/* Action Icons: Admin (if logged in) + Cart Button */}
-          <div className="flex items-center gap-2">
+          {/* Action Icons: Admin (if logged in) + Cart Button + Animated 3-Line Menu */}
+          <div className="flex items-center gap-2 shrink-0">
             {/* Admin Header Button - ONLY shown when admin is logged in */}
             {isAdminLoggedIn && onOpenAdmin && (
               <button
                 id="nav-admin-header-btn"
                 onClick={onOpenAdmin}
-                className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group"
+                className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
                 title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
               >
-                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
                 <span className="hidden sm:inline">Quản Trị</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Đang đăng nhập" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
               </button>
             )}
 
@@ -292,7 +330,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-cart-btn"
               onClick={onOpenCart}
-              className={`relative px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 border shadow-xs group cursor-pointer ${
+              className={`relative px-3.5 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 border shadow-xs group cursor-pointer whitespace-nowrap shrink-0 ${
                 isCartBumping
                   ? 'scale-105 ring-2 ring-amber-400 bg-amber-400 text-neutral-950 font-black shadow-md border-amber-300'
                   : currentView === 'cart'
@@ -302,7 +340,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-label="Mở giỏ hàng"
             >
               <ShoppingBag
-                className={`w-4 h-4 transition-transform duration-200 ${
+                className={`w-4 h-4 transition-transform duration-200 shrink-0 ${
                   isCartBumping
                     ? 'scale-115 text-neutral-950'
                     : currentView === 'cart'
@@ -314,7 +352,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Giỏ Hàng
               </span>
               {cartCount > 0 && (
-                <div className="relative inline-flex items-center justify-center">
+                <div className="relative inline-flex items-center justify-center shrink-0">
                   <span
                     className={`relative text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-4 text-center leading-none shadow-xs transition-all duration-200 ${
                       isCartBumping
@@ -330,104 +368,204 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
-            {/* Mobile Menu Hamburger */}
+            {/* Three-Line Menu Toggle Button with Smooth CSS Morph Animation to 'X' */}
             <button
               id="mobile-menu-toggle-btn"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-neutral-300 hover:text-white md:hidden rounded-xl hover:bg-neutral-900 border border-neutral-800 cursor-pointer"
-              aria-label="Menu di động"
+              type="button"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              className="relative w-10 h-10 flex flex-col items-center justify-center gap-1.5 p-2 text-neutral-300 hover:text-white xl:hidden rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 cursor-pointer transition-all duration-200 active:scale-95 shrink-0 focus:outline-hidden"
+              aria-label={mobileMenuOpen ? 'Đóng menu' : 'Mở menu ba gạch'}
+              aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <span
+                className={`w-5 h-0.5 rounded-full transition-all duration-300 ease-in-out transform origin-center ${
+                  mobileMenuOpen ? 'rotate-45 translate-y-2 bg-amber-400' : 'bg-neutral-200'
+                }`}
+              />
+              <span
+                className={`w-5 h-0.5 rounded-full transition-all duration-200 ease-in-out ${
+                  mobileMenuOpen ? 'opacity-0 scale-x-0 -translate-x-2 bg-amber-400' : 'opacity-100 scale-x-100 bg-neutral-200'
+                }`}
+              />
+              <span
+                className={`w-5 h-0.5 rounded-full transition-all duration-300 ease-in-out transform origin-center ${
+                  mobileMenuOpen ? '-rotate-45 -translate-y-2 bg-amber-400' : 'bg-neutral-200'
+                }`}
+              />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-neutral-950 border-b border-neutral-800 px-4 py-4 space-y-2 animate-fadeIn text-xs text-white shadow-xl">
-          <button
-            onClick={() => handleNavClick(onNavigateLanding)}
-            className={`w-full text-left py-2.5 px-3 rounded-xl font-bold flex items-center justify-between cursor-pointer ${
-              currentView === 'landing' ? 'bg-amber-400/10 text-amber-300' : 'text-neutral-300 hover:bg-neutral-900'
-            }`}
-          >
-            <span>Trang Chủ</span>
-            <span>›</span>
-          </button>
+      {/* Backdrop with Smooth Fade Animation */}
+      <div
+        onClick={() => setMobileMenuOpen(false)}
+        className={`fixed inset-0 top-14 bg-black/75 backdrop-blur-xs z-30 xl:hidden transition-all duration-300 ease-in-out ${
+          mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        aria-hidden="true"
+      />
 
-          {/* Sản Phẩm */}
-          <button
-            onClick={() => handleNavClick(() => onOpenAllCatalog('all'))}
-            className={`w-full text-left py-2.5 px-3 rounded-xl font-bold flex items-center justify-between transition-colors cursor-pointer ${
-              currentView === 'catalog'
-                ? 'bg-neutral-800 text-amber-400'
-                : 'text-neutral-300 bg-neutral-900 hover:bg-neutral-800'
-            }`}
-          >
-            <span>Sản Phẩm</span>
-            <span>›</span>
-          </button>
-
-          <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 px-3 pt-2">
-            Bộ Sưu Tập
-          </div>
-
-          {visibleCollections.map((col) => (
+      {/* Mobile Animated Dropdown Drawer Panel */}
+      <div
+        id="mobile-nav-panel"
+        className={`fixed left-0 right-0 top-14 z-40 xl:hidden bg-neutral-950/98 backdrop-blur-2xl border-b border-neutral-800/90 shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] transform origin-top ${
+          mobileMenuOpen
+            ? 'opacity-100 translate-y-0 pointer-events-auto max-h-[calc(100dvh-3.5rem)] overflow-y-auto'
+            : 'opacity-0 -translate-y-3 pointer-events-none max-h-0 overflow-hidden'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-3">
+          {/* Navigation Links Grid */}
+          <div className="space-y-1.5">
+            {/* 1. Trang Chủ */}
             <button
-              key={col.id}
-              onClick={() => handleNavClick(() => onSelectCollection(col.id))}
-              className={`w-full text-left py-2 px-3 rounded-lg font-medium flex items-center justify-between cursor-pointer ${
-                currentView === 'collection' && activeCollectionId === col.id
-                  ? 'bg-amber-400/15 text-amber-300 font-bold'
-                  : 'text-neutral-300 hover:bg-neutral-900'
+              onClick={() => handleNavClick(onNavigateLanding)}
+              className={`w-full text-left py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer active:scale-[0.99] ${
+                currentView === 'landing'
+                  ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30'
+                  : 'text-neutral-200 hover:text-white hover:bg-neutral-900/90'
               }`}
             >
-              <span>{stripBstPrefix(col.title)}</span>
-              {col.isPreorder && (
-                <span className="text-[9px] font-bold text-rose-300 bg-rose-950/80 px-1.5 py-0.5 rounded border border-rose-800">
-                  Đặt trước
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                <Home className={`w-4 h-4 ${currentView === 'landing' ? 'text-amber-400' : 'text-neutral-400'}`} />
+                <span className="text-sm">Trang Chủ</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-neutral-500" />
             </button>
-          ))}
 
-          <div className="pt-2 border-t border-neutral-800 flex flex-col gap-1">
+            {/* 2. Sản Phẩm */}
+            <button
+              onClick={() => handleNavClick(() => onOpenAllCatalog('all'))}
+              className={`w-full text-left py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer active:scale-[0.99] ${
+                currentView === 'catalog'
+                  ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30'
+                  : 'text-neutral-200 hover:text-white hover:bg-neutral-900/90'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Package className={`w-4 h-4 ${currentView === 'catalog' ? 'text-amber-400' : 'text-neutral-400'}`} />
+                <span className="text-sm">Tất Cả Sản Phẩm</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-neutral-500" />
+            </button>
+
+            {/* 3. Bộ Sưu Tập (Interactive Accordion Drawer) */}
+            <div className="rounded-xl border border-neutral-800/80 bg-neutral-900/50 overflow-hidden transition-colors">
+              <button
+                type="button"
+                onClick={() => setMobileCollectionsExpanded((prev) => !prev)}
+                className="w-full text-left py-2.5 px-3.5 font-bold flex items-center justify-between text-neutral-200 hover:text-white cursor-pointer active:scale-[0.99]"
+              >
+                <div className="flex items-center gap-3">
+                  <Compass className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm">Bộ Sưu Tập</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-amber-300 font-bold border border-neutral-700">
+                    {visibleCollections.length}
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-neutral-400 transition-transform duration-200 ${
+                    mobileCollectionsExpanded ? 'rotate-180 text-amber-400' : ''
+                  }`}
+                />
+              </button>
+
+              {/* Collapsible collections list */}
+              <div
+                className={`transition-all duration-300 ease-in-out ${
+                  mobileCollectionsExpanded ? 'max-h-[600px] opacity-100 pb-2 px-2' : 'max-h-0 opacity-0 overflow-hidden'
+                }`}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-neutral-800/70">
+                  {visibleCollections.map((col) => {
+                    const colImg = col.horizontalImage || col.bannerImage || col.bgImage || '/assets/hero-bg.png';
+                    const isSelected = currentView === 'collection' && activeCollectionId === col.id;
+                    const cleanTitle = stripBstPrefix(col.title);
+
+                    return (
+                      <button
+                        key={col.id}
+                        onClick={() => handleNavClick(() => onSelectCollection(col.id))}
+                        className={`w-full text-left p-2 rounded-lg flex items-center gap-2.5 transition-all cursor-pointer active:scale-[0.98] ${
+                          isSelected
+                            ? 'bg-amber-400/20 text-amber-200 ring-1 ring-amber-400/40'
+                            : 'hover:bg-neutral-800/80 text-neutral-300 hover:text-white'
+                        }`}
+                      >
+                        <img
+                          src={colImg}
+                          alt={cleanTitle}
+                          className="w-10 h-10 rounded-md object-cover shrink-0 border border-neutral-700/60"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold truncate">{cleanTitle}</span>
+                            {col.isPreorder && (
+                              <span className="text-[8px] font-black text-rose-300 bg-rose-950/90 px-1.5 py-0.2 rounded border border-rose-800 shrink-0">
+                                Preorder
+                              </span>
+                            )}
+                          </div>
+                          {col.subtitle && (
+                            <p className="text-[10px] text-neutral-400 truncate mt-0.5">{col.subtitle}</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Về Chúng Tôi */}
             <button
               onClick={() => handleNavClick(onOpenAbout)}
-              className={`w-full text-left py-2 px-3 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+              className={`w-full text-left py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer active:scale-[0.99] ${
                 currentView === 'about'
-                  ? 'bg-neutral-800 text-amber-400 font-bold'
-                  : 'text-neutral-300 hover:bg-neutral-900'
+                  ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30'
+                  : 'text-neutral-200 hover:text-white hover:bg-neutral-900/90'
               }`}
             >
-              <span>Về Chúng Tôi</span>
-              <span>›</span>
-            </button>
-            <button
-              onClick={() => handleNavClick(onOpenContact)}
-              className={`w-full text-left py-2 px-3 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
-                currentView === 'contact'
-                  ? 'bg-neutral-800 text-amber-400 font-bold'
-                  : 'text-neutral-300 hover:bg-neutral-900'
-              }`}
-            >
-              <span>Liên Hệ</span>
-              <span>›</span>
+              <div className="flex items-center gap-3">
+                <Info className={`w-4 h-4 ${currentView === 'about' ? 'text-amber-400' : 'text-neutral-400'}`} />
+                <span className="text-sm">Về Chúng Tôi</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-neutral-500" />
             </button>
 
+            {/* 5. Liên Hệ */}
+            <button
+              onClick={() => handleNavClick(onOpenContact)}
+              className={`w-full text-left py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer active:scale-[0.99] ${
+                currentView === 'contact'
+                  ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30'
+                  : 'text-neutral-200 hover:text-white hover:bg-neutral-900/90'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Phone className={`w-4 h-4 ${currentView === 'contact' ? 'text-amber-400' : 'text-neutral-400'}`} />
+                <span className="text-sm">Liên Hệ & Hỗ Trợ</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-neutral-500" />
+            </button>
+
+            {/* 6. Tra Cứu Đơn */}
             {onOpenOrderTracker && (
               <button
                 id="mobile-nav-track-order-btn"
                 onClick={() => handleNavClick(onOpenOrderTracker)}
-                className={`w-full text-left py-2 px-3 rounded-lg font-semibold flex items-center justify-between cursor-pointer ${
+                className={`w-full text-left py-2.5 px-3.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer active:scale-[0.99] ${
                   currentView === 'order-tracker' || (currentView as any) === 'track-order'
-                    ? 'bg-neutral-800 text-amber-400 font-bold'
-                    : 'text-neutral-300 hover:bg-neutral-900'
+                    ? 'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30'
+                    : 'text-neutral-200 hover:text-white hover:bg-neutral-900/90'
                 }`}
               >
-                <span>Tra Cứu Đơn</span>
-                <span>›</span>
+                <div className="flex items-center gap-3">
+                  <Search className={`w-4 h-4 ${currentView === 'order-tracker' ? 'text-amber-400' : 'text-neutral-400'}`} />
+                  <span className="text-sm">Tra Cứu Đơn Hàng</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-neutral-500" />
               </button>
             )}
           </div>
@@ -437,20 +575,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="pt-2 border-t border-neutral-800">
               <button
                 onClick={() => handleNavClick(onOpenAdmin)}
-                className="w-full text-left py-2.5 px-3 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-colors"
+                className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-all active:scale-[0.99]"
               >
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <span>Trang Quản Trị ({currentSeller?.name || 'Admin'})</span>
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <div className="text-xs font-black">Trang Quản Trị Hệ Thống</div>
+                    <div className="text-[10px] text-amber-400/80 font-normal">Tài khoản: {currentSeller?.name || 'Admin'}</div>
+                  </div>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold uppercase tracking-wider">
-                  Admin
+                  Vào Quản Trị
                 </span>
               </button>
             </div>
           )}
         </div>
-      )}
+      </div>
     </header>
   );
 };

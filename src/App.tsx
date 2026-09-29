@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
+import { TopAnnouncementBar } from './components/TopAnnouncementBar';
 import { HeroBanners } from './components/HeroBanners';
 import { LandingProductsCollection } from './components/LandingProductsCollection';
 import { LandingCollectionBanners } from './components/LandingCollectionBanners';
@@ -14,14 +15,16 @@ import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
 import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig, ComboItemSelection } from './types';
-import { CheckCircle2, ShoppingBag, Sparkles, X, Lock, AlertCircle } from 'lucide-react';
+import { CheckCircle2, ShoppingBag, Sparkles, X, AlertCircle } from 'lucide-react';
+import { Lock } from './components/common/LockIcon';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
-import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser } from './utils/auth';
+import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
 import { useAdminPresence } from './hooks/useAdminPresence';
 import { TurnOffMaintenanceConfirmModal } from './components/admin/TurnOffMaintenanceConfirmModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Dynamic code-splitting for non-landing pages & deferred non-critical widgets
 const AboutPage = React.lazy(() => import('./components/AboutPage').then((m) => ({ default: m.AboutPage })));
@@ -54,8 +57,14 @@ import {
   subscribeToCategoriesFromFirestore,
   subscribeToCollectionsFromFirestore,
   subscribeToSiteContentFromFirestore,
+  subscribeToFirebaseAuthState,
+  signOutFirebaseAuth,
+  auth,
+  fetchAuthorizedSellersFromFirestore,
+  recordUnauthorizedLoginAttempt,
   StoredOrder
 } from './firebase';
+import { getClientGeoLocation, getClientDeviceInfo } from './utils/ipGeo';
 import {
   trackGA4PageView,
   trackGA4AddToCart,
@@ -334,6 +343,7 @@ export default function App() {
   }
   const [toastInfo, setToastInfo] = useState<ToastState | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -482,20 +492,19 @@ export default function App() {
     }
 
     if (routePath === 'admin') {
+      setCurrentView('admin');
       const session = getAdminSession();
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
-        setCurrentView('admin');
         setIsAdminLoginModalOpen(false);
         verifySessionWithServer().then((verifiedUser) => {
           if (verifiedUser && verifiedUser.username) {
             setCurrentSeller(verifiedUser as SellerUser);
             setIsAdminLoginModalOpen(false);
           }
-        });
+        }).catch(() => {});
       } else {
         setIsAdminLoginModalOpen(true);
-        setCurrentView('landing');
       }
       setIsCartOpen(false);
       return;
@@ -607,7 +616,6 @@ export default function App() {
         setCurrentSeller(activeSession as SellerUser);
         setIsAdminLoginModalOpen(false);
       } else {
-        setCurrentSeller(null);
         const currentUrl = window.location.pathname + window.location.hash;
         if (currentUrl.includes('/admin') || currentUrl.includes('admin')) {
           setCurrentView('landing');
@@ -616,8 +624,79 @@ export default function App() {
       }
     });
 
+    // Subscribe to Firebase Authentication state for real-time authentication sync
+    const unsubscribeAuth = subscribeToFirebaseAuthState(async (fbUser) => {
+      if (fbUser) {
+        const email = (fbUser.email || '').trim().toLowerCase();
+        const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
+        
+        let isAuthorizedEmail = false;
+        try {
+          const authList = await fetchAuthorizedSellersFromFirestore();
+          isAuthorizedEmail = authList.some(a => a.email.trim().toLowerCase() === email && a.isActive !== false);
+        } catch {}
+
+        let matchedSeller: SellerUser | null = null;
+        if (!isRoot && email) {
+          try {
+            const sellers = await fetchSellersFromFirestore();
+            matchedSeller = sellers.find(s =>
+              (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+              (s.phone && s.phone.trim().toLowerCase() === email) ||
+              (s.username && s.username.trim().toLowerCase() === email) ||
+              ((s as any).email && (s as any).email.trim().toLowerCase() === email)
+            ) || null;
+          } catch {
+            // ignore
+          }
+        }
+
+        // ZERO-TRUST ACCESS CONTROL: Purge and reject any unauthorized Google accounts
+        if (!isRoot && !isAuthorizedEmail && (!matchedSeller || matchedSeller.isActive === false)) {
+          try {
+            const geo = await getClientGeoLocation().catch(() => null);
+            const dev = getClientDeviceInfo();
+            const physicalLoc = geo ? `${geo.city || geo.region || ''}${geo.city && geo.country ? ', ' : ''}${geo.country || 'Vietnam'}` : 'Không xác định';
+            await recordUnauthorizedLoginAttempt({
+              email,
+              name: fbUser.displayName || '',
+              ip: geo?.ip || 'Unknown',
+              location: physicalLoc,
+              device: `${dev.browser} trên ${dev.os}`,
+              reason: 'Tài khoản Google chưa được Tổng bí thư phê duyệt'
+            });
+          } catch {}
+          await signOutFirebaseAuth().catch(() => {});
+          setCurrentSeller(null);
+          clearAdminSession();
+          return;
+        }
+
+        const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || 'member');
+        const userPayload: SellerUser = {
+          id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
+          username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : (fbUser.displayName || 'admin')),
+          name: matchedSeller?.name || fbUser.displayName || (isRoot ? (email === 'nhunhuhao71@gmail.com' ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : email),
+          role: assignedRole,
+          isRootAdmin: isRoot,
+          isActive: true,
+          createdAt: matchedSeller?.createdAt || new Date().toISOString(),
+          avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
+          phone: matchedSeller?.phone || fbUser.phoneNumber || '',
+          googleEmail: email,
+          googleUid: fbUser.uid
+        };
+        setCurrentSeller(userPayload);
+      } else {
+        // If not logged into Firebase Auth, clear seller state so legacy/unauthenticated sessions cannot view admin
+        setCurrentSeller(null);
+        clearAdminSession();
+      }
+    });
+
     return () => {
       cleanupProtection();
+      unsubscribeAuth();
     };
   }, []);
 
@@ -828,15 +907,9 @@ export default function App() {
   // Online presence, public IP detection (ipapi.co) and heartbeat for active admin/seller
   useAdminPresence(currentView === 'admin' ? currentSeller : null);
 
-  // Cross-tab / Multi-device Instant Broadcast Synchronization Helper
-  const broadcastStoreChange = (type: 'products' | 'categories' | 'collections' | 'siteContent', data: any) => {
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        const channel = new BroadcastChannel('nak_store_sync_channel');
-        channel.postMessage({ type, data });
-        channel.close();
-      } catch {}
-    }
+  // Cross-tab / Multi-device Instant Broadcast Synchronization Helper (Storage-event backed)
+  const broadcastStoreChange = (_type: 'products' | 'categories' | 'collections' | 'siteContent', _data: any) => {
+    // Cross-tab synchronization is automatically handled by localStorage storage events and Firestore onSnapshot
   };
 
   // Real-time automatic synchronization with Firestore Cloud & Cross-tab broadcast
@@ -946,28 +1019,7 @@ export default function App() {
       }
     });
 
-    // F. Cross-tab instant auto-sync using BroadcastChannel (0ms delay across tabs)
-    let syncChannel: BroadcastChannel | null = null;
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        syncChannel = new BroadcastChannel('nak_store_sync_channel');
-        syncChannel.onmessage = (event) => {
-          if (!isMounted) return;
-          const { type, data } = event.data || {};
-          if (type === 'products' && Array.isArray(data)) {
-            setProducts(data);
-          } else if (type === 'categories' && Array.isArray(data)) {
-            setCategories(data);
-          } else if (type === 'collections' && Array.isArray(data)) {
-            setCollections(data);
-          } else if (type === 'siteContent' && data) {
-            setSiteContent(migrateLegacyShippingPolicy(data));
-          }
-        };
-      } catch {}
-    }
-
-    // G. Cross-window / Storage event fallback
+    // Cross-window / Storage event synchronization
     const handleStorageChange = (e: StorageEvent) => {
       if (!isMounted) return;
       if (e.key === 'nak_custom_products' && e.newValue) {
@@ -988,7 +1040,6 @@ export default function App() {
       unsubCats();
       unsubCols();
       unsubContent();
-      if (syncChannel) syncChannel.close();
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -1605,7 +1656,6 @@ export default function App() {
     }
   };
 
-  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   const landingProductSections = useMemo(() => {
@@ -1733,45 +1783,18 @@ export default function App() {
         </aside>
       )}
 
-      {/* Landing Page Exclusive Promo Announcement Banner (Full Width Infinite Continuous Loop) */}
-      {!isMaintenanceActiveForUser && currentView === 'landing' && Boolean(siteContent?.announcementActive) === true && !announcementDismissed && (
-        <aside aria-label="Thông báo ưu đãi" className="bg-red-600 text-white py-2 text-xs font-bold flex items-center justify-between border-b border-red-700/50 transition-all overflow-hidden overflow-x-clip w-full max-w-full relative select-none">
-          <div
-            onClick={siteContent?.announcementLink ? handleAnnouncementClick : undefined}
-            className={`w-full max-w-full overflow-hidden overflow-x-clip whitespace-nowrap ${
-              siteContent?.announcementLink ? 'cursor-pointer hover:opacity-95' : ''
-            }`}
-            title={siteContent?.announcementLink ? `Bấm để mở liên kết: ${siteContent.announcementLink}` : undefined}
-          >
-            <div className="animate-ticker flex items-center">
-              {/* Render 2 identical sets to create a 100% seamless, continuous loop from right to left */}
-              {[0, 1].map((setIdx) => (
-                <div key={setIdx} className="flex items-center shrink-0">
-                  {[0, 1, 2, 3].map((itemIdx) => (
-                    <div key={itemIdx} className="flex items-center gap-3 px-8 sm:px-12">
-                      <Sparkles className="w-3.5 h-3.5 flex-shrink-0 text-amber-300 animate-pulse" />
-                      <span className="tracking-wide">
-                        {siteContent?.announcementText || 'Ưu đãi đặt trước BST Mới: Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!'}
-                      </span>
-                      <span className="text-white/40 font-normal px-2">✦</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setAnnouncementDismissed(true);
-            }}
-            className="p-1 hover:bg-black/20 rounded-full text-white transition-colors absolute right-2 z-10 cursor-pointer bg-red-600/90 backdrop-blur-xs shadow-xs"
-            title="Đóng thông báo"
-            aria-label="Đóng thông báo"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </aside>
+      {/* World-Class Interactive Top Announcement Bar */}
+      {!isMaintenanceActiveForUser && currentView !== 'admin' && currentView !== 'not-found' && (
+        <TopAnnouncementBar
+          siteContent={siteContent}
+          onNavigateLanding={handleNavigateLanding}
+          onSelectCollection={handleSelectCollection}
+          onOpenAllCatalog={handleOpenAllCatalog}
+          onOpenAbout={handleOpenAbout}
+          onOpenContact={handleOpenContact}
+          onOpenCart={handleOpenCartDrawer}
+          onToast={showToast}
+        />
       )}
 
       {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode, 404 Page & Maintenance Mode for Users) */}
@@ -1926,31 +1949,33 @@ export default function App() {
 
         {/* VIEW 6: Dedicated Standalone Admin Portal Page with Strict Auth Gating */}
         {currentView === 'admin' && (
-          currentSeller ? (
-            <React.Suspense
-              fallback={
-                <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white">
-                  <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
-                  <p className="text-sm font-bold text-amber-100 tracking-wide">Đang nạp không gian quản trị bảo mật...</p>
-                  <span className="text-xs text-slate-400 mt-1">Dữ liệu được bảo vệ và mã hóa theo phiên</span>
-                </div>
-              }
-            >
-              <AdminPage
-                products={products}
-                categories={categories}
-                collections={collections}
-                siteContent={siteContent}
-                currentSeller={currentSeller}
-                onUpdateCurrentSeller={setCurrentSeller}
-                onUpdateProducts={handleUpdateProducts}
-                onUpdateCategories={handleUpdateCategories}
-                onUpdateCollections={handleUpdateCollections}
-                onUpdateSiteContent={handleUpdateSiteContent}
-                onLogout={handleAdminLogout}
-                onBackToStore={handleNavigateLanding}
-              />
-            </React.Suspense>
+          (currentSeller && auth.currentUser) ? (
+            <ErrorBoundary fallbackTitle="Bảng điều khiển Quản trị gặp sự cố khi tải">
+              <React.Suspense
+                fallback={
+                  <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white">
+                    <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
+                    <p className="text-sm font-bold text-amber-100 tracking-wide">Đang nạp không gian quản trị bảo mật...</p>
+                    <span className="text-xs text-slate-400 mt-1">Dữ liệu được bảo vệ và mã hóa theo phiên</span>
+                  </div>
+                }
+              >
+                <AdminPage
+                  products={products}
+                  categories={categories}
+                  collections={collections}
+                  siteContent={siteContent}
+                  currentSeller={currentSeller}
+                  onUpdateCurrentSeller={setCurrentSeller}
+                  onUpdateProducts={handleUpdateProducts}
+                  onUpdateCategories={handleUpdateCategories}
+                  onUpdateCollections={handleUpdateCollections}
+                  onUpdateSiteContent={handleUpdateSiteContent}
+                  onLogout={handleAdminLogout}
+                  onBackToStore={handleNavigateLanding}
+                />
+              </React.Suspense>
+            </ErrorBoundary>
           ) : (
             <div className="min-h-[75vh] flex flex-col items-center justify-center p-6 text-center bg-slate-50">
               <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center mx-auto mb-4 shadow-xs">

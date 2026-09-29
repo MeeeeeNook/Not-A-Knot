@@ -254,7 +254,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
 
       // Giữ nguyên 100% kích thước & độ phân giải gốc của ảnh (naturalWidth x naturalHeight)
       // Xuất sang WebP/JPEG chất lượng cao (0.88) để giữ nguyên vẹn độ sắc nét mà dung lượng cực kỳ gọn gàng
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         canvas.width = img.naturalWidth || img.width;

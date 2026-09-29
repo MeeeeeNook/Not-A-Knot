@@ -1,7 +1,23 @@
-import { SellerUser } from '../types';
+import { SellerUser, AuthorizedSellerItem } from '../types';
+import { safeTimeoutSignal } from './timeoutSignal';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import bcrypt from 'bcryptjs';
-import { fetchSellerByUsername, saveSellerToFirestore } from '../firebase';
+import { getClientGeoLocation, getClientDeviceInfo } from './ipGeo';
+import {
+  fetchSellerByUsername,
+  saveSellerToFirestore,
+  fetchSellersFromFirestore,
+  fetchAuthorizedSellersFromFirestore,
+  recordUnauthorizedLoginAttempt,
+  updateSellerPresence,
+  auth,
+  signInWithGooglePopup,
+  signInWithFirebaseEmail,
+  registerWithFirebaseEmail,
+  signOutFirebaseAuth
+} from '../firebase';
+
+export { signOutFirebaseAuth };
 
 // Constants for Client Session Storage
 const JWT_STORAGE_KEY = 'notaknot_admin_jwt_token';
@@ -9,6 +25,12 @@ const SESSION_STORAGE_KEY = 'notaknot_admin_auth_session';
 const COOKIE_NAME = 'nak_admin_token';
 
 export const ROOT_ADMIN_USERNAME = 'manhcuong';
+
+// Whitelist of authorized root administrator Google accounts
+export const AUTHORIZED_ROOT_ADMIN_EMAILS: readonly string[] = [
+  'nhunhuhao71@gmail.com',
+  'manhcuong2006ht@gmail.com'
+];
 
 // Helper for generating unique client identifiers / nonces
 export const generateSalt = (length = 16): string => {
@@ -44,21 +66,64 @@ export const hashUsername = async (username: string): Promise<string> => {
 
 export const isRootAdminUsername = (username: string): boolean => {
   const clean = (username || '').trim().toLowerCase();
-  return clean === ROOT_ADMIN_USERNAME || clean === 'nhunhuhao71@gmail.com' || clean === 'noreply.notaknot@gmail.com';
+  return clean === ROOT_ADMIN_USERNAME || AUTHORIZED_ROOT_ADMIN_EMAILS.includes(clean);
 };
 
 export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
   if (user.isRootAdmin || user.role === 'root_admin') return true;
   const u = (user.username || '').trim().toLowerCase();
-  const email = ((user as any).email || '').trim().toLowerCase();
+  const email = (user.googleEmail || (user as any).email || (user as any).phone || '').trim().toLowerCase();
   return (
     u === ROOT_ADMIN_USERNAME ||
-    u === 'nhunhuhao71@gmail.com' ||
-    u === 'noreply.notaknot@gmail.com' ||
-    email === 'nhunhuhao71@gmail.com' ||
-    email === 'noreply.notaknot@gmail.com'
+    AUTHORIZED_ROOT_ADMIN_EMAILS.includes(u) ||
+    AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email)
   );
+};
+
+export const isDeputyAdminUser = (user?: Partial<SellerUser> | null): boolean => {
+  if (!user) return false;
+  return user.role === 'deputy_admin';
+};
+
+/**
+ * Checks if the current admin/user has authorization to change the target user's password.
+ * Rule:
+ * 1. Admin Root: "Không ai được quyền đổi mk của admin root" - only the root admin themselves can change their own password.
+ * 2. Deputy Admin & Sellers: Admin Root can change or reset their passwords at any time.
+ * 3. Individual users can always change their own password.
+ */
+export const canChangeUserPassword = (
+  currentUser?: Partial<SellerUser> | null,
+  targetUser?: Partial<SellerUser> | null
+): boolean => {
+  if (!targetUser) return false;
+  if (!currentUser) return false;
+
+  const isTargetRoot = isRootAdminUser(targetUser);
+  const isCurrentRoot = isRootAdminUser(currentUser);
+
+  if (isTargetRoot) {
+    // Only the target root admin themselves can change their own password
+    const curU = (currentUser.username || '').trim().toLowerCase();
+    const tarU = (targetUser.username || '').trim().toLowerCase();
+    const curEmail = (currentUser.googleEmail || currentUser.email || '').trim().toLowerCase();
+    const tarEmail = (targetUser.googleEmail || targetUser.email || '').trim().toLowerCase();
+
+    return (Boolean(curU && tarU && curU === tarU) || Boolean(curEmail && tarEmail && curEmail === tarEmail) || currentUser.id === targetUser.id);
+  }
+
+  // Admin Root can change password for all deputy admins and sellers
+  if (isCurrentRoot) {
+    return true;
+  }
+
+  // Self can change own password
+  if (currentUser.id && targetUser.id && currentUser.id === targetUser.id) {
+    return true;
+  }
+
+  return false;
 };
 
 // ----------------------------------------------------
@@ -106,7 +171,7 @@ export const loginWithServer = async (
         sellerData,
         rememberMe
       }),
-      signal: AbortSignal.timeout(2500)
+      signal: safeTimeoutSignal(2500)
     });
 
     if (res.ok) {
@@ -220,6 +285,306 @@ export const loginWithServer = async (
   };
 };
 
+/**
+ * Signs in using Firebase Authentication with Google Popup.
+ * Strictly blocks any Google account that is not verified in the admin whitelist or Firestore sellers.
+ * Only nhunhuhao71@gmail.com and manhcuong2006ht@gmail.com are root admins.
+ * Other users must be in sellers list (created/linked by root admin).
+ */
+export const signInWithGoogle = async (): Promise<{ success: boolean; user?: SellerUser; error?: string }> => {
+  try {
+    const fbUser = await signInWithGooglePopup();
+    const email = (fbUser.email || '').trim().toLowerCase();
+
+    // 1. Check if the user is in the authorized Root Admin whitelist
+    const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
+
+    // 2. Check if this email is in the authorized sellers collection granted by Root Admin
+    let matchedAuthEmail: AuthorizedSellerItem | null = null;
+    try {
+      const authorizedList = await fetchAuthorizedSellersFromFirestore();
+      matchedAuthEmail = authorizedList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
+    } catch (authFetchErr) {
+      console.warn('Error checking authorized_sellers list:', authFetchErr);
+    }
+
+    // 3. Check if this email belongs to an existing seller profile in Firestore
+    let matchedSeller: SellerUser | null = null;
+    try {
+      const sellers = await fetchSellersFromFirestore();
+      matchedSeller = sellers.find(s =>
+        (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+        (s.phone && s.phone.trim().toLowerCase() === email) ||
+        (s.username && s.username.trim().toLowerCase() === email) ||
+        ((s as any).email && (s as any).email.trim().toLowerCase() === email)
+      ) || null;
+    } catch (fetchErr) {
+      console.warn('Error fetching sellers during Google login check:', fetchErr);
+    }
+
+    // 4. ZERO-TRUST BLOCK: If not root admin AND not authorized by Root Admin AND not an active seller -> REJECT!
+    const isAuthorized = isRoot || Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
+    if (!isAuthorized) {
+      // Record unauthorized login attempt with IP, physical location, and device
+      try {
+        const geo = await getClientGeoLocation().catch(() => null);
+        const dev = getClientDeviceInfo();
+        const physicalLoc = geo ? `${geo.city || geo.region || ''}${geo.city && geo.country ? ', ' : ''}${geo.country || 'Vietnam'}` : 'Không xác định';
+        await recordUnauthorizedLoginAttempt({
+          email,
+          name: fbUser.displayName || '',
+          ip: geo?.ip || 'Unknown',
+          location: physicalLoc,
+          device: `${dev.browser} trên ${dev.os}`,
+          reason: 'Tài khoản Google chưa được Tổng bí thư cấp quyền'
+        });
+      } catch (logErr) {
+        console.warn('Could not record unauthorized attempt:', logErr);
+      }
+
+      // Purge the unapproved Google session from Firebase immediately
+      await signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: `Tài khoản Google (${email}) chưa được cấp quyền quản trị. Vui lòng liên hệ Tổng bí thư để được cấp quyền truy cập.`
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const assignedRole = isRoot ? 'root_admin' : (matchedAuthEmail?.role || matchedSeller?.role || 'member');
+
+    // Auto-link Google email and UID to the seller in Firestore if not yet set
+    if (matchedSeller && (!matchedSeller.googleEmail || matchedSeller.googleEmail !== email || !matchedSeller.googleUid)) {
+      try {
+        const updatedSeller: SellerUser = {
+          ...matchedSeller,
+          googleEmail: email,
+          googleUid: fbUser.uid,
+          linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
+        };
+        await saveSellerToFirestore(updatedSeller);
+        matchedSeller = updatedSeller;
+      } catch (linkErr) {
+        console.warn('Could not auto-update linked Google email on seller document:', linkErr);
+      }
+    }
+
+    const sellerUser: SellerUser = {
+      id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
+      username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
+      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (isRoot ? (email === 'nhunhuhao71@gmail.com' ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : email),
+      role: assignedRole,
+      isRootAdmin: isRoot,
+      isActive: true,
+      createdAt: matchedSeller?.createdAt || nowIso,
+      avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
+      phone: matchedSeller?.phone || fbUser.phoneNumber || '',
+      googleEmail: email,
+      googleUid: fbUser.uid,
+      linkedGoogleAt: matchedSeller?.linkedGoogleAt || nowIso
+    };
+
+    if (!matchedSeller) {
+      await saveSellerToFirestore(sellerUser).catch(() => {});
+    }
+
+    const token = await fbUser.getIdToken();
+    saveAdminSession(token, sellerUser, true);
+
+    return { success: true, user: sellerUser };
+  } catch (err: any) {
+    console.error('Google Sign-In Error:', err);
+    let msg = 'Đăng nhập Google qua Firebase thất bại.';
+    if (err.code === 'auth/popup-closed-by-user') {
+      msg = 'Cửa sổ đăng nhập Google đã được đóng trước khi hoàn tất.';
+    } else if (err.code === 'auth/popup-blocked') {
+      msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';
+    } else if (err.code === 'auth/cancelled-popup-request') {
+      msg = 'Yêu cầu đăng nhập đã bị hủy.';
+    } else if (err.message) {
+      msg = err.message;
+    }
+    return { success: false, error: msg };
+  }
+};
+
+/**
+ * Links a Google account to an existing seller account so they can sign in with both password and Google.
+ */
+export const linkGoogleAccountWithSeller = async (
+  targetSeller: SellerUser
+): Promise<{ success: boolean; updatedSeller?: SellerUser; error?: string }> => {
+  try {
+    const fbUser = await signInWithGooglePopup();
+    const email = (fbUser.email || '').trim().toLowerCase();
+    if (!email) {
+      return { success: false, error: 'Không thể xác định địa chỉ email từ tài khoản Google.' };
+    }
+
+    // Check if another seller already uses this Google email
+    const sellers = await fetchSellersFromFirestore();
+    const conflict = sellers.find(s => s.id !== targetSeller.id && (
+      (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+      ((s as any).email && (s as any).email.trim().toLowerCase() === email)
+    ));
+    if (conflict) {
+      return {
+        success: false,
+        error: `Email Google ${email} đã được liên kết với tài khoản "${conflict.name}" (@${conflict.username}).`
+      };
+    }
+
+    const updatedSeller: SellerUser = {
+      ...targetSeller,
+      googleEmail: email,
+      googleUid: fbUser.uid,
+      linkedGoogleAt: new Date().toISOString()
+    };
+
+    await saveSellerToFirestore(updatedSeller);
+    await refreshAdminSession(updatedSeller);
+
+    return { success: true, updatedSeller };
+  } catch (err: any) {
+    console.error('Lỗi liên kết Google:', err);
+    return { success: false, error: err.message || 'Không thể liên kết tài khoản Google.' };
+  }
+};
+
+/**
+ * Unlinks the Google account from a seller account.
+ */
+export const unlinkGoogleAccountFromSeller = async (
+  targetSeller: SellerUser
+): Promise<{ success: boolean; updatedSeller?: SellerUser; error?: string }> => {
+  try {
+    const updatedSeller: SellerUser = {
+      ...targetSeller,
+      googleEmail: undefined,
+      googleUid: undefined,
+      linkedGoogleAt: undefined
+    };
+
+    await saveSellerToFirestore(updatedSeller);
+    await refreshAdminSession(updatedSeller);
+
+    return { success: true, updatedSeller };
+  } catch (err: any) {
+    console.error('Lỗi hủy liên kết Google:', err);
+    return { success: false, error: err.message || 'Không thể hủy liên kết tài khoản Google.' };
+  }
+};
+
+/**
+ * Unified login handler: Authenticates via Firebase Authentication first,
+ * with seamless fallback to server/bcrypt database so no credentials ever fail.
+ * Blocks any unauthorized email not recognized by the admin system.
+ */
+export const loginWithFirebaseAuthOrServer = async (
+  usernameOrEmail: string,
+  password: string,
+  sellersList?: SellerUser[],
+  rememberMe = true
+): Promise<ServerLoginResult> => {
+  const cleanInput = (usernameOrEmail || '').trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  if (!cleanInput) {
+    return { success: false, error: 'Vui lòng nhập tên đăng nhập hoặc email.' };
+  }
+  if (!cleanPassword) {
+    return { success: false, error: 'Vui lòng nhập mật khẩu.' };
+  }
+
+  // Pre-validate email if an email address is provided
+  if (cleanInput.includes('@')) {
+    const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(cleanInput);
+    const hasSellerMatch = sellersList?.some(s =>
+      ((s as any).email && (s as any).email.toLowerCase() === cleanInput) ||
+      (s.googleEmail && s.googleEmail.toLowerCase() === cleanInput) ||
+      (s.phone && s.phone.toLowerCase() === cleanInput) ||
+      s.username.toLowerCase() === cleanInput
+    );
+    if (!isRoot && !hasSellerMatch) {
+      // Check in Firestore if not loaded yet
+      let foundInDb = false;
+      try {
+        const fetched = await fetchSellerByUsername(cleanInput);
+        if (fetched) foundInDb = true;
+      } catch {}
+      if (!foundInDb) {
+        return {
+          success: false,
+          error: `Tài khoản (${cleanInput}) chưa được cấp quyền quản trị. Vui lòng liên hệ Admin Root để được cấp quyền truy cập.`
+        };
+      }
+    }
+  }
+
+  // 1. Try Firebase Authentication with Email and Password
+  let emailToUse = cleanInput;
+  if (!emailToUse.includes('@')) {
+    emailToUse = `${cleanInput}@notaknot.vn`;
+  }
+
+  try {
+    const fbUser = await signInWithFirebaseEmail(emailToUse, cleanPassword);
+    const isRoot = isRootAdminUsername(cleanInput) || isRootAdminUsername(emailToUse) || isRootAdminUser({ email: emailToUse, username: cleanInput });
+
+    let matchedSeller = sellersList?.find(s => s.username.toLowerCase() === cleanInput || s.googleEmail?.toLowerCase() === cleanInput || ((s as any).email && (s as any).email.toLowerCase() === cleanInput));
+    if (!matchedSeller) {
+      try {
+        matchedSeller = await fetchSellerByUsername(cleanInput);
+      } catch {}
+    }
+
+    if (!isRoot && (!matchedSeller || matchedSeller.isActive === false)) {
+      await signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: `Tài khoản (${cleanInput}) chưa được cấp quyền quản trị. Truy cập bị từ chối.`
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || 'member');
+    const userPayload: Partial<SellerUser> = {
+      id: matchedSeller?.id || `seller-${cleanInput.replace(/[^a-z0-9]/g, '')}`,
+      username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
+      name: matchedSeller?.name || fbUser.displayName || (isRoot ? (cleanInput.includes('nhunhuhao') ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : cleanInput),
+      role: assignedRole,
+      isRootAdmin: isRoot,
+      avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
+      isActive: true,
+      googleEmail: matchedSeller?.googleEmail
+    };
+
+    const token = await fbUser.getIdToken();
+    saveAdminSession(token, userPayload, rememberMe);
+
+    return {
+      success: true,
+      token,
+      user: userPayload
+    };
+  } catch (fbErr: any) {
+    // If not found in Firebase Auth yet, fallback to server/bcrypt check
+  }
+
+  // 2. Authoritative Fallback to Server / Local Database
+  let matchedSeller = sellersList?.find(s => s.username.toLowerCase() === cleanInput || s.googleEmail?.toLowerCase() === cleanInput || ((s as any).email && (s as any).email.toLowerCase() === cleanInput));
+  const serverRes = await loginWithServer(cleanInput, cleanPassword, matchedSeller, rememberMe);
+
+  if (serverRes.success && serverRes.user) {
+    // Auto-migrate to Firebase Auth in background so future logins use Firebase Auth directly
+    try {
+      await registerWithFirebaseEmail(emailToUse, cleanPassword);
+    } catch {}
+  }
+
+  return serverRes;
+};
+
 export const getAdminToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   try {
@@ -310,7 +675,7 @@ export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | n
       headers: {
         Authorization: `Bearer ${token}`
       },
-      signal: AbortSignal.timeout(2000)
+      signal: safeTimeoutSignal(2000)
     });
 
     if (!res.ok) {
@@ -391,6 +756,7 @@ export const invalidateAndRefreshSession = async (updatedSeller: Partial<SellerU
 export const clearAdminSession = (): void => {
   if (typeof window === 'undefined') return;
   try {
+    signOutFirebaseAuth().catch(() => {});
     localStorage.removeItem(JWT_STORAGE_KEY);
     localStorage.removeItem(SESSION_STORAGE_KEY);
     document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
@@ -413,7 +779,7 @@ export const hashPasswordWithServer = async (password: string): Promise<string> 
         Authorization: token ? `Bearer ${token}` : ''
       },
       body: JSON.stringify({ password }),
-      signal: AbortSignal.timeout(2500)
+      signal: safeTimeoutSignal(2500)
     });
     const data = await res.json();
     if (data.success && data.hash) {
@@ -451,7 +817,7 @@ export const verifyAdminAction = async (action: string, targetId?: string): Prom
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ action, targetId }),
-        signal: AbortSignal.timeout(2500)
+        signal: safeTimeoutSignal(2500)
       });
       if (res.ok) {
         const data = await res.json();

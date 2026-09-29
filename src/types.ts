@@ -205,11 +205,15 @@ export interface SellerUser {
   id: string;
   username: string;
   usernameHash?: string;
+  email?: string;
+  googleEmail?: string;
+  googleUid?: string;
+  linkedGoogleAt?: string;
   name: string;
   passwordHash?: string;
   passwordSalt?: string;
   isRootAdmin?: boolean;
-  role: 'root_admin' | 'member';
+  role: 'root_admin' | 'deputy_admin' | 'member';
   isActive: boolean;
   createdAt: string;
   lastLoginAt?: string;
@@ -221,6 +225,7 @@ export interface SellerUser {
   lastDevice?: string;
   avatarColor?: string;
   phone?: string;
+  isAutoCreated?: boolean;
   ipHistory?: Array<{
     ip: string;
     city?: string;
@@ -229,6 +234,26 @@ export interface SellerUser {
     device?: string;
     timestamp: string;
   }>;
+}
+
+export interface AuthorizedSellerItem {
+  email: string;
+  name?: string;
+  role: 'deputy_admin' | 'member';
+  addedBy: string;
+  createdAt: string;
+  isActive: boolean;
+}
+
+export interface UnauthorizedLoginAttemptItem {
+  id: string;
+  email: string;
+  name?: string;
+  ip: string;
+  location: string;
+  device?: string;
+  timestamp: string;
+  reason?: string;
 }
 
 export interface OrderRecord {
@@ -473,6 +498,15 @@ export interface SocialFeedConfig {
   posts: SocialFeedPost[];
 }
 
+export interface AnnouncementItemConfig {
+  id: string;
+  badge?: string;
+  text: string;
+  link?: string;
+  voucherCode?: string;
+  isActive: boolean;
+}
+
 export interface SiteContentConfig {
   logoUrl?: string;
   brandName: string;
@@ -480,6 +514,16 @@ export interface SiteContentConfig {
   announcementText: string;
   announcementLink?: string;
   announcementActive: boolean;
+  announcementTheme?: 'obsidian' | 'amber' | 'minimal' | 'festive';
+  announcementMode?: 'carousel' | 'single' | 'ticker';
+  announcementShowClose?: boolean;
+  announcementShowControls?: boolean;
+  announcementItems?: AnnouncementItemConfig[];
+  announcementShowVoucher?: boolean;
+  announcementVoucherCode?: string;
+  announcementShowFreeship?: boolean;
+  announcementShowWarranty?: boolean;
+  announcementSpeed?: number;
   phone: string;
   zalo: string;
   address: string;

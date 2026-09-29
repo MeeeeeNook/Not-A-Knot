@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SiteContentConfig, CustomElementBlock, SiteHeroSlide, CategoryItem, CollectionInfo, FaqItem, Product, LandingCollectionProductsConfig } from '../types';
+import { SiteContentConfig, CustomElementBlock, SiteHeroSlide, CategoryItem, CollectionInfo, FaqItem, Product, LandingCollectionProductsConfig, AnnouncementItemConfig } from '../types';
 import { DEFAULT_SITE_CONTENT } from '../data/siteContent';
 import { DEFAULT_CATEGORIES } from '../data/categories';
 import { COLLECTIONS_DATA } from '../data/collections';
@@ -24,12 +24,13 @@ import {
   Plus, 
   ChevronDown, 
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Search,
   ShoppingBag,
   Menu,
   ShieldCheck,
   Truck,
-  Lock,
   Wifi,
   Battery,
   CreditCard,
@@ -50,6 +51,7 @@ import { DynamicCustomElements } from './DynamicCustomElements';
 import { AboutUsSection } from './AboutUsSection';
 import { LandingFaqCommitments } from './LandingFaqCommitments';
 import { Footer } from './Footer';
+import { Lock } from './common/LockIcon';
 
 interface AdminSiteEditorProps {
   initialConfig?: SiteContentConfig;
@@ -85,11 +87,19 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
         ? DEFAULT_SITE_CONTENT.footerDescription
         : base.footerDescription;
 
+    let annItems = base.announcementItems;
+    if (!annItems || annItems.length === 0) {
+      annItems = DEFAULT_SITE_CONTENT.announcementItems || [];
+    }
+
     return {
       ...base,
       footerDescription: cleanFooterDesc,
       landingProductSections: sections,
-      landingProducts: sections[0] || base.landingProducts
+      landingProducts: sections[0] || base.landingProducts,
+      announcementItems: annItems,
+      announcementShowControls: base.announcementShowControls ?? false,
+      announcementShowClose: base.announcementShowClose ?? false
     };
   });
 
@@ -132,10 +142,17 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
           if (!sections || sections.length === 0) {
             sections = initialConfig.landingProducts ? [initialConfig.landingProducts] : (DEFAULT_SITE_CONTENT.landingProductSections || []);
           }
+          let annItems = initialConfig.announcementItems;
+          if (!annItems || annItems.length === 0) {
+            annItems = DEFAULT_SITE_CONTENT.announcementItems || [];
+          }
           return {
             ...initialConfig,
             landingProductSections: sections,
-            landingProducts: sections[0] || initialConfig.landingProducts
+            landingProducts: sections[0] || initialConfig.landingProducts,
+            announcementItems: annItems,
+            announcementShowControls: initialConfig.announcementShowControls ?? false,
+            announcementShowClose: initialConfig.announcementShowClose ?? false
           };
         }
         return prev;
@@ -211,6 +228,63 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     }
   };
 
+  // Announcement Items Management
+  const currentAnnouncementItems: AnnouncementItemConfig[] = React.useMemo(() => {
+    if (config.announcementItems && config.announcementItems.length > 0) {
+      return config.announcementItems;
+    }
+    return DEFAULT_SITE_CONTENT.announcementItems || [];
+  }, [config.announcementItems]);
+
+  const [previewSlideIdx, setPreviewSlideIdx] = useState(0);
+
+  const updateAnnouncementItems = (newItems: AnnouncementItemConfig[]) => {
+    const firstActive = newItems.find((it) => it.isActive && it.text.trim().length > 0);
+    setConfig((prev) => ({
+      ...prev,
+      announcementItems: newItems,
+      announcementText: firstActive?.text || prev.announcementText,
+      announcementLink: firstActive?.link || prev.announcementLink,
+      announcementVoucherCode: firstActive?.voucherCode || prev.announcementVoucherCode
+    }));
+  };
+
+  const handleAddAnnouncementItem = () => {
+    const newItem: AnnouncementItemConfig = {
+      id: `announcement-${Date.now()}`,
+      badge: 'Ưu Đãi',
+      text: 'Nội dung thông báo ưu đãi mới...',
+      link: '#products',
+      voucherCode: '',
+      isActive: true
+    };
+    updateAnnouncementItems([...currentAnnouncementItems, newItem]);
+  };
+
+  const handleUpdateAnnouncementItem = (id: string, patch: Partial<AnnouncementItemConfig>) => {
+    const updated = currentAnnouncementItems.map((item) => (item.id === id ? { ...item, ...patch } : item));
+    updateAnnouncementItems(updated);
+  };
+
+  const handleDeleteAnnouncementItem = (id: string) => {
+    if (currentAnnouncementItems.length <= 1) {
+      alert('Cần giữ ít nhất 1 thông báo trong danh sách (hoặc tắt checkbox "Hiển thị thanh này").');
+      return;
+    }
+    const updated = currentAnnouncementItems.filter((item) => item.id !== id);
+    updateAnnouncementItems(updated);
+  };
+
+  const handleMoveAnnouncementItem = (index: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= currentAnnouncementItems.length) return;
+    const itemsCopy = [...currentAnnouncementItems];
+    const temp = itemsCopy[index];
+    itemsCopy[index] = itemsCopy[targetIdx];
+    itemsCopy[targetIdx] = temp;
+    updateAnnouncementItems(itemsCopy);
+  };
+
   const processSectionBgImageUpload = (file: File) => {
     if (!file.type.startsWith('image/')) {
       alert('Vui lòng chọn file hình ảnh hợp lệ (JPG, PNG, WebP).');
@@ -218,7 +292,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 1600;
@@ -376,7 +450,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 600;
@@ -519,7 +593,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
+      const img = document.createElement('img');
       img.onload = () => {
         const canvas = document.createElement('canvas');
         const maxDim = 2560;
@@ -785,178 +859,434 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
             </div>
           </div>
 
-          {/* Announcement Bar */}
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span className="text-xs font-bold text-slate-900 uppercase">Thanh Thông Báo Ưu Đãi Đầu Trang</span>
+          {/* Announcement Bar & Multi-Announcement Manager */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-5 shadow-2xs">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Thanh Thông Báo Ưu Đãi Đầu Trang (Top Announcement Bar)
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-full border border-amber-300">
+                    {currentAnnouncementItems.filter(i => i.isActive).length}/{currentAnnouncementItems.length} đang bật
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Quản lý và chỉnh sửa toàn bộ các câu thông báo, ưu đãi quà tặng, freeship, voucher chạy trên đầu website.
+                </p>
               </div>
+
               <div className="flex items-center gap-3">
-                {config.announcementText && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfig({ ...config, announcementText: '', announcementActive: false, announcementLink: '' });
-                      setStatusMsg('Đã xóa nội dung thông báo ưu đãi.');
-                      setSaveStatus('success');
-                      setTimeout(() => setSaveStatus('idle'), 2500);
-                    }}
-                    className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1 cursor-pointer"
-                    title="Xóa nội dung và tắt thông báo này"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Xóa thông báo</span>
-                  </button>
-                )}
-                <label className="inline-flex items-center gap-2 cursor-pointer text-xs">
+                <button
+                  type="button"
+                  onClick={handleAddAnnouncementItem}
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm thông báo mới</span>
+                </button>
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
                   <input
                     type="checkbox"
                     checked={config.announcementActive}
                     onChange={(e) => setConfig({ ...config, announcementActive: e.target.checked })}
                     className="rounded text-slate-900 focus:ring-0"
                   />
-                  <span className="text-slate-700 font-semibold">Hiển thị thanh này</span>
+                  <span className="text-slate-800 font-bold">Bật thanh này</span>
                 </label>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-              {/* Nội dung thông báo */}
-              <div className="lg:col-span-7 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-semibold text-slate-600">Nội dung thông báo (hiển thị chạy chữ)</label>
-                  {config.announcementText && (
-                    <button
-                      type="button"
-                      onClick={() => setConfig({ ...config, announcementText: '' })}
-                      className="text-[10px] text-slate-500 hover:text-rose-600 hover:underline cursor-pointer"
-                    >
-                      Xóa chữ
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={config.announcementText}
-                  onChange={(e) => setConfig({ ...config, announcementText: e.target.value })}
-                  placeholder="Ví dụ: 🇻🇳 Sự Kiện 02/09: Nhận đặt trước BST Hào Khí Độc Lập..."
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none font-medium focus:border-slate-400"
-                />
+            {/* Danh Sách Các Câu Thông Báo (Chỗ sửa từng thông báo) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Danh sách thông điệp luân phiên ({currentAnnouncementItems.length})</span>
+                </label>
+                <span className="text-[11px] text-slate-500 italic">
+                  * Mỗi thẻ bên dưới là 1 slide thông báo xuất hiện trên website.
+                </span>
               </div>
 
-              {/* Menu Dropdown Chọn Trang Liên Kết Chuyển Hướng */}
-              <div className="lg:col-span-5 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
-                    <Link2 className="w-3 h-3 text-slate-500" />
-                    <span>Trang liên kết khi bấm vào</span>
-                  </label>
-                  {config.announcementLink && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfig({ ...config, announcementLink: '' });
-                        setIsCustomAnnouncementLink(false);
-                      }}
-                      className="text-[10px] text-slate-500 hover:text-rose-600 hover:underline cursor-pointer"
+              <div className="space-y-3">
+                {currentAnnouncementItems.map((item, idx) => {
+                  const standardLinks = [
+                    '',
+                    '#products',
+                    '#collection?id=event_0209',
+                    '#about',
+                    '#contact',
+                    ...(collections || []).map((c) => `#collection?id=${c.id}`),
+                    ...(categories || []).map((c) => `#products?category=${c.id}`)
+                  ];
+                  const isCustom = Boolean(item.link && !standardLinks.includes(item.link));
+
+                  return (
+                    <div 
+                      key={item.id}
+                      className={`bg-white border rounded-xl p-3.5 sm:p-4 space-y-3 transition-all ${
+                        item.isActive 
+                          ? 'border-slate-200 shadow-2xs hover:border-amber-400/60' 
+                          : 'border-slate-200 bg-slate-50/70 opacity-60'
+                      }`}
                     >
-                      Không liên kết
-                    </button>
-                  )}
+                      {/* Item Header Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          {/* Order buttons */}
+                          <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => handleMoveAnnouncementItem(idx, 'up')}
+                              disabled={idx === 0}
+                              className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              title="Di chuyển lên trên"
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveAnnouncementItem(idx, 'down')}
+                              disabled={idx === currentAnnouncementItems.length - 1}
+                              className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                              title="Di chuyển xuống dưới"
+                            >
+                              <ArrowDown className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <span className="font-mono text-xs font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                            #{idx + 1}
+                          </span>
+
+                          {/* Badge tag input */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-slate-600 hidden xs:inline">Nhãn:</span>
+                            <input
+                              type="text"
+                              value={item.badge || ''}
+                              onChange={(e) => handleUpdateAnnouncementItem(item.id, { badge: e.target.value })}
+                              placeholder="Ưu Đãi, Freeship 0đ, Mã Giảm Giá..."
+                              className="bg-amber-50/80 border border-amber-300 text-amber-950 font-bold text-xs rounded-lg px-2 py-1 outline-none w-28 xs:w-36 focus:bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {/* Active Switch */}
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={item.isActive !== false}
+                              onChange={(e) => handleUpdateAnnouncementItem(item.id, { isActive: e.target.checked })}
+                              className="rounded text-slate-900 focus:ring-0"
+                            />
+                            <span>{item.isActive ? 'Đang hiện' : 'Đang ẩn'}</span>
+                          </label>
+
+                          {/* Delete Item */}
+                          {currentAnnouncementItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAnnouncementItem(item.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Xóa thông báo này"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Item Content: Announcement Text */}
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-semibold text-slate-700">
+                          Nội dung câu thông báo <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={item.text}
+                          onChange={(e) => handleUpdateAnnouncementItem(item.id, { text: e.target.value })}
+                          placeholder="Ví dụ: 🇻🇳 Miễn phí giao hàng toàn bộ Hà Nội • Đồng giá 20k toàn quốc..."
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white font-medium focus:border-slate-400"
+                        />
+                      </div>
+
+                      {/* Row: Link Destination & 1-Click Voucher Code */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                        {/* Link Destination */}
+                        <div className="sm:col-span-7 space-y-1">
+                          <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                            <Link2 className="w-3 h-3 text-slate-500" />
+                            <span>Trang chuyển hướng khi bấm vào</span>
+                          </label>
+                          <select
+                            value={isCustom ? '__custom__' : (item.link || '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                handleUpdateAnnouncementItem(item.id, { link: 'https://' });
+                              } else {
+                                handleUpdateAnnouncementItem(item.id, { link: val });
+                              }
+                            }}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 outline-none focus:bg-white font-medium cursor-pointer"
+                          >
+                            <optgroup label="-- Tùy chọn cơ bản --">
+                              <option value="">🚫 Không chuyển hướng (Chỉ xem chữ)</option>
+                            </optgroup>
+                            <optgroup label="-- Các Trang Chính --">
+                              <option value="#products">🛍️ Trang: Tất cả sản phẩm</option>
+                              <option value="#collection?id=event_0209">🇻🇳 Trang: BST Hào Khí 02/09 (Quốc Khánh)</option>
+                              <option value="#about">📖 Trang: Về Chúng Tôi (Giới thiệu & Cam kết)</option>
+                              <option value="#contact">📬 Trang: Liên Hệ (Gửi tin nhắn & Mạng xã hội)</option>
+                            </optgroup>
+                            {Array.isArray(collections) && collections.length > 0 && (
+                              <optgroup label="-- Theo Bộ Sưu Tập (Collections) --">
+                                {collections.map((col) => (
+                                  <option key={col.id} value={`#collection?id=${col.id}`}>
+                                    🌟 BST: {col.title || col.tag || col.id}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {Array.isArray(categories) && categories.length > 0 && (
+                              <optgroup label="-- Theo Danh Mục Sản Phẩm --">
+                                {categories.map((cat) => (
+                                  <option key={cat.id} value={`#products?category=${cat.id}`}>
+                                    📂 Danh mục: {cat.label || cat.id}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            <optgroup label="-- Tùy Chọn Nâng Cao --">
+                              <option value="__custom__">🔗 Nhập liên kết web ngoài / tùy chỉnh...</option>
+                            </optgroup>
+                          </select>
+
+                          {/* Custom URL Input */}
+                          {isCustom && (
+                            <div className="pt-1 flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={item.link || ''}
+                                onChange={(e) => handleUpdateAnnouncementItem(item.id, { link: e.target.value })}
+                                placeholder="https://facebook.com/... hoặc #custom"
+                                className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-mono outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateAnnouncementItem(item.id, { link: '' })}
+                                className="text-xs px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium shrink-0 cursor-pointer"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Optional 1-Click Voucher Code */}
+                        <div className="sm:col-span-5 space-y-1">
+                          <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                            <Copy className="w-3 h-3 text-slate-500" />
+                            <span>Mã Voucher 1-chạm (Nếu có)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={item.voucherCode || ''}
+                            onChange={(e) => handleUpdateAnnouncementItem(item.id, { voucherCode: e.target.value.toUpperCase() })}
+                            placeholder="Để trống nếu không cấp voucher"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono font-bold uppercase outline-none focus:bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Cấu Hình Hiển Thị & Nút Điều Hướng */}
+            <div className="pt-3 border-t border-slate-200">
+              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2.5">
+                Cấu Hình Giao Diện &amp; Nút Điều Hướng
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* 1. Theme */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Màu sắc &amp; Giao diện
+                  </label>
+                  <select
+                    value={config.announcementTheme || 'obsidian'}
+                    onChange={(e) => setConfig({ ...config, announcementTheme: e.target.value as any })}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-slate-400 font-medium"
+                  >
+                    <option value="obsidian">🖤 Đen Khoáng Thạch &amp; Vàng Gold</option>
+                    <option value="amber">🤎 Nâu Hổ Phách (Warm Amber)</option>
+                    <option value="minimal">🤍 Trắng Sáng Tối Giản (Minimal Light)</option>
+                    <option value="festive">🔴 Đỏ Lễ Hội Nổi Bật (Festive Ruby)</option>
+                  </select>
                 </div>
 
-                {/* Dropdown Menu các Trang của Website */}
-                <select
-                  value={
-                    isCustomAnnouncementLink
-                      ? '__custom__'
-                      : (config.announcementLink || '')
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '__custom__') {
-                      setIsCustomAnnouncementLink(true);
-                    } else {
-                      setIsCustomAnnouncementLink(false);
-                      setConfig({ ...config, announcementLink: val });
-                    }
-                  }}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:border-slate-400 font-medium cursor-pointer"
-                >
-                  <optgroup label="-- Tùy chọn cơ bản --">
-                    <option value="">🚫 Không chuyển hướng (Chỉ xem chữ)</option>
-                  </optgroup>
+                {/* 2. Mode */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Chế độ hiển thị
+                  </label>
+                  <select
+                    value={config.announcementMode || 'carousel'}
+                    onChange={(e) => setConfig({ ...config, announcementMode: e.target.value as any })}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-slate-400 font-medium"
+                  >
+                    <option value="carousel">🔄 Tự xoay vòng các thông báo (Carousel)</option>
+                    <option value="single">📢 Chỉ hiện thông báo đầu tiên (Single)</option>
+                    <option value="ticker">📜 Dải chữ chạy ngang (Marquee Ticker)</option>
+                  </select>
+                </div>
 
-                  <optgroup label="-- Các Trang Chính --">
-                    <option value="#products">🛍️ Trang: Tất cả sản phẩm</option>
-                    <option value="#collection?id=event_0209">🇻🇳 Trang: BST Hào Khí 02/09 (Quốc Khánh)</option>
-                    <option value="#about">📖 Trang: Về Chúng Tôi (Giới thiệu & Cam kết)</option>
-                    <option value="#contact">📬 Trang: Liên Hệ (Gửi tin nhắn & Mạng xã hội)</option>
-                  </optgroup>
+                {/* 3. Speed */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Tốc độ xoay thông báo
+                  </label>
+                  <select
+                    value={config.announcementSpeed || 4.5}
+                    onChange={(e) => setConfig({ ...config, announcementSpeed: parseFloat(e.target.value) })}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-slate-400 font-medium"
+                  >
+                    <option value={3}>⚡ Nhanh (3 giây / slide)</option>
+                    <option value={4.5}>⏱️ Chuẩn (4.5 giây / slide)</option>
+                    <option value={6}>🌿 Chậm rãi (6 giây / slide)</option>
+                    <option value={8}>🛋️ Rất chậm (8 giây / slide)</option>
+                  </select>
+                </div>
 
-                  {Array.isArray(collections) && collections.length > 0 && (
-                    <optgroup label="-- Theo Bộ Sưu Tập (Collections) --">
-                      {collections.map((col) => (
-                        <option key={col.id} value={`#collection?id=${col.id}`}>
-                          🌟 BST: {col.title || col.tag || col.id}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                {/* 4. Controls & Close Buttons Toggle */}
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    Nút điều hướng &amp; Nút tắt
+                  </label>
+                  <div className="space-y-1.5 text-[11px] text-slate-600">
+                    <label className="flex items-start gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={config.announcementShowControls === true}
+                        onChange={(e) => setConfig({ ...config, announcementShowControls: e.target.checked })}
+                        className="rounded text-slate-900 focus:ring-0 mt-0.5"
+                      />
+                      <span>
+                        <strong className="text-slate-800">Nút điều hướng (Mũi tên & Chấm)</strong>
+                        <span className="block text-[10px] text-slate-400 leading-tight">
+                          (Mặc định TẮT để thanh tinh tế, không vướng nút)
+                        </span>
+                      </span>
+                    </label>
 
-                  {Array.isArray(categories) && categories.length > 0 && (
-                    <optgroup label="-- Theo Danh Mục Sản Phẩm --">
-                      {categories.map((cat) => (
-                        <option key={cat.id} value={`#products?category=${cat.id}`}>
-                          📂 Danh mục: {cat.label || cat.id}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                    <label className="flex items-center gap-1.5 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={config.announcementShowClose === true}
+                        onChange={(e) => setConfig({ ...config, announcementShowClose: e.target.checked })}
+                        className="rounded text-slate-900 focus:ring-0"
+                      />
+                      <span>Hiện nút tắt (X) cho khách hàng</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                  <optgroup label="-- Tùy Chọn Nâng Cao --">
-                    <option value="__custom__">🔗 Nhập liên kết tùy chỉnh / Web ngoài...</option>
-                  </optgroup>
-                </select>
-
-                {/* Input nhập Custom Link nếu chọn Tùy chỉnh hoặc link không khớp danh sách */}
-                {(isCustomAnnouncementLink || (config.announcementLink && ![
-                  '',
-                  '#products',
-                  '#collection?id=event_0209',
-                  '#about',
-                  '#contact',
-                  ...(collections || []).map((c) => `#collection?id=${c.id}`),
-                  ...(categories || []).map((c) => `#products?category=${c.id}`)
-                ].includes(config.announcementLink))) && (
-                  <div className="pt-1.5 flex items-center gap-2 animate-fadeIn">
-                    <input
-                      type="text"
-                      value={config.announcementLink || ''}
-                      onChange={(e) => setConfig({ ...config, announcementLink: e.target.value })}
-                      placeholder="https://facebook.com/... hoặc #custom-link"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 outline-none font-mono"
-                    />
+            {/* Live Preview Box */}
+            <div className="pt-2 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Xem Trước Giao Diện Thanh Thông Báo (Live Preview)
+                </span>
+                {currentAnnouncementItems.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Slide {((previewSlideIdx % currentAnnouncementItems.length) + 1)} / {currentAnnouncementItems.length}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setIsCustomAnnouncementLink(false);
-                        setConfig({ ...config, announcementLink: '' });
-                      }}
-                      className="text-xs px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg shrink-0 font-medium cursor-pointer"
+                      onClick={() => setPreviewSlideIdx((prev) => (prev - 1 + currentAnnouncementItems.length) % currentAnnouncementItems.length)}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
+                      title="Slide trước"
                     >
-                      Hủy
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewSlideIdx((prev) => (prev + 1) % currentAnnouncementItems.length)}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
+                      title="Slide sau"
+                    >
+                      <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
                 )}
-
-                <p className="text-[10px] text-slate-500">
-                  {config.announcementLink
-                    ? `Khi khách bấm vào thông báo sẽ mở: ${config.announcementLink}`
-                    : 'Không đặt link chuyển hướng, khách hàng chỉ nhìn thấy nội dung chữ.'}
-                </p>
               </div>
+
+              {(() => {
+                const activeList = currentAnnouncementItems.filter(i => i.isActive);
+                const cur = activeList[previewSlideIdx % (activeList.length || 1)] || currentAnnouncementItems[0] || {
+                  badge: 'Ưu Đãi',
+                  text: 'Miễn phí giao hàng toàn bộ Hà Nội • Đồng giá 20k toàn quốc',
+                  voucherCode: 'NOTAKNOT'
+                };
+
+                return (
+                  <div className={`rounded-xl px-3 sm:px-4 py-2 border flex items-center justify-between text-xs shadow-xs transition-colors h-10 ${
+                    config.announcementTheme === 'minimal'
+                      ? 'bg-stone-50 text-stone-900 border-stone-300'
+                      : config.announcementTheme === 'amber'
+                        ? 'bg-gradient-to-r from-amber-950 via-[#3a1d0f] to-amber-950 text-amber-100 border-amber-600/30'
+                        : config.announcementTheme === 'festive'
+                          ? 'bg-gradient-to-r from-rose-950 via-[#4c0519] to-rose-950 text-rose-100 border-rose-500/30'
+                          : 'bg-neutral-950 text-slate-100 border-amber-400/20'
+                  }`}>
+                    {/* Controls indicator in preview if enabled */}
+                    {config.announcementShowControls && (
+                      <span className="opacity-40 text-xs mr-2 select-none">‹</span>
+                    )}
+
+                    <div className="flex-1 flex items-center justify-center gap-2 overflow-hidden truncate">
+                      {cur.badge && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
+                          config.announcementTheme === 'minimal'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-amber-400 text-slate-950'
+                        }`}>
+                          {cur.badge}
+                        </span>
+                      )}
+                      <span className="font-medium truncate">
+                        {cur.text}
+                      </span>
+                      {cur.voucherCode && (
+                        <span className="font-mono bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.2 rounded text-[11px] font-bold text-amber-300 shrink-0">
+                          {cur.voucherCode}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right controls indicator in preview */}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {config.announcementShowControls && (
+                        <span className="opacity-40 text-xs select-none">›</span>
+                      )}
+                      {config.announcementShowClose && (
+                        <span className="opacity-40 text-xs select-none">×</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
 

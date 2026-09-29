@@ -33,7 +33,7 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
         if (k.image) {
           const resolved = resolveAssetUrl(k.image);
           if (resolved && resolved !== '/assets/bracelet.jpg') {
-            const img = new Image();
+            const img = document.createElement('img');
             img.src = resolved;
           }
         }

@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Lock, Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb } from 'lucide-react';
+import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 import {
   printOrderSlipDirectly,
   openOrderPrintTab,

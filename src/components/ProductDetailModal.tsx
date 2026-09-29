@@ -118,7 +118,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
       optionImageUrls.forEach((url) => {
         if (url && url !== '/assets/bracelet.jpg') {
-          const img = new Image();
+          const img = document.createElement('img');
           img.src = url;
         }
       });
@@ -510,7 +510,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               )}
 
               {/* Description */}
-              <p className="text-neutral-600 text-xs sm:text-sm leading-relaxed">
+              <p className="text-slate-800 font-medium text-sm sm:text-base leading-relaxed">
                 {product.description}
               </p>
 

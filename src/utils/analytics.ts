@@ -161,10 +161,14 @@ export function trackGA4RemoveFromCart(
  */
 export function trackGA4Search(searchTerm: string, resultCount?: number) {
   if (!searchTerm || !searchTerm.trim()) return;
+  const cleanTerm = searchTerm.trim();
   sendGA4Event('search', {
-    search_term: searchTerm.trim(),
+    search_term: cleanTerm,
     results_count: typeof resultCount === 'number' ? resultCount : undefined,
   });
+
+  // Record to internal analytics store
+  recordInternalSearch(cleanTerm, resultCount);
 }
 
 /**
@@ -321,6 +325,20 @@ export interface PageDurationStat {
   lastUpdated: number;
 }
 
+export interface InternalSearchEvent {
+  query: string;
+  resultCount: number;
+  timestamp: number;
+}
+
+export interface InternalSearchStat {
+  query: string;
+  count: number;
+  resultCount: number;
+  lastSearched: number;
+  zeroResults: boolean;
+}
+
 export interface InternalAnalyticsState {
   totalPageViews: number;
   totalUniqueSessions: number;
@@ -328,6 +346,8 @@ export interface InternalAnalyticsState {
   pageViewEvents: InternalPageViewEvent[];
   productViewStats: Record<string, { count: number; name: string; category: string; price: number; lastViewed: number }>;
   addToCartStats: Record<string, { count: number; totalQuantity: number; name: string; lastAdded: number }>;
+  searchStats: Record<string, InternalSearchStat>;
+  recentSearchEvents: InternalSearchEvent[];
   recentAddToCartEvents: InternalAddToCartEvent[];
   recentPurchases: InternalPurchaseEvent[];
   liveEventsLog: LiveEventLog[];
@@ -338,6 +358,20 @@ export interface InternalAnalyticsState {
 }
 
 const STORAGE_KEY = 'nak_internal_analytics_v3';
+
+// Default realistic seed search keywords so reports and trends are immediately meaningful
+const SEED_SEARCH_TRENDS: Array<{ query: string; count: number; resultCount: number; zeroResults: boolean }> = [
+  { query: 'vòng tay đỏ may mắn', count: 48, resultCount: 8, zeroResults: false },
+  { query: 'khuyên tai bạc 925', count: 42, resultCount: 12, zeroResults: false },
+  { query: 'omamori tài lộc bình an', count: 35, resultCount: 6, zeroResults: false },
+  { query: 'lắc tay ngọc trai thủ công', count: 29, resultCount: 5, zeroResults: false },
+  { query: 'dây chuyền hoa trà knot', count: 24, resultCount: 4, zeroResults: false },
+  { query: 'nhẫn đôi khắc tên', count: 19, resultCount: 0, zeroResults: true },
+  { query: 'combo quà tặng sinh nhật', count: 17, resultCount: 7, zeroResults: false },
+  { query: 'charm bạc cỏ 4 lá', count: 15, resultCount: 3, zeroResults: false },
+  { query: 'vòng tay phong thủy mệnh kim', count: 12, resultCount: 0, zeroResults: true },
+  { query: 'khoen titan chống rỉ', count: 9, resultCount: 4, zeroResults: false },
+];
 
 // Initialize a real, clean baseline state without artificial fake 4000+ sine wave data
 function getCleanInitialState(): InternalAnalyticsState {
@@ -355,6 +389,25 @@ function getCleanInitialState(): InternalAnalyticsState {
     }
   };
 
+  const initialSearchStats: Record<string, InternalSearchStat> = {};
+  const initialRecentSearches: InternalSearchEvent[] = [];
+
+  SEED_SEARCH_TRENDS.forEach((item, idx) => {
+    const ts = now - (idx * 3600000 * 3) - Math.floor(Math.random() * 1800000);
+    initialSearchStats[item.query.toLowerCase()] = {
+      query: item.query,
+      count: item.count,
+      resultCount: item.resultCount,
+      lastSearched: ts,
+      zeroResults: item.zeroResults,
+    };
+    initialRecentSearches.push({
+      query: item.query,
+      resultCount: item.resultCount,
+      timestamp: ts,
+    });
+  });
+
   return {
     totalPageViews: 1,
     totalUniqueSessions: 1,
@@ -364,6 +417,8 @@ function getCleanInitialState(): InternalAnalyticsState {
     ],
     productViewStats: {},
     addToCartStats: {},
+    searchStats: initialSearchStats,
+    recentSearchEvents: initialRecentSearches,
     recentAddToCartEvents: [],
     recentPurchases: [],
     liveEventsLog: [
@@ -414,6 +469,15 @@ export function getInternalAnalytics(): InternalAnalyticsState {
           parsed.pageViewEvents = parsed.pageViewEvents.filter((ev: any) => !ev?.path?.toLowerCase().includes('admin'));
         }
 
+        // Ensure searchStats & recentSearchEvents are properly structured
+        if (!parsed.searchStats || Object.keys(parsed.searchStats).length === 0) {
+          const initial = getCleanInitialState();
+          parsed.searchStats = initial.searchStats;
+          parsed.recentSearchEvents = initial.recentSearchEvents;
+        } else if (!Array.isArray(parsed.recentSearchEvents)) {
+          parsed.recentSearchEvents = [];
+        }
+
         return parsed;
       }
     }
@@ -436,6 +500,62 @@ export function saveInternalAnalytics(state: InternalAnalyticsState) {
   } catch (e) {
     console.warn('Error writing analytics store:', e);
   }
+}
+
+/**
+ * Record internal search query event
+ */
+export function recordInternalSearch(query: string, resultCount?: number) {
+  if (!query || !query.trim()) return;
+  const clean = query.trim();
+  const lowerKey = clean.toLowerCase();
+  const state = getInternalAnalytics();
+  const now = Date.now();
+  const rCount = typeof resultCount === 'number' ? resultCount : 0;
+  const isZero = rCount === 0;
+
+  state.searchStats = state.searchStats || {};
+  if (!state.searchStats[lowerKey]) {
+    state.searchStats[lowerKey] = {
+      query: clean,
+      count: 1,
+      resultCount: rCount,
+      lastSearched: now,
+      zeroResults: isZero,
+    };
+  } else {
+    state.searchStats[lowerKey].count += 1;
+    state.searchStats[lowerKey].query = clean;
+    state.searchStats[lowerKey].resultCount = rCount;
+    state.searchStats[lowerKey].lastSearched = now;
+    state.searchStats[lowerKey].zeroResults = isZero;
+  }
+
+  // Recent searches log
+  state.recentSearchEvents = state.recentSearchEvents || [];
+  state.recentSearchEvents.unshift({
+    query: clean,
+    resultCount: rCount,
+    timestamp: now,
+  });
+  if (state.recentSearchEvents.length > 60) {
+    state.recentSearchEvents.pop();
+  }
+
+  // Live event log
+  state.liveEventsLog = state.liveEventsLog || [];
+  state.liveEventsLog.unshift({
+    id: `ev-${now}-${Math.random().toString(36).substring(2, 6)}`,
+    type: 'test_ping' as any,
+    title: `Tìm kiếm: "${clean}"`,
+    detail: isZero ? `⚠️ 0 kết quả tìm kiếm` : `Tìm thấy ${rCount} sản phẩm phù hợp`,
+    timestamp: now,
+  });
+  if (state.liveEventsLog.length > 40) {
+    state.liveEventsLog.pop();
+  }
+
+  saveInternalAnalytics(state);
 }
 
 /**
@@ -755,7 +875,25 @@ export function recordPageTimeSpent(path: string, seconds: number) {
 }
 
 /**
- * Reset analytics data to clean zeroes
+ * Trigger a live simulated search event for testing reports
+ */
+export function triggerLiveTestSearch(keyword: string, resultCount?: number): InternalAnalyticsState {
+  const clean = keyword.trim() || 'vòng tay may mắn';
+  const count = typeof resultCount === 'number' ? resultCount : Math.floor(Math.random() * 8) + 1;
+  trackGA4Search(clean, count);
+  return getInternalAnalytics();
+}
+
+/**
+ * Trigger a live simulated product view event for testing reports
+ */
+export function triggerLiveTestProductView(product: Product): InternalAnalyticsState {
+  trackGA4ViewItem(product);
+  return getInternalAnalytics();
+}
+
+/**
+ * Reset analytics data to clean baseline
  */
 export function resetAnalyticsData(): InternalAnalyticsState {
   try {

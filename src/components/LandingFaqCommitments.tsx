@@ -45,16 +45,16 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
   const title = siteContent?.faqTitle || 'Câu Hỏi Thường Gặp';
 
   return (
-    <section id="landing-faq-section" className="py-10 sm:py-14 bg-slate-50 text-slate-900 border-t border-slate-200/80 font-sans">
+    <section id="landing-faq-section" className="py-10 sm:py-14 bg-[#F8F6F1] text-stone-900 border-t border-[#EAE6DE] font-sans">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
         
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto space-y-1.5">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl font-black text-stone-950 tracking-tight">
             {title}
           </h2>
           {siteContent?.faqSubtitle && siteContent.faqSubtitle.trim().length > 0 && (
-            <p className="text-xs sm:text-sm text-slate-600 font-medium">
+            <p className="text-xs sm:text-sm text-stone-600 font-medium">
               {siteContent.faqSubtitle}
             </p>
           )}
@@ -69,22 +69,22 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
                 key={index}
                 className={`rounded-2xl border transition-all overflow-hidden ${
                   isOpen
-                    ? 'bg-white border-amber-400 shadow-sm'
-                    : 'bg-white border-slate-200 hover:border-slate-300'
+                    ? 'bg-[#FFFDFB] border-amber-400 shadow-[0_4px_16px_-2px_rgba(217,119,6,0.12)]'
+                    : 'bg-[#FFFDFB] border-[#EAE6DE] hover:border-[#D5CFCE] shadow-[0_2px_8px_-2px_rgba(44,38,30,0.03)]'
                 }`}
               >
                 <button
                   onClick={() => setOpenIndex(isOpen ? null : index)}
-                  className="w-full p-4 sm:p-4.5 text-left flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-slate-900 cursor-pointer"
+                  className="w-full p-4 sm:p-4.5 text-left flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-stone-900 cursor-pointer"
                 >
                   <span className="leading-snug">{faq.q}</span>
-                  <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-600">
+                  <div className="w-6 h-6 rounded-full bg-stone-100 flex items-center justify-center flex-shrink-0 text-stone-600">
                     {isOpen ? <ChevronUp className="w-4 h-4 text-amber-700" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
                 </button>
 
                 {isOpen && (
-                  <div className="px-4 sm:px-4.5 pb-4 pt-0 text-xs sm:text-sm text-slate-700 leading-relaxed border-t border-slate-100">
+                  <div className="px-4 sm:px-4.5 pb-4 pt-0 text-xs sm:text-sm text-stone-700 leading-relaxed border-t border-[#F2EFE9]">
                     {faq.a}
                   </div>
                 )}
@@ -97,7 +97,7 @@ export const LandingFaqCommitments: React.FC<LandingFaqCommitmentsProps> = ({
         <div className="flex flex-wrap items-center justify-center gap-3 pt-1 text-xs font-bold">
           <button
             onClick={onOpenContact}
-            className="px-6 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+            className="px-6 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-white transition-all flex items-center gap-2 shadow-sm cursor-pointer"
           >
             <MessageCircle className="w-4 h-4 text-amber-400" />
             <span>Liên hệ tư vấn & đặt hàng</span>

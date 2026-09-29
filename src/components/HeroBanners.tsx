@@ -74,7 +74,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     if (activeSlides && activeSlides.length > 0) {
       activeSlides.forEach((slide) => {
         if (slide.bgImage) {
-          const img = new Image();
+          const img = document.createElement('img');
           img.src = slide.bgImage;
         }
       });
@@ -156,7 +156,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     let isMounted = true;
     let idleId: number | null = null;
     let timeoutId: any = null;
-    const img = new Image();
+    const img = document.createElement('img');
     img.crossOrigin = 'anonymous';
     img.src = activeImgSrc;
 

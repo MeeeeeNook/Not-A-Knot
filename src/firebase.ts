@@ -1,11 +1,17 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
 import { getStorage, ref, uploadBytes, uploadString, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import {
-  initializeFirestore,
   getFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   setLogLevel,
   collection,
   doc,
@@ -22,7 +28,7 @@ import {
   arrayUnion,
   onSnapshot
 } from 'firebase/firestore';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, VersionBackup, BackupScheduleConfig, SocialFeedConfig } from './types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, VersionBackup, BackupScheduleConfig, SocialFeedConfig } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import {
   saveProductToIDB,
@@ -43,9 +49,9 @@ import {
 
 // Load client configuration using encrypted database connection parameters
 // protected from plain-text exposure in client bundle
-// Suppress internal Firebase advisory warnings (like transient WebChannel retry or 10s auto-detect warning)
+// Suppress internal Firebase advisory warnings (like transient WebChannel retry or idle stream disconnect)
 try {
-  setLogLevel('error');
+  setLogLevel('silent');
 } catch {
   // ignore
 }
@@ -64,21 +70,106 @@ export const firebaseConfig = {
 // Initialize Firebase App instance
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
+// Initialize Firebase Authentication
+export const auth = getAuth(app);
+
+/**
+ * Lazy Google Auth Provider instance
+ */
+export const getGoogleAuthProvider = (): GoogleAuthProvider => {
+  const provider = new GoogleAuthProvider();
+  try {
+    provider.setCustomParameters({ prompt: 'select_account' });
+  } catch {}
+  return provider;
+};
+
+/**
+ * Helper to safely dispatch custom events across all browsers
+ */
+export const dispatchSafeEvent = (name: string, detail?: any): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent(name, { detail }));
+      return;
+    }
+  } catch {}
+
+  try {
+    if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+      const evt = document.createEvent('CustomEvent');
+      evt.initCustomEvent(name, false, false, detail);
+      window.dispatchEvent(evt);
+      return;
+    }
+  } catch {}
+
+  try {
+    if (typeof Event === 'function') {
+      window.dispatchEvent(new Event(name));
+      return;
+    }
+  } catch {}
+
+  try {
+    if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+      const evt = document.createEvent('Event');
+      evt.initEvent(name, false, false);
+      window.dispatchEvent(evt);
+    }
+  } catch {}
+};
+
+/**
+ * Sign in with Google Popup using Firebase Authentication
+ */
+export async function signInWithGooglePopup(): Promise<FirebaseUser> {
+  const provider = getGoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
+}
+
+/**
+ * Sign in with Email and Password using Firebase Authentication
+ */
+export async function signInWithFirebaseEmail(email: string, pass: string): Promise<FirebaseUser> {
+  const cred = await signInWithEmailAndPassword(auth, email, pass);
+  return cred.user;
+}
+
+/**
+ * Create user with Email and Password in Firebase Authentication
+ */
+export async function registerWithFirebaseEmail(email: string, pass: string): Promise<FirebaseUser> {
+  const cred = await createUserWithEmailAndPassword(auth, email, pass);
+  return cred.user;
+}
+
+/**
+ * Sign out of Firebase Authentication
+ */
+export async function signOutFirebaseAuth(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn('Firebase signout warning:', e);
+  }
+}
+
+/**
+ * Subscribe to Firebase Auth state changes
+ */
+export function subscribeToFirebaseAuthState(callback: (user: FirebaseUser | null) => void): () => void {
+  return onAuthStateChanged(auth, callback);
+}
+
 const targetDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
   ? firebaseConfig.firestoreDatabaseId
   : undefined;
 
-// Initialize Firestore with clean settings and persistent local cache for instant multi-tab loading
-let firestoreInstance;
-try {
-  firestoreInstance = initializeFirestore(app, {
-    ignoreUndefinedProperties: true,
-    experimentalAutoDetectLongPolling: true,
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-  }, targetDbId);
-} catch {
-  firestoreInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
-}
+// Initialize Firestore instance
+export const db = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
 
 export const canonicalOrderKey = (idOrTracking?: string): string => {
   if (!idOrTracking) return '';
@@ -190,11 +281,7 @@ export const syncLocalStorageOrderDeletion = (orderId: string, permanent: boolea
     }
   });
 
-  try {
-    window.dispatchEvent(
-      new CustomEvent('nak_order_deleted', { detail: { orderId, permanent } })
-    );
-  } catch {}
+  dispatchSafeEvent('nak_order_deleted', { orderId, permanent });
 };
 
 export const purgeAllDeletedOrdersFromLocalStorage = (orderIds?: string[]) => {
@@ -220,14 +307,8 @@ export const purgeAllDeletedOrdersFromLocalStorage = (orderIds?: string[]) => {
     } catch {}
   });
 
-  try {
-    window.dispatchEvent(
-      new CustomEvent('nak_order_deleted', { detail: { orderIds, permanent: true } })
-    );
-  } catch {}
+  dispatchSafeEvent('nak_order_deleted', { orderIds, permanent: true });
 };
-
-export const db = firestoreInstance;
 
 export const storage = getStorage(app);
 
@@ -494,7 +575,7 @@ export async function compressBase64Image(
       // Safety timeout: never hang more than 2.5s
       setTimeout(() => done(dataUrl), 2500);
 
-      const img = new Image();
+      const img = document.createElement('img');
       if (!dataUrl.startsWith('data:')) {
         img.crossOrigin = 'anonymous';
       }
@@ -1538,9 +1619,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
 
   // 4. Broadcast live custom event across browser window/tabs
   ordersMemoryCache = null;
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('nak_order_created', { detail: payload }));
-  }
+  dispatchSafeEvent('nak_order_created', payload);
 
   // 5. Direct write to Firestore with up to 3 fast retry attempts
   let lastErr: any = null;
@@ -2068,13 +2147,7 @@ export const emptyOrderTrash = async (orderIds?: string[]): Promise<void> => {
     recordOperation('delete', Math.max(1, deletePromises.length), -900);
 
     // 6. Broadcast deletion event
-    if (typeof window !== 'undefined') {
-      try {
-        window.dispatchEvent(
-          new CustomEvent('nak_order_deleted', { detail: { orderIds, permanent: true } })
-        );
-      } catch {}
-    }
+    dispatchSafeEvent('nak_order_deleted', { orderIds, permanent: true });
   } catch (err) {
     console.error('Lỗi dọn sạch thùng rác:', err);
     throw err;
@@ -2618,8 +2691,8 @@ export const fetchContactMessagesFromFirestore = async (): Promise<ContactMessag
       recordOperation('read');
     });
     return results;
-  } catch (err) {
-    console.error('Lỗi tải tin nhắn liên hệ từ Firestore:', err);
+  } catch (err: any) {
+    console.warn('Tin nhắn liên hệ từ Firestore (sử dụng bộ nhớ cục bộ):', err?.message || err);
     // Fallback to localStorage cache
     try {
       const cached = localStorage.getItem('nak_contact_messages');
@@ -2701,7 +2774,7 @@ export const saveContactMessageToFirestore = async (msg: ContactMessage): Promis
       // ignore
     }
   } catch (err) {
-    console.error('Lỗi lưu tin nhắn liên hệ vào Firestore:', err);
+    console.warn('Lưu tin nhắn liên hệ vào Firestore:', err);
     // Ensure saved to local cache even if Firestore fails
     try {
       const existing = localStorage.getItem('nak_contact_messages');
@@ -2838,6 +2911,9 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         lastDevice: data.lastDevice || '',
         avatarColor: data.avatarColor || '#B41C1A',
         phone: data.phone || '',
+        googleEmail: data.googleEmail || data.email || '',
+        googleUid: data.googleUid || '',
+        linkedGoogleAt: data.linkedGoogleAt || '',
         ipHistory: parsedHistory
       });
     });
@@ -2941,6 +3017,24 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
     });
     await setDoc(docRef, payload, { merge: true });
     recordOperation('write', 1, JSON.stringify(payload).length);
+
+    // Sync to authorized_sellers collection so Firestore Security Rules recognize this authorized Google email
+    if (seller.googleEmail) {
+      const cleanEmail = seller.googleEmail.trim().toLowerCase();
+      try {
+        const authRef = doc(db, 'authorized_sellers', cleanEmail);
+        await setDoc(authRef, {
+          email: cleanEmail,
+          sellerId: sellerId,
+          username: seller.username,
+          role: seller.role || (seller.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: seller.isActive !== false,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (authErr) {
+        console.warn('Could not sync to authorized_sellers collection:', authErr);
+      }
+    }
   } catch (err) {
     console.error('Lỗi lưu tài khoản người bán trên Firestore:', err);
     throw err;
@@ -2953,13 +3047,170 @@ export const saveSellersToFirestore = async (sellersList: SellerUser[]): Promise
   }
 };
 
-export const deleteSellerFromFirestore = async (sellerId: string): Promise<void> => {
+export const deleteSellerFromFirestore = async (sellerId: string, googleEmail?: string): Promise<void> => {
   try {
     const docRef = doc(db, 'sellers', sellerId);
     await deleteDoc(docRef);
     recordOperation('delete', 1, -400);
+
+    // Remove from authorized_sellers collection if linked email exists
+    if (googleEmail) {
+      try {
+        const authRef = doc(db, 'authorized_sellers', googleEmail.trim().toLowerCase());
+        await deleteDoc(authRef);
+      } catch {}
+    }
   } catch (err) {
     console.error('Lỗi xóa người bán trên Firestore:', err);
+    throw err;
+  }
+};
+
+// ----------------------------------------------------
+// Authorized Google Emails Management for Staff / Sellers
+// ----------------------------------------------------
+export const fetchAuthorizedSellersFromFirestore = async (): Promise<AuthorizedSellerItem[]> => {
+  try {
+    recordOperation('read', 1);
+    const colRef = collection(db, 'authorized_sellers');
+    const snap = await getDocs(colRef);
+    const results: AuthorizedSellerItem[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const email = docSnap.id || data.email;
+      if (email) {
+        const clean = email.trim().toLowerCase();
+        // Prevent duplicate display of Root Admin accounts in the staff list
+        if (clean === 'nhunhuhao71@gmail.com' || clean === 'manhcuong2006ht@gmail.com') {
+          return;
+        }
+        results.push({
+          email: clean,
+          name: data.name || '',
+          role: data.role || 'member',
+          addedBy: data.addedBy || '',
+          createdAt: data.createdAt || new Date().toISOString(),
+          isActive: data.isActive !== false
+        });
+      }
+    });
+    return results;
+  } catch (err) {
+    console.warn('Lỗi lấy danh sách email được ủy quyền:', err);
+    return [];
+  }
+};
+
+export const saveAuthorizedSellerToFirestore = async (item: AuthorizedSellerItem): Promise<void> => {
+  try {
+    const cleanEmail = item.email.trim().toLowerCase();
+    const docRef = doc(db, 'authorized_sellers', cleanEmail);
+    await setDoc(docRef, {
+      email: cleanEmail,
+      name: item.name || '',
+      role: item.role || 'member',
+      addedBy: item.addedBy || '',
+      createdAt: item.createdAt || new Date().toISOString(),
+      isActive: item.isActive !== false
+    }, { merge: true });
+    recordOperation('write', 1, 150);
+  } catch (err) {
+    console.error('Lỗi lưu email ủy quyền trên Firestore:', err);
+    throw err;
+  }
+};
+
+export const deleteAuthorizedSellerFromFirestore = async (email: string): Promise<void> => {
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const docRef = doc(db, 'authorized_sellers', cleanEmail);
+    await deleteDoc(docRef);
+    recordOperation('delete', 1, -150);
+  } catch (err) {
+    console.error('Lỗi xóa email ủy quyền trên Firestore:', err);
+    throw err;
+  }
+};
+
+// ----------------------------------------------------
+// Security Unauthorized Login Attempts Log
+// ----------------------------------------------------
+export const recordUnauthorizedLoginAttempt = async (attempt: {
+  email: string;
+  name?: string;
+  ip?: string;
+  location?: string;
+  device?: string;
+  reason?: string;
+}): Promise<void> => {
+  try {
+    const timestamp = new Date().toISOString();
+    const cleanEmail = (attempt.email || '').trim().toLowerCase();
+    const docId = `unauth-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const docRef = doc(db, 'unauthorized_login_attempts', docId);
+    await setDoc(docRef, {
+      id: docId,
+      email: cleanEmail || 'Không rõ',
+      name: attempt.name || '',
+      ip: attempt.ip || '127.0.0.1',
+      location: attempt.location || 'Không xác định',
+      device: attempt.device || 'Trình duyệt Web',
+      timestamp,
+      reason: attempt.reason || 'Email chưa được phê duyệt trong danh sách Quản trị'
+    });
+    recordOperation('write', 1, 100);
+  } catch (err) {
+    console.warn('Could not record unauthorized attempt to Firestore:', err);
+  }
+};
+
+export const fetchUnauthorizedLoginAttemptsFromFirestore = async (): Promise<UnauthorizedLoginAttemptItem[]> => {
+  try {
+    recordOperation('read', 1);
+    const colRef = collection(db, 'unauthorized_login_attempts');
+    const q = query(colRef, orderBy('timestamp', 'desc'), limit(100));
+    const snap = await getDocs(q);
+    const list: UnauthorizedLoginAttemptItem[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      list.push({
+        id: d.id,
+        email: data.email || '',
+        name: data.name || '',
+        ip: data.ip || 'Unknown',
+        location: data.location || 'Không xác định',
+        device: data.device || 'Trình duyệt Web',
+        timestamp: data.timestamp || new Date().toISOString(),
+        reason: data.reason || 'Bị từ chối quyền truy cập'
+      });
+    });
+    return list;
+  } catch (err) {
+    console.warn('Lỗi lấy danh sách đăng nhập không hợp lệ:', err);
+    return [];
+  }
+};
+
+export const deleteUnauthorizedLoginAttemptFromFirestore = async (id: string): Promise<void> => {
+  try {
+    const docRef = doc(db, 'unauthorized_login_attempts', id);
+    await deleteDoc(docRef);
+    recordOperation('delete', 1);
+  } catch (err) {
+    console.error('Lỗi xóa lịch sử đăng nhập bất thường:', err);
+    throw err;
+  }
+};
+
+export const clearAllUnauthorizedLoginAttemptsFromFirestore = async (): Promise<void> => {
+  try {
+    const colRef = collection(db, 'unauthorized_login_attempts');
+    const snap = await getDocs(colRef);
+    const promises = snap.docs.map(d => deleteDoc(d.ref));
+    await Promise.all(promises);
+    recordOperation('delete', snap.size);
+  } catch (err) {
+    console.error('Lỗi dọn sạch lịch sử đăng nhập bất thường:', err);
     throw err;
   }
 };
@@ -3231,7 +3482,7 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
   } catch {}
 
   // 4. AUTO-SYNC: If there are local backups that only exist on this machine, upload them to Firebase Cloud!
-  if (unsyncedBackups.length > 0) {
+  if (unsyncedBackups.length > 0 && auth.currentUser) {
     console.log(`Tự động đồng bộ ${unsyncedBackups.length} bản sao lưu từ máy này lên Firebase Cloud...`);
     for (const unsynced of unsyncedBackups) {
       try {
@@ -3505,11 +3756,11 @@ export const fetchProductsByCategoryAndPriceIndex = async (
  * Client-Side In-Memory Database Index Cache
  * Provides O(1) indexed lookups for products and orders
  */
-class ClientDatabaseIndexManager {
-  private productsByCategory = new Map<string, Product[]>();
-  private ordersByStatus = new Map<string, any[]>();
-  private ordersByPhone = new Map<string, any[]>();
-  private lastIndexedAt = 0;
+export const dbIndexManager = {
+  productsByCategory: new Map<string, Product[]>(),
+  ordersByStatus: new Map<string, any[]>(),
+  ordersByPhone: new Map<string, any[]>(),
+  lastIndexedAt: 0,
 
   indexProducts(products: Product[]): void {
     this.productsByCategory.clear();
@@ -3522,7 +3773,7 @@ class ClientDatabaseIndexManager {
       }
     }
     this.lastIndexedAt = Date.now();
-  }
+  },
 
   indexOrders(orders: any[]): void {
     this.ordersByStatus.clear();
@@ -3542,25 +3793,23 @@ class ClientDatabaseIndexManager {
         this.ordersByPhone.get(cleanPhone)!.push(o);
       }
     }
-  }
+  },
 
   getProductsByCategory(category: string): Product[] {
     return this.productsByCategory.get(category) || [];
-  }
+  },
 
   getOrdersByStatus(status: string): any[] {
     return this.ordersByStatus.get(status) || [];
-  }
+  },
 
   getOrdersByPhone(phone: string): any[] {
     return this.ordersByPhone.get(phone.trim()) || [];
-  }
+  },
 
   getLastIndexedTime(): number {
     return this.lastIndexedAt;
   }
-}
-
-export const dbIndexManager = new ClientDatabaseIndexManager();
+};
 
 

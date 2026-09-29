@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowRight, Phone, MessageSquare, Lock, ExternalLink, ShieldAlert } from 'lucide-react';
+import { ArrowRight, Phone, MessageSquare, ExternalLink, ShieldAlert } from 'lucide-react';
+import { Lock } from './common/LockIcon';
 import { MaintenanceConfig } from '../types';
 import { MaintenanceIllustration } from './MaintenanceIllustration';
 

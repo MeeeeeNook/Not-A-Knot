@@ -1,4 +1,5 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
@@ -9,8 +10,42 @@ import rateLimit from 'express-rate-limit';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc } from 'firebase/firestore';
-import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail';
+import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
+import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
+
+// Suppress internal Firestore gRPC idle stream cancellation messages in Node server process
+try {
+  setLogLevel('silent');
+} catch {}
+
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+(process.stderr.write as any) = function (chunk: any, encoding?: any, callback?: any) {
+  const str = chunk ? chunk.toString() : '';
+  if (
+    str.includes('Disconnecting idle stream') ||
+    str.includes('Timed out waiting for new targets') ||
+    str.includes("RPC 'Listen' stream") ||
+    str.includes('GrpcConnection RPC')
+  ) {
+    if (typeof callback === 'function') callback();
+    return true;
+  }
+  return originalStderrWrite(chunk, encoding, callback);
+};
+
+const originalConsoleError = console.error;
+console.error = function (...args: any[]) {
+  const str = args.map(a => (typeof a === 'string' ? a : (a?.message || ''))).join(' ');
+  if (
+    str.includes('Disconnecting idle stream') ||
+    str.includes('Timed out waiting for new targets') ||
+    str.includes("RPC 'Listen' stream") ||
+    str.includes('GrpcConnection RPC')
+  ) {
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
 
 // Server-side Secrets (never exposed to client browser)
 const JWT_SECRET: string = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-development-only-replace-in-prod';
@@ -75,6 +110,16 @@ function resetMailTransporter(): void {
 const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || 'AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI';
 
 const ROOT_ADMIN_USERNAME: string = (process.env.ROOT_ADMIN_USERNAME || 'manhcuong').trim().toLowerCase();
+const AUTHORIZED_ROOT_ADMIN_EMAILS: readonly string[] = [
+  'nhunhuhao71@gmail.com',
+  'manhcuong2006ht@gmail.com',
+  'noreply.notaknot@gmail.com'
+];
+
+function isServerRootAdmin(identifier: string): boolean {
+  const clean = (identifier || '').trim().toLowerCase();
+  return clean === ROOT_ADMIN_USERNAME || AUTHORIZED_ROOT_ADMIN_EMAILS.includes(clean);
+}
 
 // Connect server directly to Firestore database for authoritative seller credentials
 const firebaseClientConfig = {
@@ -652,11 +697,11 @@ async function startServer() {
       }
 
       // 3. Issue signed JWT session token
-      const isRoot = authoritativeSeller.isRootAdmin === true || authoritativeSeller.role === 'root_admin' || cleanUsername === ROOT_ADMIN_USERNAME;
+      const isRoot = authoritativeSeller.isRootAdmin === true || authoritativeSeller.role === 'root_admin' || isServerRootAdmin(cleanUsername);
       const userPayload: JwtAdminPayload = {
         id: authoritativeSeller.id || `seller-${cleanUsername}`,
         username: cleanUsername,
-        name: authoritativeSeller.name || (isRoot ? 'Mạnh Cường' : cleanUsername),
+        name: authoritativeSeller.name || (isRoot ? (cleanUsername.includes('nhunhuhao') ? 'Như Hảo (Root Admin)' : 'Mạnh Cường') : cleanUsername),
         role: isRoot ? 'root_admin' : (authoritativeSeller.role || 'member'),
         isRootAdmin: isRoot,
         avatarColor: authoritativeSeller.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
@@ -698,7 +743,7 @@ async function startServer() {
       // Look up current authoritative seller record in Firestore to catch real-time role promotions/demotions
       const authSeller = await fetchAuthoritativeSeller(decoded.username);
       if (authSeller) {
-        const isRoot = authSeller.isRootAdmin === true || authSeller.role === 'root_admin' || decoded.username === ROOT_ADMIN_USERNAME;
+        const isRoot = authSeller.isRootAdmin === true || authSeller.role === 'root_admin' || isServerRootAdmin(decoded.username);
         const refreshedPayload: JwtAdminPayload = {
           id: authSeller.id || decoded.id,
           username: decoded.username,

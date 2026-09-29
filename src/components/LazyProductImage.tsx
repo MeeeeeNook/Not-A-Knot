@@ -75,29 +75,43 @@ export const LazyProductImage: React.FC<LazyProductImageProps> = ({
   useEffect(() => {
     if (priority || isInView) return;
 
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+    if (
+      typeof window === 'undefined' ||
+      !('IntersectionObserver' in window) ||
+      typeof window.IntersectionObserver !== 'function'
+    ) {
       setIsInView(true);
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin, threshold }
-    );
+    let observer: IntersectionObserver | null = null;
+    try {
+      observer = new IntersectionObserver(
+        (entries) => {
+          const [entry] = entries;
+          if (entry && entry.isIntersecting) {
+            setIsInView(true);
+            if (observer) {
+              try { observer.disconnect(); } catch {}
+            }
+          }
+        },
+        { rootMargin, threshold }
+      );
 
-    const currentEl = wrapperRef.current;
-    if (currentEl) {
-      observer.observe(currentEl);
+      const currentEl = wrapperRef.current;
+      if (currentEl) {
+        observer.observe(currentEl);
+      }
+    } catch {
+      setIsInView(true);
+      return;
     }
 
     return () => {
-      observer.disconnect();
+      if (observer) {
+        try { observer.disconnect(); } catch {}
+      }
     };
   }, [priority, isInView, rootMargin, threshold]);
 
