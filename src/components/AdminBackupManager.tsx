@@ -478,7 +478,7 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
         <div className="flex items-center gap-3">
           <div className="text-right">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Tài khoản Cloud</span>
-            <span className="text-xs font-bold text-slate-800 font-mono">nhunhuhao71@gmail.com</span>
+            <span className="text-xs font-bold text-emerald-700 font-mono">Đã kết nối Firebase</span>
           </div>
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100" title="Cloud Realtime Active" />
         </div>

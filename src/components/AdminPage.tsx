@@ -30,6 +30,7 @@ import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { AdminSocialFeedManager } from './admin/AdminSocialFeedManager';
+import { FacebookImageWarningModal, isFacebookImageUrl, triggerFacebookImageWarning } from './admin/FacebookImageWarningModal';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { ensureGmailDomain, sendOrderConfirmationEmail } from '../utils/emailService';
 import {
@@ -1664,6 +1665,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleAddImageUrl = () => {
     if (!newImageUrlInput.trim()) return;
     const url = newImageUrlInput.trim();
+    if (isFacebookImageUrl(url)) {
+      triggerFacebookImageWarning(url);
+    }
     setFormImages((prev) => {
       const updated = [...prev, url];
       if (!formImage || prev.length === 0) {
@@ -3328,7 +3332,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <div className="flex items-center gap-2">
               <span className="p-1 rounded-md bg-amber-500/20 text-amber-800 font-bold shrink-0">⚠️ Thông báo bảo mật:</span>
               <span>
-                Bạn đang duy trì phiên đăng nhập cũ (chưa liên kết Google). Để kích hoạt toàn bộ quyền hạn Cloud (Đồng bộ bản sao lưu & Nhật ký hệ thống), hãy <strong>Đăng xuất</strong> và bấm <strong>"Đăng nhập bằng tài khoản Google"</strong> ({isRootAdmin ? 'nhunhuhao71@gmail.com' : 'Gmail được duyệt'}).
+                Bạn đang duy trì phiên đăng nhập cũ (chưa liên kết Google). Để kích hoạt toàn bộ quyền hạn Cloud (Đồng bộ bản sao lưu & Nhật ký hệ thống), hãy <strong>Đăng xuất</strong> và bấm <strong>"Đăng nhập bằng tài khoản Google"</strong> ({isRootAdmin ? 'Tài khoản Tổng bí thư' : 'Gmail được duyệt'}).
               </span>
             </div>
             <button
@@ -6641,6 +6645,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               orders={activeOrders}
               currentAdmin={currentSeller || (sellers[0] || null)}
               onUpdateSellers={handleUpdateSellers}
+              onUpdateCurrentAdmin={onUpdateCurrentSeller}
             />
           ) : null
         )}
@@ -8644,26 +8649,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <div className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 transition-colors">
                   <span className="font-medium text-slate-500 sm:w-44">Tài khoản quản trị:</span>
                   <div className="flex items-center gap-2 flex-1 font-mono text-slate-800">
-                    <span>nhunhuhao71@gmail.com</span>
+                    <span>{currentSeller?.googleEmail || 'Tài khoản Google Quản trị'}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyFirebaseText('account', 'nhunhuhao71@gmail.com')}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
-                    title="Sao chép email"
-                  >
-                    {copiedFirebaseKey === 'account' ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-[11px] text-emerald-600">Đã chép</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span className="text-[11px]">Sao chép</span>
-                      </>
-                    )}
-                  </button>
+                  {currentSeller?.googleEmail && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyFirebaseText('account', currentSeller.googleEmail || '')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto font-medium"
+                      title="Sao chép email"
+                    >
+                      {copiedFirebaseKey === 'account' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-[11px] text-emerald-600">Đã chép</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Chép</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Item 2 */}
@@ -9218,6 +9225,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </button>
         </div>
       )}
+      {/* ======================================================== */}
+      {/* MODAL: FACEBOOK IMAGE LINK EXPIRATION WARNING */}
+      {/* ======================================================== */}
+      <FacebookImageWarningModal />
+
       {/* ======================================================== */}
       {/* MODAL: EXCEL ORDERS EXPORT PROMPT */}
       {/* ======================================================== */}

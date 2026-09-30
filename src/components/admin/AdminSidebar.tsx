@@ -155,10 +155,10 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           </div>
 
-          {/* User Profile Card for Mobile / Tablet */}
+          {/* User Profile Card */}
           {currentSeller && (
-            <div className="p-3 mx-3 mt-3 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl border border-amber-200/60 flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-3 mx-3 mt-3 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl border border-amber-200/60 flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div
                   className="w-8 h-8 rounded-xl text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs relative"
                   style={{ backgroundColor: currentSeller.avatarColor || '#d97706' }}
@@ -166,24 +166,19 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   <span>{currentSeller.name.slice(0, 1).toUpperCase()}</span>
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="font-bold text-xs text-slate-900 truncate leading-tight">
                     {currentSeller.name}
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono">
-                    @{currentSeller.username} • {currentSeller.isRootAdmin ? 'Admin Root' : (currentSeller.role === 'deputy_admin' ? 'Phó Admin' : 'Người bán')}
+                  <div className="text-[11px] text-slate-700 truncate leading-tight mt-0.5">
+                    <span className="font-bold text-slate-800">{currentSeller.googleEmail || currentSeller.username}</span>
+                    <span className="mx-1 text-slate-400 font-normal">•</span>
+                    <span className="font-bold text-amber-900">
+                      {currentSeller.isRootAdmin ? 'Tổng bí thư' : (currentSeller.role === 'deputy_admin' ? 'Chủ tịch nước' : 'Bộ trưởng')}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={onOpenSwitchSellerModal}
-                className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10px] rounded-lg border border-slate-200 shadow-2xs shrink-0 cursor-pointer active:scale-95 transition-transform"
-                title="Đổi tài khoản đăng nhập"
-              >
-                Đổi
-              </button>
             </div>
           )}
 

@@ -19,7 +19,7 @@ import { CheckCircle2, ShoppingBag, Sparkles, X, AlertCircle } from 'lucide-reac
 import { Lock } from './components/common/LockIcon';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
-import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS } from './utils/auth';
+import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS, getRootAdminEmails } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
 import { useAdminPresence } from './hooks/useAdminPresence';
@@ -35,6 +35,7 @@ const ProductDetailPage = React.lazy(() => import('./components/ProductDetailPag
 const CartPage = React.lazy(() => import('./components/CartPage').then((m) => ({ default: m.CartPage })));
 const OrderTracker = React.lazy(() => import('./components/OrderTracker').then((m) => ({ default: m.OrderTracker })));
 const AdminLoginModal = React.lazy(() => import('./components/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal })));
+const AdminLoginPage = React.lazy(() => import('./components/AdminLoginPage').then((m) => ({ default: m.AdminLoginPage })));
 const MaintenanceScreen = React.lazy(() => import('./components/MaintenanceScreen').then((m) => ({ default: m.MaintenanceScreen })));
 const LegalPoliciesModal = React.lazy(() => import('./components/LegalPoliciesModal').then((m) => ({ default: m.LegalPoliciesModal })));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
@@ -496,16 +497,13 @@ export default function App() {
       const session = getAdminSession();
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
-        setIsAdminLoginModalOpen(false);
         verifySessionWithServer().then((verifiedUser) => {
           if (verifiedUser && verifiedUser.username) {
             setCurrentSeller(verifiedUser as SellerUser);
-            setIsAdminLoginModalOpen(false);
           }
         }).catch(() => {});
-      } else {
-        setIsAdminLoginModalOpen(true);
       }
+      setIsAdminLoginModalOpen(false);
       setIsCartOpen(false);
       return;
     }
@@ -618,8 +616,8 @@ export default function App() {
       } else {
         const currentUrl = window.location.pathname + window.location.hash;
         if (currentUrl.includes('/admin') || currentUrl.includes('admin')) {
-          setCurrentView('landing');
-          setIsAdminLoginModalOpen(true);
+          setCurrentView('admin');
+          setIsAdminLoginModalOpen(false);
         }
       }
     });
@@ -676,7 +674,7 @@ export default function App() {
         const userPayload: SellerUser = {
           id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
           username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : (fbUser.displayName || 'admin')),
-          name: matchedSeller?.name || fbUser.displayName || (isRoot ? (email === 'nhunhuhao71@gmail.com' ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : email),
+          name: matchedSeller?.name || fbUser.displayName || (isRoot ? 'Tổng bí thư' : email),
           role: assignedRole,
           isRootAdmin: isRoot,
           isActive: true,
@@ -1589,11 +1587,10 @@ export default function App() {
     const session = getAdminSession();
     if (session && session.username) {
       setCurrentSeller(session as SellerUser);
-      setCurrentView('admin');
-      navigateTo('/admin');
-    } else {
-      setIsAdminLoginModalOpen(true);
     }
+    setCurrentView('admin');
+    navigateTo('/admin');
+    setIsAdminLoginModalOpen(false);
   };
 
   const handleAdminLoginSuccess = (user: SellerUser) => {
@@ -1953,10 +1950,22 @@ export default function App() {
             <ErrorBoundary fallbackTitle="Bảng điều khiển Quản trị gặp sự cố khi tải">
               <React.Suspense
                 fallback={
-                  <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white">
+                  <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white select-none">
                     <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
-                    <p className="text-sm font-bold text-amber-100 tracking-wide">Đang nạp không gian quản trị bảo mật...</p>
-                    <span className="text-xs text-slate-400 mt-1">Dữ liệu được bảo vệ và mã hóa theo phiên</span>
+                    <h2 className="text-xl sm:text-2xl font-medium text-amber-200 tracking-wide text-center">
+                      Xin chào{(() => {
+                        const raw = currentSeller?.name && currentSeller.name !== 'Tổng bí thư' && !currentSeller.name.includes('@')
+                          ? currentSeller.name
+                          : (auth.currentUser?.displayName || (currentSeller?.name !== 'Tổng bí thư' ? currentSeller?.name : '') || currentSeller?.username || '');
+                        return raw ? ` ${raw.trim()}` : '';
+                      })()}!
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-300 mt-1.5 font-normal tracking-wide text-center">
+                      Đang nạp không gian quản trị bảo mật...
+                    </p>
+                    <span className="text-[11px] sm:text-xs text-slate-500 mt-1 text-center">
+                      Dữ liệu được bảo vệ và mã hóa theo phiên
+                    </span>
                   </div>
                 }
               >
@@ -1977,31 +1986,16 @@ export default function App() {
               </React.Suspense>
             </ErrorBoundary>
           ) : (
-            <div className="min-h-[75vh] flex flex-col items-center justify-center p-6 text-center bg-slate-50">
-              <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center mx-auto mb-4 shadow-xs">
-                <Lock className="w-8 h-8" />
-              </div>
-              <h2 className="text-2xl font-black text-slate-900 mb-2">Trang Quản Trị Bảo Mật</h2>
-              <p className="text-sm text-slate-600 max-w-md mx-auto mb-6 leading-relaxed">
-                Nội dung quản trị được mã hóa và bảo vệ. Vui lòng đăng nhập với tài khoản quản trị viên của NOT A KNOT để truy cập.
-              </p>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleNavigateLanding}
-                  className="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 transition-colors cursor-pointer shadow-xs"
-                >
-                  Về Trang Chủ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsAdminLoginModalOpen(true)}
-                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-md"
-                >
-                  Đăng Nhập Quản Trị
-                </button>
-              </div>
-            </div>
+            <React.Suspense fallback={<ViewLoadingFallback />}>
+              <AdminLoginPage
+                onLoginSuccess={(user) => {
+                  handleAdminLoginSuccess(user);
+                }}
+                onBackToStore={handleNavigateLanding}
+                brandName={siteContent?.brandName}
+                logoUrl={siteContent?.logoUrl}
+              />
+            </React.Suspense>
           )
         )}
 

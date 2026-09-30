@@ -101,17 +101,17 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               <ShieldCheck className="w-7 h-7" />
             )}
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+          <h2 className="text-xl sm:text-2xl font-semibold tracking-normal text-white">
             Cổng Quản Trị & Người Bán
           </h2>
-          <p className="text-xs sm:text-sm text-neutral-400 mt-1">
+          <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-normal">
             Đăng nhập tài khoản nội bộ {brandName} (Firebase Authentication)
           </p>
         </div>
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs sm:text-sm flex items-start gap-2.5 animate-in slide-in-from-top-1">
+          <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs sm:text-sm flex items-start gap-2.5 animate-in slide-in-from-top-1 font-normal">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <span>{errorMessage}</span>
           </div>
@@ -123,7 +123,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             type="button"
             onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full py-3.5 px-4 bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 active:scale-[0.99] border border-white"
+            className="w-full py-3.5 px-4 bg-white hover:bg-neutral-100 text-neutral-800 font-medium text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 active:scale-[0.99] border border-neutral-200"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
               <path
@@ -148,37 +148,23 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
           {/* Access Policy Explainer Card */}
           <div className="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 text-xs space-y-2 text-neutral-300">
-            <div className="font-bold text-amber-400 flex items-center gap-1.5 text-xs">
+            <div className="font-medium text-amber-400 flex items-center gap-1.5 text-xs">
               <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>Cơ chế bảo mật Firebase Authentication</span>
+              <span>Cơ chế bảo mật Google Firebase Authentication</span>
             </div>
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Hệ thống đã loại bỏ hoàn toàn mật khẩu nội bộ để bảo vệ tối đa dữ liệu. Chỉ các tài khoản Google được Root Admin cấp quyền mới có thể truy cập:
+            <p className="text-[11px] text-neutral-400 leading-relaxed font-normal">
+              Hệ thống xác thực tài khoản Google Cloud. Chỉ các tài khoản quản trị viên được ủy quyền mới có thể truy cập hệ thống.
             </p>
-            <div className="space-y-1 pt-1 text-[11px]">
-              <div className="flex items-center gap-2 text-amber-300 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>nhunhuhao71@gmail.com (Root Admin)</span>
-              </div>
-              <div className="flex items-center gap-2 text-amber-300 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>manhcuong2006ht@gmail.com (Root Admin)</span>
-              </div>
-              <div className="flex items-center gap-2 text-neutral-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-neutral-600" />
-                <span>Các Gmail nhân viên được duyệt trong trang Quản trị</span>
-              </div>
-            </div>
           </div>
         </div>
 
         {/* Security Status */}
         <div className="mt-5 p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-neutral-400">
+          <div className="flex items-center gap-1.5 text-neutral-400 font-normal">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-500 shrink-0" />
             <span>Xác thực RSA Token mã hóa cấp Google Cloud</span>
           </div>
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 flex items-center gap-1">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 flex items-center gap-1">
             <Lock className="w-2.5 h-2.5" /> 100% Google Auth
           </span>
         </div>

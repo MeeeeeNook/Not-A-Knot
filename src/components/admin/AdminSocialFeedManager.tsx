@@ -14,10 +14,12 @@ import {
   Smartphone,
   Monitor,
   CloudUpload,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { SiteContentConfig, SocialFeedConfig, SocialFeedPost } from '../../types';
-import { saveSiteContentToFirestore, uploadBase64ToStorage } from '../../firebase';
+import { saveSiteContentToFirestore, uploadBase64ToStorage, compressBase64Image } from '../../firebase';
+import { isFacebookImageUrl, triggerFacebookImageWarning } from './FacebookImageWarningModal';
 
 interface AdminSocialFeedManagerProps {
   siteContent: SiteContentConfig;
@@ -118,17 +120,16 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
     try {
       const reader = new FileReader();
       reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        if (base64) {
+        const rawBase64 = event.target?.result as string;
+        if (rawBase64) {
           try {
-            const cloudUrl = await uploadBase64ToStorage(
-              base64,
-              `social_feed/card_${selectedCardIdx + 1}_${Date.now()}.png`
-            );
-            handleUpdatePostField('image', cloudUrl);
+            // Compress into optimized, high-fidelity WebP/JPEG format (< 90KB)
+            // Storing directly in Firestore ensures all visitors on notaknot.id.vn can read images seamlessly without Firebase Storage CORS/permission errors
+            const compressed = await compressBase64Image(rawBase64, 1200, 1200, 0.88);
+            handleUpdatePostField('image', compressed);
           } catch (cloudErr) {
-            console.warn('Lỗi tải ảnh lên đám mây, dùng fallback base64:', cloudErr);
-            handleUpdatePostField('image', base64);
+            console.warn('Lỗi nén ảnh, dùng ảnh gốc:', cloudErr);
+            handleUpdatePostField('image', rawBase64);
           }
         }
         setIsUploadingImage(false);
@@ -336,7 +337,7 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                       alt=""
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        (e.target as HTMLElement).setAttribute('src', '/assets/about-story.jpg');
+                        (e.target as HTMLElement).setAttribute('src', '/assets/no-image.svg');
                       }}
                     />
                     {isUploadingImage && (
@@ -371,10 +372,40 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                   <input
                     type="text"
                     value={currentPost.image}
-                    onChange={(e) => handleUpdatePostField('image', e.target.value)}
+                    onPaste={(e) => {
+                      const pasted = e.clipboardData?.getData('text') || '';
+                      if (isFacebookImageUrl(pasted)) {
+                        triggerFacebookImageWarning(pasted);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleUpdatePostField('image', val);
+                      if (isFacebookImageUrl(val)) {
+                        triggerFacebookImageWarning(val);
+                      }
+                    }}
                     placeholder="Hoặc dán URL ảnh trực tiếp (https://..., /assets/...)"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-slate-600 focus:outline-none focus:border-amber-500"
                   />
+                  {currentPost.image && isFacebookImageUrl(currentPost.image) && (
+                    <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2 shadow-2xs">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 space-y-1">
+                        <p>
+                          <strong>Cảnh báo link Facebook (hết hạn sau 24–48h):</strong> Link ảnh từ CDN của Facebook sẽ tự động bị khóa sau 24-48 giờ (lỗi 403). Hãy tải ảnh về máy rồi bấm chọn ảnh ở trên để hệ thống lưu trữ vĩnh viễn trên Cloud!
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => triggerFacebookImageWarning(currentPost.image)}
+                          className="inline-flex items-center gap-1 text-amber-800 font-bold hover:underline cursor-pointer"
+                        >
+                          <span>Xem hướng dẫn xử lý</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

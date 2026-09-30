@@ -38,7 +38,8 @@ import {
   canChangeUserPassword,
   linkGoogleAccountWithSeller,
   unlinkGoogleAccountFromSeller,
-  AUTHORIZED_ROOT_ADMIN_EMAILS
+  AUTHORIZED_ROOT_ADMIN_EMAILS,
+  getRootAdminEmails
 } from '../utils/auth';
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
@@ -47,6 +48,7 @@ interface AdminSellersManagerProps {
   orders: StoredOrder[];
   currentAdmin: SellerUser | null;
   onUpdateSellers: (newSellers: SellerUser[]) => void;
+  onUpdateCurrentAdmin?: (updatedAdmin: SellerUser) => void;
 }
 
 // Helper to convert 2-letter ISO country code or country name to flag emoji
@@ -136,7 +138,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   sellers,
   orders,
   currentAdmin,
-  onUpdateSellers
+  onUpdateSellers,
+  onUpdateCurrentAdmin
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<'all' | 'root_admin' | 'deputy_admin' | 'member'>('all');
@@ -210,10 +213,18 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       const stored = localStorage.getItem('nak_admin_custom_names');
       if (stored) return JSON.parse(stored);
     } catch {}
-    return {
-      'nhunhuhao71@gmail.com': 'Như Hảo',
-      'manhcuong2006ht@gmail.com': 'Vũ Ngọc Mạnh Cường'
-    };
+    const rootEmails = getRootAdminEmails();
+    const initialNames: Record<string, string> = {};
+    rootEmails.forEach((email, idx) => {
+      if (email) {
+        if (currentAdmin?.name && (currentAdmin.googleEmail === email || idx === 0)) {
+          initialNames[email] = currentAdmin.name;
+        } else {
+          initialNames[email] = idx === 0 ? 'Tổng bí thư' : `Tổng bí thư ${idx + 1}`;
+        }
+      }
+    });
+    return initialNames;
   });
 
   // Modal / Inline Rename State for Tổng bí thư
@@ -274,6 +285,25 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       try {
         localStorage.setItem('nak_admin_custom_names', JSON.stringify(updated));
       } catch {}
+
+      // Keep name identical across admin tag and current session
+      if (currentAdmin && (currentAdmin.googleEmail === editingTarget.email || editingTarget.email === getRootAdminEmails()[0])) {
+        const updatedAdmin: SellerUser = { ...currentAdmin, name: cleanName };
+        if (onUpdateCurrentAdmin) {
+          onUpdateCurrentAdmin(updatedAdmin);
+        }
+        try {
+          const sessionStr = localStorage.getItem('nak_admin_session');
+          if (sessionStr) {
+            const sess = JSON.parse(sessionStr);
+            if (sess.user) {
+              sess.user.name = cleanName;
+              localStorage.setItem('nak_admin_session', JSON.stringify(sess));
+            }
+          }
+        } catch {}
+      }
+
       setEditingTarget(null);
       setAuthEmailSuccess(`Đã cập nhật tên thành công cho: ${editingTarget.email}`);
       setTimeout(() => setAuthEmailSuccess(''), 3000);
@@ -1424,117 +1454,69 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {/* ROOT ADMIN 1: nhunhuhao71@gmail.com */}
-              <tr className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
-                <td className="p-3.5 sm:p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
-                      H
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-900">
-                        {adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo'}
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono">nhunhuhao71@gmail.com</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                    Tổng bí thư
-                  </span>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Google Firebase Auth</span>
-                  </span>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <div className="text-xs text-slate-600">
-                    <span className="font-semibold text-emerald-700">Toàn quyền hệ thống</span>
-                    <div className="text-[10px] text-slate-400">Security Rules & Cloud DB</div>
-                  </div>
-                </td>
-                <td className="p-3.5 sm:p-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleStartEditTarget('nhunhuhao71@gmail.com', adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo', true)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-                      title="Đổi tên hiển thị"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Đổi tên</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenLogsForEmail('nhunhuhao71@gmail.com', adminCustomNames['nhunhuhao71@gmail.com'] || 'Như Hảo', true)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-                      title="Xem lịch sử đăng nhập & IP"
-                    >
-                      <History className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Log IP</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              {/* ROOT ADMIN ROWS (Mapped dynamically without plain hardcoded personal identifiers) */}
+              {AUTHORIZED_ROOT_ADMIN_EMAILS.map((rootEmail, idx) => {
+                const isCurrent = currentAdmin?.googleEmail === rootEmail || (!currentAdmin?.googleEmail && currentAdmin?.isRootAdmin && idx === 0);
+                const displayName = (isCurrent && currentAdmin?.name) 
+                  ? currentAdmin.name 
+                  : (adminCustomNames[rootEmail] || (idx === 0 ? 'Tổng bí thư' : `Tổng bí thư ${idx + 1}`));
+                const initial = displayName.charAt(0).toUpperCase() || 'T';
 
-              {/* ROOT ADMIN 2: manhcuong2006ht@gmail.com */}
-              <tr className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
-                <td className="p-3.5 sm:p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
-                      C
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-900">
-                        {adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường'}
+                return (
+                  <tr key={rootEmail} className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
+                    <td className="p-3.5 sm:p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
+                          {initial}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900">{displayName}</div>
+                          <div className="text-xs text-slate-500 font-mono">{rootEmail}</div>
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-500 font-mono">manhcuong2006ht@gmail.com</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                    Tổng bí thư
-                  </span>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Google Firebase Auth</span>
-                  </span>
-                </td>
-                <td className="p-3.5 sm:p-4">
-                  <div className="text-xs text-slate-600">
-                    <span className="font-semibold text-emerald-700">Toàn quyền hệ thống</span>
-                    <div className="text-[10px] text-slate-400">Security Rules & Cloud DB</div>
-                  </div>
-                </td>
-                <td className="p-3.5 sm:p-4 text-center">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleStartEditTarget('manhcuong2006ht@gmail.com', adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường', true)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-                      title="Đổi tên hiển thị"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Đổi tên</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenLogsForEmail('manhcuong2006ht@gmail.com', adminCustomNames['manhcuong2006ht@gmail.com'] || 'Vũ Ngọc Mạnh Cường', true)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
-                      title="Xem lịch sử đăng nhập & IP"
-                    >
-                      <History className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Log IP</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                    </td>
+                    <td className="p-3.5 sm:p-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                        Tổng bí thư
+                      </span>
+                    </td>
+                    <td className="p-3.5 sm:p-4">
+                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>Google Firebase Auth</span>
+                      </span>
+                    </td>
+                    <td className="p-3.5 sm:p-4">
+                      <div className="text-xs text-slate-600">
+                        <span className="font-semibold text-emerald-700">Toàn quyền hệ thống</span>
+                        <div className="text-[10px] text-slate-400">Security Rules & Cloud DB</div>
+                      </div>
+                    </td>
+                    <td className="p-3.5 sm:p-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditTarget(rootEmail, displayName, true)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                          title="Đổi tên hiển thị"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Đổi tên</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenLogsForEmail(rootEmail, displayName, true)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer"
+                          title="Xem lịch sử đăng nhập & IP"
+                        >
+                          <History className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Log IP</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {/* STAFF ROWS (NO DUPLICATES) */}
               {staffAuthorizedList.map((item) => (

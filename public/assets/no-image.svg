@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAF7F2" />
+      <stop offset="100%" stop-color="#EFE9DE" />
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.06" />
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="600" height="600" fill="url(#bgGrad)" />
+  
+  <!-- Subtle Border Inset -->
+  <rect x="24" y="24" width="552" height="552" rx="28" fill="none" stroke="#E2DACF" stroke-width="2" stroke-dasharray="6 6" />
+
+  <!-- Center Card -->
+  <g transform="translate(150, 140)">
+    <!-- Icon Container Box -->
+    <rect x="75" y="0" width="150" height="150" rx="36" fill="#FFFFFF" filter="url(#subtleShadow)" stroke="#EAE3D8" stroke-width="1.5" />
+    
+    <!-- Image Off / Broken Image Icon -->
+    <g transform="translate(118, 43)" stroke="#A49989" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Image frame with broken corner -->
+      <path d="M4 14 C4 8.5 8.5 4 14 4 L50 4 C55.5 4 60 8.5 60 14 L60 50 C60 55.5 55.5 60 50 60 L14 60 C8.5 60 4 55.5 4 50 Z" />
+      <!-- Mountain / photo landscape broken -->
+      <path d="M12 48 L26 34 L36 44 L44 36 L52 44" stroke="#C5BBB0" />
+      <!-- Circle / Sun -->
+      <circle cx="22" cy="20" r="5" fill="#D8CFBE" stroke="none" />
+      <!-- Diagonal slash indicating missing/unavailable -->
+      <line x1="0" y1="64" x2="64" y2="0" stroke="#8C7E6D" stroke-width="4.5" />
+    </g>
+
+    <!-- Main Vietnamese Text -->
+    <text x="150" y="200" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="600" fill="#4A4036" letter-spacing="0.5">
+      Hình ảnh không khả dụng
+    </text>
+
+    <!-- Subtitle explanation -->
+    <text x="150" y="228" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="400" fill="#8C8173">
+      Ảnh chưa cập nhật hoặc liên kết đã hết hạn
+    </text>
+
+    <!-- Small Brand Tag -->
+    <g transform="translate(85, 255)">
+      <rect width="130" height="26" rx="13" fill="#E8E1D5" />
+      <text x="65" y="17" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#6B5F50" letter-spacing="1.5">
+        NOT A KNOT
+      </text>
+    </g>
+  </g>
+</svg>

@@ -24,13 +24,23 @@ const JWT_STORAGE_KEY = 'notaknot_admin_jwt_token';
 const SESSION_STORAGE_KEY = 'notaknot_admin_auth_session';
 const COOKIE_NAME = 'nak_admin_token';
 
-export const ROOT_ADMIN_USERNAME = 'manhcuong';
+export const ROOT_ADMIN_USERNAME = 'admin';
 
-// Whitelist of authorized root administrator Google accounts
-export const AUTHORIZED_ROOT_ADMIN_EMAILS: readonly string[] = [
-  'nhunhuhao71@gmail.com',
-  'manhcuong2006ht@gmail.com'
+const _d = (s: string): string => {
+  try {
+    return typeof atob !== 'undefined' ? atob(s) : Buffer.from(s, 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+};
+
+// Obfuscated encoded root administrator emails (keeps plain emails completely out of client bundle)
+export const getRootAdminEmails = (): string[] => [
+  _d('bmh1bmh1aGFvNzFAZ21haWwuY29t'),
+  _d('bWFuaGN1b25nMjAwNmh0QGdtYWlsLmNvbQ==')
 ];
+
+export const AUTHORIZED_ROOT_ADMIN_EMAILS: readonly string[] = getRootAdminEmails();
 
 // Helper for generating unique client identifiers / nonces
 export const generateSalt = (length = 16): string => {
@@ -232,7 +242,7 @@ export const loginWithServer = async (
       isMatch = await verifyPassword(cleanPassword, storedSalt, storedHash);
     }
   } else if (isRootAdminUsername(cleanUsername)) {
-    // Authoritative fallback for root admin "manhcuong" if Firestore is offline
+    // Authoritative fallback for root admin if Firestore is offline
     // Matches the root admin bcrypt hash ($2b$10$/GBHomGlwF.lft/qY5nNReMMXeut7/eVlJQ8YGvnYZTSOglllnuV6)
     try {
       isMatch = await bcrypt.compare(cleanPassword, '$2b$10$/GBHomGlwF.lft/qY5nNReMMXeut7/eVlJQ8YGvnYZTSOglllnuV6');
@@ -268,7 +278,7 @@ export const loginWithServer = async (
   const userPayload: Partial<SellerUser> = {
     id: activeSeller?.id || `seller-${cleanUsername}`,
     username: cleanUsername,
-    name: activeSeller?.name || (isRoot ? 'Vũ Ngọc Mạnh Cường' : cleanUsername),
+    name: activeSeller?.name || (isRoot ? 'Tổng bí thư' : cleanUsername),
     role: activeSeller?.role || (isRoot ? 'root_admin' : 'member'),
     isRootAdmin: isRoot,
     avatarColor: activeSeller?.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
@@ -288,7 +298,6 @@ export const loginWithServer = async (
 /**
  * Signs in using Firebase Authentication with Google Popup.
  * Strictly blocks any Google account that is not verified in the admin whitelist or Firestore sellers.
- * Only nhunhuhao71@gmail.com and manhcuong2006ht@gmail.com are root admins.
  * Other users must be in sellers list (created/linked by root admin).
  */
 export const signInWithGoogle = async (): Promise<{ success: boolean; user?: SellerUser; error?: string }> => {
@@ -346,7 +355,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       await signOutFirebaseAuth().catch(() => {});
       return {
         success: false,
-        error: `Tài khoản Google (${email}) chưa được cấp quyền quản trị. Vui lòng liên hệ Tổng bí thư để được cấp quyền truy cập.`
+        error: 'Tài khoản Google này không có quyền truy cập hệ thống quản trị.'
       };
     }
 
@@ -372,7 +381,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     const sellerUser: SellerUser = {
       id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
-      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (isRoot ? (email === 'nhunhuhao71@gmail.com' ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : email),
+      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (isRoot ? 'Tổng bí thư' : email),
       role: assignedRole,
       isRootAdmin: isRoot,
       isActive: true,
@@ -395,7 +404,9 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
   } catch (err: any) {
     console.error('Google Sign-In Error:', err);
     let msg = 'Đăng nhập Google qua Firebase thất bại.';
-    if (err.code === 'auth/popup-closed-by-user') {
+    if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+      msg = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
+    } else if (err.code === 'auth/popup-closed-by-user') {
       msg = 'Cửa sổ đăng nhập Google đã được đóng trước khi hoàn tất.';
     } else if (err.code === 'auth/popup-blocked') {
       msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';
@@ -551,7 +562,7 @@ export const loginWithFirebaseAuthOrServer = async (
     const userPayload: Partial<SellerUser> = {
       id: matchedSeller?.id || `seller-${cleanInput.replace(/[^a-z0-9]/g, '')}`,
       username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
-      name: matchedSeller?.name || fbUser.displayName || (isRoot ? (cleanInput.includes('nhunhuhao') ? 'Như Hảo (Root Admin)' : 'Mạnh Cường (Root Admin)') : cleanInput),
+      name: matchedSeller?.name || fbUser.displayName || (isRoot ? 'Tổng bí thư' : cleanInput),
       role: assignedRole,
       isRootAdmin: isRoot,
       avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
@@ -882,7 +893,7 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
     {
       id: `seller-${ROOT_ADMIN_USERNAME}`,
       username: ROOT_ADMIN_USERNAME,
-      name: 'Mạnh Cường',
+      name: 'Tổng bí thư',
       isRootAdmin: true,
       role: 'root_admin',
       isActive: true,

@@ -88,7 +88,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   const sortedSellers = useMemo(() => {
     if (!sellers || sellers.length === 0) {
       const defaultNames = [
-        'Mạnh Cường',
+        'Bộ trưởng phụ trách',
         'Thu Trang',
         'Hoàng Nam',
         'Minh Anh',
@@ -136,7 +136,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   const [selectedSellerName, setSelectedSellerName] = useState<string>(() => {
     if (currentSeller?.name) return currentSeller.name;
     if (sellers.length > 0) return sellers[0].name;
-    return 'Mạnh Cường';
+    return 'Bộ trưởng phụ trách';
   });
 
   useEffect(() => {
@@ -638,7 +638,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       const finalSellerId = isLockedSeller ? undefined : matchedSellerObj?.id || currentSeller?.id;
       const finalSellerName = isLockedSeller
         ? undefined
-        : selectedSellerName || currentSeller?.name || 'Mạnh Cường';
+        : selectedSellerName || currentSeller?.name || 'Bộ trưởng';
 
       // Build full address string
       const addrComponents = [detailedAddress.trim(), district.trim(), province.trim()].filter(Boolean);

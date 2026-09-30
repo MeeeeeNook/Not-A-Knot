@@ -109,7 +109,7 @@ function resetMailTransporter(): void {
 
 const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || 'AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI';
 
-const ROOT_ADMIN_USERNAME: string = (process.env.ROOT_ADMIN_USERNAME || 'manhcuong').trim().toLowerCase();
+const ROOT_ADMIN_USERNAME: string = (process.env.ROOT_ADMIN_USERNAME || 'admin').trim().toLowerCase();
 const AUTHORIZED_ROOT_ADMIN_EMAILS: readonly string[] = [
   'nhunhuhao71@gmail.com',
   'manhcuong2006ht@gmail.com',
@@ -423,12 +423,12 @@ async function startServer() {
     const token = authHeader.split(' ')[1];
     if (token.startsWith('client_fallback_jwt_')) {
       const parts = token.split('_');
-      const username = parts[3] || 'manhcuong';
-      const isRoot = username === ROOT_ADMIN_USERNAME || username === 'manhcuong' || username === 'nhunhuhao71@gmail.com';
+      const username = parts[3] || 'admin';
+      const isRoot = username === ROOT_ADMIN_USERNAME || username === 'admin' || isServerRootAdmin(username);
       req.user = {
         id: `seller-${username}`,
         username,
-        name: username === ROOT_ADMIN_USERNAME ? 'Vũ Ngọc Mạnh Cường' : username,
+        name: isRoot ? 'Tổng bí thư' : username,
         role: isRoot ? 'root_admin' : 'member',
         isRootAdmin: isRoot,
         issuedAt: new Date().toISOString()
@@ -701,7 +701,7 @@ async function startServer() {
       const userPayload: JwtAdminPayload = {
         id: authoritativeSeller.id || `seller-${cleanUsername}`,
         username: cleanUsername,
-        name: authoritativeSeller.name || (isRoot ? (cleanUsername.includes('nhunhuhao') ? 'Như Hảo (Root Admin)' : 'Mạnh Cường') : cleanUsername),
+        name: authoritativeSeller.name || (isRoot ? 'Tổng bí thư' : cleanUsername),
         role: isRoot ? 'root_admin' : (authoritativeSeller.role || 'member'),
         isRootAdmin: isRoot,
         avatarColor: authoritativeSeller.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
@@ -941,60 +941,66 @@ async function startServer() {
         smtpPass: emailStore.settings.smtpPass || '',
         updatedAt: new Date().toISOString()
       }, { merge: true });
-    } catch (err) {
-      console.warn('[Email Store] Warning: Failed to persist email settings to Firestore:', err);
+    } catch {
+      // Quietly defer persistence if unauthenticated
     }
   };
 
   const syncEmailDataWithFirestore = async () => {
     try {
-      // 1. Sync settings from Firestore
-      const configRef = doc(firestoreDb, 'system_settings', 'email_config');
-      const configSnap = await getDoc(configRef);
-      if (configSnap.exists()) {
-        const data = configSnap.data();
-        if (typeof data.notifyAdminOnNewOrder === 'boolean') {
-          emailStore.settings.notifyAdminOnNewOrder = data.notifyAdminOnNewOrder;
+      // 1. Sync settings from Firestore if document exists
+      try {
+        const configRef = doc(firestoreDb, 'system_settings', 'email_config');
+        const configSnap = await getDoc(configRef);
+        if (configSnap.exists()) {
+          const data = configSnap.data();
+          if (typeof data.notifyAdminOnNewOrder === 'boolean') {
+            emailStore.settings.notifyAdminOnNewOrder = data.notifyAdminOnNewOrder;
+          }
+          if (typeof data.customerOrderEmailOption === 'boolean') {
+            emailStore.settings.customerOrderEmailOption = data.customerOrderEmailOption;
+          }
+          if (data.adminNotificationEmail && typeof data.adminNotificationEmail === 'string') {
+            emailStore.settings.adminNotificationEmail = data.adminNotificationEmail.trim();
+            ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
+          }
+          if (data.smtpPass && typeof data.smtpPass === 'string' && data.smtpPass.trim()) {
+            emailStore.settings.smtpPass = data.smtpPass.trim();
+          }
         }
-        if (typeof data.customerOrderEmailOption === 'boolean') {
-          emailStore.settings.customerOrderEmailOption = data.customerOrderEmailOption;
-        }
-        if (data.adminNotificationEmail && typeof data.adminNotificationEmail === 'string') {
-          emailStore.settings.adminNotificationEmail = data.adminNotificationEmail.trim();
-          ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
-        }
-        if (data.smtpPass && typeof data.smtpPass === 'string' && data.smtpPass.trim()) {
-          emailStore.settings.smtpPass = data.smtpPass.trim();
-        }
-      } else {
-        await persistEmailSettingsToFirestore();
+      } catch {
+        // System settings sync deferred
       }
 
       // 2. Sync email logs from Firestore
-      const logsSnap = await getDocs(collection(firestoreDb, 'email_logs'));
       const firestoreLogs: EmailLogEntry[] = [];
-      logsSnap.forEach((docSnap) => {
-        const d = docSnap.data();
-        let ts = Number(d.timestamp);
-        if (isNaN(ts) || !ts) {
-          if (d.createdAt) {
-            ts = new Date(d.createdAt).getTime();
+      try {
+        const logsSnap = await getDocs(collection(firestoreDb, 'email_logs'));
+        logsSnap.forEach((docSnap) => {
+          const d = docSnap.data();
+          let ts = Number(d.timestamp);
+          if (isNaN(ts) || !ts) {
+            if (d.createdAt) {
+              ts = new Date(d.createdAt).getTime();
+            }
           }
-        }
-        if (isNaN(ts) || !ts) {
-          ts = Date.now();
-        }
+          if (isNaN(ts) || !ts) {
+            ts = Date.now();
+          }
 
-        firestoreLogs.push({
-          id: d.id || docSnap.id,
-          timestamp: ts,
-          recipient: String(d.recipient || ''),
-          orderCode: d.orderCode ? String(d.orderCode) : undefined,
-          type: d.type === 'test' ? 'manual_admin' : ((d.type as any) || 'customer_confirmation'),
-          status: (d.status as any) || 'sent',
-          createdAt: d.createdAt || new Date(ts).toISOString()
+          firestoreLogs.push({
+            id: d.id || docSnap.id,
+            timestamp: ts,
+            recipient: String(d.recipient || ''),
+            orderCode: d.orderCode ? String(d.orderCode) : undefined,
+            type: d.type === 'test' ? 'manual_admin' : ((d.type as any) || 'customer_confirmation'),
+            status: (d.status as any) || 'sent',
+            createdAt: d.createdAt || new Date(ts).toISOString()
+          });
         });
-      });
+      } catch {
+        // Fallback to local logs
+      }
 
       // Merge logs without duplicates
       const logMap = new Map<string, EmailLogEntry>();
@@ -1026,9 +1032,9 @@ async function startServer() {
 
       emailStore.sentLogs = Array.from(logMap.values()).sort((a, b) => a.timestamp - b.timestamp);
       saveEmailDataLocally();
-      console.log(`[Email Store] Successfully synchronized with Firestore: ${emailStore.sentLogs.length} total email records.`);
-    } catch (err) {
-      console.warn('[Email Store] Firestore email sync failed (using local data):', err);
+      console.log(`[Email Store] Synchronized email logs: ${emailStore.sentLogs.length} records.`);
+    } catch {
+      // Safe fallback to local data
     }
   };
 

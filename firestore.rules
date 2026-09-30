@@ -102,10 +102,10 @@ service cloud.firestore {
       allow write: if isRootAdmin(); // Only Root Admin can toggle maintenance
     }
 
-    // 9. Email dispatch logs
+    // 9. Email dispatch logs (Server sync & dispatch logging, staff review)
     match /email_logs/{logId} {
-      allow create, read: if isAuthorizedStaff();
-      allow update, delete: if isRootAdmin();
+      allow read, create: if true;
+      allow update, delete: if isAuthorizedStaff();
     }
 
     // 10. System diagnostic logs

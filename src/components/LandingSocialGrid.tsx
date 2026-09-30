@@ -9,7 +9,7 @@ interface LandingSocialGridProps {
 const DEFAULT_POSTS: SocialFeedPost[] = [
   {
     id: 'post-1',
-    image: '/assets/about-story.jpg',
+    image: '/assets/no-image.svg',
     caption: 'Hậu trường chế tác từng nút thắt thủ công tỉ mỉ cho bộ sưu tập độc bản Not A Knot.\n\nMỗi sản phẩm là một câu chuyện kết nối được tạo nên từ sự tận tâm của người thợ lành nghề.',
     url: 'https://www.facebook.com/profile.php?id=61593591390851',
     gradient: 'bg-white/85',
@@ -17,7 +17,7 @@ const DEFAULT_POSTS: SocialFeedPost[] = [
   },
   {
     id: 'post-2',
-    image: '/assets/img_4_NOT_A_KNOT.jpg',
+    image: '/assets/no-image.svg',
     caption: 'BST Nàng Thơ 20/10 — Sự hòa quyện giữa charm hoa ngọt ngào và dây đan pastel dịu êm.\n\nThiết kế độc quyền tôn vinh vẻ đẹp tinh tế của phái đẹp.',
     url: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
     gradient: 'bg-white/85',
@@ -25,7 +25,7 @@ const DEFAULT_POSTS: SocialFeedPost[] = [
   },
   {
     id: 'post-3',
-    image: '/assets/hero-bg.png',
+    image: '/assets/no-image.svg',
     caption: 'Phiên bản đặc biệt 02/09 — Năng lượng tự hào non sông trong từng nét đan thủ công.\n\nSợi chỉ đỏ kiên cường đan xen vẻ đẹp hiện đại.',
     url: 'https://www.facebook.com/profile.php?id=61593591390851',
     gradient: 'bg-white/85',
@@ -33,7 +33,7 @@ const DEFAULT_POSTS: SocialFeedPost[] = [
   },
   {
     id: 'post-4',
-    image: '/assets/img_0.jpg',
+    image: '/assets/no-image.svg',
     caption: 'Gợi ý phối vòng charm phong cách tối giản cho outfit dạo phố cuối tuần thêm nổi bật.\n\nNhẹ nhàng, thanh lịch và cuốn hút trong từng khoảnh khắc.',
     url: 'https://www.instagram.com/notaknot.handmade?igsi=MWszYjN4MmczMjNzMQ==',
     gradient: 'bg-white/85',
@@ -41,7 +41,7 @@ const DEFAULT_POSTS: SocialFeedPost[] = [
   },
   {
     id: 'post-5',
-    image: '/assets/image_4.jpg',
+    image: '/assets/no-image.svg',
     caption: 'Dây đeo Everyday Wear êm ái, bền chắc trên cổ tay suốt ngày dài học tập và làm việc.\n\nĐồng hành cùng bạn trong mọi trải nghiệm cuộc sống.',
     url: 'https://www.facebook.com/profile.php?id=61593591390851',
     gradient: 'bg-white/85',
@@ -58,6 +58,33 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
   const total = posts.length || 1;
 
   const title = config?.title || 'GÓC TIN TỨC';
+
+  // Fallback image map to gracefully recover from broken images without random filling
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  // Dedicated "image is not there" placeholder when Facebook image expired or failed
+  const NO_IMAGE_PLACEHOLDER = '/assets/no-image.svg';
+
+  const getPostImage = (post: SocialFeedPost, index: number) => {
+    const postKey = post?.id || String(index);
+    if (failedImages[postKey]) {
+      return NO_IMAGE_PLACEHOLDER;
+    }
+    const imgUrl = (post?.image || '').trim();
+    // If empty, or expired Facebook CDN URL, display the "image is not there" placeholder, never fill random store photos
+    if (
+      !imgUrl ||
+      imgUrl.includes('scontent.') ||
+      imgUrl.includes('scontent-') ||
+      imgUrl.includes('fbcdn.net') ||
+      imgUrl.includes('fbsbx.com') ||
+      imgUrl === '/assets/no-image.svg' ||
+      imgUrl === '/assets/image-placeholder.svg'
+    ) {
+      return NO_IMAGE_PLACEHOLDER;
+    }
+    return imgUrl;
+  };
 
   // Section ref for viewport auto-scroll detection
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -248,8 +275,9 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
             {/* Image - Natural fit without distortion/crop on tinted white glass */}
             <div className="w-full h-full flex items-center justify-center overflow-hidden p-2">
               <img
-                src={posts[0].image}
+                src={getPostImage(posts[0], 0)}
                 alt="Featured Post Not A Knot"
+                onError={() => setFailedImages((prev) => ({ ...prev, [posts[0]?.id || '0']: true }))}
                 className="w-full h-full max-w-full max-h-full object-contain object-center group-hover:scale-105 transition-transform duration-700 ease-out"
                 loading="lazy"
               />
@@ -281,7 +309,7 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
 
           {/* Right 2x2 Grid (Spans 7 cols, 2 rows of 2 cards) */}
           <div className="col-span-7 grid grid-cols-2 gap-5 lg:gap-6 h-full">
-            {posts.slice(1, 5).map((post) => (
+            {posts.slice(1, 5).map((post, idx) => (
               <div
                 key={post.id}
                 onClick={() => openPost(post.url)}
@@ -293,8 +321,9 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
                 {/* Image - Natural fit without distortion/crop */}
                 <div className="w-full h-full flex items-center justify-center overflow-hidden p-2">
                   <img
-                    src={post.image}
+                    src={getPostImage(post, idx + 1)}
                     alt={post.caption}
+                    onError={() => setFailedImages((prev) => ({ ...prev, [post.id || String(idx + 1)]: true }))}
                     className="w-full h-full max-w-full max-h-full object-contain object-center group-hover:scale-105 transition-transform duration-700 ease-out"
                     loading="lazy"
                   />
@@ -425,8 +454,9 @@ export const LandingSocialGrid: React.FC<LandingSocialGridProps> = ({ siteConten
                   {/* Image Container: Full square coverage on all cards */}
                   <div className="w-full h-full relative overflow-hidden bg-stone-100 flex items-center justify-center">
                     <img
-                      src={post.image}
+                      src={getPostImage(post, idx)}
                       alt={post.caption}
+                      onError={() => setFailedImages((prev) => ({ ...prev, [post.id || String(idx)]: true }))}
                       style={{ filter: isCenter ? (isDescriptionOpen ? 'blur(1px) brightness(0.95)' : 'none') : 'none' }}
                       className={`w-full h-full object-cover object-center transition-all duration-300 ${
                         isCenter && isDescriptionOpen ? 'scale-[1.03]' : 'scale-100'

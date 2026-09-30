@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#14281B" stop-opacity="0.85"/>
+      <stop offset="60%" stop-color="#0A160F" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#040A07" stop-opacity="1"/>
+    </radialGradient>
+
+    <!-- Leaf Gradients -->
+    <linearGradient id="leafGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2D5A3C"/>
+      <stop offset="50%" stop-color="#193824"/>
+      <stop offset="100%" stop-color="#0E2215"/>
+    </linearGradient>
+
+    <linearGradient id="leafGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3A6E4B"/>
+      <stop offset="50%" stop-color="#214A2E"/>
+      <stop offset="100%" stop-color="#0B1A10"/>
+    </linearGradient>
+
+    <linearGradient id="leafGrad3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#274E34"/>
+      <stop offset="60%" stop-color="#152F1E"/>
+      <stop offset="100%" stop-color="#08140B"/>
+    </linearGradient>
+
+    <linearGradient id="leafHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F8C65" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#1A3B24" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- Leaf shadow filter -->
+    <filter id="leafShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="10" dy="20" stdDeviation="25" flood-color="#020603" flood-opacity="0.8"/>
+    </filter>
+
+    <!-- Leaf symbol: Hosta / Tropical Leaf -->
+    <g id="hostaLeaf">
+      <path d="M 0,0 C 120,-80 260,-90 400,0 C 260,90 120,80 0,0 Z" fill="url(#leafGrad1)"/>
+      <path d="M 0,0 C 120,-80 260,-90 400,0 C 260,0 120,0 0,0 Z" fill="url(#leafHighlight)" opacity="0.4"/>
+      <path d="M 0,0 L 380,0" stroke="#122B1B" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 80,0 C 130,-30 180,-45 220,-50" stroke="#1F482D" stroke-width="2" fill="none"/>
+      <path d="M 80,0 C 130,30 180,45 220,50" stroke="#14331E" stroke-width="2" fill="none"/>
+      <path d="M 160,0 C 210,-25 260,-35 300,-40" stroke="#1F482D" stroke-width="2" fill="none"/>
+      <path d="M 160,0 C 210,25 260,35 300,40" stroke="#14331E" stroke-width="2" fill="none"/>
+      <path d="M 240,0 C 280,-18 320,-25 350,-26" stroke="#1F482D" stroke-width="1.5" fill="none"/>
+      <path d="M 240,0 C 280,18 320,25 350,26" stroke="#14331E" stroke-width="1.5" fill="none"/>
+    </g>
+
+    <!-- Rounded broad leaf -->
+    <g id="broadLeaf">
+      <path d="M 0,0 C 100,-150 300,-170 450,0 C 300,170 100,150 0,0 Z" fill="url(#leafGrad2)"/>
+      <path d="M 0,0 C 150,-130 300,-120 450,0 C 300,0 150,0 0,0 Z" fill="url(#leafHighlight)" opacity="0.3"/>
+      <path d="M 0,0 C 150,0 300,0 430,0" stroke="#0E2416" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 90,0 C 140,-50 200,-80 270,-100" stroke="#255234" stroke-width="2.5" fill="none"/>
+      <path d="M 90,0 C 140,50 200,80 270,100" stroke="#14331E" stroke-width="2.5" fill="none"/>
+      <path d="M 190,0 C 240,-40 300,-65 360,-75" stroke="#255234" stroke-width="2" fill="none"/>
+      <path d="M 190,0 C 240,40 300,65 360,75" stroke="#14331E" stroke-width="2" fill="none"/>
+    </g>
+  </defs>
+
+  <!-- Deep Forest Base Layer -->
+  <rect width="1920" height="1080" fill="#060E09"/>
+
+  <!-- Layer 1: Background Out-of-Focus Foliage -->
+  <g opacity="0.5" filter="blur(16px)">
+    <use href="#broadLeaf" transform="translate(100, -80) rotate(45) scale(1.6)"/>
+    <use href="#hostaLeaf" transform="translate(1700, 200) rotate(-35) scale(1.8)"/>
+    <use href="#broadLeaf" transform="translate(1400, 800) rotate(-130) scale(1.9)"/>
+    <use href="#hostaLeaf" transform="translate(200, 900) rotate(-45) scale(1.7)"/>
+    <use href="#broadLeaf" transform="translate(900, -100) rotate(80) scale(1.5)"/>
+  </g>
+
+  <!-- Layer 2: Mid-ground Rich Tropical Foliage with Shadows -->
+  <g filter="url(#leafShadow)">
+    <!-- Top-Left cluster -->
+    <use href="#broadLeaf" transform="translate(-100, 150) rotate(25) scale(1.4)"/>
+    <use href="#hostaLeaf" transform="translate(120, -50) rotate(65) scale(1.3)"/>
+    <use href="#broadLeaf" transform="translate(250, 180) rotate(40) scale(1.2)"/>
+    <use href="#hostaLeaf" transform="translate(50, 380) rotate(15) scale(1.3)"/>
+    <use href="#broadLeaf" transform="translate(350, 360) rotate(55) scale(1.1)"/>
+
+    <!-- Bottom-Left cluster -->
+    <use href="#broadLeaf" transform="translate(-80, 750) rotate(-20) scale(1.5)"/>
+    <use href="#hostaLeaf" transform="translate(150, 680) rotate(-45) scale(1.3)"/>
+    <use href="#broadLeaf" transform="translate(260, 900) rotate(-70) scale(1.4)"/>
+    <use href="#hostaLeaf" transform="translate(420, 820) rotate(-35) scale(1.2)"/>
+    <use href="#broadLeaf" transform="translate(520, 980) rotate(-55) scale(1.2)"/>
+
+    <!-- Top-Right cluster -->
+    <use href="#broadLeaf" transform="translate(1800, -50) rotate(145) scale(1.5)"/>
+    <use href="#hostaLeaf" transform="translate(1650, 150) rotate(125) scale(1.3)"/>
+    <use href="#broadLeaf" transform="translate(1500, 40) rotate(115) scale(1.2)"/>
+    <use href="#hostaLeaf" transform="translate(1750, 380) rotate(160) scale(1.4)"/>
+    <use href="#broadLeaf" transform="translate(1480, 280) rotate(135) scale(1.15)"/>
+
+    <!-- Bottom-Right cluster -->
+    <use href="#broadLeaf" transform="translate(1950, 800) rotate(-165) scale(1.5)"/>
+    <use href="#hostaLeaf" transform="translate(1700, 750) rotate(-140) scale(1.3)"/>
+    <use href="#broadLeaf" transform="translate(1550, 920) rotate(-120) scale(1.4)"/>
+    <use href="#hostaLeaf" transform="translate(1420, 780) rotate(-145) scale(1.25)"/>
+    <use href="#broadLeaf" transform="translate(1320, 950) rotate(-110) scale(1.2)"/>
+
+    <!-- Center Surrounding Leaves -->
+    <use href="#hostaLeaf" transform="translate(700, -80) rotate(80) scale(1.2)"/>
+    <use href="#broadLeaf" transform="translate(1150, -60) rotate(100) scale(1.15)"/>
+    <use href="#hostaLeaf" transform="translate(850, 1020) rotate(-85) scale(1.2)"/>
+    <use href="#broadLeaf" transform="translate(1080, 1040) rotate(-95) scale(1.2)"/>
+  </g>
+
+  <!-- Layer 3: Foreground Overlapping Leaf Accents -->
+  <g filter="url(#leafShadow)">
+    <use href="#broadLeaf" transform="translate(180, 20) rotate(50) scale(1.1)"/>
+    <use href="#hostaLeaf" transform="translate(-20, 520) rotate(5) scale(1.2)"/>
+    <use href="#broadLeaf" transform="translate(320, 600) rotate(-15) scale(1.1)"/>
+    <use href="#hostaLeaf" transform="translate(1600, 500) rotate(175) scale(1.2)"/>
+    <use href="#broadLeaf" transform="translate(1400, 420) rotate(150) scale(1.05)"/>
+    <use href="#hostaLeaf" transform="translate(170, 850) rotate(-50) scale(1.15)"/>
+    <use href="#broadLeaf" transform="translate(1620, 880) rotate(-135) scale(1.1)"/>
+  </g>
+
+  <!-- Atmospheric Dark Vignette Overlay -->
+  <rect width="1920" height="1080" fill="url(#vignette)"/>
+  
+  <!-- Subtle Grain & Depth Tint -->
+  <rect width="1920" height="1080" fill="#040906" opacity="0.25"/>
+</svg>
