@@ -2040,6 +2040,7 @@ export default function App() {
             <OrderTracker
               initialTrackingCode={orderTrackerInitialCode}
               siteContent={siteContent}
+              products={products}
               onNavigateHome={handleNavigateLanding}
               onNavigateCatalog={() => handleOpenAllCatalog('all')}
             />

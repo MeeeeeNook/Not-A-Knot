@@ -329,6 +329,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       productName: String(it?.productName || it?.name || 'Sản phẩm thủ công'),
       quantity: Math.max(1, Number(it?.quantity || 1)),
       price: Number(it?.price ?? it?.unitPrice ?? 0),
+      image: it?.image || it?.selectedColorImage || it?.imageUrl || it?.productImage || undefined,
+      selectedColorImage: it?.selectedColorImage || it?.image || undefined,
       selectedSize: it?.selectedSize ? String(it.selectedSize) : undefined,
       selectedColor: it?.selectedColor ? String(it.selectedColor) : undefined,
       selectedCharm: it?.selectedCharm ? (it.selectedCharm.name || String(it.selectedCharm)) : undefined,
@@ -346,8 +348,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         }))
       : [];
 
+    const orderIdCode = String(data.trackingNumber || data.id || data.orderCode || cleanCode);
+
     const safeOrder = {
-      orderCode: String(data.trackingNumber || data.id || cleanCode),
+      id: orderIdCode,
+      trackingNumber: orderIdCode,
+      orderCode: orderIdCode,
+      source: data.source || 'website',
       date: String(data.date || data.createdAt || ''),
       createdAt: String(data.createdAt || data.date || ''),
       status: String(data.status || 'Chờ xác nhận'),

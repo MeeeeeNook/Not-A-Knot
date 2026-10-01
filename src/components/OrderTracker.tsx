@@ -42,10 +42,45 @@ import { sendOrderConfirmationEmail } from '../utils/emailService';
 interface OrderTrackerProps {
   initialTrackingCode?: string;
   allOrders?: StoredOrder[];
+  products?: any[];
   onNavigateHome: () => void;
   onNavigateCatalog: () => void;
   siteContent?: SiteContentConfig;
 }
+
+// Fallback image resolver for handcrafted items
+const resolveOrderItemImage = (it: any, catalog: any[] = []): string => {
+  const direct = it?.selectedColorImage || it?.image || it?.imageUrl || it?.productImage;
+  if (direct && typeof direct === 'string' && direct.trim() && !direct.startsWith('data:image/')) {
+    return direct.trim();
+  }
+
+  const name = String(it?.productName || it?.name || '').trim().toLowerCase();
+  if (Array.isArray(catalog) && catalog.length > 0) {
+    const matched = catalog.find((p: any) => {
+      const pName = String(p?.name || p?.title || '').trim().toLowerCase();
+      return pName && (pName.includes(name) || name.includes(pName));
+    });
+    if (matched) {
+      if (it?.selectedColor && Array.isArray(matched.colorOptions)) {
+        const cOpt = matched.colorOptions.find((c: any) =>
+          String(c?.name || '').trim().toLowerCase() === String(it.selectedColor).trim().toLowerCase()
+        );
+        if (cOpt?.image) return cOpt.image;
+      }
+      if (matched.image) return matched.image;
+      if (Array.isArray(matched.images) && matched.images[0]) return matched.images[0];
+    }
+  }
+
+  if (name.includes('bo doi') || name.includes('bộ đội')) return '/assets/keychain-bodoi.jpg';
+  if (name.includes('mu coi') || name.includes('mũ cối')) return '/assets/keychain-mucoi.jpg';
+  if (name.includes('0209') || name.includes('02/09') || name.includes('paracord') || name.includes('co do')) return '/assets/0209/img_3.jpg';
+  if (name.includes('butterfly') || name.includes('buom') || name.includes('bướm')) return '/assets/img_4.jpg';
+  if (name.includes('lucky') || name.includes('hoa') || name.includes('knot')) return '/assets/img_1.jpg';
+
+  return '/assets/img_1.jpg';
+};
 
 // Normalize code key for robust deduplication (removes spaces, hyphens, case differences)
 const normalizeCodeKey = (str?: string): string => {
@@ -300,6 +335,7 @@ const EMPTY_DEFAULT_ORDERS: StoredOrder[] = [];
 export const OrderTracker: React.FC<OrderTrackerProps> = ({
   initialTrackingCode = '',
   allOrders = EMPTY_DEFAULT_ORDERS,
+  products = [],
   onNavigateHome,
   onNavigateCatalog,
   siteContent
@@ -882,11 +918,11 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-2.5">
                     <span className="font-mono font-black text-xl sm:text-3xl text-slate-950 tracking-tight">
-                      {getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id}
+                      {activeOrder.orderCode || activeOrder.trackingNumber || activeOrder.id || getCanonicalOrderKey(activeOrder)}
                     </span>
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(getCanonicalOrderKey(activeOrder) || activeOrder.trackingNumber || activeOrder.id || '', 'activeCode')}
+                      onClick={() => copyToClipboard(activeOrder.orderCode || activeOrder.trackingNumber || activeOrder.id || getCanonicalOrderKey(activeOrder) || '', 'activeCode')}
                       className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1"
                       title="Sao chép mã đơn"
                     >
@@ -1166,7 +1202,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                         const price = it.price || (it as any).unitPrice || 0;
                         const qty = it.quantity || 1;
                         const sub = price * qty;
-                        const itemImg = it.selectedColorImage || (it as any).image;
+                        const itemImg = resolveOrderItemImage(it, products);
 
                         return (
                           <div key={idx} className="py-4 first:pt-0 last:pb-0 flex gap-4 items-start">
