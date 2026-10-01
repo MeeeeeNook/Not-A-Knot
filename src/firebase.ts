@@ -124,10 +124,22 @@ export const dispatchSafeEvent = (name: string, detail?: any): void => {
 /**
  * Sign in with Google Popup using Firebase Authentication
  */
+let activeGooglePopupPromise: Promise<FirebaseUser> | null = null;
+
 export async function signInWithGooglePopup(): Promise<FirebaseUser> {
+  if (activeGooglePopupPromise) {
+    return activeGooglePopupPromise;
+  }
   const provider = getGoogleAuthProvider();
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  activeGooglePopupPromise = (async () => {
+    try {
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    } finally {
+      activeGooglePopupPromise = null;
+    }
+  })();
+  return activeGooglePopupPromise;
 }
 
 /**

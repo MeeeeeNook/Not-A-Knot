@@ -137,7 +137,6 @@
         "notifyAdminOnNewOrder": { "type": "boolean", "description": "Bật/tắt email thông báo admin khi có đơn mới" },
         "customerOrderEmailOption": { "type": "boolean", "description": "Bật/tắt gửi email xác nhận cho khách" },
         "adminNotificationEmail": { "type": "string", "description": "Email nhận thông báo admin" },
-        "smtpPass": { "type": "string", "description": "Mật khẩu ứng dụng SMTP (lưu bảo mật)", "optional": true },
         "updatedAt": { "type": "string", "description": "Thời gian cập nhật" }
       }
     },
@@ -181,61 +180,65 @@
     "/orders/{orderId}": {
       "schema": "Order",
       "allow": {
-        "read": "true",
-        "write": "true"
+        "read": "isAuthorizedStaff()",
+        "create": "isAuthorizedStaff() || validPublicOrderCreation()",
+        "update": "isAuthorizedStaff()",
+        "delete": "isAuthorizedStaff()"
       }
     },
     "/categories/{categoryId}": {
       "schema": "Category",
       "allow": {
         "read": "true",
-        "write": "true"
+        "write": "isAuthorizedStaff()"
       }
     },
     "/collections/{collectionId}": {
       "schema": "Collection",
       "allow": {
         "read": "true",
-        "write": "true"
+        "write": "isAuthorizedStaff()"
       }
     },
     "/site_content/{contentId}": {
       "allow": {
         "read": "true",
-        "write": "true"
+        "write": "isAuthorizedStaff()"
       }
     },
     "/social_feed/{feedId}": {
       "allow": {
         "read": "true",
-        "write": "true"
+        "write": "isAuthorizedStaff()"
       }
     },
     "/contact_messages/{messageId}": {
       "schema": "ContactMessage",
       "allow": {
-        "read": "true",
-        "write": "true"
+        "create": "true",
+        "read": "isAuthorizedStaff()",
+        "update": "isAuthorizedStaff()",
+        "delete": "isAuthorizedStaff()"
       }
     },
     "/sellers/{sellerId}": {
       "schema": "Seller",
       "allow": {
-        "read": "true",
-        "write": "true"
+        "read": "isAuthorizedStaff()",
+        "write": "isAuthorizedStaff()"
       }
     },
     "/authorized_sellers/{email}": {
       "allow": {
-        "read": "true",
-        "write": "true"
+        "read": "isAuthorizedStaff()",
+        "write": "isRootAdmin()"
       }
     },
     "/email_logs/{logId}": {
       "schema": "EmailLog",
       "allow": {
-        "read": "true",
-        "write": "true"
+        "read": "isAuthorizedStaff()",
+        "write": "isAuthorizedStaff()"
       }
     },
     "/system_settings/{settingId}": {

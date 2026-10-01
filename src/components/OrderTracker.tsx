@@ -36,7 +36,6 @@ import {
   getSourceBadgeConfig,
   removeVietnameseTones
 } from '../utils/orderFormatters';
-import { getOrdersFromFirestore, subscribeToOrdersFromFirestore } from '../firebase';
 import { printOrderSlipDirectly } from '../utils/printOrderSlip';
 import { sendOrderConfirmationEmail } from '../utils/emailService';
 
@@ -305,18 +304,19 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   onNavigateCatalog,
   siteContent
 }) => {
-  const [searchQuery, setSearchQuery] = useState(initialTrackingCode);
-  const [activeOrder, setActiveOrder] = useState<StoredOrder | null>(null);
-  const [matchedOrders, setMatchedOrders] = useState<StoredOrder[]>([]);
+  const [orderCodeInput, setOrderCodeInput] = useState(initialTrackingCode || '');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [activeOrder, setActiveOrder] = useState<any | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Email modal state for interactive order email dispatch
-  const [emailModalOrder, setEmailModalOrder] = useState<StoredOrder | null>(null);
+  const [emailModalOrder, setEmailModalOrder] = useState<any | null>(null);
   const [emailModalInput, setEmailModalInput] = useState('');
   const [emailModalMessage, setEmailModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -340,7 +340,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     try {
       const payload = {
         ...emailModalOrder,
-        id: emailModalOrder.id || emailModalOrder.trackingNumber || `NAK-${Date.now()}`,
+        id: emailModalOrder.id || emailModalOrder.orderCode || emailModalOrder.trackingNumber || `NAK-${Date.now()}`,
         email: cleanEmail,
         customerEmail: cleanEmail,
         isManualAdmin: true
@@ -363,17 +363,6 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
       setIsSendingEmail(false);
     }
   };
-  const [liveOrders, setLiveOrders] = useState<StoredOrder[]>(allOrders);
-
-  const allOrdersRef = useRef<StoredOrder[]>(allOrders);
-  useEffect(() => {
-    allOrdersRef.current = allOrders;
-  }, [allOrders]);
-
-  const liveOrdersRef = useRef<StoredOrder[]>(allOrders);
-  useEffect(() => {
-    liveOrdersRef.current = liveOrders;
-  }, [liveOrders]);
 
   const brandName = siteContent?.brandName || 'NOT A KNOT';
   const facebookUrl = 'https://www.facebook.com/profile.php?id=61593591390851';
@@ -389,115 +378,111 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     qrTemplate: 'compact2'
   };
 
-  // Load latest orders from local storage with auto-sanitization of legacy ord-web IDs
-  const getRecentLocalOrders = useCallback((): StoredOrder[] => {
+  // Pre-fill order tracking code from URL or last order, but NEVER prefill or display phone/order info
+  useEffect(() => {
+    if (initialTrackingCode && initialTrackingCode.trim()) {
+      setOrderCodeInput(initialTrackingCode.trim().toUpperCase());
+    } else {
+      try {
+        const lastCode = localStorage.getItem('nak_last_order_code');
+        if (lastCode && lastCode.trim()) {
+          setOrderCodeInput(lastCode.trim().toUpperCase());
+        }
+      } catch {}
+    }
+  }, [initialTrackingCode]);
+
+  // Handle Order Tracking Verification via Server Gatekeeper
+  const handleTrackSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanCode = (orderCodeInput || '').trim().toUpperCase();
+    const cleanPhone = (phoneInput || '').trim();
+
+    if (!cleanCode || !cleanPhone) {
+      setSearchError('Vui lòng nhập cả mã đơn hàng và số điện thoại đã dùng khi đặt hàng.');
+      return;
+    }
+
+    setIsLoading(true);
+    setSearchError(null);
+    setHasSearched(true);
+
     try {
-      const raw = localStorage.getItem('nak_preorders');
-      if (!raw) return [];
-      const local = JSON.parse(raw);
-      if (!Array.isArray(local)) return [];
-
-      // Auto-migrate any legacy ord-web / ord-man IDs to standard NAK- format
-      let hasLegacy = false;
-      const sanitized = local.map((ord: StoredOrder) => {
-        let changed = false;
-        let id = ord.id;
-        let trackingNumber = ord.trackingNumber;
-
-        if (id && (id.startsWith('ord-web-') || id.startsWith('ord-man-'))) {
-          const suffix = id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
-          id = `NAK-${suffix}`;
-          changed = true;
-        }
-        if (trackingNumber && (trackingNumber.startsWith('ord-web-') || trackingNumber.startsWith('ord-man-'))) {
-          const suffix = trackingNumber.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
-          trackingNumber = `NAK-${suffix}`;
-          changed = true;
-        }
-
-        if (changed) {
-          hasLegacy = true;
-          return { ...ord, id, trackingNumber };
-        }
-        return ord;
+      const res = await fetch('/api/orders/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderCode: cleanCode, phone: cleanPhone })
       });
 
-      if (hasLegacy) {
-        localStorage.setItem('nak_preorders', JSON.stringify(sanitized));
+      const data = await res.json();
+      if (data.success && data.order) {
+        setActiveOrder(data.order);
+        setSearchError(null);
+        try {
+          // Remember order code for convenience (NEVER store phone number!)
+          localStorage.setItem('nak_last_order_code', cleanCode);
+        } catch {}
+      } else {
+        // Fallback: If customer placed an order in this browser, check nak_preorders with phone match
+        let localFoundOrder: any = null;
+        try {
+          const raw = localStorage.getItem('nak_preorders');
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const matched = list.find((it: any) => {
+                const c = String(it?.id || it?.trackingNumber || '').trim().toUpperCase();
+                const p = String(it?.phone || it?.customerPhone || '').trim().replace(/[^\d+]/g, '');
+                const cleanPhoneDigits = cleanPhone.replace(/[^\d+]/g, '');
+                const codeMatch = c === cleanCode || c === `NAK-${cleanCode}` || cleanCode === `NAK-${c}`;
+                const phoneMatch = p && cleanPhoneDigits && (p.endsWith(cleanPhoneDigits.slice(-9)) || cleanPhoneDigits.endsWith(p.slice(-9)));
+                return codeMatch && phoneMatch;
+              });
+              if (matched) {
+                localFoundOrder = matched;
+              }
+            }
+          }
+        } catch {}
+
+        if (localFoundOrder) {
+          setActiveOrder(localFoundOrder);
+          setSearchError(null);
+        } else {
+          setActiveOrder(null);
+          setSearchError(data.message || 'Không tìm thấy đơn hàng. Vui lòng kiểm tra lại mã đơn và số điện thoại.');
+        }
       }
-      return sanitized;
+    } catch {
+      setActiveOrder(null);
+      setSearchError('Không thể kết nối máy chủ tra cứu. Vui lòng thử lại sau.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Recent order codes for convenience chips
+  const recentSuggestedCodes = useMemo(() => {
+    try {
+      const codes = new Set<string>();
+      const last = localStorage.getItem('nak_last_order_code');
+      if (last && last.trim()) codes.add(last.trim().toUpperCase());
+
+      const raw = localStorage.getItem('nak_preorders');
+      if (raw) {
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            const c = (item.id || item.trackingNumber || '').trim().toUpperCase();
+            if (c) codes.add(c);
+          }
+        }
+      }
+      return Array.from(codes).slice(0, 4);
     } catch {
       return [];
     }
   }, []);
-
-  // Fetch or refresh orders from Firestore with canonical key merging
-  const refreshOrdersData = useCallback(async (): Promise<StoredOrder[]> => {
-    try {
-      setIsLoading(true);
-      const fsOrders = await getOrdersFromFirestore();
-      const localOrders = getRecentLocalOrders();
-      const orderMap = new Map<string, StoredOrder>();
-
-      // Merge order by normalized canonical tracking key (e.g. NAK2609096132)
-      [...allOrdersRef.current, ...localOrders, ...fsOrders].forEach((ord) => {
-        if (!ord) return;
-        const canonKey = getCanonicalOrderKey(ord) || ord.id || '';
-        const key = normalizeCodeKey(canonKey);
-        if (!key) return;
-
-        if (orderMap.has(key)) {
-          const existing = orderMap.get(key)!;
-          orderMap.set(key, mergeOrderRecords(existing, ord));
-        } else {
-          orderMap.set(key, ord);
-        }
-      });
-
-      const merged = Array.from(orderMap.values());
-      setLiveOrders(merged);
-      liveOrdersRef.current = merged;
-      return merged;
-    } catch (err) {
-      console.warn('Cannot refresh orders from Firestore, using local data:', err);
-      const localOrders = getRecentLocalOrders();
-      const orderMap = new Map<string, StoredOrder>();
-      [...allOrdersRef.current, ...localOrders].forEach((ord) => {
-        if (!ord) return;
-        const canonKey = getCanonicalOrderKey(ord) || ord.id || '';
-        const key = normalizeCodeKey(canonKey);
-        if (!key) return;
-        if (orderMap.has(key)) {
-          const existing = orderMap.get(key)!;
-          orderMap.set(key, mergeOrderRecords(existing, ord));
-        } else {
-          orderMap.set(key, ord);
-        }
-      });
-      const fallback = Array.from(orderMap.values());
-      setLiveOrders(fallback);
-      liveOrdersRef.current = fallback;
-      return fallback;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [getRecentLocalOrders]);
-
-  // Clean phone digits
-  const cleanPhone = (p?: string) => {
-    if (!p) return '';
-    return p.replace(/[^0-9]/g, '');
-  };
-
-  // Mask phone for customer privacy
-  const maskPhone = (phoneStr?: string) => {
-    if (!phoneStr) return '***';
-    const digits = cleanPhone(phoneStr);
-    if (digits.length < 6) return phoneStr;
-    const prefix = digits.slice(0, 3);
-    const suffix = digits.slice(-3);
-    return `${prefix}****${suffix}`;
-  };
 
   // Copy helper
   const copyToClipboard = async (text: string, fieldKey: string) => {
@@ -521,214 +506,6 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
       console.warn('Copy failed:', err);
     }
   };
-
-  // Unified matcher function: searches both tracking number, NAK code, carrier tracking code, and phone number simultaneously
-  const matchOrders = useCallback((queryStr: string, dataset: StoredOrder[]): StoredOrder[] => {
-    const q = queryStr.trim();
-    if (!q) return [];
-
-    const qLower = q.toLowerCase();
-    const qClean = qLower.replace(/[^a-z0-9]/g, '');
-    const qDigits = cleanPhone(q);
-
-    const rawMatched = dataset.filter((ord) => {
-      if (!ord) return false;
-      const tracking = (ord.trackingNumber || '').toLowerCase().replace(/\s+/g, '');
-      const stdCode = getOrderTrackingNumber(ord).toLowerCase().replace(/\s+/g, '');
-      const ordId = (ord.id || '').toLowerCase().replace(/\s+/g, '');
-      const shippingCode = (ord.shippingCode || (ord as any).carrierTrackingNumber || '').toLowerCase().replace(/\s+/g, '');
-      const phoneDigits = cleanPhone(ord.phone);
-
-      // Search by standard code or tracking number (case-insensitive contains or exact)
-      if (tracking && (tracking === qLower || tracking === qClean || tracking.includes(qClean))) return true;
-      if (stdCode && (stdCode === qLower || stdCode === qClean || stdCode.includes(qClean))) return true;
-      if (ordId && (ordId === qLower || ordId === qClean || ordId.includes(qClean))) return true;
-
-      // Suffix or alphanumeric match (e.g. customer enters 260908-8942 or 8942)
-      if (qClean.length >= 4) {
-        const trackingClean = tracking.replace(/[^a-z0-9]/g, '');
-        const stdClean = stdCode.replace(/[^a-z0-9]/g, '');
-        const idClean = ordId.replace(/[^a-z0-9]/g, '');
-        if (trackingClean.includes(qClean) || stdClean.includes(qClean) || idClean.includes(qClean)) {
-          return true;
-        }
-      }
-
-      // Search by shipping carrier tracking code (Viettel Post, GHTK, GHN, etc.)
-      if (shippingCode && (shippingCode === qLower || shippingCode === qClean || shippingCode.includes(qClean))) return true;
-
-      // Search by customer phone number
-      if (qDigits.length >= 4 && phoneDigits) {
-        if (phoneDigits === qDigits) return true;
-        if (phoneDigits.includes(qDigits)) return true;
-        if (phoneDigits.endsWith(qDigits)) return true;
-      }
-
-      // Customer name match if query is alphabetical
-      if (q.length >= 3 && ord.name && !/\d/.test(q)) {
-        if (removeVietnameseTones(ord.name).toLowerCase().includes(removeVietnameseTones(q).toLowerCase())) {
-          return true;
-        }
-      }
-
-      return false;
-    });
-
-    // CRITICAL: Deduplicate matches by normalized code so that 1 order code NEVER appears twice!
-    const uniqueMatches: StoredOrder[] = [];
-    const seenNormalizedKeys = new Set<string>();
-
-    for (const ord of rawMatched) {
-      const canonKey = getCanonicalOrderKey(ord) || ord.id || '';
-      const normKey = normalizeCodeKey(canonKey);
-      if (normKey && !seenNormalizedKeys.has(normKey)) {
-        seenNormalizedKeys.add(normKey);
-        uniqueMatches.push(ord);
-      }
-    }
-
-    return uniqueMatches;
-  }, []);
-
-  // Perform search (can be triggered by form submit, chip click, or url query)
-  const performSearch = useCallback(async (queryStr: string, dataset?: StoredOrder[]) => {
-    const q = queryStr.trim();
-    if (!q) {
-      setActiveOrder(null);
-      setMatchedOrders([]);
-      setHasSearched(false);
-      return;
-    }
-
-    setHasSearched(true);
-    let ordersToSearch = dataset || liveOrdersRef.current;
-
-    // If local dataset is currently empty, load once from Firestore
-    if (ordersToSearch.length === 0) {
-      ordersToSearch = await refreshOrdersData();
-    }
-
-    const matches = matchOrders(q, ordersToSearch);
-    setMatchedOrders(matches);
-    if (matches.length === 1) {
-      setActiveOrder(matches[0]);
-    } else {
-      setActiveOrder(null);
-    }
-  }, [matchOrders, refreshOrdersData]);
-
-  // Initial load: fetch on mount, auto-search target code or recent order, and subscribe to real-time updates
-  useEffect(() => {
-    let isMounted = true;
-    const targetCode =
-      (initialTrackingCode && initialTrackingCode.trim()) ||
-      localStorage.getItem('nak_last_order_code') ||
-      '';
-
-    if (targetCode) {
-      setSearchQuery(targetCode);
-    }
-
-    refreshOrdersData().then((merged) => {
-      if (!isMounted) return;
-      if (targetCode) {
-        const matches = matchOrders(targetCode, merged);
-        setHasSearched(true);
-        setMatchedOrders(matches);
-        if (matches.length === 1) {
-          setActiveOrder(matches[0]);
-        }
-      } else {
-        const recent = getRecentLocalOrders();
-        if (recent.length > 0) {
-          const latest = recent[0];
-          const latestKey = getCanonicalOrderKey(latest) || latest.trackingNumber || latest.id || '';
-          if (latestKey) {
-            setSearchQuery(latestKey);
-            const matches = matchOrders(latestKey, merged);
-            setHasSearched(true);
-            setMatchedOrders(matches);
-            if (matches.length === 1) {
-              setActiveOrder(matches[0]);
-            }
-          }
-        }
-      }
-    });
-
-    const unsubscribe = subscribeToOrdersFromFirestore((realtimeOrders) => {
-      if (!isMounted) return;
-      if (realtimeOrders && realtimeOrders.length > 0) {
-        const local = getRecentLocalOrders();
-        const orderMap = new Map<string, StoredOrder>();
-        [...local, ...realtimeOrders].forEach((ord) => {
-          if (!ord) return;
-          const canonKey = getCanonicalOrderKey(ord) || ord.id || '';
-          const key = normalizeCodeKey(canonKey);
-          if (!key) return;
-          if (orderMap.has(key)) {
-            const existing = orderMap.get(key)!;
-            orderMap.set(key, mergeOrderRecords(existing, ord));
-          } else {
-            orderMap.set(key, ord);
-          }
-        });
-        const merged = Array.from(orderMap.values());
-        setLiveOrders(merged);
-        liveOrdersRef.current = merged;
-
-        // Keep active order up to date in real-time
-        setActiveOrder((curr) => {
-          if (!curr) return null;
-          const currKey = normalizeCodeKey(getCanonicalOrderKey(curr) || curr.id || '');
-          const found = merged.find((o) => normalizeCodeKey(getCanonicalOrderKey(o) || o.id || '') === currKey);
-          return found || curr;
-        });
-      }
-    });
-
-    const handleOrderCreated = (e: Event) => {
-      if (!isMounted) return;
-      const customEvt = e as CustomEvent<StoredOrder>;
-      if (customEvt.detail) {
-        const newOrd = customEvt.detail;
-        const target = newOrd.trackingNumber || newOrd.id || '';
-        if (target) {
-          setSearchQuery(target);
-          refreshOrdersData().then((merged) => {
-            const matches = matchOrders(target, merged);
-            setHasSearched(true);
-            setMatchedOrders(matches);
-            if (matches.length === 1) {
-              setActiveOrder(matches[0]);
-            }
-          });
-        }
-      }
-    };
-    window.addEventListener('nak_order_created', handleOrderCreated);
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-      window.removeEventListener('nak_order_created', handleOrderCreated);
-    };
-  }, [initialTrackingCode, matchOrders, refreshOrdersData, getRecentLocalOrders]);
-
-  // Recent local orders for quick suggestions (deduplicated by canonical tracking code)
-  const recentSuggestedOrders = useMemo(() => {
-    const local = getRecentLocalOrders();
-    const uniqueList: StoredOrder[] = [];
-    const seen = new Set<string>();
-    for (const ord of local) {
-      const code = getCanonicalOrderKey(ord);
-      if (code && !seen.has(code)) {
-        seen.add(code);
-        uniqueList.push(ord);
-      }
-    }
-    return uniqueList.slice(0, 4);
-  }, [getRecentLocalOrders]);
 
   // Generate formatted plain text invoice for copying / sharing
   const generateSlipPlainText = (order: StoredOrder) => {
@@ -902,11 +679,10 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
   // Build VietQR for active order if unpaid and bank transfer
   const activeOrderAmount = Math.round(Number(activeOrder?.totalPrice || activeOrder?.totalAmount || 0));
   const activeCustomerName = (activeOrder?.customerName || activeOrder?.name || '').trim();
-  const activeCustomerPhone = (activeOrder?.phone || '').trim();
+  const activeOrderCode = (activeOrder?.orderCode || activeOrder?.trackingNumber || activeOrder?.id || '').trim();
 
-  // User requirement: "Nội dung ck là Họ và tên người mua + số điện thoại"
-  const rawTransferMemo = `${activeCustomerName} ${activeCustomerPhone}`.trim();
-  const cleanAsciiMemo = removeVietnameseTones(rawTransferMemo).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim() || `NOTAKNOT ${activeCustomerPhone}`;
+  const rawTransferMemo = `${activeCustomerName} ${activeOrderCode}`.trim();
+  const cleanAsciiMemo = removeVietnameseTones(rawTransferMemo).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim() || `NOTAKNOT ${activeOrderCode || 'ORDER'}`;
 
   const cleanBankId = (bankConfig.bankId || 'VCB').toUpperCase().trim();
   const cleanAccountNo = (bankConfig.accountNumber || '').replace(/[^0-9a-zA-Z]/g, '');
@@ -943,198 +719,124 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
               Tra Cứu Tiến Độ Đơn Hàng
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
-              Nhập mã tra cứu (ví dụ: <span className="font-mono font-bold text-slate-700">NAK-260908-1234</span>) hoặc số điện thoại bạn đã dùng khi đặt hàng.
+              Nhập mã đơn hàng và số điện thoại bạn đã dùng khi đặt hàng để kiểm tra trạng thái đơn hàng
             </p>
           </div>
 
-          {/* Search Input Bar */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              performSearch(searchQuery);
-            }}
-            className="max-w-2xl mx-auto"
-          >
-            <div className="relative flex items-center shadow-xs rounded-2xl border-2 border-slate-200 focus-within:border-amber-400 transition-colors bg-white overflow-hidden">
-              <div className="pl-3 sm:pl-4 text-slate-400">
-                <Search className="w-5 h-5" />
+          {/* Secure Dual-Input Tracking Form */}
+          <form onSubmit={handleTrackSubmit} className="max-w-2xl mx-auto space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {/* 1. Mã đơn hàng */}
+              <div className="relative flex items-center shadow-xs rounded-2xl border-2 border-slate-200 focus-within:border-amber-500 transition-colors bg-white overflow-hidden">
+                <div className="pl-3.5 text-slate-400">
+                  <Package className="w-5 h-5" />
+                </div>
+                <input
+                  type="text"
+                  value={orderCodeInput}
+                  onChange={(e) => setOrderCodeInput(e.target.value)}
+                  placeholder="Mã đơn hàng (VD: NAK-260908-1234)"
+                  className="w-full px-3 py-3 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden placeholder:text-slate-400 font-mono"
+                  required
+                />
+                {orderCodeInput && (
+                  <button
+                    type="button"
+                    onClick={() => setOrderCodeInput('')}
+                    className="p-1.5 mr-2 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                    title="Xóa mã đơn"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Nhập mã đơn NAK, mã vận đơn hoặc số điện thoại..."
-                className="w-full px-2.5 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-900 focus:outline-hidden placeholder:text-slate-400"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setActiveOrder(null);
-                    setMatchedOrders([]);
-                    setHasSearched(false);
-                  }}
-                  className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
-                  title="Xóa ô tìm kiếm"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+
+              {/* 2. Số điện thoại */}
+              <div className="relative flex items-center shadow-xs rounded-2xl border-2 border-slate-200 focus-within:border-amber-500 transition-colors bg-white overflow-hidden">
+                <div className="pl-3.5 text-slate-400">
+                  <Phone className="w-5 h-5" />
+                </div>
+                <input
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="Số điện thoại đặt hàng (VD: 0796555636)"
+                  className="w-full px-3 py-3 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-hidden placeholder:text-slate-400 font-mono"
+                  required
+                />
+                {phoneInput && (
+                  <button
+                    type="button"
+                    onClick={() => setPhoneInput('')}
+                    className="p-1.5 mr-2 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                    title="Xóa số điện thoại"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
               <button
                 type="submit"
-                disabled={isLoading || !searchQuery.trim()}
-                className="mr-1.5 sm:mr-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0"
+                disabled={isLoading || !orderCodeInput.trim() || !phoneInput.trim()}
+                className="w-full sm:w-auto px-6 py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs sm:text-sm font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs shrink-0"
               >
                 {isLoading ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span className="hidden sm:inline">Đang tìm...</span>
+                    <span>Đang tra cứu...</span>
                   </>
                 ) : (
-                  <span>Tra cứu</span>
+                  <>
+                    <Search className="w-4 h-4" />
+                    <span>Tra cứu đơn hàng</span>
+                  </>
                 )}
               </button>
             </div>
           </form>
 
-          {/* Compact Recent Orders Chips */}
-          {recentSuggestedOrders.length > 0 && !activeOrder && (
+          {/* Error Alert */}
+          {searchError && (
+            <div className="max-w-2xl mx-auto mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800 text-xs sm:text-sm animate-fadeIn">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+              <span className="font-semibold">{searchError}</span>
+            </div>
+          )}
+
+          {/* Quick Pre-fill Hint from Email Link */}
+          {initialTrackingCode && !activeOrder && !searchError && (
+            <div className="max-w-2xl mx-auto mt-4 p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center gap-2.5 text-amber-900 text-xs">
+              <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Mã đơn <strong>{initialTrackingCode}</strong> đã được điền sẵn từ email. Vui lòng nhập số điện thoại đặt hàng để tra cứu tiến độ.</span>
+            </div>
+          )}
+
+          {/* Compact Recent Orders Chips (fills code only, never phone) */}
+          {recentSuggestedCodes.length > 0 && !activeOrder && (
             <div className="max-w-2xl mx-auto mt-3.5 flex items-center justify-center gap-2 text-xs">
               <span className="text-slate-400 font-medium text-[11px] shrink-0">Đơn gần đây:</span>
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                {recentSuggestedOrders.slice(0, 3).map((ord) => {
-                  const displayCode = getOrderTrackingNumber(ord);
-                  return (
-                    <button
-                      key={displayCode}
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery(displayCode);
-                        performSearch(displayCode);
-                      }}
-                      className="px-2.5 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 font-mono font-bold text-xs transition-colors cursor-pointer border border-amber-200/60"
-                      title={`Tra cứu nhanh ${displayCode}`}
-                    >
-                      {displayCode}
-                    </button>
-                  );
-                })}
+                {recentSuggestedCodes.map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => {
+                      setOrderCodeInput(code);
+                      setSearchError(null);
+                    }}
+                    className="px-2.5 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 font-mono font-bold text-xs transition-colors cursor-pointer border border-amber-200/60"
+                    title={`Điền mã ${code}`}
+                  >
+                    {code}
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
-
-        {/* ============================================================ */}
-        {/* SEARCH RESULT: MULTIPLE MATCHES (E.G. PHONE SEARCH)          */}
-        {/* ============================================================ */}
-        {!activeOrder && matchedOrders.length > 1 && (
-          <div className="space-y-4 mb-8">
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-amber-950 font-bold text-xs sm:text-sm">
-                <CheckCircle2 className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <span>Tìm thấy <strong>{matchedOrders.length}</strong> đơn hàng phù hợp với thông tin tra cứu của bạn:</span>
-              </div>
-              <span className="text-xs text-amber-800 font-medium">Nhấn vào đơn để xem tiến độ</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {matchedOrders.map((ord) => {
-                const code = getOrderTrackingNumber(ord);
-                const normStatus = normalizeOrderStatus(ord.status);
-                const total = ord.totalPrice || ord.totalAmount || 0;
-
-                return (
-                  <div
-                    key={ord.id || code}
-                    onClick={() => setActiveOrder(ord)}
-                    className="bg-white rounded-3xl border border-slate-200 hover:border-amber-400 p-5 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-mono font-black text-sm text-slate-950 tracking-wider group-hover:text-amber-600 transition-colors">
-                          {code}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap shrink-0">
-                          {normStatus}
-                        </span>
-                      </div>
-
-                      <div className="text-xs text-slate-400 mb-3 flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>{formatOrderDateWithoutSeconds(ord.date || ord.createdAt)}</span>
-                      </div>
-
-                      <div className="space-y-1 mb-4">
-                        {ord.itemDetails && ord.itemDetails.length > 0 ? (
-                          ord.itemDetails.map((it, idx) => (
-                            <div key={idx} className="text-xs text-slate-700 font-medium line-clamp-1">
-                              • {it.productName} (x{it.quantity})
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-xs text-slate-700 line-clamp-2">
-                            {Array.isArray(ord.items) ? ord.items.join(', ') : (ord.items ? String(ord.items) : '')}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Tổng tiền</span>
-                        <span className="text-sm font-black text-slate-900 font-mono">
-                          {total.toLocaleString('vi-VN')}đ
-                        </span>
-                      </div>
-                      <span className="text-xs font-bold text-amber-700 group-hover:translate-x-1 transition-transform flex items-center gap-1">
-                        Xem chi tiết →
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ============================================================ */}
-        {/* SEARCH RESULT: NOT FOUND                                     */}
-        {/* ============================================================ */}
-        {!activeOrder && matchedOrders.length === 0 && hasSearched && (
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center shadow-xs max-w-lg mx-auto mb-8">
-            <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
-              <Package className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-black text-slate-900 mb-2">
-              Không tìm thấy đơn hàng phù hợp
-            </h3>
-            <p className="text-xs text-slate-500 leading-relaxed mb-6">
-              Hệ thống chưa tìm thấy đơn nào khớp với từ khóa <strong>"{searchQuery}"</strong>. Bạn vui lòng kiểm tra lại mã đơn hàng (NAK-...), mã vận đơn bưu điện hoặc số điện thoại đã đặt hàng.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <a
-                href={messengerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-2 shadow-xs"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Nhắn tin cho Shop</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setHasSearched(false);
-                }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Nhập lại thông tin
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ============================================================ */}
         {/* ACTIVE ORDER: DETAILED CRAFT & PROGRESS VIEW                 */}
@@ -1610,30 +1312,18 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                         </strong>
                       </div>
 
-                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
-                        <div>
-                          <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Số điện thoại:</span>
-                          <span className="font-mono font-bold text-slate-900 text-sm sm:text-base block">
-                            {maskPhone(activeOrder.phone)}
-                          </span>
-                        </div>
-                        {activeOrder.phone && (
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(activeOrder.phone || '', 'phone')}
-                            className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-                            title="Sao chép số điện thoại"
-                          >
-                            {copiedField === 'phone' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        )}
+                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Số điện thoại (đã ẩn):</span>
+                        <span className="font-mono font-bold text-slate-900 text-sm sm:text-base block">
+                          {activeOrder.maskedPhone || (activeOrder.phone ? `******${String(activeOrder.phone).slice(-4)}` : '******')}
+                        </span>
                       </div>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
-                      <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Địa chỉ giao hàng:</span>
+                      <span className="text-[11px] text-slate-400 font-bold uppercase block mb-1">Khu vực giao hàng:</span>
                       <p className="text-slate-800 font-medium leading-relaxed">
-                        {activeOrder.address || 'Đang cập nhật địa chỉ giao hàng qua tin nhắn'}
+                        {activeOrder.maskedLocation || activeOrder.address || 'Đang cập nhật khu vực giao hàng'}
                       </p>
                     </div>
 

@@ -28,7 +28,7 @@ function money(value: unknown): string {
 }
 
 function safeBaseUrl(value?: string): string {
-  const OFFICIAL_SITE = 'https://www.notaknot.id.vn';
+  const OFFICIAL_SITE = process.env.PUBLIC_SITE_URL || 'https://www.notaknot.id.vn';
   if (!value) return OFFICIAL_SITE;
   try {
     const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
@@ -166,7 +166,7 @@ function buildHtml(order: any, reqHost: string, productsCatalog: any[] = []): st
   const instagramSrc = `${baseUrl}/assets/icons/instagram.png`;
   const threadsSrc = `${baseUrl}/assets/email/threads.png`;
   const messengerSrc = `${baseUrl}/assets/email/messenger.png`;
-  const trackingUrl = `${baseUrl}/#tracking?code=${encodeURIComponent(orderCode)}`;
+  const trackingUrl = `${baseUrl}/tracking?code=${encodeURIComponent(orderCode)}`;
 
   const renderedRows = items.map((item: any) => {
     const productName = String(item?.productName || item?.name || 'Sản phẩm thủ công');
@@ -302,6 +302,9 @@ function buildHtml(order: any, reqHost: string, productsCatalog: any[] = []): st
               </table>
 
               <div style="text-align:center;padding:24px 0 10px;">
+                <p style="margin:0 0 14px;font-size:13px;line-height:20px;color:${BRAND.muted};text-align:center;">
+                  Nhấn vào nút bên dưới và nhập số điện thoại đã dùng khi đặt hàng để theo dõi đơn hàng.
+                </p>
                 <a href="${trackingUrl}" style="display:inline-block;padding:12px 28px;background:${BRAND.burgundy};color:#ffffff;text-decoration:none;border-radius:24px;font-size:14px;font-weight:700;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(104,24,32,0.25);">
                   Tra cứu tiến độ đơn hàng →
                 </a>
@@ -369,28 +372,19 @@ export default async function handler(req: any, res: any) {
     }
 
     const orderCode = String(order.id || order.trackingNumber);
-    const rawExplicit = typeof body?.recipientEmail === 'string' && body.recipientEmail.trim()
-      ? body.recipientEmail
-      : typeof body?.targetEmail === 'string' && body.targetEmail.trim()
-      ? body.targetEmail
-      : typeof body?.email === 'string' && body.email.trim()
-      ? body.email
+    // Abuse protection: recipient must belong to the verified order, not an arbitrary separate parameter
+    const rawCustomerEmail = typeof order.email === 'string' && order.email.trim()
+      ? order.email
+      : typeof order.customerEmail === 'string' && order.customerEmail.trim()
+      ? order.customerEmail
+      : typeof order.recipientEmail === 'string' && order.recipientEmail.trim()
+      ? order.recipientEmail
       : null;
 
-    const explicitRecipient = rawExplicit ? ensureGmailDomain(rawExplicit) : null;
+    const customerEmail = rawCustomerEmail ? ensureGmailDomain(rawCustomerEmail) : null;
 
-    const customerEmail = explicitRecipient || (
-      typeof order.email === 'string' && order.email.trim()
-        ? ensureGmailDomain(order.email)
-        : typeof order.customerEmail === 'string' && order.customerEmail.trim()
-        ? ensureGmailDomain(order.customerEmail)
-        : typeof order.recipientEmail === 'string' && order.recipientEmail.trim()
-        ? ensureGmailDomain(order.recipientEmail)
-        : null
-    );
-
-    if (!customerEmail) {
-      return res.status(400).json({ error: 'Không tìm thấy địa chỉ email người nhận. Vui lòng kiểm tra lại thông tin email khách hàng.' });
+    if (!customerEmail || !customerEmail.includes('@') || customerEmail.length > 100) {
+      return res.status(400).json({ error: 'Địa chỉ email người nhận trong đơn hàng không hợp lệ.' });
     }
 
     const productsList = Array.isArray(body?.products) ? body.products : Array.isArray(order?.products) ? order.products : [];
@@ -399,13 +393,24 @@ export default async function handler(req: any, res: any) {
     const html = buildHtml(order, reqHost, productsList);
     const subject = `[NOT A KNOT] Xác nhận đơn hàng #${orderCode} - ${order.customerName || order.name || 'Quý khách'}`;
 
-    const SMTP_USER = process.env.SMTP_USER || 'noreply.notaknot@gmail.com';
-    const SMTP_PASS = process.env.SMTP_PASS || 'nioymdoezmrflsmr';
+    const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const SMTP_PORT = Number(process.env.SMTP_PORT) || 465;
+    const SMTP_SECURE = process.env.SMTP_SECURE !== 'false' && (SMTP_PORT === 465 || !process.env.SMTP_PORT);
+    const SMTP_USER = (process.env.SMTP_USER || 'noreply.notaknot@gmail.com').trim();
+    const SMTP_PASS = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '').trim() : '';
+    const SMTP_FROM = process.env.SMTP_FROM || `"NOT A KNOT" <${SMTP_USER}>`;
+
+    if (!SMTP_PASS) {
+      return res.status(500).json({
+        success: false,
+        error: 'Chưa cấu hình biến môi trường mật khẩu SMTP (SMTP_PASS) trên máy chủ Vercel. Vui lòng thiết lập biến môi trường SMTP_PASS trong Vercel Project Settings.'
+      });
+    }
 
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS
@@ -413,7 +418,7 @@ export default async function handler(req: any, res: any) {
     });
 
     await transporter.sendMail({
-      from: `"NOT A KNOT" <${SMTP_USER}>`,
+      from: SMTP_FROM,
       to: customerEmail,
       subject,
       html
@@ -427,7 +432,7 @@ export default async function handler(req: any, res: any) {
       message: `Đã gửi thành công email xác nhận đơn hàng #${orderCode} tới ${customerEmail}!`
     });
   } catch (err: any) {
-    console.error('[Vercel Email Handler Error]:', err);
+    console.error('[Vercel Email Handler Error]:', err?.message || 'Error occurred during email dispatch');
     return res.status(500).json({
       success: false,
       error: err.message || 'Lỗi gửi email xác nhận.'

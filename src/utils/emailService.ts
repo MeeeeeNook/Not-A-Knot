@@ -1,4 +1,5 @@
 import { StoredOrder } from '../firebase';
+import { getAdminToken } from './auth';
 
 /**
  * Ensures an email address has a valid domain.
@@ -216,13 +217,18 @@ export async function fetchEmailConfigStatus(): Promise<EmailConfigStatus | null
 export async function testEmailDelivery(targetEmail?: string): Promise<{ success: boolean; message: string; configured?: boolean }> {
   try {
     const primaryBaseUrl = getBackendUrl();
+    const token = getAdminToken();
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    };
     let res: Response | null = null;
     let data: any = null;
 
     try {
       res = await fetch(`${primaryBaseUrl}/api/email/test-delivery`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ targetEmail })
       });
       data = await safeJsonParse(res);
@@ -241,7 +247,7 @@ export async function testEmailDelivery(targetEmail?: string): Promise<{ success
     try {
       const fallbackRes = await fetch(`${FALLBACK_BACKEND_URL}/api/email/test-delivery`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ targetEmail })
       });
       const fallbackData = await safeJsonParse(fallbackRes);

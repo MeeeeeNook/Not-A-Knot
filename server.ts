@@ -12,6 +12,7 @@ import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
+import trackOrderHandler from './api/orders/track.ts';
 
 // Suppress internal Firestore gRPC idle stream cancellation messages in Node server process
 try {
@@ -53,34 +54,23 @@ if (!process.env.ADMIN_JWT_SECRET && !process.env.JWT_SECRET) {
   console.warn("WARNING: ADMIN_JWT_SECRET environment variable is missing. Using fallback for development.");
 }
 
-// SMTP / Email Delivery Secrets
+// SMTP / Email Delivery Secrets (loaded strictly from environment variables)
 const SMTP_HOST: string = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT: number = Number(process.env.SMTP_PORT) || 465;
 const SMTP_SECURE: boolean = process.env.SMTP_SECURE !== 'false' && (SMTP_PORT === 465 || !process.env.SMTP_PORT);
 const SMTP_USER: string = (process.env.SMTP_USER || 'noreply.notaknot@gmail.com').trim();
-const DEFAULT_FALLBACK_APP_PASS = 'nioymdoezmrflsmr';
 const SMTP_FROM: string = process.env.SMTP_FROM || '"NOT A KNOT" <noreply.notaknot@gmail.com>';
 let ADMIN_NOTIFICATION_EMAIL: string = (process.env.ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com').trim();
 
+/**
+ * Retrieves SMTP password strictly from environment variables.
+ * No hardcoded, fallback, sample, or file-stored password allowed.
+ */
 function getSmtpPass(): string {
-  const envPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '').trim() : '';
-  if (envPass) return envPass;
-  try {
-    const dataPath = path.join(process.cwd(), 'email_data.json');
-    if (fs.existsSync(dataPath)) {
-      const parsed = JSON.parse(fs.readFileSync(dataPath, 'utf-8'));
-      if (parsed?.settings?.smtpPass) {
-        const storePass = String(parsed.settings.smtpPass).replace(/\s+/g, '').trim();
-        if (storePass) return storePass;
-      }
-    }
-  } catch {
-    // Ignore JSON read errors
-  }
-  return DEFAULT_FALLBACK_APP_PASS;
+  return process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '').trim() : '';
 }
 
-// Lazy transporter creation (fails gracefully if credentials not provided)
+// Lazy transporter creation (fails safely if credentials not provided in environment)
 let mailTransporter: any = null;
 function getMailTransporter(): any {
   const currentPass = getSmtpPass();
@@ -628,6 +618,13 @@ async function startServer() {
   });
 
   // ----------------------------------------------------
+  // SECURE CUSTOMER ORDER TRACKING API
+  // ----------------------------------------------------
+  app.all('/api/orders/track', (req: Request, res: Response) => {
+    trackOrderHandler(req, res);
+  });
+
+  // ----------------------------------------------------
   // SERVER-SIDE AUTHENTICATION API
   // ----------------------------------------------------
 
@@ -876,7 +873,6 @@ async function startServer() {
       notifyAdminOnNewOrder: boolean;
       customerOrderEmailOption: boolean;
       adminNotificationEmail: string;
-      smtpPass?: string;
       updatedAt?: string;
     };
     sentLogs: EmailLogEntry[];
@@ -888,8 +884,7 @@ async function startServer() {
     settings: {
       notifyAdminOnNewOrder: false, // Default OFF per user request
       customerOrderEmailOption: true, // Default ON (toggleable)
-      adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com',
-      smtpPass: ''
+      adminNotificationEmail: ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com'
     },
     sentLogs: []
   };
@@ -904,8 +899,7 @@ async function startServer() {
             settings: {
               notifyAdminOnNewOrder: typeof parsed.settings?.notifyAdminOnNewOrder === 'boolean' ? parsed.settings.notifyAdminOnNewOrder : false,
               customerOrderEmailOption: typeof parsed.settings?.customerOrderEmailOption === 'boolean' ? parsed.settings.customerOrderEmailOption : true,
-              adminNotificationEmail: parsed.settings?.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL,
-              smtpPass: parsed.settings?.smtpPass || ''
+              adminNotificationEmail: parsed.settings?.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL
             },
             sentLogs: Array.isArray(parsed.sentLogs) ? parsed.sentLogs : []
           };
@@ -930,7 +924,7 @@ async function startServer() {
 
   loadEmailDataLocally();
 
-  // Synchronize email settings and counts with Firestore
+  // Synchronize email settings and counts with Firestore (secrets are NEVER stored)
   const persistEmailSettingsToFirestore = async () => {
     try {
       const configRef = doc(firestoreDb, 'system_settings', 'email_config');
@@ -938,7 +932,6 @@ async function startServer() {
         notifyAdminOnNewOrder: emailStore.settings.notifyAdminOnNewOrder,
         customerOrderEmailOption: emailStore.settings.customerOrderEmailOption,
         adminNotificationEmail: emailStore.settings.adminNotificationEmail,
-        smtpPass: emailStore.settings.smtpPass || '',
         updatedAt: new Date().toISOString()
       }, { merge: true });
     } catch {
@@ -963,9 +956,6 @@ async function startServer() {
           if (data.adminNotificationEmail && typeof data.adminNotificationEmail === 'string') {
             emailStore.settings.adminNotificationEmail = data.adminNotificationEmail.trim();
             ADMIN_NOTIFICATION_EMAIL = emailStore.settings.adminNotificationEmail;
-          }
-          if (data.smtpPass && typeof data.smtpPass === 'string' && data.smtpPass.trim()) {
-            emailStore.settings.smtpPass = data.smtpPass.trim();
           }
         }
       } catch {
@@ -1113,7 +1103,7 @@ async function startServer() {
     notifyAdminOnNewOrder: Boolean(emailStore.settings.notifyAdminOnNewOrder),
     customerOrderEmailOption: Boolean(emailStore.settings.customerOrderEmailOption),
     adminNotificationEmail: emailStore.settings.adminNotificationEmail || ADMIN_NOTIFICATION_EMAIL || 'noreply.notaknot@gmail.com',
-    hasCustomPass: Boolean(emailStore.settings.smtpPass)
+    hasCustomPass: Boolean(getSmtpPass())
   });
 
   const getMaskedPass = () => {
@@ -1161,7 +1151,7 @@ async function startServer() {
       smtpSecure: SMTP_SECURE,
       configuredUser: maskedUser,
       maskedPass: getMaskedPass(),
-      hasCustomPass: Boolean(emailStore.settings.smtpPass),
+      hasCustomPass: Boolean(activePass),
       settings: getSafeSettings(),
       stats,
       mode: isConfigured ? 'live_smtp' : 'simulated_preview'
@@ -1188,54 +1178,20 @@ async function startServer() {
   });
 
   /**
-   * POST /api/email/update-smtp-pass
-   * Allows updating the 16-character Google App Password (Mật khẩu ứng dụng)
+   * POST /api/email/update-smtp-pass (Disabled for security)
+   * Passwords must only be injected via environment variables (SMTP_PASS)
    */
-  app.post('/api/email/update-smtp-pass', async (req: Request, res: Response) => {
-    try {
-      const { smtpPass } = req.body;
-      if (typeof smtpPass !== 'string' || !smtpPass.trim()) {
-        return res.status(400).json({ error: 'Mật khẩu ứng dụng (App Password) không được để trống.' });
-      }
-      const cleanPass = smtpPass.replace(/\s+/g, '').trim();
-      emailStore.settings.smtpPass = cleanPass;
-      saveEmailDataLocally();
-      await persistEmailSettingsToFirestore();
-      apiCache.invalidateTag('settings');
-      resetMailTransporter();
-
-      const transporter = getMailTransporter();
-      if (!transporter) {
-        return res.status(400).json({ error: 'Không thể khởi tạo transporter SMTP với mật khẩu này.' });
-      }
-
-      try {
-        await transporter.verify();
-        console.log('[Email Service] SMTP verification succeeded with new App Password');
-        return res.json({
-          success: true,
-          maskedPass: '••••••••••••••••',
-          hasCustomPass: true,
-          settings: getSafeSettings(),
-          message: 'Đã cập nhật và xác thực thành công Mật khẩu ứng dụng Google (App Password)!'
-        });
-      } catch (verifyErr: any) {
-        console.error('[Email Service] SMTP verification failed with provided password:', verifyErr);
-        return res.json({
-          success: false,
-          error: `Google SMTP từ chối Mật khẩu ứng dụng (Error: ${verifyErr.message || 'Chưa được chấp nhận'}). Vui lòng tạo Mật khẩu ứng dụng mới tại https://myaccount.google.com/apppasswords`
-        });
-      }
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message || 'Lỗi cập nhật mật khẩu ứng dụng' });
-    }
+  app.post('/api/email/update-smtp-pass', (_req: Request, res: Response) => {
+    return res.status(403).json({
+      error: 'Mật khẩu ứng dụng SMTP được quản lý an toàn qua biến môi trường SMTP_PASS trên máy chủ. Không cho phép cập nhật qua giao diện hoặc API.'
+    });
   });
 
   /**
    * POST /api/email/settings
-   * Allows updating email toggles and admin notification email
+   * Protected: Allows updating email toggles and admin notification email
    */
-  app.post('/api/email/settings', async (req: Request, res: Response) => {
+  app.post('/api/email/settings', requireAdminAuth, async (req: Request, res: Response) => {
     try {
       const { notifyAdminOnNewOrder, customerOrderEmailOption, adminNotificationEmail } = req.body;
       if (typeof notifyAdminOnNewOrder === 'boolean') {
@@ -1280,7 +1236,7 @@ async function startServer() {
       smtpSecure: SMTP_SECURE,
       configuredUser: maskedUser,
       maskedPass: getMaskedPass(),
-      hasCustomPass: Boolean(emailStore.settings.smtpPass),
+      hasCustomPass: Boolean(activePass),
       adminNotificationEmail: emailStore.settings.adminNotificationEmail,
       settings: getSafeSettings(),
       stats,
@@ -1290,9 +1246,9 @@ async function startServer() {
 
   /**
    * POST /api/email/update-admin-email
-   * Allows dynamically updating the admin notification email address
+   * Protected: Allows dynamically updating the admin notification email address
    */
-  app.post('/api/email/update-admin-email', async (req: Request, res: Response) => {
+  app.post('/api/email/update-admin-email', requireAdminAuth, async (req: Request, res: Response) => {
     try {
       const { newEmail } = req.body;
       const formatted = ensureGmailDomain(newEmail);
@@ -1319,7 +1275,7 @@ async function startServer() {
   /**
    * POST /api/email/send-order-confirmation
    * Dispatches order confirmation email:
-   * - To customer recipient if provided
+   * - To customer recipient if provided in verified order
    * - To admin only if notifyAdminOnNewOrder is true
    */
   app.post('/api/email/send-order-confirmation', async (req: Request, res: Response) => {
@@ -1332,32 +1288,25 @@ async function startServer() {
       }
       const order = body?.orderData || body;
       if (!order || (!order.id && !order.trackingNumber)) {
-        return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ.' });
+        return res.status(400).json({ error: 'Dữ liệu đơn hàng không hợp lệ hoặc thiếu mã đơn.' });
       }
 
-      const orderCode = order.id || order.trackingNumber;
-      const rawExplicit = typeof body?.recipientEmail === 'string' && body.recipientEmail.trim()
-        ? body.recipientEmail
-        : typeof body?.targetEmail === 'string' && body.targetEmail.trim()
-        ? body.targetEmail
-        : typeof body?.email === 'string' && body.email.trim()
-        ? body.email
+      const orderCode = String(order.id || order.trackingNumber);
+      // Abuse prevention: recipient strictly derived from customer order details
+      const rawCustomerEmail = typeof order.email === 'string' && order.email.trim()
+        ? order.email
+        : typeof order.customerEmail === 'string' && order.customerEmail.trim()
+        ? order.customerEmail
+        : typeof order.recipientEmail === 'string' && order.recipientEmail.trim()
+        ? order.recipientEmail
         : null;
 
-      const explicitRecipient = rawExplicit ? ensureGmailDomain(rawExplicit) : null;
-
-      const customerEmail = explicitRecipient || (
-        typeof order.email === 'string' && order.email.trim()
-          ? ensureGmailDomain(order.email)
-          : typeof order.customerEmail === 'string' && order.customerEmail.trim()
-          ? ensureGmailDomain(order.customerEmail)
-          : typeof order.recipientEmail === 'string' && order.recipientEmail.trim()
-          ? ensureGmailDomain(order.recipientEmail)
-          : null
-      );
+      const customerEmail = rawCustomerEmail ? ensureGmailDomain(rawCustomerEmail) : null;
+      if (customerEmail && (!customerEmail.includes('@') || customerEmail.length > 100)) {
+        return res.status(400).json({ error: 'Địa chỉ email người nhận không hợp lệ.' });
+      }
 
       const isManualAdmin = Boolean(req.body?.isManualAdmin);
-      const isCustomerRequest = Boolean(req.body?.isCustomerRequest);
 
       // Determine who should receive email
       const recipients: { email: string; type: EmailLogEntry['type'] }[] = [];
@@ -1390,6 +1339,14 @@ async function startServer() {
         });
       }
 
+      const activePass = getSmtpPass();
+      if (!activePass) {
+        return res.status(500).json({
+          success: false,
+          error: 'Chưa cấu hình biến môi trường mật khẩu SMTP (SMTP_PASS) trên máy chủ. Không thể gửi email.'
+        });
+      }
+
       const reqHost = (req.headers['x-forwarded-host'] as string) || req.headers.host;
       let productsList = Array.isArray(req.body?.products) && req.body.products.length > 0
         ? req.body.products
@@ -1410,6 +1367,12 @@ async function startServer() {
       const subject = `[NOT A KNOT] Xác nhận đơn hàng #${orderCode} - ${order.customerName || order.name || 'Quý khách'}`;
 
       const transporter = getMailTransporter();
+      if (!transporter) {
+        return res.status(500).json({
+          success: false,
+          error: 'Không thể kết nối dịch vụ SMTP. Vui lòng kiểm tra lại cấu hình SMTP_USER và SMTP_PASS.'
+        });
+      }
 
       const safeAttachments = Array.isArray(email.attachments)
         ? email.attachments.filter((att: any) => {
@@ -1418,52 +1381,35 @@ async function startServer() {
           })
         : [];
 
-      if (transporter) {
-        // Send to each recipient with inline CID logo and hosted images
-        for (const target of recipients) {
-          try {
-            await transporter.sendMail({
-              from: SMTP_FROM,
-              to: target.email,
-              subject,
-              html: email.html,
-              attachments: safeAttachments
-            });
-            recordEmailLog(target.email, target.type, orderCode, 'sent');
-          } catch (sendErr: any) {
-            console.error(`[Email Service] Failed sending to ${target.email}:`, sendErr);
-            recordEmailLog(target.email, target.type, orderCode, 'error');
-          }
+      // Send to each recipient with inline CID logo and hosted images
+      for (const target of recipients) {
+        try {
+          await transporter.sendMail({
+            from: SMTP_FROM,
+            to: target.email,
+            subject,
+            html: email.html,
+            attachments: safeAttachments
+          });
+          recordEmailLog(target.email, target.type, orderCode, 'sent');
+        } catch (sendErr: any) {
+          console.error(`[Email Service] Failed sending to ${target.email}:`, sendErr?.message || 'Send error');
+          recordEmailLog(target.email, target.type, orderCode, 'error');
         }
-
-        const stats = calculateEmailStats();
-        return res.json({
-          success: true,
-          mode: 'sent_real_email',
-          recipients: recipients.map((r) => r.email),
-          stats,
-          orderCode,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        // Simulated / preview mode
-        for (const target of recipients) {
-          recordEmailLog(target.email, target.type, orderCode, 'simulated');
-        }
-        const stats = calculateEmailStats();
-        return res.json({
-          success: true,
-          mode: 'simulated_preview',
-          message: 'Đã ghi nhận gửi email (Chế độ xem trước).',
-          recipients: recipients.map((r) => r.email),
-          stats,
-          orderCode,
-          timestamp: new Date().toISOString()
-        });
       }
-    } catch (err: any) {
-      console.error('[Email Service] Error in send-order-confirmation:', err);
+
+      const stats = calculateEmailStats();
       return res.json({
+        success: true,
+        mode: 'sent_real_email',
+        recipients: recipients.map((r) => r.email),
+        stats,
+        orderCode,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      console.error('[Email Service] Error in send-order-confirmation:', err?.message || err);
+      return res.status(500).json({
         success: false,
         error: err.message || 'Không thể gửi email lúc này'
       });
@@ -1472,26 +1418,31 @@ async function startServer() {
 
   /**
    * POST /api/email/test-delivery
-   * Admin-only or setup endpoint to verify SMTP delivery
+   * Protected: Admin-only endpoint to verify SMTP delivery to configured admin address
    */
-  app.post('/api/email/test-delivery', async (req: Request, res: Response) => {
+  app.post('/api/email/test-delivery', requireAdminAuth, async (req: Request, res: Response) => {
     try {
-      const { targetEmail } = req.body;
-      const destination = ensureGmailDomain(targetEmail || emailStore.settings.adminNotificationEmail);
+      const activePass = getSmtpPass();
+      if (!activePass) {
+        return res.status(500).json({
+          success: false,
+          configured: false,
+          error: 'Chưa cấu hình biến môi trường mật khẩu SMTP (SMTP_PASS) trên máy chủ. Vui lòng thiết lập biến môi trường SMTP_PASS.'
+        });
+      }
 
+      // Anti-relay protection: only test delivery to configured admin notification email
+      const destination = ensureGmailDomain(ADMIN_NOTIFICATION_EMAIL || SMTP_USER);
       if (!destination) {
-        return res.status(400).json({ error: 'Địa chỉ email nhận test không hợp lệ.' });
+        return res.status(400).json({ error: 'Chưa cấu hình địa chỉ email quản trị viên nhận thông báo.' });
       }
 
       const transporter = getMailTransporter();
       if (!transporter) {
-        recordEmailLog(destination, 'manual_admin', undefined, 'simulated');
-        const stats = calculateEmailStats();
-        return res.json({
+        return res.status(500).json({
           success: false,
           configured: false,
-          stats,
-          message: `Chưa cấu hình thông tin đăng nhập SMTP (SMTP_USER và SMTP_PASS). Hệ thống đang chạy ở chế độ xem trước (Simulated Mode). Email test tới ${destination} đã được mô phỏng.`
+          error: 'Không thể kết nối dịch vụ SMTP. Vui lòng kiểm tra lại cấu hình SMTP_USER và SMTP_PASS.'
         });
       }
 
@@ -1520,7 +1471,7 @@ async function startServer() {
         message: `Đã gửi thành công email thử nghiệm đến ${destination}!`
       });
     } catch (err: any) {
-      console.error('[Email Service] Test delivery failed:', err);
+      console.error('[Email Service] Test delivery failed:', err?.message || err);
       return res.status(500).json({
         success: false,
         error: err.message || 'Lỗi khi gửi email thử nghiệm qua SMTP.'

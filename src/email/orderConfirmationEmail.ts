@@ -57,7 +57,7 @@ function money(value: unknown): string {
 }
 
 function safeBaseUrl(value?: string): string {
-  const OFFICIAL_SITE = 'https://www.notaknot.id.vn';
+  const OFFICIAL_SITE = process.env.PUBLIC_SITE_URL || 'https://www.notaknot.id.vn';
   if (!value) return OFFICIAL_SITE;
   try {
     const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
@@ -291,7 +291,7 @@ export async function buildOrderConfirmationEmail(order: any, options: OrderEmai
   const instagramSrc = emailImage(null, '/assets/icons/instagram.png', 'instagram');
   const threadsSrc = emailImage(null, '/assets/email/threads.png', 'threads');
   const messengerSrc = emailImage(null, '/assets/email/messenger.png', 'messenger');
-  const trackingUrl = `${baseUrl}/#tracking?code=${encodeURIComponent(orderCode)}`;
+  const trackingUrl = `${baseUrl}/tracking?code=${encodeURIComponent(orderCode)}`;
 
   const productsCatalog = Array.isArray(options?.products) && options.products.length > 0
     ? options.products
@@ -455,6 +455,9 @@ export async function buildOrderConfirmationEmail(order: any, options: OrderEmai
                   </td>
                   <td class="stack" align="right" valign="middle" style="padding-top:17px;">
                     <a class="cta" href="${escapeHtml(trackingUrl)}" style="display:inline-block;padding:11px 20px;background:${BRAND.burgundy};border-radius:7px;font-family:${BODY_FONT};font-size:14px;line-height:19px;font-weight:700;color:#ffffff;text-decoration:none;">TRA CỨU ĐƠN HÀNG</a>
+                    <div style="padding-top:6px;font-size:11px;line-height:16px;color:${BRAND.muted};font-style:italic;">
+                      Nhấn vào nút bên trên và nhập số điện thoại đã dùng khi đặt hàng để theo dõi đơn hàng.
+                    </div>
                   </td>
                 </tr>
               </table>

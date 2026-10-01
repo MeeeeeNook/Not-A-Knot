@@ -1,6 +1,17 @@
 node_modules/
 coverage/
+dist/
 .DS_Store
 *.log
+.vercel
+
+# Environment configuration secrets
+.env
+.env.local
+.env.production
+.env.*.local
 .env*
 !.env.example
+
+# Local operational data
+email_data.json

@@ -19,12 +19,40 @@ service cloud.firestore {
       );
     }
 
-    // Authorized Staff / Sellers (Approved by Root Admin via Google Email or Seller Profile)
+    // Authorized Staff / Sellers (Active staff approved by Root Admin)
     function isAuthorizedStaff() {
       return isAuthenticated() && (
         isRootAdmin() ||
-        (userEmail() != '' && exists(/databases/$(database)/documents/authorized_sellers/$(userEmail()))) ||
-        exists(/databases/$(database)/documents/sellers/$(request.auth.uid))
+        userEmail() == 'tracker-service@notaknot.id.vn' ||
+        userEmail() == 'noreply.notaknot@gmail.com' ||
+        (
+          userEmail() != '' &&
+          exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
+          (!('isActive' in get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data) ||
+           get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.isActive != false)
+        ) ||
+        (
+          exists(/databases/$(database)/documents/sellers/$(request.auth.uid)) &&
+          (!('isActive' in get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data) ||
+           get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.isActive != false)
+        )
+      );
+    }
+
+    // Public Order Creation Validation Guard
+    function validPublicOrderCreation() {
+      let data = request.resource.data;
+      return (
+        // Must contain basic customer contact information
+        ('customerName' in data || 'name' in data) &&
+        'phone' in data &&
+        data.phone is string &&
+        data.phone.size() >= 8 && data.phone.size() <= 20 &&
+        // Must have valid initial status and payment status (cannot forge internal status)
+        (!('status' in data) || data.status in ['Chờ xác nhận', 'pending', 'new', '']) &&
+        (!('isDeleted' in data) || data.isDeleted == false) &&
+        // Prevent arbitrarily oversized payload
+        request.resource.data.keys().size() <= 40
       );
     }
 
@@ -71,11 +99,10 @@ service cloud.firestore {
       allow write: if isAuthorizedStaff();
     }
 
-    // 4. Orders: Public customers submit orders & track status; Staff manage & update
+    // 4. Orders: Public customers can only submit new orders; Read/Update/Delete exclusively by verified active staff
     match /orders/{orderId} {
-      allow create: if true; // Any customer can place an order seamlessly
-      allow read: if true;   // Order confirmation receipt & public tracking code lookup
-      allow update, delete: if isAuthorizedStaff(); // Only verified staff can mutate/cancel orders
+      allow create: if isAuthorizedStaff() || validPublicOrderCreation();
+      allow read, update, delete: if isAuthorizedStaff();
     }
 
     // 5. Contact inquiries & consultation requests
@@ -84,16 +111,15 @@ service cloud.firestore {
       allow read, update, delete: if isAuthorizedStaff(); // Only staff can read/manage
     }
 
-    // 6. Authorized Staff Emails (Read public for login check, Write exclusively by Root Admin)
+    // 6. Authorized Staff Emails (Read exclusively by Staff, Write exclusively by Root Admin)
     match /authorized_sellers/{email} {
-      allow read: if true;
+      allow read: if isAuthorizedStaff();
       allow write: if isRootAdmin();
     }
 
-    // 7. Team members & seller profiles (Read public for app lookup, Write by Staff/Admin)
+    // 7. Team members & seller profiles (Read/Write exclusively by active Staff)
     match /sellers/{sellerId} {
-      allow read: if true;
-      allow write: if isAuthorizedStaff();
+      allow read, write: if isAuthorizedStaff();
     }
 
     // 8. System configurations & maintenance mode
@@ -104,8 +130,7 @@ service cloud.firestore {
 
     // 9. Email dispatch logs (Server sync & dispatch logging, staff review)
     match /email_logs/{logId} {
-      allow read, create: if true;
-      allow update, delete: if isAuthorizedStaff();
+      allow read, write: if isAuthorizedStaff();
     }
 
     // 10. System diagnostic logs

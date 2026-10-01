@@ -33,7 +33,9 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
       } else {
         // Sanitize error message to never expose internal sensitive details
         let userSafeError = res.error || 'Đăng nhập không thành công. Vui lòng thử lại sau.';
-        if (
+        if (userSafeError.includes('đã được đóng') || userSafeError.includes('cancelled-popup-request')) {
+          userSafeError = '';
+        } else if (
           userSafeError.includes('Tổng bí thư') ||
           userSafeError.includes('authorized_sellers') ||
           userSafeError.includes('@gmail.com')
@@ -43,14 +45,22 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         setErrorMessage(userSafeError);
       }
     } catch (err: any) {
-      console.warn('Google Sign-In Error:', err);
-      let userSafeError = 'Đăng nhập không thành công. Vui lòng thử lại sau.';
-      if (err?.code === 'auth/popup-closed-by-user') {
-        userSafeError = 'Cửa sổ đăng nhập Google đã được đóng.';
-      } else if (err?.code === 'auth/popup-blocked') {
-        userSafeError = 'Trình duyệt đã chặn popup. Vui lòng cho phép mở cửa sổ đăng nhập.';
-      } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
-        userSafeError = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
+      const isNormalCancel =
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request';
+
+      if (!isNormalCancel) {
+        console.warn('Google Sign-In Notice:', err?.message || err);
+      }
+
+      let userSafeError = '';
+      if (!isNormalCancel) {
+        userSafeError = 'Đăng nhập không thành công. Vui lòng thử lại sau.';
+        if (err?.code === 'auth/popup-blocked') {
+          userSafeError = 'Trình duyệt đã chặn popup. Vui lòng cho phép mở cửa sổ đăng nhập.';
+        } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+          userSafeError = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
+        }
       }
       setErrorMessage(userSafeError);
     } finally {

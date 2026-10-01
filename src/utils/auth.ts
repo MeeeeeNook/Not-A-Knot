@@ -402,17 +402,22 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
 
     return { success: true, user: sellerUser };
   } catch (err: any) {
-    console.error('Google Sign-In Error:', err);
+    const isNormalCancel =
+      err?.code === 'auth/popup-closed-by-user' ||
+      err?.code === 'auth/cancelled-popup-request';
+
+    if (!isNormalCancel) {
+      console.warn('Google Sign-In Notice:', err?.message || err);
+    }
+
     let msg = 'Đăng nhập Google qua Firebase thất bại.';
-    if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+    if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('unauthorized-domain'))) {
       msg = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
-    } else if (err.code === 'auth/popup-closed-by-user') {
-      msg = 'Cửa sổ đăng nhập Google đã được đóng trước khi hoàn tất.';
-    } else if (err.code === 'auth/popup-blocked') {
+    } else if (isNormalCancel) {
+      msg = 'Cửa sổ đăng nhập Google đã được đóng.';
+    } else if (err?.code === 'auth/popup-blocked') {
       msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';
-    } else if (err.code === 'auth/cancelled-popup-request') {
-      msg = 'Yêu cầu đăng nhập đã bị hủy.';
-    } else if (err.message) {
+    } else if (err?.message) {
       msg = err.message;
     }
     return { success: false, error: msg };
@@ -457,8 +462,10 @@ export const linkGoogleAccountWithSeller = async (
 
     return { success: true, updatedSeller };
   } catch (err: any) {
-    console.error('Lỗi liên kết Google:', err);
-    return { success: false, error: err.message || 'Không thể liên kết tài khoản Google.' };
+    if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+      console.warn('Lỗi liên kết Google:', err?.message || err);
+    }
+    return { success: false, error: err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request' ? 'Cửa sổ đăng nhập đã được đóng.' : (err?.message || 'Không thể liên kết tài khoản Google.') };
   }
 };
 

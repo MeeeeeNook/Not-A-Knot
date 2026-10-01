@@ -17,6 +17,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { ensureGmailDomain } from '../../utils/emailService';
+import { getAdminToken } from '../../utils/auth';
 import { db } from '../../firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 
@@ -268,9 +269,13 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
     setSettings(updatedSettings);
 
     try {
+      const token = getAdminToken();
       const res = await fetch('/api/email/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ [key]: value })
       });
       const data = await parseJsonResponse(res);
@@ -316,9 +321,13 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
     setIsSavingEmail(true);
     let savedSuccessfully = false;
     try {
+      const token = getAdminToken();
       const res = await fetch('/api/email/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ adminNotificationEmail: formattedEmail })
       });
       const data = await parseJsonResponse(res);
@@ -360,9 +369,13 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
     setIsTesting(true);
     setTestResult(null);
     try {
+      const token = getAdminToken();
       const res = await fetch('/api/email/test-delivery', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ targetEmail: target })
       });
       const data = await parseJsonResponse(res);
