@@ -71,7 +71,7 @@ Cung cấp đoạn mã HTML / Widget cho các blog đối tác, nghệ nhân là
 
 ```html
 <!-- NOT A KNOT Verified Handmade Partner Badge -->
-<a href="https://www.notaknot.id.vn/#collection/hao-khi-0209" target="_blank" rel="noopener" title="NOT A KNOT - Phụ Kiện Handmade Độc Bản">
+<a href="https://www.notaknot.id.vn/collection/hao-khi-0209" target="_blank" rel="noopener" title="NOT A KNOT - Phụ Kiện Handmade Độc Bản">
   <img src="https://www.notaknot.id.vn/assets/logo.jpg" alt="NOT A KNOT Handmade Studio" width="120" height="40" style="border-radius:8px; border:1px solid #e2e8f0;" />
 </a>
 ```
@@ -143,5 +143,5 @@ Thân mến,
 - Đa dạng hóa Anchor Text:
   - 40% Thương hiệu: `NOT A KNOT`, `NOT A KNOT Handmade`, `notaknot.id.vn`.
   - 30% Từ khóa tự nhiên: `vòng tay handmade`, `phụ kiện thủ công`, `móc khóa đan tay`, `BST Hào Khí 02.09`.
-  - 20% URL trần: `https://www.notaknot.id.vn/`, `https://www.notaknot.id.vn/#collection/hao-khi-0209`.
+  - 20% URL trần: `https://www.notaknot.id.vn/`, `https://www.notaknot.id.vn/collection/hao-khi-0209`.
   - 10% Từ kêu gọi hành động: `tại đây`, `xem chi tiết`, `ghé thăm xưởng`.

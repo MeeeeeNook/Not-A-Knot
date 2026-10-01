@@ -164,10 +164,10 @@ export function resolveCategoryId(slugOrCat: string, categories?: CategoryItem[]
  */
 export function buildProductUrl(product: Product, domain = 'https://www.notaknot.id.vn'): string {
   const slug = getProductSlug(product);
-  return `${domain}/#product/${slug}`;
+  return `${domain}/product/${slug}`;
 }
 
 export function buildCollectionUrl(collectionId: string, title?: string, domain = 'https://www.notaknot.id.vn'): string {
   const slug = getCollectionSlug(collectionId, title);
-  return `${domain}/#collection/${slug}`;
+  return `${domain}/collection/${slug}`;
 }

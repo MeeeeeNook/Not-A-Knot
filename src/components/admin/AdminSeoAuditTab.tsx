@@ -91,7 +91,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
       const title = prod.name?.trim() || '';
       const description = prod.description?.trim() || '';
       const prodSlug = getProductSlug(prod);
-      const url = `${SITE_DOMAIN}/#product/${prodSlug}`;
+      const url = `${SITE_DOMAIN}/product/${prodSlug}`;
       const issues: string[] = [];
       const recommendations: string[] = [];
 
@@ -159,7 +159,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
       const title = col.title?.trim() || '';
       const description = col.description?.trim() || col.subtitle?.trim() || col.story?.trim() || '';
       const colSlug = getCollectionSlug(col.id);
-      const url = `${SITE_DOMAIN}/#collection/${colSlug}`;
+      const url = `${SITE_DOMAIN}/collection/${colSlug}`;
       const issues: string[] = [];
       const recommendations: string[] = [];
 
@@ -210,7 +210,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
       const title = cat.label?.trim() || '';
       const description = cat.description?.trim() || cat.introText?.trim() || '';
       const catSlug = slugify(cat.id);
-      const url = `${SITE_DOMAIN}/#catalog?category=${catSlug}`;
+      const url = `${SITE_DOMAIN}/products?category=${catSlug}`;
       const issues: string[] = [];
       const recommendations: string[] = [];
 
@@ -1096,7 +1096,7 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
                     Đường Dẫn URL Slug
                   </label>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-mono">https://www.notaknot.id.vn/#.../</span>
+                    <span className="text-xs text-slate-400 font-mono">https://www.notaknot.id.vn/.../</span>
                     <input
                       type="text"
                       value={editSlug}

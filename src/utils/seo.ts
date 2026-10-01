@@ -492,7 +492,7 @@ export function setCollectionSEO(collection: CollectionInfo, productsInCollectio
   updateCollectionSchemaJsonLd(collection, productsInCollection);
   updateBreadcrumbSchemaJsonLd([
     { name: 'Trang Chủ', url: '/' },
-    { name: 'Bộ Sưu Tập', url: '/#collections' },
+    { name: 'Bộ Sưu Tập', url: '/collection' },
     { name: colTitle, url: `/collection/${colSlug}` }
   ]);
 }

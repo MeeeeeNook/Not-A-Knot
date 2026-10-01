@@ -21,7 +21,7 @@
 - **Description**: Inspired by Vietnamese national pride, unity, and independence. Incorporates vibrant scarlet red and imperial gold/brass cords woven with military-grade paracord and custom star/emblem charms.
 - **Audience**: Patriotic youth, cultural gift givers, event participants, couples.
 - **Key Features**: High-density weaving, weather-resistant, non-fading dyes.
-- **Canonical URL**: https://www.notaknot.id.vn/#collection/hao-khi-0209
+- **Canonical URL**: https://www.notaknot.id.vn/collection/hao-khi-0209
 
 ### 2.2 Vòng Tay Thủ Công (Handmade Bracelets)
 - **Sub-types**:
@@ -32,7 +32,7 @@
   - Choice of base cord colors (Red, Navy, Olive, Black, Beige, Pastel Pink, Lavender).
   - Choice of charms: Star bell, Cherry blossom, Lotus, Titanium alphabet letters, Compass, Anchor.
   - Custom wrist circumference (from 13cm to 22cm).
-- **Canonical URL**: https://www.notaknot.id.vn/#catalog?category=bracelet
+- **Canonical URL**: https://www.notaknot.id.vn/products?category=bracelets
 
 ### 2.3 Móc Khóa Handmade (Everyday Carry Keychains)
 - **Sub-types**:
@@ -40,7 +40,7 @@
   - *Móc Khóa Bùa May Mắn Omamori*: Japanese-inspired amulet charms with positive wishes for exams, safety, love, and fortune.
   - *Dây Đeo Balo & Bình Nước*: Utility loops for bags and bottles.
 - **Clasp Options**: Stainless steel ring, Silver lobster claw clasp, Heart-shaped clip, Vintage bronze carabiner.
-- **Canonical URL**: https://www.notaknot.id.vn/#catalog?category=keychain
+- **Canonical URL**: https://www.notaknot.id.vn/products?category=keychain
 
 ---
 
@@ -93,7 +93,7 @@ A: Dây Paracord và chỉ sáp dầu cao cấp tại NOT A KNOT có khả năng
 A: Quý khách có thể nhắn tin trực tiếp qua Fanpage Facebook hoặc Instagram của NOT A KNOT để gửi bản vẽ hoặc ý tưởng mẫu và nhận tư vấn chi tiết từ nghệ nhân đan tay.
 
 **Q: Làm sao để kiểm tra tình trạng đơn hàng đã đặt?**  
-A: Nhập mã đơn hàng (ví dụ: NAK-123456) hoặc số điện thoại tại https://www.notaknot.id.vn/#tracker để xem tiến độ đan tay và hành trình vận chuyển theo thời gian thực.
+A: Nhập mã đơn hàng (ví dụ: NAK-123456) và số điện thoại tại https://www.notaknot.id.vn/tracker để xem tiến độ đan tay và hành trình vận chuyển theo thời gian thực.
 
 ---
 

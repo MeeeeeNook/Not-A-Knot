@@ -497,29 +497,6 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     }
   };
 
-  // Recent order codes for convenience chips
-  const recentSuggestedCodes = useMemo(() => {
-    try {
-      const codes = new Set<string>();
-      const last = localStorage.getItem('nak_last_order_code');
-      if (last && last.trim()) codes.add(last.trim().toUpperCase());
-
-      const raw = localStorage.getItem('nak_preorders');
-      if (raw) {
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          for (const item of list) {
-            const c = (item.id || item.trackingNumber || '').trim().toUpperCase();
-            if (c) codes.add(c);
-          }
-        }
-      }
-      return Array.from(codes).slice(0, 4);
-    } catch {
-      return [];
-    }
-  }, []);
-
   // Copy helper
   const copyToClipboard = async (text: string, fieldKey: string) => {
     try {
@@ -752,7 +729,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
         <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-8 shadow-xs mb-8">
           <div className="max-w-2xl mx-auto text-center mb-6">
             <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight font-display">
-              Tra Cứu Tiến Độ Đơn Hàng
+              Tra Cứu Đơn Hàng
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-2 leading-relaxed">
               Nhập mã đơn hàng và số điện thoại bạn đã dùng khi đặt hàng để kiểm tra trạng thái đơn hàng
@@ -839,37 +816,6 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
             <div className="max-w-2xl mx-auto mt-4 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-800 text-xs sm:text-sm animate-fadeIn">
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
               <span className="font-semibold">{searchError}</span>
-            </div>
-          )}
-
-          {/* Quick Pre-fill Hint from Email Link */}
-          {initialTrackingCode && !activeOrder && !searchError && (
-            <div className="max-w-2xl mx-auto mt-4 p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center gap-2.5 text-amber-900 text-xs">
-              <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Mã đơn <strong>{initialTrackingCode}</strong> đã được điền sẵn từ email. Vui lòng nhập số điện thoại đặt hàng để tra cứu tiến độ.</span>
-            </div>
-          )}
-
-          {/* Compact Recent Orders Chips (fills code only, never phone) */}
-          {recentSuggestedCodes.length > 0 && !activeOrder && (
-            <div className="max-w-2xl mx-auto mt-3.5 flex items-center justify-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium text-[11px] shrink-0">Đơn gần đây:</span>
-              <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                {recentSuggestedCodes.map((code) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => {
-                      setOrderCodeInput(code);
-                      setSearchError(null);
-                    }}
-                    className="px-2.5 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 font-mono font-bold text-xs transition-colors cursor-pointer border border-amber-200/60"
-                    title={`Điền mã ${code}`}
-                  >
-                    {code}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
         </div>
