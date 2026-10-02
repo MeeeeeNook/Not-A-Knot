@@ -816,9 +816,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Security Guard: Load sellers list ONLY when admin login modal is active or admin is already logged in
+  // Security Guard: Load sellers list ONLY when admin is logged in
   useEffect(() => {
-    if (!isAdminLoginModalOpen && !currentSeller) return;
+    if (!currentSeller) return;
 
     const initSellers = async () => {
       try {
@@ -850,7 +850,7 @@ export default function App() {
       }
     };
     initSellers();
-  }, [isAdminLoginModalOpen, currentSeller]);
+  }, [currentSeller]);
 
   // Synchronize current active seller session with updated sellers list from Firestore
   useEffect(() => {

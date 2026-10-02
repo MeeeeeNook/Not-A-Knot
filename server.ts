@@ -14,6 +14,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
 import trackOrderHandler from './api/orders/track.ts';
+import createOrderHandler from './api/orders/create.ts';
 
 // Suppress internal Firestore gRPC idle stream cancellation messages in Node server process
 try {
@@ -169,7 +170,8 @@ function computeLegacyHash(password: string, salt: string): string {
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  // Dev server and control plane must listen on port 3000
+  const PORT = 3000;
 
   // Enable CORS for cross-origin requests from published frontends (Vercel / GitHub Pages / custom domains)
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -623,6 +625,13 @@ async function startServer() {
   // ----------------------------------------------------
   app.all('/api/orders/track', (req: Request, res: Response) => {
     trackOrderHandler(req, res);
+  });
+
+  // ----------------------------------------------------
+  // SECURE AUTHORITATIVE ORDER CREATION API
+  // ----------------------------------------------------
+  app.all('/api/orders/create', (req: Request, res: Response) => {
+    createOrderHandler(req, res);
   });
 
   // ----------------------------------------------------

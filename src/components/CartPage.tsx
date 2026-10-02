@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
+import { submitOrderToServer } from '../utils/orderService';
 import { sendOrderConfirmationEmail, ensureGmailDomain } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
@@ -110,6 +111,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'preparing' | 'syncing' | 'confirmed' | 'error'>('idle');
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [priceChangeWarning, setPriceChangeWarning] = useState<{ oldTotal: number; newTotal: number; message: string } | null>(null);
 
   // Placed Order Details for Success Screen (persists even after onClearCart)
   const [placedOrder, setPlacedOrder] = useState<StoredOrder | null>(null);
@@ -386,9 +388,12 @@ export const CartPage: React.FC<CartPageProps> = ({
   };
 
   // Handle Order Submit
-  const handleCheckoutSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCheckoutSubmit = async (e?: React.FormEvent, confirmedPriceVal?: number) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     setFormError(null);
+    setPriceChangeWarning(null);
 
     const cleanName = name.trim();
     const cleanPhone = phone.trim();
@@ -500,37 +505,61 @@ export const CartPage: React.FC<CartPageProps> = ({
     setSubmissionStep('syncing');
 
     try {
-      // 10s timeout guard: If order is not acknowledged after 10 seconds, trigger error flow
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT_10S')), 10000)
-      );
+      let confirmedOrder: StoredOrder | undefined;
 
-      await Promise.race([saveOrderToFirestore(orderData), timeoutPromise]);
-      
+      // 1. Try server endpoint first
+      try {
+        const result = await submitOrderToServer(orderData, {
+          expectedTotal: currentOrderTotal,
+          confirmedPrice: confirmedPriceVal
+        });
+
+        if (result.requiresConfirmation) {
+          setIsSubmitting(false);
+          setSubmissionStep('idle');
+          setPriceChangeWarning({
+            oldTotal: result.oldTotal || currentOrderTotal,
+            newTotal: result.newTotal || currentOrderTotal,
+            message: result.error || 'Giá sản phẩm hoặc mức khuyến mãi có sự thay đổi.'
+          });
+          return;
+        }
+
+        if (result.success && result.order) {
+          confirmedOrder = result.order;
+        }
+      } catch (serverErr) {
+        console.warn('[CartPage] Server submit notice, trying fallback save:', serverErr);
+      }
+
+      // 2. Fallback to direct saveOrderToFirestore if server was unreachable
+      if (!confirmedOrder) {
+        try {
+          await saveOrderToFirestore(orderData);
+          confirmedOrder = orderData;
+        } catch (directErr: any) {
+          console.error('[CartPage] Both server and direct save failed:', directErr);
+          setSubmissionStep('error');
+          setSubmissionError(directErr?.message || 'Chưa thể ghi nhận đơn hàng vào hệ thống. Quý khách vui lòng thử lại!');
+          return;
+        }
+      }
+
       setSubmissionStep('confirmed');
 
-      // Dispatch order confirmation email asynchronously
-      sendOrderConfirmationEmail(orderData).catch((e) => {
+      // Dispatch order confirmation email asynchronously using verified order
+      sendOrderConfirmationEmail(confirmedOrder).catch((e) => {
         console.warn('[CartPage] Email notification background notice:', e);
       });
 
-      // Save to local storage for instant offline access
-      try {
-        const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
-        local.unshift(orderData);
-        localStorage.setItem('nak_preorders', JSON.stringify(local));
-      } catch {
-        // ignore localstorage errors
-      }
-
-      // Retain state for success view BEFORE clearing cart
-      setPlacedOrder(orderData);
-      setPlacedTotal(currentOrderTotal);
-      onOrderPlaced(orderData);
+      // Retain authoritative state for success view BEFORE clearing cart
+      setPlacedOrder(confirmedOrder);
+      setPlacedTotal(confirmedOrder.totalPrice || currentOrderTotal);
+      onOrderPlaced(confirmedOrder);
       trackGA4Purchase(
-        orderData.id || trackingCode,
-        currentOrderTotal,
-        orderData.itemDetails,
+        confirmedOrder.id || trackingCode,
+        confirmedOrder.totalPrice || currentOrderTotal,
+        confirmedOrder.itemDetails,
         paymentMethod === 'vietqr' ? 'VietQR_Banking' : 'COD_System'
       );
 
@@ -542,9 +571,9 @@ export const CartPage: React.FC<CartPageProps> = ({
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 700);
     } catch (err: any) {
-      console.error('Lỗi hoặc quá thời gian 10s khi lưu đơn hàng:', err);
+      console.error('Lỗi khi gửi đơn hàng lên máy chủ:', err);
       setSubmissionStep('error');
-      setSubmissionError('Sau 10 giây hệ thống chưa ghi nhận được đơn hàng. Quý khách vui lòng tải lại trang và đặt lại. Nếu vẫn còn tiếp diễn, liên lạc chúng tớ để đặt hàng nhé!');
+      setSubmissionError(err?.message || 'Không thể tạo đơn hàng trên máy chủ lúc này. Quý khách vui lòng thử lại!');
     }
   };
 
@@ -1054,6 +1083,36 @@ export const CartPage: React.FC<CartPageProps> = ({
                       </div>
                     </div>
 
+                    {/* Price Drift Confirmation Banner */}
+                    {priceChangeWarning && (
+                      <div className="mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-300 text-xs text-amber-950 space-y-2.5 animate-fadeIn">
+                        <div className="flex items-start gap-2 font-bold text-amber-900">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <span>{priceChangeWarning.message}</span>
+                        </div>
+                        <div className="bg-white/80 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between font-mono text-xs">
+                          <span className="text-slate-500 line-through">Giá cũ: {priceChangeWarning.oldTotal.toLocaleString('vi-VN')}đ</span>
+                          <span className="text-amber-700 font-extrabold text-sm">Giá mới: {priceChangeWarning.newTotal.toLocaleString('vi-VN')}đ</span>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleCheckoutSubmit(undefined, priceChangeWarning.newTotal)}
+                            className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer text-center"
+                          >
+                            Xác nhận & Tiếp tục đặt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPriceChangeWarning(null)}
+                            className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-xs transition-colors cursor-pointer"
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Error Message */}
                     {formError && (
                       <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-800 flex items-center gap-2">
@@ -1469,6 +1528,16 @@ export const CartPage: React.FC<CartPageProps> = ({
                       <span>Liên hệ Messenger</span>
                     </a>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSubmitting(false);
+                      setSubmissionStep('idle');
+                    }}
+                    className="w-full mt-3 py-2 text-slate-500 hover:text-slate-800 text-xs font-medium cursor-pointer"
+                  >
+                    ← Quay lại kiểm tra thông tin đặt hàng
+                  </button>
                 </>
               )}
             </div>

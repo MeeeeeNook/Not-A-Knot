@@ -450,7 +450,39 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
         body: JSON.stringify({ orderCode: cleanCode, phone: cleanPhone })
       });
 
-      const data = await res.json();
+      // 1. Intercept HTTP 429 before attempting to read JSON (WAF response may be plain text/HTML)
+      if (res.status === 429) {
+        setActiveOrder(null);
+        const retryAfter = res.headers.get('Retry-After');
+        let errorMsg = 'Bạn đã tra cứu quá nhiều lần. Vui lòng chờ một lúc rồi thử lại.';
+        if (retryAfter) {
+          const seconds = parseInt(retryAfter, 10);
+          if (!isNaN(seconds) && seconds > 0) {
+            const minutes = Math.ceil(seconds / 60);
+            errorMsg = `Bạn đã tra cứu quá nhiều lần. Vui lòng chờ ${minutes > 1 ? `${minutes} phút` : `${seconds} giây`} rồi thử lại.`;
+          }
+        }
+        setSearchError(errorMsg);
+        return;
+      }
+
+      // 2. Safe parse in case edge WAF or gateway returns non-JSON body
+      let data: any = null;
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        setActiveOrder(null);
+        setSearchError('Máy chủ đang bận hoặc phản hồi không hợp lệ. Vui lòng thử lại sau.');
+        return;
+      }
+
+      if (!data) {
+        setActiveOrder(null);
+        setSearchError('Không nhận được dữ liệu từ máy chủ. Vui lòng thử lại sau.');
+        return;
+      }
+
       if (data.success && data.order) {
         setActiveOrder(data.order);
         setSearchError(null);

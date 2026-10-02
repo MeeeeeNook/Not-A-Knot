@@ -39,7 +39,7 @@ service cloud.firestore {
       );
     }
 
-    // Public Order Creation Validation Guard
+    // Order Security Guard: Enforces strict initial status, paymentStatus, and paidAmount
     function validPublicOrderCreation() {
       let data = request.resource.data;
       return (
@@ -48,8 +48,12 @@ service cloud.firestore {
         'phone' in data &&
         data.phone is string &&
         data.phone.size() >= 8 && data.phone.size() <= 20 &&
-        // Must have valid initial status and payment status (cannot forge internal status)
-        (!('status' in data) || data.status in ['Chờ xác nhận', 'pending', 'new', '']) &&
+        // Strict enforcement: Initial status MUST be 'Chờ xác nhận'
+        (!('status' in data) || data.status == 'Chờ xác nhận') &&
+        // Strict enforcement: Initial payment status MUST be 'unpaid'
+        (!('paymentStatus' in data) || data.paymentStatus == 'unpaid') &&
+        // Strict enforcement: Initial paid amount MUST be 0
+        (!('paidAmount' in data) || data.paidAmount == 0) &&
         (!('isDeleted' in data) || data.isDeleted == false) &&
         // Prevent arbitrarily oversized payload
         request.resource.data.keys().size() <= 40
@@ -99,7 +103,10 @@ service cloud.firestore {
       allow write: if isAuthorizedStaff();
     }
 
-    // 4. Orders: Public customers can only submit new orders; Read/Update/Delete exclusively by verified active staff
+    // 4. Orders:
+    // Staff can create, read, update, and delete any order.
+    // Customers can submit new orders with strict initial status enforcement ('Chờ xác nhận', 'unpaid', paidAmount = 0).
+    // Updating, reading, or deleting existing orders is strictly restricted to authorized staff.
     match /orders/{orderId} {
       allow create: if isAuthorizedStaff() || validPublicOrderCreation();
       allow read, update, delete: if isAuthorizedStaff();

@@ -1577,6 +1577,41 @@ function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
 export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> => {
   const canonicalId = canonicalOrderKey(order.id) || canonicalOrderKey(order.trackingNumber);
   const orderId = (canonicalId || order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
+
+  // If client is not an authenticated staff member, route order creation via server endpoint with graceful direct Firestore fallback
+  if (!auth.currentUser) {
+    try {
+      const { submitOrderToServer } = await import('./utils/orderService');
+      const result = await submitOrderToServer(order, {
+        expectedTotal: order.totalPrice || order.totalAmount
+      });
+      if (result.success && result.order) {
+        try {
+          const existingStr = localStorage.getItem('nak_preorders');
+          const existingList: StoredOrder[] = existingStr ? JSON.parse(existingStr) : [];
+          const normKey = (result.order.id || orderId).toUpperCase();
+          const updatedList = [
+            result.order,
+            ...existingList.filter((o) => {
+              const k1 = (o.id || '').toUpperCase();
+              const k2 = (o.trackingNumber || '').toUpperCase();
+              return k1 !== normKey && k2 !== normKey;
+            })
+          ];
+          safeStorageSetItem('nak_preorders', JSON.stringify(updatedList));
+          localStorage.setItem('nak_last_order_code', result.order.id || orderId);
+          ordersMemoryCache = null;
+          dispatchSafeEvent('nak_order_created', result.order);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+    } catch (serverErr) {
+      console.warn('[saveOrderToFirestore] Server submission notice, falling back to direct Firestore write:', serverErr);
+    }
+  }
+
   const docRef = doc(db, 'orders', orderId);
 
   // 1. Bank receipt image is uploaded directly to Firebase Storage bucket under receipts/
@@ -2873,6 +2908,17 @@ export const deleteContactMessageFromFirestore = async (id: string): Promise<voi
 // Firestore Sellers & Admin Users CRUD
 // ----------------------------------------------------
 export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
+  // If user is not authenticated in Firebase Auth, return cached sellers without triggering permission error
+  if (!auth.currentUser) {
+    const local = safeStorageGetItem('nak_sellers_list');
+    if (local) {
+      try {
+        return JSON.parse(local);
+      } catch {}
+    }
+    return [];
+  }
+
   try {
     recordOperation('read', 1);
     const colRef = collection(db, 'sellers');
@@ -2942,15 +2988,23 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
       deduplicatedResults.push(item);
     }
     return deduplicatedResults;
-  } catch (err) {
-    console.error('Lỗi tải danh sách người bán từ Firestore:', err);
+  } catch (err: any) {
+    if (err?.code !== 'permission-denied' && !err?.message?.includes('insufficient permissions')) {
+      console.warn('Lỗi tải danh sách người bán từ Firestore:', err);
+    }
+    const local = safeStorageGetItem('nak_sellers_list');
+    if (local) {
+      try {
+        return JSON.parse(local);
+      } catch {}
+    }
     return [];
   }
 };
 
 export const fetchSellerByUsername = async (username: string): Promise<SellerUser | null> => {
   const clean = (username || '').trim().toLowerCase();
-  if (!clean) return null;
+  if (!clean || !auth.currentUser) return null;
   const sellerId = `seller-${clean.replace(/[^a-z0-9]/g, '')}`;
 
   const fetchInternal = async (): Promise<SellerUser | null> => {
@@ -3082,6 +3136,9 @@ export const deleteSellerFromFirestore = async (sellerId: string, googleEmail?: 
 // Authorized Google Emails Management for Staff / Sellers
 // ----------------------------------------------------
 export const fetchAuthorizedSellersFromFirestore = async (): Promise<AuthorizedSellerItem[]> => {
+  if (!auth.currentUser) {
+    return [];
+  }
   try {
     recordOperation('read', 1);
     const colRef = collection(db, 'authorized_sellers');

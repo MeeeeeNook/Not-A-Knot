@@ -3,6 +3,7 @@ import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore as getClientFirestore, doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { recentOrdersCache } from './create';
 
 type App = any;
 type ApiRequest = any;
@@ -92,6 +93,15 @@ async function ensureClientAuthenticated() {
 }
 
 async function fetchOrderRecord(cleanCode: string): Promise<any | null> {
+  // Method 0: In-memory recent orders cache (immediate session lookup)
+  if (recentOrdersCache && recentOrdersCache.has(cleanCode)) {
+    return recentOrdersCache.get(cleanCode);
+  }
+  const alt = cleanCode.startsWith('NAK-') ? cleanCode.replace(/^NAK-/, '') : `NAK-${cleanCode}`;
+  if (recentOrdersCache && recentOrdersCache.has(alt)) {
+    return recentOrdersCache.get(alt);
+  }
+
   // Method 1: Firebase Admin SDK (if private key available)
   if (hasAdminCredentials()) {
     try {
@@ -267,9 +277,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   // Check rate limit
   if (!checkRateLimit(clientIp)) {
+    res.setHeader('Retry-After', '600');
     return res.status(429).json({
       success: false,
-      message: 'Bạn đã thử tra cứu sai quá nhiều lần. Vui lòng đợi 10 phút trước khi thử lại.'
+      message: 'Bạn đã tra cứu quá nhiều lần. Vui lòng chờ một lúc rồi thử lại.'
     });
   }
 
