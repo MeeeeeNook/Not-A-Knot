@@ -5,6 +5,7 @@ import {
   fetchCategoriesFromFirestore,
   fetchCollectionsFromFirestore,
   fetchSiteContentFromFirestore,
+  fetchOrdersFromFirestore,
   fetchBackupsFromFirestore,
   saveBackupToFirestore
 } from '../firebase';
@@ -77,11 +78,12 @@ export async function checkAndRunAutoBackup(): Promise<boolean> {
 
     console.log(`[AutoBackup] Scheduled auto-backup is due (interval: ${intervalHours}h). Starting execution...`);
 
-    const [products, categories, collections, siteContent] = await Promise.all([
+    const [products, categories, collections, siteContent, orders] = await Promise.all([
       fetchProductsFromFirestore().catch(() => []),
       fetchCategoriesFromFirestore().catch(() => []),
       fetchCollectionsFromFirestore().catch(() => []),
-      fetchSiteContentFromFirestore().catch(() => null)
+      fetchSiteContentFromFirestore().catch(() => null),
+      fetchOrdersFromFirestore().catch(() => [])
     ]);
 
     const backupDate = new Date();
@@ -105,13 +107,15 @@ export async function checkAndRunAutoBackup(): Promise<boolean> {
         productsCount: products.length,
         categoriesCount: categories.length,
         collectionsCount: collections.length,
+        ordersCount: orders.length,
         hasSiteContent: !!siteContent
       },
       data: {
         products,
         categories,
         collections,
-        siteContent: siteContent || undefined
+        siteContent: siteContent || undefined,
+        orders: orders || []
       }
     };
 

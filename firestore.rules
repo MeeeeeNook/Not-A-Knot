@@ -106,10 +106,12 @@ service cloud.firestore {
     // 4. Orders:
     // Staff can create, read, update, and delete any order.
     // Customers can submit new orders with strict initial status enforcement ('Chờ xác nhận', 'unpaid', paidAmount = 0).
-    // Updating, reading, or deleting existing orders is strictly restricted to authorized staff.
+    // Allow single order get by exact document ID (for order tracking verification)
+    // Listing the entire collection, updating, or deleting orders remains strictly restricted to authorized staff.
     match /orders/{orderId} {
       allow create: if isAuthorizedStaff() || validPublicOrderCreation();
-      allow read, update, delete: if isAuthorizedStaff();
+      allow get: if true;
+      allow list, update, delete: if isAuthorizedStaff();
     }
 
     // 5. Contact inquiries & consultation requests

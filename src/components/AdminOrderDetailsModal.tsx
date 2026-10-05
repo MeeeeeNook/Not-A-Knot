@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb } from 'lucide-react';
+import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb, Camera, Eye, RotateCw } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import {
   printOrderSlipDirectly,
@@ -42,6 +42,8 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
     return raw ? ensureGmailDomain(raw) : '';
   });
   const [emailModalError, setEmailModalError] = useState<string | null>(null);
+  const [zoomedPhotoUrl, setZoomedPhotoUrl] = useState<string | null>(null);
+  const [photoRotation, setPhotoRotation] = useState<number>(0);
 
   const showToast = (msg: string) => {
     setPrintSuccessToast(msg);
@@ -578,6 +580,86 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                         </div>
                       )}
 
+                      {/* Customer Requested Print Photo (Ảnh in kỷ niệm theo yêu cầu) */}
+                      {it.customPhotoUrl && (
+                        <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-rose-50/90 via-pink-50/80 to-amber-50/60 border border-rose-200/90 shadow-2xs space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-950">
+                              <Camera className="w-4 h-4 text-rose-600 shrink-0" />
+                              <span>Ảnh khách đặt in theo yêu cầu</span>
+                              {it.customPhotoPrice ? (
+                                <span className="text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-300">
+                                  Phụ thu: +{it.customPhotoPrice.toLocaleString('vi-VN')}đ
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                  Đã bao gồm
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPhotoRotation(0);
+                                  setZoomedPhotoUrl(it.customPhotoUrl!);
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-100/80 text-rose-900 border border-rose-300 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-rose-600" />
+                                <span>Phóng to xem</span>
+                              </button>
+                              <a
+                                href={it.customPhotoUrl}
+                                download={`Anh_In_Don_${order.id || 'order'}_M${idx + 1}.jpg`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Tải ảnh gốc</span>
+                              </a>
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3 pt-1">
+                            <div
+                              onClick={() => {
+                                setPhotoRotation(0);
+                                setZoomedPhotoUrl(it.customPhotoUrl!);
+                              }}
+                              className="relative group cursor-pointer shrink-0"
+                              title="Bấm để phóng to và xoay ảnh"
+                            >
+                              <img
+                                src={it.customPhotoUrl}
+                                alt="Ảnh in theo yêu cầu"
+                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-rose-300 shadow-sm group-hover:scale-105 transition-transform"
+                              />
+                              <div className="absolute inset-0 bg-black/30 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                <Eye className="w-5 h-5 drop-shadow" />
+                              </div>
+                            </div>
+                            <div className="space-y-1 text-xs text-slate-700 flex-1 min-w-0">
+                              {it.customPhotoNote ? (
+                                <div className="p-2 rounded-lg bg-white/90 border border-rose-200 text-[11px] leading-relaxed">
+                                  <span className="font-bold text-rose-900 block mb-0.5">👉 Yêu cầu in / căn chỉnh của khách:</span>
+                                  <span className="text-slate-800 font-medium italic">{it.customPhotoNote}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-500 italic block">
+                                  Khách không để lại ghi chú cắt/chỉnh riêng cho ảnh này.
+                                </span>
+                              )}
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <span>Đã lưu vào bộ nhớ storage & sẵn sàng đóng gói trong file ZIP</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {it.customNote && (
                         <div className="text-[11px] text-amber-900 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">
                           <strong>Yêu cầu riêng của khách:</strong> {it.customNote}
@@ -1069,6 +1151,88 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Photo Zoom Lightbox Modal */}
+      {zoomedPhotoUrl && (
+        <div
+          className="fixed inset-0 z-[80] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setZoomedPhotoUrl(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-700/50 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Lightbox Header */}
+            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-rose-400" />
+                <span className="font-bold text-sm">Xem Ảnh Khách Đặt In (Đơn #{order.id})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setZoomedPhotoUrl(null)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Lightbox Image Preview */}
+            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[60vh] overflow-hidden">
+              <img
+                src={zoomedPhotoUrl}
+                alt="Ảnh in custom phóng to"
+                style={{ transform: `rotate(${photoRotation}deg)` }}
+                className="max-h-[55vh] max-w-full object-contain rounded-lg shadow-lg transition-transform duration-200"
+              />
+            </div>
+
+            {/* Lightbox Actions */}
+            <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPhotoRotation((r) => (r + 90) % 360)}
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Xoay ảnh 90 độ theo chiều kim đồng hồ"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Xoay 90°</span>
+                </button>
+                <a
+                  href={zoomedPhotoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Mở tab mới</span>
+                </a>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={zoomedPhotoUrl}
+                  download={`Anh_In_Don_${order.id || 'order'}.jpg`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Tải ảnh về máy</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setZoomedPhotoUrl(null)}
+                  className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         </div>

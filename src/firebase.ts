@@ -28,7 +28,7 @@ import {
   arrayUnion,
   onSnapshot
 } from 'firebase/firestore';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, VersionBackup, BackupScheduleConfig, SocialFeedConfig } from './types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, VersionBackup, BackupScheduleConfig, SocialFeedConfig, OrderItemDetail } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import {
   saveProductToIDB,
@@ -826,23 +826,7 @@ export interface StoredOrder {
   detailedAddress?: string;
   note?: string;
   items: string[];
-  itemDetails?: {
-    productId: string;
-    productName: string;
-    category?: string;
-    price: number;
-    quantity: number;
-    selectedColor?: string;
-    selectedColorImage?: string;
-    selectedCharm?: string;
-    selectedCharmImage?: string;
-    selectedCharmPrice?: number;
-    selectedKhoen?: string;
-    selectedKhoenImage?: string;
-    selectedKhoenPrice?: number;
-    selectedSize?: string;
-    customNote?: string;
-  }[];
+  itemDetails?: OrderItemDetail[];
   totalPrice?: number;
   totalAmount?: number;
   shippingFee?: number;
@@ -1250,6 +1234,12 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         khoenTitle: data.khoenTitle || undefined,
         khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
         khoenSelectionRequired: !!data.khoenSelectionRequired,
+        enableCustomPhoto: !!data.enableCustomPhoto,
+        customPhotoTitle: data.customPhotoTitle || undefined,
+        customPhotoDescription: data.customPhotoDescription || undefined,
+        customPhotoPriceDelta: typeof data.customPhotoPriceDelta === 'number' ? data.customPhotoPriceDelta : undefined,
+        customPhotoRequired: !!data.customPhotoRequired,
+        customPhotoAspectRatio: data.customPhotoAspectRatio || undefined,
         enableSizeSelection: !!data.enableSizeSelection,
         isCombo: !!data.isCombo,
         comboItems: Array.isArray(data.comboItems) ? data.comboItems : undefined,
@@ -1327,6 +1317,12 @@ export const subscribeToProductsFromFirestore = (
             khoenTitle: data.khoenTitle || undefined,
             khoenOptions: Array.isArray(data.khoenOptions) ? data.khoenOptions : undefined,
             khoenSelectionRequired: !!data.khoenSelectionRequired,
+            enableCustomPhoto: !!data.enableCustomPhoto,
+            customPhotoTitle: data.customPhotoTitle || undefined,
+            customPhotoDescription: data.customPhotoDescription || undefined,
+            customPhotoPriceDelta: typeof data.customPhotoPriceDelta === 'number' ? data.customPhotoPriceDelta : undefined,
+            customPhotoRequired: !!data.customPhotoRequired,
+            customPhotoAspectRatio: data.customPhotoAspectRatio || undefined,
             enableSizeSelection: !!data.enableSizeSelection,
             isCombo: !!data.isCombo,
             comboItems: Array.isArray(data.comboItems) ? data.comboItems : undefined,
@@ -1574,15 +1570,62 @@ function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
   });
 }
 
+// Upload customer-provided custom photos directly to Firebase Storage bucket under order_custom_photos/
+export async function uploadOrderCustomPhotosToStorage(
+  orderId: string,
+  itemDetails: any[]
+): Promise<any[]> {
+  if (!Array.isArray(itemDetails)) return [];
+  const safeOrderId = (orderId || `NAK_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return Promise.all(
+    itemDetails.map(async (item, idx) => {
+      const copy = { ...item };
+      if (
+        copy.customPhotoUrl &&
+        typeof copy.customPhotoUrl === 'string' &&
+        (copy.customPhotoUrl.startsWith('data:image/') || copy.customPhotoUrl.length > 300) &&
+        !copy.customPhotoUrl.startsWith('http')
+      ) {
+        // Cache high-resolution original locally in IndexedDB as immediate safety net
+        try {
+          saveAssetToIDB(`order_custom_photo_${safeOrderId}_item_${idx + 1}`, copy.customPhotoUrl).catch(() => {});
+        } catch {}
+
+        try {
+          const uploadedUrl = await Promise.race([
+            uploadBase64ToStorage(copy.customPhotoUrl, `order_custom_photos/${safeOrderId}_item_${idx + 1}.jpg`),
+            new Promise<string>((resolve) => setTimeout(() => resolve(copy.customPhotoUrl!), 5000))
+          ]);
+          copy.customPhotoUrl = uploadedUrl;
+        } catch (err) {
+          console.warn(`[uploadOrderCustomPhotosToStorage] Món ${idx + 1} lưu fallback:`, err);
+        }
+      }
+      return copy;
+    })
+  );
+}
+
 export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> => {
   const canonicalId = canonicalOrderKey(order.id) || canonicalOrderKey(order.trackingNumber);
   const orderId = (canonicalId || order.id || order.trackingNumber || `NAK-${Date.now().toString().slice(-8)}`).trim().toUpperCase();
+
+  // 1. Upload any customer custom photos to Firebase Storage first so Storage URLs are ready
+  let readyItemDetails = order.itemDetails || [];
+  try {
+    readyItemDetails = await uploadOrderCustomPhotosToStorage(orderId, readyItemDetails);
+  } catch (photoErr) {
+    console.warn('[saveOrderToFirestore] Lỗi chuẩn bị ảnh custom Storage:', photoErr);
+  }
 
   // If client is not an authenticated staff member, route order creation via server endpoint with graceful direct Firestore fallback
   if (!auth.currentUser) {
     try {
       const { submitOrderToServer } = await import('./utils/orderService');
-      const result = await submitOrderToServer(order, {
+      const result = await submitOrderToServer({
+        ...order,
+        itemDetails: readyItemDetails
+      }, {
         expectedTotal: order.totalPrice || order.totalAmount
       });
       if (result.success && result.order) {
@@ -1614,7 +1657,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
 
   const docRef = doc(db, 'orders', orderId);
 
-  // 1. Bank receipt image is uploaded directly to Firebase Storage bucket under receipts/
+  // 2. Bank receipt image is uploaded directly to Firebase Storage bucket under receipts/
   let receiptImage = order.bankReceiptImage;
   if (receiptImage && (receiptImage.startsWith('data:image/') || receiptImage.length > 300) && !receiptImage.startsWith('http')) {
     try {
@@ -1628,8 +1671,8 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
     }
   }
 
-  // 2. Sanitize itemDetails to strip all images so order payload is pure text (< 2KB)
-  const sanitizedItemDetails = sanitizeItemDetailsForFirestore(order.itemDetails || []);
+  // 3. Sanitize itemDetails to strip catalog images while strictly preserving customPhotoUrl and crafting instructions
+  const sanitizedItemDetails = sanitizeItemDetailsForFirestore(readyItemDetails);
 
   const payload = cleanFirestoreData({
     ...order,
@@ -3407,9 +3450,13 @@ async function loadBackupsFromIDB(): Promise<VersionBackup[]> {
   }
 }
 
-function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000): any {
+function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000, parentKey?: string): any {
   if (obj === null || obj === undefined) return null;
   if (typeof obj === 'string') {
+    // If it's a customer's custom requested photo, strictly preserve it
+    if (parentKey === 'customPhotoUrl') {
+      return obj;
+    }
     // If it's a base64 image data URI that is heavy, replace with safe fallback asset
     if (obj.startsWith('data:image/') && obj.length > maxDataUriLen) {
       return '/assets/bracelet.jpg';
@@ -3417,13 +3464,13 @@ function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000): any {
     return obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => deepSanitizeBackup(item, maxDataUriLen));
+    return obj.map((item) => deepSanitizeBackup(item, maxDataUriLen, parentKey));
   }
   if (typeof obj === 'object') {
     const res: Record<string, any> = {};
     for (const [k, v] of Object.entries(obj)) {
       if (v !== undefined) {
-        res[k] = deepSanitizeBackup(v, maxDataUriLen);
+        res[k] = deepSanitizeBackup(v, maxDataUriLen, k);
       }
     }
     return res;

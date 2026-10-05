@@ -1272,6 +1272,17 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                                         Khoen: {it.selectedKhoen}
                                       </span>
                                     )}
+                                    {it.customPhotoUrl && (
+                                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                        <a href={it.customPhotoUrl} target="_blank" rel="noreferrer" title="Bấm để xem ảnh bạn đã tải">
+                                          <img src={it.customPhotoUrl} alt="Ảnh custom" className="w-3.5 h-3.5 rounded object-cover border border-rose-300 inline" />
+                                        </a>
+                                        <span>Ảnh in custom</span>
+                                        {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
+                                          <span className="text-rose-700">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                        ) : null}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
 

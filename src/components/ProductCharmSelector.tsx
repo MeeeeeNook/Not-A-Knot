@@ -4,6 +4,7 @@ import { Check, Sparkles, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
 import { LoadingImage } from './LoadingImage';
+import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
 
 interface ProductCharmSelectorProps {
   charms: ProductCharmOption[];
@@ -47,12 +48,23 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
     }
   }, [charms]);
 
+  const resolveCharmImage = (c: ProductCharmOption) => {
+    if (c.image && c.image.trim()) {
+      const resolved = resolveAssetUrl(c.image);
+      if (resolved && resolved !== '/assets/bracelet.jpg') return resolved;
+    }
+    const preset = DEFAULT_CHARM_PRESETS.find(
+      (p) => p.id === c.id || p.name.trim().toLowerCase() === c.name.trim().toLowerCase()
+    );
+    return preset?.image || c.image || '';
+  };
+
   // Convert charms to CompareItems for zoom/compare modal
   const compareItems: CompareItem[] = useMemo(() => {
     return charms.map((c, i) => ({
       id: c.id || `charm-${i}`,
       title: c.name,
-      image: c.image || '',
+      image: resolveCharmImage(c),
       priceDelta: c.priceDelta,
       stock: c.stock,
       type: 'charm',
@@ -252,9 +264,9 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
 
-                {charm.image && charm.image.trim() ? (
+                {resolveCharmImage(charm) ? (
                   <LoadingImage
-                    src={resolveAssetUrl(charm.image)}
+                    src={resolveCharmImage(charm)}
                     alt={charm.name}
                     containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"

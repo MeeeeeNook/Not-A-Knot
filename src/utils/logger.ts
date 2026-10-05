@@ -78,7 +78,7 @@ export function isIgnorableClientError(message: string, stack?: string): boolean
   // 3. Benign DOM observation / cross-origin script error / sandbox constructor restriction
   if (
     lowerMsg.includes('resizeobserver') ||
-    lowerMsg.includes('script error.') ||
+    lowerMsg.includes('script error') ||
     lowerMsg.includes('illegal constructor')
   ) {
     return true;

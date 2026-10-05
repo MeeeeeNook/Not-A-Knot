@@ -70,6 +70,12 @@ export interface ComboItemConfig {
   khoenSelectionRequired?: boolean;
   enableSizeSelection?: boolean;
   availableSizes?: string[];
+  // Custom Photo Printing option per combo item
+  enableCustomPhoto?: boolean;
+  customPhotoTitle?: string;
+  customPhotoDescription?: string;
+  customPhotoPriceDelta?: number;
+  customPhotoRequired?: boolean;
 }
 
 // Customer choices for each item in a Combo
@@ -87,6 +93,9 @@ export interface ComboItemSelection {
   selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
+  customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoNote?: string; // Special instruction for photo
+  customPhotoPrice?: number; // Extra fee for custom photo
 }
 
 export interface Product {
@@ -130,6 +139,13 @@ export interface Product {
   khoenOptions?: ProductKhoenOption[];
   khoenSelectionRequired?: boolean;
   enableSizeSelection?: boolean;
+  // Custom Photo Printing / In lồng ảnh theo yêu cầu settings
+  enableCustomPhoto?: boolean;
+  customPhotoTitle?: string; // Tên hiển thị (mặc định: "In ảnh theo yêu cầu", "Lồng ảnh kỷ niệm"...)
+  customPhotoDescription?: string; // Hướng dẫn tải ảnh (VD: "Tải ảnh rõ nét, chụp chính diện để in đẹp nhất")
+  customPhotoPriceDelta?: number; // Phụ thu in ảnh (VD: 0 hoặc 10.000đ)
+  customPhotoRequired?: boolean; // Bắt buộc tải ảnh khi đặt hàng
+  customPhotoAspectRatio?: string; // 'square' | 'portrait' | 'circle' | 'free'
   // Multi-Product Combo settings
   isCombo?: boolean; // If true, product has multiple distinct items to customize
   comboItems?: ComboItemConfig[]; // Array of sub-items that make up this combo
@@ -171,6 +187,9 @@ export interface CartItem {
   selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
+  customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoNote?: string; // Special instruction for photo
+  customPhotoPrice?: number; // Extra fee for custom photo
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
@@ -198,6 +217,9 @@ export interface OrderItemDetail {
   selectedKhoenPrice?: number;
   selectedSize?: string;
   customNote?: string;
+  customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoNote?: string; // Special instruction for photo
+  customPhotoPrice?: number; // Extra fee for custom photo
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
@@ -621,6 +643,7 @@ export interface VersionBackup {
     categories: CategoryItem[];
     collections: CollectionInfo[];
     siteContent?: SiteContentConfig;
+    orders?: StoredOrder[];
   };
 }
 

@@ -93,6 +93,9 @@ export const buildProductGalleryImages = (product: {
   return result.length > 0 ? result : ['/assets/bracelet.jpg'];
 };
 
+export const DEFAULT_FALLBACK_IMAGE = '/assets/bracelet.jpg';
+export const PLACEHOLDER_SVG_URL = '/assets/image-placeholder.svg';
+
 /**
  * Transforms an image URL to include width, quality, and auto-format query parameters
  * when supported (e.g., Unsplash, Cloudinary, Imgix).
@@ -102,9 +105,17 @@ export const getOptimizedImageUrl = (
   width?: number,
   quality: number = 80
 ): string => {
-  if (!src || typeof src !== 'string') return '/assets/bracelet.jpg';
-  const trimmed = src.trim();
-  if (!trimmed) return '/assets/bracelet.jpg';
+  if (!src || typeof src !== 'string') return DEFAULT_FALLBACK_IMAGE;
+  let trimmed = src.trim();
+  if (!trimmed) return DEFAULT_FALLBACK_IMAGE;
+
+  // Resolve asset tokens if needed
+  if (trimmed.startsWith('asset:')) {
+    const resolved = resolveAssetUrl(trimmed, DEFAULT_FALLBACK_IMAGE);
+    if (resolved && !resolved.startsWith('asset:')) {
+      trimmed = resolved.trim();
+    }
+  }
 
   // Base64 data URLs or local SVG / assets without query parameter support
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:') || trimmed.endsWith('.svg')) {

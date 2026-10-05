@@ -3,13 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Enforce HTTPS: Upgrade all insecure requests automatically -->
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+    <!-- Primary Viewport Configuration -->
     <script>
-      // Client-Side HTTPS Redirection Safeguard for Production
+      // Global error suppression for benign cross-origin script error, sandbox constructor notices, and Vite HMR
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var str = String(msg || '');
+        if (
+          str.toLowerCase().includes('script error') ||
+          str.includes('Illegal constructor') ||
+          str.includes('ResizeObserver') ||
+          str.includes('Disconnecting idle stream') ||
+          str.includes('Timed out waiting')
+        ) {
+          return true; // suppresses the error
+        }
+      };
+
+      // Client-Side HTTPS Redirection Safeguard for Production only
       if (typeof window !== 'undefined' && window.location.protocol === 'http:') {
         var host = window.location.hostname;
-        if (host && !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('0.0.0.0')) {
+        if (host === 'notaknot.id.vn' || host === 'www.notaknot.id.vn') {
           window.location.replace('https://' + window.location.host + window.location.pathname + window.location.search + window.location.hash);
         }
       }
@@ -34,10 +47,15 @@
         };
       })();
 
-      // Gracefully prevent benign Vite HMR websocket connection notices and sandbox Illegal Constructor errors
+      // Gracefully prevent benign Vite HMR websocket connection notices and sandbox errors
       window.addEventListener('error', function(event) {
         var errStr = String((event && event.message) || (event && event.error && event.error.message) || '');
-        if (errStr.includes('Illegal constructor')) {
+        if (
+          errStr.includes('Illegal constructor') ||
+          errStr.toLowerCase().includes('script error') ||
+          errStr.includes('ResizeObserver') ||
+          errStr.includes('Disconnecting idle stream')
+        ) {
           if (event.preventDefault) event.preventDefault();
           if (event.stopImmediatePropagation) event.stopImmediatePropagation();
           return true;
@@ -46,8 +64,15 @@
 
       window.addEventListener('unhandledrejection', function(event) {
         var errStr = String((event && event.reason && event.reason.message) || (event && event.reason) || '');
-        if (errStr.includes('Illegal constructor') || errStr.includes('WebSocket') || errStr.includes('websocket') || errStr.includes('[vite]')) {
-          event.preventDefault();
+        if (
+          errStr.includes('Illegal constructor') ||
+          errStr.toLowerCase().includes('script error') ||
+          errStr.includes('WebSocket') ||
+          errStr.includes('websocket') ||
+          errStr.includes('[vite]')
+        ) {
+          if (event.preventDefault) event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
         }
       });
 
@@ -433,9 +458,9 @@
       function loadGtag() {
         if (window.__gtag_injected) return;
         window.__gtag_injected = true;
-        // Do not inject external GA4 script in sandbox iframes or local/dev preview environments
+        // Only inject external GA4 script on the live production domain
         var host = window.location.hostname || '';
-        if (window.self !== window.top || host.includes('run.app') || host.includes('localhost') || host.includes('127.0.0.1')) {
+        if (host !== 'notaknot.id.vn' && host !== 'www.notaknot.id.vn') {
           return;
         }
         ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function(ev) {

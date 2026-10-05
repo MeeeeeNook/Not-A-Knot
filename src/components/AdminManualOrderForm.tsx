@@ -84,9 +84,22 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     return products.filter((p) => p.isHidden !== true);
   }, [products]);
 
-  // Priority sort sellers list so that the currently logged-in seller is ALWAYS FIRST on the list
+  // Priority sort sellers list so that the currently logged-in seller is ALWAYS FIRST on the list, with strict deduplication
   const sortedSellers = useMemo(() => {
-    if (!sellers || sellers.length === 0) {
+    const rawList: string[] = [];
+
+    // Current seller always first
+    if (currentSeller?.name && currentSeller.name.trim()) {
+      rawList.push(currentSeller.name.trim());
+    }
+
+    if (Array.isArray(sellers) && sellers.length > 0) {
+      sellers.forEach((s) => {
+        if (s?.name && s.name.trim()) {
+          rawList.push(s.name.trim());
+        }
+      });
+    } else {
       const defaultNames = [
         'Bộ trưởng phụ trách',
         'Thu Trang',
@@ -98,38 +111,20 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
         'Quang Huy',
         'Ngọc Mai'
       ];
-      if (currentSeller?.name) {
-        return [
-          currentSeller.name,
-          ...defaultNames.filter((n) => n.toLowerCase() !== currentSeller.name.toLowerCase())
-        ];
-      }
-      return defaultNames;
+      defaultNames.forEach((n) => rawList.push(n));
     }
 
-    if (!currentSeller) return sellers.map((s) => s.name);
-
-    const currentName = currentSeller.name.trim().toLowerCase();
-    const currentUsername = (currentSeller.username || '').trim().toLowerCase();
-
-    const loggedInList: string[] = [];
-    const otherList: string[] = [];
-
-    sellers.forEach((s) => {
-      const sName = s.name.trim().toLowerCase();
-      const sUser = (s.username || '').trim().toLowerCase();
-      if (sName === currentName || (currentUsername && sUser === currentUsername)) {
-        loggedInList.push(s.name);
-      } else {
-        otherList.push(s.name);
+    // Strict case-insensitive deduplication while preserving order (current seller first)
+    const seenNames = new Set<string>();
+    const deduplicated: string[] = [];
+    for (const name of rawList) {
+      const lower = name.toLowerCase();
+      if (!seenNames.has(lower)) {
+        seenNames.add(lower);
+        deduplicated.push(name);
       }
-    });
-
-    if (loggedInList.length === 0 && currentSeller.name) {
-      loggedInList.push(currentSeller.name);
     }
-
-    return [...loggedInList, ...otherList];
+    return deduplicated;
   }, [sellers, currentSeller]);
 
   // Seller assignment state
@@ -143,7 +138,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     if (currentSeller?.name) {
       setSelectedSellerName(currentSeller.name);
     }
-  }, [currentSeller]);
+  }, [currentSeller?.name]);
 
   // Customer info state
   const [customerName, setCustomerName] = useState('');
@@ -1076,8 +1071,8 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               Đơn {orderSource === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động ghi nhận
                             </option>
                           ) : (
-                            sortedSellers.map((name) => (
-                              <option key={name} value={name}>
+                            sortedSellers.map((name, idx) => (
+                              <option key={`seller-opt-${name}-${idx}`} value={name}>
                                 {name}
                               </option>
                             ))

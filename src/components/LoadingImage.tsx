@@ -57,15 +57,16 @@ export const LoadingImage: React.FC<LoadingImageProps> = ({
   const activeSrc = !src || src.trim().length === 0 ? fallbackSrc : src.trim();
   const currentSrc = hasError ? fallbackSrc : activeSrc;
 
-  // Whenever source URL changes, reset state and check if cached in memory
+  // Whenever the target source URL prop changes, reset error/loaded state
   useEffect(() => {
     setHasError(false);
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+    const node = imgRef.current;
+    if (node && node.complete && (node.naturalWidth > 0 || (activeSrc.startsWith('data:') && node.width > 0))) {
       setIsLoaded(true);
     } else {
       setIsLoaded(false);
     }
-  }, [currentSrc]);
+  }, [activeSrc]);
 
   const handleLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setIsLoaded(true);
@@ -112,8 +113,8 @@ export const LoadingImage: React.FC<LoadingImageProps> = ({
       <img
         ref={(node) => {
           imgRef.current = node;
-          // Synchronous check if browser already cached the image
-          if (node && node.complete && node.naturalWidth > 0 && !isLoaded) {
+          // Synchronous check if browser already cached or decoded the image
+          if (node && node.complete && (node.naturalWidth > 0 || (currentSrc.startsWith('data:') && node.width > 0)) && !isLoaded) {
             setIsLoaded(true);
           }
         }}

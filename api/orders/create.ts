@@ -642,7 +642,33 @@ export default async function handler(req: any, res: any) {
         }
       }
 
-      const authoritativeUnitPrice = authoritativeBasePrice + charmPriceDelta + omamoriPriceDelta + khoenPriceDelta;
+      let customPhotoPriceDelta = 0;
+      let hasCustomPhoto = false;
+      const customPhotoUrl = typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim()
+        ? item.customPhotoUrl.trim()
+        : undefined;
+      const customPhotoNote = typeof item.customPhotoNote === 'string' && item.customPhotoNote.trim()
+        ? item.customPhotoNote.trim().slice(0, 300)
+        : undefined;
+
+      if (customPhotoUrl) {
+        hasCustomPhoto = true;
+        if (authoritativeProduct.enableCustomPhoto && typeof authoritativeProduct.customPhotoPriceDelta === 'number') {
+          customPhotoPriceDelta = Math.max(0, Number(authoritativeProduct.customPhotoPriceDelta));
+        } else if (typeof item.customPhotoPrice === 'number') {
+          customPhotoPriceDelta = Math.max(0, Number(item.customPhotoPrice));
+        }
+      }
+
+      // Check if custom photo is required
+      if (authoritativeProduct.enableCustomPhoto && authoritativeProduct.customPhotoRequired && !customPhotoUrl) {
+        return res.status(400).json({
+          success: false,
+          error: `Sản phẩm "${authoritativeProduct.name}" bắt buộc tải ảnh in theo yêu cầu.`
+        });
+      }
+
+      const authoritativeUnitPrice = authoritativeBasePrice + charmPriceDelta + omamoriPriceDelta + khoenPriceDelta + customPhotoPriceDelta;
       const itemTotalPrice = authoritativeUnitPrice * rawQuantity;
       calculatedSubtotal += itemTotalPrice;
 
@@ -662,6 +688,9 @@ export default async function handler(req: any, res: any) {
         selectedKhoen: selectedKhoenName || undefined,
         selectedKhoenPrice: khoenPriceDelta > 0 ? khoenPriceDelta : undefined,
         selectedSize: typeof item.selectedSize === 'string' ? item.selectedSize : undefined,
+        customPhotoUrl: customPhotoUrl,
+        customPhotoNote: customPhotoNote,
+        customPhotoPrice: customPhotoPriceDelta > 0 ? customPhotoPriceDelta : undefined,
         customNote: typeof item.customNote === 'string' ? item.customNote.slice(0, 300) : undefined
       });
 
@@ -673,6 +702,7 @@ export default async function handler(req: any, res: any) {
       if (selectedOmamoriNames.length > 0) extras.push(`Bùa: ${selectedOmamoriNames.join(', ')}`);
       if (selectedKhoenName) extras.push(`Khoen: ${selectedKhoenName}`);
       if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
+      if (hasCustomPhoto) extras.push('In ảnh theo yêu cầu');
       if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
       if (extras.length > 0) summaryText += ` [${extras.join(', ')}]`;
       itemsSummaryList.push(summaryText);

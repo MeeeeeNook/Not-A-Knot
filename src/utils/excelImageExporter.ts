@@ -18,20 +18,46 @@ async function fetchImageBlob(url: string): Promise<{ data: Blob; extension: str
       return { data: blob, extension: ext };
     }
 
-    // Handle URL (relative or absolute)
-    const response = await fetch(url, { mode: 'cors' });
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    
-    // Determine extension
-    let ext = 'jpg';
-    if (blob.type.includes('png')) ext = 'png';
-    else if (blob.type.includes('webp')) ext = 'webp';
-    else if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
-    else if (url.endsWith('.png')) ext = 'png';
-    else if (url.endsWith('.webp')) ext = 'webp';
+    // Try standard fetch first
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (response.ok) {
+        const blob = await response.blob();
+        let ext = 'jpg';
+        if (blob.type.includes('png')) ext = 'png';
+        else if (blob.type.includes('webp')) ext = 'webp';
+        else if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
+        else if (url.endsWith('.png')) ext = 'png';
+        else if (url.endsWith('.webp')) ext = 'webp';
+        return { data: blob, extension: ext };
+      }
+    } catch {}
 
-    return { data: blob, extension: ext };
+    // Fallback: load image into an Image element and export via canvas
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const loaded = await new Promise<boolean>((resolve) => {
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = url;
+      });
+      if (loaded && img.width > 0 && img.height > 0) {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+          if (blob) {
+            return { data: blob, extension: 'jpg' };
+          }
+        }
+      }
+    } catch {}
+
+    return null;
   } catch (err) {
     console.warn('Không thể tải ảnh cho file export:', url, err);
     return null;
@@ -124,6 +150,11 @@ function formatOrderItemFullNameAndOptions(it: any): string {
     optionsParts.push(`Màu nút: ${it.customKnotColor}`);
   }
 
+  if (it.customPhotoUrl) {
+    const photoNote = it.customPhotoNote ? ` - Y/C: ${it.customPhotoNote}` : '';
+    optionsParts.push(`In ảnh theo YC: Có${it.customPhotoPrice ? ` (+${it.customPhotoPrice.toLocaleString('vi-VN')}đ)` : ''}${photoNote}`);
+  }
+
   if (it.customNote) {
     optionsParts.push(`Yêu cầu riêng: ${it.customNote}`);
   }
@@ -153,6 +184,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
     'Số Điện Thoại',
     'Địa Chỉ',
     'Sản Phẩm',
+    'Ảnh In Custom (File ZIP / Link)',
     'Số Lượng',
     'Đơn giá',
     'Tổng Tiền',
@@ -175,7 +207,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
   const rows: (string | number)[][] = [];
   const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
-  const rowMetas: { sourceText: string; paymentStatusText: string }[] = [];
+  const rowMetas: { sourceText: string; paymentStatusText: string; customPhotoUrl?: string }[] = [];
 
   orders.forEach((o, idx) => {
     // 1. STT
@@ -255,6 +287,8 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
     // Extract individual product lines
     interface ExtractedItem {
       name: string;
+      customPhotoDesc: string;
+      customPhotoUrl?: string;
       quantity: number | '';
       unitPrice: number | '';
     }
@@ -262,8 +296,15 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
     const items: ExtractedItem[] = [];
 
     if (o.itemDetails && o.itemDetails.length > 0) {
-      o.itemDetails.forEach((it) => {
+      o.itemDetails.forEach((it, itIdx) => {
         const pName = safeCellText(formatOrderItemFullNameAndOptions(it));
+        let photoDesc = '';
+        if (it.customPhotoUrl) {
+          const zipFilename = `Anh_In_Don_${safeId}_M${itIdx + 1}`;
+          const noteStr = it.customPhotoNote ? ` - Y/C: ${it.customPhotoNote}` : '';
+          const onlineLink = it.customPhotoUrl.startsWith('http') ? ` (Link: ${it.customPhotoUrl})` : '';
+          photoDesc = `[File ZIP: ${zipFilename}]${noteStr}${onlineLink}`;
+        }
         const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
         let price: number | '' = '';
         if (typeof it.price === 'number' && it.price >= 0) {
@@ -273,7 +314,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         } else if (o.itemDetails!.length === 1 && typeof orderTotal === 'number') {
           price = Math.round(orderTotal / qty);
         }
-        items.push({ name: pName, quantity: qty, unitPrice: price });
+        items.push({ name: pName, customPhotoDesc: photoDesc, customPhotoUrl: it.customPhotoUrl, quantity: qty, unitPrice: price });
       });
     } else if (o.items && o.items.length > 0) {
       o.items.forEach((itStr) => {
@@ -281,16 +322,16 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         if (match) {
           const pName = safeCellText((match[1] + (match[3] || '')).trim());
           const qty = parseInt(match[2], 10) || 1;
-          items.push({ name: pName, quantity: qty, unitPrice: '' });
+          items.push({ name: pName, customPhotoDesc: '', quantity: qty, unitPrice: '' });
         } else {
-          items.push({ name: safeCellText(itStr), quantity: 1, unitPrice: '' });
+          items.push({ name: safeCellText(itStr), customPhotoDesc: '', quantity: 1, unitPrice: '' });
         }
       });
       if (items.length === 1 && items[0].unitPrice === '' && typeof orderTotal === 'number' && typeof items[0].quantity === 'number') {
         items[0].unitPrice = Math.round(orderTotal / items[0].quantity);
       }
     } else {
-      items.push({ name: '', quantity: '', unitPrice: '' });
+      items.push({ name: '', customPhotoDesc: '', quantity: '', unitPrice: '' });
     }
 
     const numItems = items.length;
@@ -298,7 +339,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
     if (numItems > 1) {
       const endRowIndex = startRowIndex + numItems - 1;
-      const MERGED_COLUMNS = [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+      const MERGED_COLUMNS = [0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18];
       MERGED_COLUMNS.forEach((colIdx) => {
         merges.push({
           s: { r: startRowIndex, c: colIdx },
@@ -320,6 +361,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
       // Product line data (individual line per item)
       const cellProdName = item.name;
+      const cellCustomPhoto = item.customPhotoDesc;
       const cellQuantity = item.quantity;
       const cellUnitPrice = item.unitPrice;
 
@@ -344,6 +386,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         cellPhone,
         cellAddress,
         cellProdName,
+        cellCustomPhoto,
         cellQuantity,
         cellUnitPrice,
         cellTotal,
@@ -359,7 +402,8 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
       rowMetas.push({
         sourceText,
-        paymentStatusText
+        paymentStatusText,
+        customPhotoUrl: item.customPhotoUrl
       });
     });
   });
@@ -384,24 +428,25 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
 
   // Set Column Widths
   worksheet['!cols'] = [
-    { wch: 6 },  // STT
-    { wch: 18 }, // Mã Đơn Hàng
-    { wch: 20 }, // Thời Gian Đặt
-    { wch: 24 }, // Tên Khách Hàng
-    { wch: 14 }, // Số Điện Thoại
-    { wch: 38 }, // Địa Chỉ
-    { wch: 36 }, // Sản Phẩm
-    { wch: 10 }, // Số Lượng
-    { wch: 14 }, // Đơn giá
-    { wch: 16 }, // Tổng Tiền
-    { wch: 16 }, // Đã Thu (VNĐ)
-    { wch: 14 }, // Nguồn Đơn
-    { wch: 18 }, // Tình Trạng TT
-    { wch: 24 }, // Hình Thức TT
-    { wch: 34 }, // Bill Chuyển Khoản
-    { wch: 18 }, // Trạng Thái Xử Lý
-    { wch: 30 }, // Ghi Chú
-    { wch: 18 }  // Người bán
+    { wch: 6 },  // 0. STT
+    { wch: 18 }, // 1. Mã Đơn Hàng
+    { wch: 20 }, // 2. Thời Gian Đặt
+    { wch: 24 }, // 3. Tên Khách Hàng
+    { wch: 14 }, // 4. Số Điện Thoại
+    { wch: 38 }, // 5. Địa Chỉ
+    { wch: 36 }, // 6. Sản Phẩm
+    { wch: 32 }, // 7. Ảnh In Custom (File ZIP / Link)
+    { wch: 10 }, // 8. Số Lượng
+    { wch: 14 }, // 9. Đơn giá
+    { wch: 16 }, // 10. Tổng Tiền
+    { wch: 16 }, // 11. Đã Thu (VNĐ)
+    { wch: 14 }, // 12. Nguồn Đơn
+    { wch: 18 }, // 13. Tình Trạng TT
+    { wch: 24 }, // 14. Hình Thức TT
+    { wch: 34 }, // 15. Bill Chuyển Khoản
+    { wch: 18 }, // 16. Trạng Thái Xử Lý
+    { wch: 30 }, // 17. Ghi Chú
+    { wch: 18 }  // 18. Người bán
   ];
 
   // Header Row Styling: Background #3B608D, Font: Bold, size 11, White (#FFFFFF), Height: 26, Center/Center, Border #E0E0E0
@@ -427,16 +472,26 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
       }
 
       const cell = worksheet[cellRef];
-      // Numeric columns (Số Lượng, Đơn giá, Tổng Tiền, Đã Thu): cols 7, 8, 9, 10
-      const isNumericCol = c === 7 || c === 8 || c === 9 || c === 10;
-      const isCenteredCol = [0, 1, 2, 4, 11, 12, 13, 14, 15].includes(c);
+      // Numeric columns (Số Lượng, Đơn giá, Tổng Tiền, Đã Thu): cols 8, 9, 10, 11
+      const isNumericCol = c === 8 || c === 9 || c === 10 || c === 11;
+      const isCenteredCol = [0, 1, 2, 4, 7, 12, 13, 14, 15, 16].includes(c);
 
       let cellFont: any = { name: 'Calibri', sz: 11, bold: false, color: { rgb: '000000' } };
       let cellFill: any = undefined;
 
-      // Conditional Color: Column Nguồn Đơn (col 11)
+      // Highlight custom photo column if populated
+      if (c === 7 && val) {
+        cellFont = { name: 'Calibri', sz: 10, bold: true, color: { rgb: '9F1239' } };
+        cellFill = { fgColor: { rgb: 'FFE4E6' } };
+        const rawPhotoUrl = rowMetas[rowIdx]?.customPhotoUrl;
+        if (rawPhotoUrl && (rawPhotoUrl.startsWith('http://') || rawPhotoUrl.startsWith('https://'))) {
+          (cell as any).l = { Target: rawPhotoUrl, Tooltip: 'Bấm để mở ảnh trực tuyến' };
+        }
+      }
+
+      // Conditional Color: Column Nguồn Đơn (col 12)
       const currentSource = (val as string) || rowMetas[rowIdx]?.sourceText || '';
-      if (c === 11) {
+      if (c === 12) {
         if (currentSource === 'Trực tiếp') {
           cellFill = { fgColor: { rgb: 'D2DAE4' } };
         } else if (currentSource === 'Website') {
@@ -446,9 +501,9 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         }
       }
 
-      // Conditional Color: Column Tình Trạng TT (col 12)
+      // Conditional Color: Column Tình Trạng TT (col 13)
       const currentPaymentStatus = (val as string) || rowMetas[rowIdx]?.paymentStatusText || '';
-      if (c === 12) {
+      if (c === 13) {
         if (currentPaymentStatus === 'Đã thanh toán') {
           cellFill = { fgColor: { rgb: '748C42' } };
           cellFont = { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'C2D69B' } };
@@ -465,7 +520,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         alignment: {
           vertical: 'center',
           horizontal: isNumericCol ? 'right' : isCenteredCol ? 'center' : 'left',
-          wrapText: c === 5 || c === 6 || c === 16 // Wrap text on Address, Products, Notes
+          wrapText: c === 5 || c === 6 || c === 7 || c === 17 // Wrap text on Address, Products, Custom Photo, Notes
         }
       };
 
@@ -509,47 +564,85 @@ export async function exportOrdersWithImageOption({
   const sheetName = `Danh Sách Đơn Hàng (${exportTime})`.slice(0, 31);
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
-  // If user does NOT want images, download .xlsx directly
-  if (!includeImages) {
+  // Check if any order contains custom requested print photos
+  const hasCustomPhotos = orders.some((ord) => 
+    Array.isArray(ord.itemDetails) && ord.itemDetails.some((it) => it && it.customPhotoUrl)
+  );
+
+  // If user does NOT want images AND there are NO custom photos at all, download standalone .xlsx directly
+  if (!includeImages && !hasCustomPhotos) {
     XLSX.writeFile(workbook, `NOT_A_KNOT_Don_Hang_${dateStr}_${exportTime}.xlsx`);
     return;
   }
 
-  // If user requested images, package Excel + Images into a ZIP
-  onProgress?.('Đang thu thập và nén hình ảnh bill & sản phẩm...');
+  // Package Excel + Images into a ZIP bundle
+  onProgress?.(hasCustomPhotos ? 'Đang thu thập và nén hình ảnh in theo yêu cầu của khách...' : 'Đang thu thập và nén hình ảnh bill & sản phẩm...');
   const zip = new JSZip();
 
   // 1. Add Excel file to ZIP
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   zip.file(`NOT_A_KNOT_Don_Hang_${dateStr}_${exportTime}.xlsx`, excelBuffer);
 
-  // 2. Fetch and add Receipt Bills folder
-  const billFolder = zip.folder('Anh_Bill_Chuyen_Khoan');
-  let billCount = 0;
+  // 2. Fetch and add Customer Requested Print Photos folder
+  const customPhotoFolder = zip.folder('Anh_Khach_In_Theo_Yeu_Cau');
+  let customPhotoCount = 0;
   for (let i = 0; i < orders.length; i++) {
     const ord = orders[i];
-    if (ord.bankReceiptImage) {
-      onProgress?.(`Đang tải ảnh bill ${i + 1}/${orders.length}...`);
-      const imgObj = await fetchImageBlob(ord.bankReceiptImage);
-      if (imgObj && billFolder) {
-        const safeId = sanitizeFilename(ord.id || `ORD_${i + 1}`);
-        billFolder.file(`Bill_Don_${safeId}.${imgObj.extension}`, imgObj.data);
-        billCount++;
+    const safeId = sanitizeFilename(ord.id || ord.trackingNumber || `ORD_${i + 1}`);
+    const cleanCustomerName = sanitizeFilename(ord.name || ord.customerName || 'Khach');
+
+    if (Array.isArray(ord.itemDetails)) {
+      for (let itIdx = 0; itIdx < ord.itemDetails.length; itIdx++) {
+        const it = ord.itemDetails[itIdx];
+        if (it && it.customPhotoUrl) {
+          onProgress?.(`Đang tải ảnh in của khách đơn ${safeId} (món ${itIdx + 1})...`);
+          const imgObj = await fetchImageBlob(it.customPhotoUrl);
+          if (imgObj && customPhotoFolder) {
+            const prodName = sanitizeFilename(it.productName || (it as any).name || `SP_${itIdx + 1}`);
+            const baseFileName = `Anh_In_Don_${safeId}_M${itIdx + 1}_${cleanCustomerName}_${prodName}`;
+            customPhotoFolder.file(`${baseFileName}.${imgObj.extension}`, imgObj.data);
+            customPhotoCount++;
+
+            // If customer provided custom notes for photo crafting, save a companion text note
+            if (it.customPhotoNote) {
+              const noteContent = `=========================================\nTHÔNG TIN ẢNH IN THEO YÊU CẦU CỦA KHÁCH\n=========================================\n- Mã đơn hàng: ${ord.id || ord.trackingNumber || ''}\n- Khách hàng: ${ord.name || ord.customerName || ''}\n- Số điện thoại: ${ord.phone || ''}\n- Sản phẩm: ${it.productName || (it as any).name || ''}\n- Số lượng: ${it.quantity || 1}\n- Phụ thu in ảnh: ${it.customPhotoPrice ? `${it.customPhotoPrice.toLocaleString('vi-VN')}đ` : 'Miễn phí'}\n\n👉 YÊU CẦU CHẾ TÁC / IN ẤN CỦA KHÁCH:\n${it.customPhotoNote}\n\n(File ảnh đính kèm tương ứng: ${baseFileName}.${imgObj.extension})\n`;
+              customPhotoFolder.file(`${baseFileName}_YEU_CAU.txt`, noteContent);
+            }
+          }
+        }
       }
     }
   }
 
-  // 3. Fetch and add Product Images folder
-  if (products && products.length > 0) {
-    const prodFolder = zip.folder('Anh_San_Pham');
-    let prodImgCount = 0;
-    for (const p of products) {
-      if (p.image) {
-        const imgObj = await fetchImageBlob(p.image);
-        if (imgObj && prodFolder) {
-          const safeName = sanitizeFilename(`${p.id}_${p.name}`);
-          prodFolder.file(`${safeName}.${imgObj.extension}`, imgObj.data);
-          prodImgCount++;
+  // 3. Fetch and add Receipt Bills folder (only when includeImages is requested)
+  if (includeImages) {
+    const billFolder = zip.folder('Anh_Bill_Chuyen_Khoan');
+    let billCount = 0;
+    for (let i = 0; i < orders.length; i++) {
+      const ord = orders[i];
+      if (ord.bankReceiptImage) {
+        onProgress?.(`Đang tải ảnh bill ${i + 1}/${orders.length}...`);
+        const imgObj = await fetchImageBlob(ord.bankReceiptImage);
+        if (imgObj && billFolder) {
+          const safeId = sanitizeFilename(ord.id || `ORD_${i + 1}`);
+          billFolder.file(`Bill_Don_${safeId}.${imgObj.extension}`, imgObj.data);
+          billCount++;
+        }
+      }
+    }
+
+    // 4. Fetch and add Product Images folder (only when includeImages is requested)
+    if (products && products.length > 0) {
+      const prodFolder = zip.folder('Anh_San_Pham');
+      let prodImgCount = 0;
+      for (const p of products) {
+        if (p.image) {
+          const imgObj = await fetchImageBlob(p.image);
+          if (imgObj && prodFolder) {
+            const safeName = sanitizeFilename(`${p.id}_${p.name}`);
+            prodFolder.file(`${safeName}.${imgObj.extension}`, imgObj.data);
+            prodImgCount++;
+          }
         }
       }
     }
@@ -560,7 +653,9 @@ export async function exportOrdersWithImageOption({
   const downloadUrl = URL.createObjectURL(zipBlob);
   const link = document.createElement('a');
   link.href = downloadUrl;
-  link.download = `NOT_A_KNOT_Don_Hang_Kem_Anh_${dateStr}_${exportTime}.zip`;
+  link.download = includeImages
+    ? `NOT_A_KNOT_Don_Hang_Kem_Tat_Ca_Anh_${dateStr}_${exportTime}.zip`
+    : `NOT_A_KNOT_Don_Hang_Kem_Anh_In_${dateStr}_${exportTime}.zip`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -721,17 +816,40 @@ export async function exportMasterBackupWithImageOption({
     }
   }
 
-  // 2. Order receipt bills
+  // 2. Order receipt bills & customer print photos
   if (selectedTypes.orders && orders.length > 0) {
     const billFolder = zip.folder('2_Anh_Bill_Don_Hang');
+    const customPhotoFolder = zip.folder('2b_Anh_Khach_In_Theo_Yeu_Cau');
     for (let i = 0; i < orders.length; i++) {
       const ord = orders[i];
+      const safeId = sanitizeFilename(ord.id || ord.trackingNumber || `ORD_${i + 1}`);
+      const cleanCustomerName = sanitizeFilename(ord.name || ord.customerName || 'Khach');
+
       if (ord.bankReceiptImage) {
-        onProgress?.(`Đang tải bill chuyển khoản đơn #${ord.id || i + 1}...`);
+        onProgress?.(`Đang tải bill chuyển khoản đơn #${safeId}...`);
         const imgObj = await fetchImageBlob(ord.bankReceiptImage);
         if (imgObj && billFolder) {
-          const safeId = sanitizeFilename(ord.id || `ORD_${i + 1}`);
           billFolder.file(`Bill_Don_${safeId}.${imgObj.extension}`, imgObj.data);
+        }
+      }
+
+      if (Array.isArray(ord.itemDetails)) {
+        for (let itIdx = 0; itIdx < ord.itemDetails.length; itIdx++) {
+          const it = ord.itemDetails[itIdx];
+          if (it && it.customPhotoUrl) {
+            onProgress?.(`Đang tải ảnh in custom đơn #${safeId} (món ${itIdx + 1})...`);
+            const imgObj = await fetchImageBlob(it.customPhotoUrl);
+            if (imgObj && customPhotoFolder) {
+              const prodName = sanitizeFilename(it.productName || (it as any).name || `SP_${itIdx + 1}`);
+              const baseFileName = `Anh_In_Don_${safeId}_M${itIdx + 1}_${cleanCustomerName}_${prodName}`;
+              customPhotoFolder.file(`${baseFileName}.${imgObj.extension}`, imgObj.data);
+
+              if (it.customPhotoNote) {
+                const noteContent = `=========================================\nTHÔNG TIN ẢNH IN THEO YÊU CẦU CỦA KHÁCH\n=========================================\n- Mã đơn hàng: ${ord.id || ord.trackingNumber || ''}\n- Khách hàng: ${ord.name || ord.customerName || ''}\n- Số điện thoại: ${ord.phone || ''}\n- Sản phẩm: ${it.productName || (it as any).name || ''}\n- Số lượng: ${it.quantity || 1}\n- Phụ thu in ảnh: ${it.customPhotoPrice ? `${it.customPhotoPrice.toLocaleString('vi-VN')}đ` : 'Miễn phí'}\n\n👉 YÊU CẦU CHẾ TÁC / IN ẤN CỦA KHÁCH:\n${it.customPhotoNote}\n\n(File ảnh đính kèm tương ứng: ${baseFileName}.${imgObj.extension})\n`;
+                customPhotoFolder.file(`${baseFileName}_YEU_CAU.txt`, noteContent);
+              }
+            }
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
+import { ProductCustomPhotoSelector } from './ProductCustomPhotoSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { LoadingImage } from './LoadingImage';
@@ -32,7 +33,11 @@ interface ProductDetailModalProps {
     selectedOmamoriPrice?: number,
     selectedKhoen?: string,
     selectedKhoenImage?: string,
-    selectedKhoenPrice?: number
+    selectedKhoenPrice?: number,
+    selectedComboItems?: any[],
+    customPhotoUrl?: string,
+    customPhotoNote?: string,
+    customPhotoPrice?: number
   ) => void;
 }
 
@@ -71,6 +76,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [omamoriError, setOmamoriError] = useState<string | null>(null);
   const [selectedKhoen, setSelectedKhoen] = useState<ProductKhoenOption | null>(null);
   const [khoenError, setKhoenError] = useState<string | null>(null);
+  const [customPhotoUrl, setCustomPhotoUrl] = useState<string | undefined>(undefined);
+  const [customPhotoNote, setCustomPhotoNote] = useState<string>('');
+  const [customPhotoError, setCustomPhotoError] = useState<string | null>(null);
 
   const totalCharmPrice = useMemo(() => {
     return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
@@ -82,7 +90,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const totalKhoenPrice = selectedKhoen?.priceDelta || 0;
 
-  const effectiveUnitPrice = (product?.price || 0) + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice;
+  const customPhotoPrice = useMemo(() => {
+    if (!product?.enableCustomPhoto) return 0;
+    if (customPhotoUrl && typeof product.customPhotoPriceDelta === 'number') {
+      return product.customPhotoPriceDelta;
+    }
+    return 0;
+  }, [product?.enableCustomPhoto, product?.customPhotoPriceDelta, customPhotoUrl]);
+
+  const effectiveUnitPrice = (product?.price || 0) + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice + customPhotoPrice;
 
   const selectedCharmNames = useMemo(() => {
     return selectedCharms.map((c) => c.name).join(', ');
@@ -100,6 +116,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     setCharmError(null);
     setOmamoriError(null);
     setKhoenError(null);
+    setCustomPhotoUrl(undefined);
+    setCustomPhotoNote('');
+    setCustomPhotoError(null);
 
     if (product) {
       trackGA4ViewItem(product);
@@ -224,6 +243,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       return;
     }
 
+    const photoTitleLabel = product.customPhotoTitle?.trim() || 'In ảnh theo yêu cầu';
+    if (product.enableCustomPhoto && product.customPhotoRequired && !customPhotoUrl) {
+      setCustomPhotoError(`Vui lòng tải ảnh cho "${photoTitleLabel}" trước khi thêm.`);
+      return;
+    }
+
     if (selectedColorOption && typeof selectedColorOption.stock === 'number') {
       if (selectedColorOption.stock <= 0) {
         alert(`Màu "${selectedColorOption.name}" hiện đã hết hàng. Vui lòng chọn màu khác.`);
@@ -287,7 +312,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       totalOmamoriPrice,
       selectedKhoen?.name || undefined,
       selectedKhoen?.image || undefined,
-      totalKhoenPrice
+      totalKhoenPrice,
+      undefined,
+      customPhotoUrl,
+      customPhotoNote,
+      customPhotoPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -595,6 +624,27 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       {khoenError}
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Custom Photo Upload (if enabled) */}
+              {product.enableCustomPhoto && (
+                <div className="space-y-1">
+                  <ProductCustomPhotoSelector
+                    title={product.customPhotoTitle}
+                    description={product.customPhotoDescription}
+                    priceDelta={product.customPhotoPriceDelta || 0}
+                    isRequired={product.customPhotoRequired}
+                    aspectRatio={product.customPhotoAspectRatio || 'square'}
+                    customPhotoUrl={customPhotoUrl}
+                    customPhotoNote={customPhotoNote}
+                    onPhotoChange={(url, note) => {
+                      setCustomPhotoError(null);
+                      setCustomPhotoUrl(url);
+                      if (note !== undefined) setCustomPhotoNote(note);
+                    }}
+                    error={customPhotoError}
+                  />
                 </div>
               )}
 

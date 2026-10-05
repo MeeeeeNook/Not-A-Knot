@@ -4,6 +4,7 @@ import { Check, CircleDot, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
 import { LoadingImage } from './LoadingImage';
+import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 
 interface ProductKhoenSelectorProps {
   khoenOptions: ProductKhoenOption[];
@@ -41,11 +42,22 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
     }
   }, [khoenOptions]);
 
+  const resolveKhoenImage = (k: ProductKhoenOption) => {
+    if (k.image && k.image.trim()) {
+      const resolved = resolveAssetUrl(k.image);
+      if (resolved && resolved !== '/assets/bracelet.jpg') return resolved;
+    }
+    const preset = DEFAULT_KHOEN_PRESETS.find(
+      (p) => p.id === k.id || p.name.trim().toLowerCase() === k.name.trim().toLowerCase()
+    );
+    return preset?.image || k.image || '';
+  };
+
   const compareItems: CompareItem[] = useMemo(() => {
     return khoenOptions.map((k, i) => ({
       id: k.id || `khoen-${i}`,
       title: k.name,
-      image: k.image || '',
+      image: resolveKhoenImage(k),
       priceDelta: k.priceDelta,
       stock: k.stock,
       type: 'khoen',
@@ -195,9 +207,9 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
 
-                {khoen.image && khoen.image.trim() ? (
+                {resolveKhoenImage(khoen) ? (
                   <LoadingImage
-                    src={resolveAssetUrl(khoen.image)}
+                    src={resolveKhoenImage(khoen)}
                     alt={khoen.name}
                     containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 hover:scale-105"

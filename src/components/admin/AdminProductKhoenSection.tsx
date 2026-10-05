@@ -41,21 +41,11 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
   return (
     <div className="p-3 bg-emerald-50/40 rounded-xl border border-emerald-200/70 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div
-          onClick={() => {
-            const newChecked = !formEnableKhoenSelection;
-            setFormEnableKhoenSelection(newChecked);
-            if (newChecked && formKhoenOptions.length === 0) {
-              setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
-            }
-          }}
-          className="flex items-center gap-2 cursor-pointer select-none"
-        >
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={formEnableKhoenSelection}
             onChange={(e) => {
-              e.stopPropagation();
               const checked = e.target.checked;
               setFormEnableKhoenSelection(checked);
               if (checked && formKhoenOptions.length === 0) {
@@ -72,7 +62,7 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
               Khách hàng có thể chọn loại khoen (Khoen tròn Inox, Càng cua, Trái tim, Giọt nước, Chữ D...) và phụ thu / tồn kho.
             </span>
           </div>
-        </div>
+        </label>
 
         {formEnableKhoenSelection && (
           <div className="flex flex-wrap items-center gap-2">

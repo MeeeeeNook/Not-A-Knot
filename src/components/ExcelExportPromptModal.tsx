@@ -115,13 +115,13 @@ export const ExcelExportPromptModal: React.FC<ExcelExportPromptModalProps> = ({
                     </div>
                     <div>
                       <div className="font-black text-xs text-slate-950 flex items-center gap-1.5">
-                        <span>Tải Excel kèm tất cả hình ảnh (.zip)</span>
+                        <span>Tải Excel đóng gói file ZIP (.zip)</span>
                         <span className="px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 text-[9px] font-extrabold">
                           Khuyên dùng
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-600 mt-0.5">
-                        Bao gồm file Excel và thư mục ảnh bill CK, ảnh sản phẩm, banner
+                        Bao gồm file Excel (.xlsx), thư mục ảnh khách đặt in theo yêu cầu, ảnh bill và sản phẩm
                       </div>
                     </div>
                   </div>

@@ -1007,26 +1007,30 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
 };
 
 /**
- * Deduplicate sellers list by ID and username to guarantee unique keys across rendering
+ * Deduplicate sellers list by ID, username, and name to guarantee unique keys across rendering
  */
 export const deduplicateSellers = (list: SellerUser[]): SellerUser[] => {
   if (!Array.isArray(list)) return [];
   const seenIds = new Set<string>();
   const seenUsernames = new Set<string>();
+  const seenNames = new Set<string>();
   const result: SellerUser[] = [];
 
   for (const s of list) {
     if (!s) continue;
     const rawId = s.id ? String(s.id).trim() : '';
     const rawUsername = s.username ? String(s.username).trim().toLowerCase() : '';
+    const rawName = s.name ? String(s.name).trim().toLowerCase() : '';
     const cleanId = rawId || (rawUsername ? `seller-${rawUsername.replace(/[^a-z0-9_]/g, '')}` : '');
     const cleanUsername = rawUsername || cleanId;
 
     if (cleanId && seenIds.has(cleanId)) continue;
     if (cleanUsername && seenUsernames.has(cleanUsername)) continue;
+    if (rawName && seenNames.has(rawName)) continue;
 
     if (cleanId) seenIds.add(cleanId);
     if (cleanUsername) seenUsernames.add(cleanUsername);
+    if (rawName) seenNames.add(rawName);
 
     result.push({
       ...s,

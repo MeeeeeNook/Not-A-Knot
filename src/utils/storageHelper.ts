@@ -164,6 +164,12 @@ function sanitizeProductForCart(product: Product): Product {
     khoenTitle: product.khoenTitle,
     khoenOptions: product.khoenOptions,
     khoenSelectionRequired: product.khoenSelectionRequired,
+    enableCustomPhoto: product.enableCustomPhoto,
+    customPhotoTitle: product.customPhotoTitle,
+    customPhotoDescription: product.customPhotoDescription,
+    customPhotoPriceDelta: product.customPhotoPriceDelta,
+    customPhotoRequired: product.customPhotoRequired,
+    customPhotoAspectRatio: product.customPhotoAspectRatio,
   };
 }
 
@@ -196,6 +202,9 @@ export function serializeCartItems(cartItems: CartItem[]): string {
     selectedKhoen: item.selectedKhoen,
     selectedKhoenImage: sanitizeImageUrl(item.selectedKhoenImage),
     selectedKhoenPrice: item.selectedKhoenPrice,
+    customPhotoUrl: sanitizeImageUrl(item.customPhotoUrl),
+    customPhotoNote: item.customPhotoNote,
+    customPhotoPrice: item.customPhotoPrice,
     selectedSize: item.selectedSize,
     customNote: item.customNote,
   }));
@@ -245,6 +254,9 @@ export function deserializeCartItems(
           selectedKhoen: item.selectedKhoen,
           selectedKhoenImage: item.selectedKhoenImage,
           selectedKhoenPrice: item.selectedKhoenPrice,
+          customPhotoUrl: item.customPhotoUrl,
+          customPhotoNote: item.customPhotoNote,
+          customPhotoPrice: item.customPhotoPrice,
           selectedSize: item.selectedSize,
           customNote: item.customNote,
         };

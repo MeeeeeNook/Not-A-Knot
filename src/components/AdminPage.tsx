@@ -24,6 +24,7 @@ import { AdminVersionHistoryPage } from './admin/AdminVersionHistoryPage';
 import { AdminTrashPage } from './admin/AdminTrashPage';
 import { AdminLogsPage } from './admin/AdminLogsPage';
 import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
+import { AdminProductCustomPhotoSection } from './admin/AdminProductCustomPhotoSection';
 import { AdminProductComboSection } from './admin/AdminProductComboSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
@@ -561,6 +562,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formKhoenTitle, setFormKhoenTitle] = useState('');
   const [formKhoenSelectionRequired, setFormKhoenSelectionRequired] = useState(false);
   const [formKhoenOptions, setFormKhoenOptions] = useState<ProductKhoenOption[]>([]);
+  // Custom Photo states
+  const [formEnableCustomPhoto, setFormEnableCustomPhoto] = useState(false);
+  const [formCustomPhotoTitle, setFormCustomPhotoTitle] = useState('In ảnh theo yêu cầu');
+  const [formCustomPhotoDescription, setFormCustomPhotoDescription] = useState('');
+  const [formCustomPhotoPriceDelta, setFormCustomPhotoPriceDelta] = useState(0);
+  const [formCustomPhotoRequired, setFormCustomPhotoRequired] = useState(false);
+  const [formCustomPhotoAspectRatio, setFormCustomPhotoAspectRatio] = useState('square');
   // Combo multi-product states
   const [formIsCombo, setFormIsCombo] = useState(false);
   const [isComboMode, setIsComboMode] = useState(false);
@@ -864,7 +872,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   useEffect(() => {
     if (!currentSeller) return;
     loadSellers();
-  }, [currentSeller]);
+  }, [currentSeller?.id, currentSeller?.username]);
 
   // Check connection to Firestore on mount
   useEffect(() => {
@@ -874,7 +882,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       setCloudConnected(ok);
     };
     checkConn();
-  }, [currentSeller]);
+  }, [currentSeller?.id, currentSeller?.username]);
 
   // Synchronize deleted orders across sessions & components
   useEffect(() => {
@@ -1085,7 +1093,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       window.removeEventListener('nak_order_created', handleOrderCreated);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [currentSeller]);
+  }, [currentSeller?.id, currentSeller?.username]);
 
   // Auto-load orders on initial mount and when switching to dashboard or orders tab
   useEffect(() => {
@@ -1096,7 +1104,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     if (activeTab === 'messages') {
       loadMessagesCount();
     }
-  }, [activeTab, currentSeller]);
+  }, [activeTab, currentSeller?.id, currentSeller?.username]);
 
   // Đồng Bộ từ Cloud về máy (Kéo dữ liệu từ Firestore về Local)
   const handleFetchFromCloud = async () => {
@@ -1383,6 +1391,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormKhoenTitle('');
     setFormKhoenSelectionRequired(false);
     setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
+    // Custom photo initialization
+    setFormEnableCustomPhoto(false);
+    setFormCustomPhotoTitle('In ảnh theo yêu cầu');
+    setFormCustomPhotoDescription('');
+    setFormCustomPhotoPriceDelta(0);
+    setFormCustomPhotoRequired(false);
+    setFormCustomPhotoAspectRatio('square');
     // Combo initialization
     setFormComboItems([]);
     setFormEnableSizeSelection(false);
@@ -1434,6 +1449,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormKhoenTitle('');
     setFormKhoenSelectionRequired(false);
     setFormKhoenOptions(DEFAULT_KHOEN_PRESETS);
+    setFormEnableCustomPhoto(false);
+    setFormCustomPhotoTitle('In ảnh theo yêu cầu');
+    setFormCustomPhotoDescription('');
+    setFormCustomPhotoPriceDelta(0);
+    setFormCustomPhotoRequired(false);
+    setFormCustomPhotoAspectRatio('square');
     setFormEnableSizeSelection(false);
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
     setFormComboItems([]);
@@ -1449,8 +1470,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const isCombo = Boolean(
       prod.isCombo ||
       (prod.comboItems && prod.comboItems.length > 0) ||
-      prod.category === 'combo' ||
-      (prod.name && prod.name.toLowerCase().includes('combo'))
+      prod.category === 'combo'
     );
     setIsComboMode(isCombo);
     setFormIsCombo(isCombo);
@@ -1506,6 +1526,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       ? prod.khoenOptions
       : DEFAULT_KHOEN_PRESETS;
     setFormKhoenOptions(loadedKhoens);
+    // Custom photo loading
+    setFormEnableCustomPhoto(Boolean(prod.enableCustomPhoto));
+    setFormCustomPhotoTitle(prod.customPhotoTitle || 'In ảnh theo yêu cầu');
+    setFormCustomPhotoDescription(prod.customPhotoDescription || '');
+    setFormCustomPhotoPriceDelta(prod.customPhotoPriceDelta || 0);
+    setFormCustomPhotoRequired(Boolean(prod.customPhotoRequired));
+    setFormCustomPhotoAspectRatio(prod.customPhotoAspectRatio || 'square');
     // Combo loading
     setFormComboItems(prod.comboItems || []);
     setFormEnableSizeSelection(false);
@@ -1813,6 +1840,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         khoenTitle: savingAsCombo ? undefined : (formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined),
         khoenSelectionRequired: savingAsCombo ? false : (formEnableKhoenSelection && formKhoenSelectionRequired),
         khoenOptions: savingAsCombo ? [] : (formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : []),
+        enableCustomPhoto: savingAsCombo ? false : formEnableCustomPhoto,
+        customPhotoTitle: savingAsCombo ? undefined : (formEnableCustomPhoto ? (formCustomPhotoTitle.trim() || undefined) : undefined),
+        customPhotoDescription: savingAsCombo ? undefined : (formEnableCustomPhoto ? (formCustomPhotoDescription.trim() || undefined) : undefined),
+        customPhotoPriceDelta: savingAsCombo ? undefined : (formEnableCustomPhoto ? formCustomPhotoPriceDelta : undefined),
+        customPhotoRequired: savingAsCombo ? false : (formEnableCustomPhoto && formCustomPhotoRequired),
+        customPhotoAspectRatio: savingAsCombo ? undefined : (formEnableCustomPhoto ? formCustomPhotoAspectRatio : undefined),
         isCombo: savingAsCombo,
         comboItems: savingAsCombo ? formComboItems : undefined,
         enableSizeSelection: false,
@@ -1902,6 +1935,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         khoenTitle: savingAsCombo ? undefined : (formEnableKhoenSelection ? (formKhoenTitle.trim() || undefined) : undefined),
         khoenSelectionRequired: savingAsCombo ? false : (formEnableKhoenSelection && formKhoenSelectionRequired),
         khoenOptions: savingAsCombo ? [] : (formEnableKhoenSelection ? (formKhoenOptions && formKhoenOptions.length > 0 ? formKhoenOptions : DEFAULT_KHOEN_PRESETS) : []),
+        enableCustomPhoto: savingAsCombo ? false : formEnableCustomPhoto,
+        customPhotoTitle: savingAsCombo ? undefined : (formEnableCustomPhoto ? (formCustomPhotoTitle.trim() || undefined) : undefined),
+        customPhotoDescription: savingAsCombo ? undefined : (formEnableCustomPhoto ? (formCustomPhotoDescription.trim() || undefined) : undefined),
+        customPhotoPriceDelta: savingAsCombo ? undefined : (formEnableCustomPhoto ? formCustomPhotoPriceDelta : undefined),
+        customPhotoRequired: savingAsCombo ? false : (formEnableCustomPhoto && formCustomPhotoRequired),
+        customPhotoAspectRatio: savingAsCombo ? undefined : (formEnableCustomPhoto ? formCustomPhotoAspectRatio : undefined),
         isCombo: savingAsCombo,
         comboItems: savingAsCombo ? formComboItems : undefined,
         enableSizeSelection: false,
@@ -3471,6 +3510,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             products={products}
             categories={localCategories}
             collections={localCollections}
+            orders={orders}
             siteContent={siteContent}
             onUpdateProducts={onUpdateProducts}
             onUpdateCategories={(newCats) => {
@@ -3480,6 +3520,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             onUpdateCollections={(newColls) => {
               setLocalCollections(newColls);
               onUpdateCollections?.(newColls);
+            }}
+            onUpdateOrders={(newOrders) => {
+              setOrders(newOrders);
             }}
             onUpdateSiteContent={(newCfg) => {
               onUpdateSiteContent?.(newCfg);
@@ -3768,8 +3811,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                       }`}
                     >
-                      <span>2. Tùy chọn phối (Màu, Charm, Bùa, Khoen)</span>
-                      {(formEnableColorSelection || formEnableCharmSelection || formEnableOmamoriSelection || formEnableKhoenSelection) && (
+                      <span>2. Tùy chọn phối (Màu, Charm, Bùa, Khoen, In ảnh)</span>
+                      {(formEnableColorSelection || formEnableCharmSelection || formEnableOmamoriSelection || formEnableKhoenSelection || formEnableCustomPhoto) && (
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
                           Đang bật
                         </span>
@@ -5183,21 +5226,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     {/* SECTION 3: OMAMORI AMULETS */}
                     <div className="p-3 bg-red-50/40 rounded-xl border border-red-200/70 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div 
-                          onClick={() => {
-                            const newChecked = !formEnableOmamoriSelection;
-                            setFormEnableOmamoriSelection(newChecked);
-                            if (newChecked && formOmamoriOptions.length === 0) {
-                              setFormOmamoriOptions(DEFAULT_OMAMORI_PRESETS);
-                            }
-                          }}
-                          className="flex items-center gap-2 cursor-pointer select-none"
-                        >
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
                           <input
                             type="checkbox"
                             checked={formEnableOmamoriSelection}
                             onChange={(e) => {
-                              e.stopPropagation();
                               const checked = e.target.checked;
                               setFormEnableOmamoriSelection(checked);
                               if (checked && formOmamoriOptions.length === 0) {
@@ -5214,7 +5247,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               Khách hàng có thể chọn nhiều mẫu bùa may mắn / quà tặng kèm và quản lý tồn kho. Admin có thể đổi tên hiển thị tùy ý.
                             </span>
                           </div>
-                        </div>
+                        </label>
 
                         {formEnableOmamoriSelection && (
                           <div className="flex flex-wrap items-center gap-2">
@@ -5658,6 +5691,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       handleMoveKhoen={handleMoveKhoen}
                       processOptionImageFile={processOptionImageFile}
                       showAdminToast={showAdminToast}
+                    />
+
+                    {/* SECTION 5: CUSTOM PHOTO / IN ẢNH THEO YÊU CẦU */}
+                    <AdminProductCustomPhotoSection
+                      formEnableCustomPhoto={formEnableCustomPhoto}
+                      setFormEnableCustomPhoto={setFormEnableCustomPhoto}
+                      formCustomPhotoTitle={formCustomPhotoTitle}
+                      setFormCustomPhotoTitle={setFormCustomPhotoTitle}
+                      formCustomPhotoDescription={formCustomPhotoDescription}
+                      setFormCustomPhotoDescription={setFormCustomPhotoDescription}
+                      formCustomPhotoPriceDelta={formCustomPhotoPriceDelta}
+                      setFormCustomPhotoPriceDelta={setFormCustomPhotoPriceDelta}
+                      formCustomPhotoRequired={formCustomPhotoRequired}
+                      setFormCustomPhotoRequired={setFormCustomPhotoRequired}
+                      formCustomPhotoAspectRatio={formCustomPhotoAspectRatio}
+                      setFormCustomPhotoAspectRatio={setFormCustomPhotoAspectRatio}
                     />
                   </div>
 
@@ -7412,7 +7461,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           ))}
                                         </div>
                                       </div>
-                                    ) : (item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize) ? (
+                                    ) : (item.selectedColor || item.selectedCharm || item.selectedKhoen || (item.selectedOmamoris && item.selectedOmamoris.length > 0) || item.selectedSize || item.customPhotoUrl) ? (
                                       <div className="flex flex-wrap items-center gap-1 text-[10px] pl-2 text-slate-600">
                                         {item.selectedColor && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-900 border border-amber-200 rounded font-medium">
@@ -7440,8 +7489,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             Size: {item.selectedSize}
                                           </span>
                                         )}
+                                        {item.customPhotoUrl && (
+                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
+                                            <a href={item.customPhotoUrl} target="_blank" rel="noreferrer" title="Bấm để xem ảnh khách tải" className="hover:opacity-80">
+                                              <img src={item.customPhotoUrl} alt="Ảnh custom" className="w-3.5 h-3.5 rounded object-cover border border-rose-300 inline" />
+                                            </a>
+                                            <span>Ảnh custom</span>
+                                            {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
+                                              <span className="text-rose-700 font-bold">(+{item.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                            ) : null}
+                                          </span>
+                                        )}
                                       </div>
                                     ) : null}
+                                    {item.customPhotoNote && (
+                                      <div className="text-[10px] text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/60 pl-2">
+                                        * Yêu cầu ảnh: {item.customPhotoNote}
+                                      </div>
+                                    )}
                                     {item.customNote && (
                                       <div className="text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 pl-2">
                                         * {item.customNote}
@@ -7917,8 +7982,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               Size: {it.selectedSize}
                                             </span>
                                           )}
+                                          {it.customPhotoUrl && (
+                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-950 border border-rose-300 rounded font-bold">
+                                              <a href={it.customPhotoUrl} target="_blank" rel="noreferrer" title="Mở ảnh kích thước đầy đủ" className="hover:opacity-85">
+                                                <img src={it.customPhotoUrl} alt="Ảnh custom" className="w-4 h-4 rounded object-cover border border-rose-400 inline" />
+                                              </a>
+                                              <span>Ảnh in custom</span>
+                                              {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
+                                                <span className="text-rose-700 font-bold">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                              ) : null}
+                                              <a
+                                                href={it.customPhotoUrl}
+                                                download={`anh-in-don-${ord.id || ord.trackingNumber || 'custom'}.jpg`}
+                                                className="ml-1 text-[9px] text-rose-700 hover:text-rose-900 underline font-semibold cursor-pointer"
+                                                title="Tải ảnh về máy để in"
+                                              >
+                                                Tải ảnh in
+                                              </a>
+                                            </div>
+                                          )}
                                         </div>
                                       ) : null}
+                                      {it.customPhotoNote && (
+                                        <div className="text-[10px] text-rose-900 bg-rose-50/90 px-1.5 py-0.5 rounded border border-rose-200 mt-0.5 font-medium">
+                                          📷 Yêu cầu in ảnh: <span className="font-bold">{it.customPhotoNote}</span>
+                                        </div>
+                                      )}
                                       {it.customNote && (
                                         <div className="text-[10px] text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-200/60 mt-0.5">
                                           * {it.customNote}
@@ -9237,7 +9326,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isOpen={showOrdersExcelPrompt}
         onClose={() => setShowOrdersExcelPrompt(false)}
         title="Xuất Danh Sách Đơn Hàng"
-        description="Bạn có muốn tải về toàn bộ ảnh chụp bill chuyển khoản của khách và ảnh sản phẩm đính kèm cùng file Excel (.xlsx) không?"
+        description="Bạn có muốn tải về toàn bộ ảnh in theo yêu cầu của khách, ảnh chụp bill chuyển khoản và ảnh sản phẩm đính kèm trong file ZIP cùng file Excel (.xlsx) không?"
         itemCountInfo={`Đang có ${orders.length} đơn hàng trong hệ thống`}
         onConfirm={handleConfirmExportOrdersExcel}
       />

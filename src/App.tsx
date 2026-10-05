@@ -818,7 +818,7 @@ export default function App() {
 
   // Security Guard: Load sellers list ONLY when admin is logged in
   useEffect(() => {
-    if (!currentSeller) return;
+    if (!currentSeller?.id && !currentSeller?.username) return;
 
     const initSellers = async () => {
       try {
@@ -850,52 +850,66 @@ export default function App() {
       }
     };
     initSellers();
-  }, [currentSeller]);
+  }, [currentSeller?.id, currentSeller?.username]);
 
   // Synchronize current active seller session with updated sellers list from Firestore
   useEffect(() => {
-    if (currentSeller && sellers.length > 0) {
-      const matched = sellers.find(
-        (s) =>
-          (s.username && currentSeller.username && s.username.toLowerCase() === currentSeller.username.toLowerCase()) ||
-          (s.id && currentSeller.id && s.id === currentSeller.id)
-      );
-      if (matched) {
-        const isRoleDifferent =
-          matched.role !== currentSeller.role ||
-          Boolean(matched.isRootAdmin) !== Boolean(currentSeller.isRootAdmin) ||
-          matched.name !== currentSeller.name ||
-          matched.isActive !== currentSeller.isActive;
+    if (!currentSeller || sellers.length === 0) return;
 
-        if (isRoleDifferent) {
-          const isRoot = isRootAdminUser(matched);
-          const updated: SellerUser = {
-            ...currentSeller,
-            ...matched,
-            role: isRoot ? 'root_admin' : (matched.role || 'member'),
-            isRootAdmin: isRoot
-          };
-          setCurrentSeller(updated);
-          try {
-            localStorage.setItem('notaknot_admin_auth_session', JSON.stringify(updated));
-          } catch {}
-        }
+    const matched = sellers.find(
+      (s) =>
+        (s.username && currentSeller.username && s.username.toLowerCase() === currentSeller.username.toLowerCase()) ||
+        (s.id && currentSeller.id && s.id === currentSeller.id)
+    );
+    if (matched) {
+      const isRoot = isRootAdminUser(matched);
+      const expectedRole = isRoot ? 'root_admin' : (matched.role || 'member');
+      const expectedIsRoot = Boolean(isRoot);
+
+      const isRoleDifferent =
+        currentSeller.role !== expectedRole ||
+        Boolean(currentSeller.isRootAdmin) !== expectedIsRoot ||
+        (matched.name && currentSeller.name !== matched.name) ||
+        (matched.isActive !== undefined && currentSeller.isActive !== matched.isActive);
+
+      if (isRoleDifferent) {
+        const updated: SellerUser = {
+          ...currentSeller,
+          ...matched,
+          role: expectedRole,
+          isRootAdmin: expectedIsRoot
+        };
+        setCurrentSeller(updated);
+        try {
+          localStorage.setItem('notaknot_admin_auth_session', JSON.stringify(updated));
+        } catch {}
       }
     }
-  }, [sellers, currentSeller]);
+  }, [
+    sellers,
+    currentSeller?.id,
+    currentSeller?.username,
+    currentSeller?.role,
+    currentSeller?.isRootAdmin,
+    currentSeller?.name,
+    currentSeller?.isActive
+  ]);
 
   // Re-verify session with server on mount & whenever switching to Admin view
   useEffect(() => {
-    if (currentView === 'admin' || currentSeller) {
+    if (currentView === 'admin' || currentSeller?.username) {
       verifySessionWithServer().then((freshUser) => {
         if (freshUser && freshUser.username) {
           setCurrentSeller((prev) => {
             if (!prev) return freshUser as SellerUser;
+            const isRoot = isRootAdminUser(freshUser);
+            const expectedRole = isRoot ? 'root_admin' : (freshUser.role || 'member');
+            const expectedIsRoot = Boolean(isRoot);
             const isChanged =
-              prev.role !== freshUser.role ||
-              Boolean(prev.isRootAdmin) !== Boolean(freshUser.isRootAdmin) ||
-              prev.name !== freshUser.name;
-            return isChanged ? ({ ...prev, ...freshUser } as SellerUser) : prev;
+              prev.role !== expectedRole ||
+              Boolean(prev.isRootAdmin) !== expectedIsRoot ||
+              (freshUser.name && prev.name !== freshUser.name);
+            return isChanged ? ({ ...prev, ...freshUser, role: expectedRole, isRootAdmin: expectedIsRoot } as SellerUser) : prev;
           });
         }
       }).catch(() => {});
@@ -1123,17 +1137,21 @@ export default function App() {
     selectedKhoen?: string,
     selectedKhoenImage?: string,
     selectedKhoenPrice?: number,
-    selectedComboItems?: ComboItemSelection[]
+    selectedComboItems?: ComboItemSelection[],
+    customPhotoUrl?: string,
+    customPhotoNote?: string,
+    customPhotoPrice?: number
   ) => {
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`, { type: 'warning' });
       return;
     }
 
-    // Check mandatory option selections (Charms, Omamori, Khoen)
+    // Check mandatory option selections (Charms, Omamori, Khoen, Custom Photo)
     const hasRequiredCharm = Boolean(product.enableCharmSelection && product.charmSelectionRequired);
     const hasRequiredOmamori = Boolean(product.enableOmamoriSelection && product.omamoriSelectionRequired);
     const hasRequiredKhoen = Boolean(product.enableKhoenSelection && product.khoenSelectionRequired);
+    const hasRequiredCustomPhoto = Boolean(product.enableCustomPhoto && product.customPhotoRequired);
 
     if (!selectedComboItems || selectedComboItems.length === 0) {
       if (hasRequiredCharm && (!selectedCharms || selectedCharms.length === 0) && !selectedCharm) {
@@ -1151,6 +1169,12 @@ export default function App() {
       if (hasRequiredKhoen && !selectedKhoen) {
         setSelectedProduct(product);
         showToast(`Vui lòng chọn ${product.khoenTitle?.trim() || 'khoen'} trước khi thêm vào giỏ hàng.`, { type: 'warning' });
+        return;
+      }
+
+      if (hasRequiredCustomPhoto && !customPhotoUrl) {
+        setSelectedProduct(product);
+        showToast(`Vui lòng tải ảnh cho "${product.customPhotoTitle?.trim() || 'In ảnh theo yêu cầu'}" trước khi thêm vào giỏ hàng.`, { type: 'warning' });
         return;
       }
     }
@@ -1243,6 +1267,8 @@ export default function App() {
           item.selectedKhoen === selectedKhoen &&
           item.selectedSize === selectedSize &&
           item.customNote === customNote &&
+          item.customPhotoUrl === customPhotoUrl &&
+          item.customPhotoNote === customPhotoNote &&
           charmsKey === itemCharmsKey &&
           omamorisKey === itemOmamorisKey &&
           comboKey === itemComboKey
@@ -1274,6 +1300,9 @@ export default function App() {
             selectedKhoenPrice,
             selectedSize,
             customNote,
+            customPhotoUrl,
+            customPhotoNote,
+            customPhotoPrice,
             selectedComboItems
           }
         ];
@@ -1392,6 +1421,20 @@ export default function App() {
   const handleRemoveCartItem = (index: number) => {
     setCartItems((prev) => prev.filter((_, i) => i !== index));
     showToast('Đã xóa sản phẩm khỏi giỏ hàng.');
+  };
+
+  const handleUpdateCartItemPhoto = (index: number, newPhotoUrl: string, newPhotoNote?: string) => {
+    setCartItems((prev) => {
+      if (!prev[index]) return prev;
+      const updated = [...prev];
+      updated[index] = {
+        ...updated[index],
+        customPhotoUrl: newPhotoUrl,
+        customPhotoNote: newPhotoNote !== undefined ? newPhotoNote : updated[index].customPhotoNote
+      };
+      return updated;
+    });
+    showToast('Đã cập nhật ảnh in theo yêu cầu thành công!');
   };
 
   const handleClearCart = () => {
@@ -2023,11 +2066,11 @@ export default function App() {
               }
               onBack={handleCloseProductDetail}
               onSelectProduct={handleOpenProductDetail}
-              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems);
+              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice);
               }}
-              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems);
+              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice);
                 handleOpenCartDrawer();
               }}
             />
@@ -2062,6 +2105,7 @@ export default function App() {
               onOrderPlaced={handleWebsiteOrderPlaced}
               onContinueShopping={() => handleOpenAllCatalog('all')}
               onOpenOrderTracker={handleOpenOrderTracker}
+              onUpdateItemPhoto={handleUpdateCartItemPhoto}
             />
           </React.Suspense>
         )}

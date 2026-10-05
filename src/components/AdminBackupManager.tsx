@@ -212,7 +212,13 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
           soldCount: item.soldCount !== undefined ? Number(item.soldCount) : 0,
           isNew: item.isNew !== undefined ? Boolean(item.isNew) : false,
           isBestSeller: item.isBestSeller !== undefined ? Boolean(item.isBestSeller) : false,
-          detailsText: item.detailsText || item.description || ''
+          detailsText: item.detailsText || item.description || '',
+          enableCustomPhoto: item.enableCustomPhoto !== undefined ? Boolean(item.enableCustomPhoto) : undefined,
+          customPhotoTitle: item.customPhotoTitle || undefined,
+          customPhotoDescription: item.customPhotoDescription || undefined,
+          customPhotoPriceDelta: item.customPhotoPriceDelta !== undefined ? Number(item.customPhotoPriceDelta) : undefined,
+          customPhotoRequired: item.customPhotoRequired !== undefined ? Boolean(item.customPhotoRequired) : undefined,
+          customPhotoAspectRatio: item.customPhotoAspectRatio || undefined
         } as Product;
       });
   };
@@ -234,11 +240,19 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
           name: item.name || item.customerName || 'Khách hàng',
           customerName: item.customerName || item.name || 'Khách hàng',
           phone: item.phone ? String(item.phone).trim() : '',
-          total: Number(item.total) >= 0 ? Number(item.total) : 0,
+          total: Number(item.total) >= 0 ? Number(item.total) : (Number(item.totalPrice) || 0),
+          totalPrice: Number(item.totalPrice) >= 0 ? Number(item.totalPrice) : (Number(item.total) || 0),
           status: item.status || 'Chờ xác nhận',
           paymentStatus: item.paymentStatus || 'unpaid',
           source: item.source || 'website',
-          itemDetails: Array.isArray(item.itemDetails) ? item.itemDetails : []
+          itemDetails: Array.isArray(item.itemDetails)
+            ? item.itemDetails.map((it: any) => ({
+                ...it,
+                customPhotoUrl: it.customPhotoUrl || undefined,
+                customPhotoNote: it.customPhotoNote || undefined,
+                customPhotoPrice: it.customPhotoPrice !== undefined ? Number(it.customPhotoPrice) : undefined
+              }))
+            : []
         } as StoredOrder;
       });
   };

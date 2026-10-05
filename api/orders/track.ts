@@ -92,6 +92,63 @@ async function ensureClientAuthenticated() {
   }
 }
 
+// ----------------------------------------------------
+// FIRESTORE REST API PARSER & FETCH HELPER
+// ----------------------------------------------------
+function parseFirestoreRestValue(val: any): any {
+  if (!val || typeof val !== 'object') return val;
+  if ('stringValue' in val) return val.stringValue;
+  if ('integerValue' in val) return Number(val.integerValue);
+  if ('doubleValue' in val) return Number(val.doubleValue);
+  if ('booleanValue' in val) return Boolean(val.booleanValue);
+  if ('timestampValue' in val) return val.timestampValue;
+  if ('nullValue' in val) return null;
+  if ('arrayValue' in val) {
+    if (!val.arrayValue || !val.arrayValue.values) return [];
+    return val.arrayValue.values.map(parseFirestoreRestValue);
+  }
+  if ('mapValue' in val) {
+    if (!val.mapValue || !val.mapValue.fields) return {};
+    const res: any = {};
+    for (const k of Object.keys(val.mapValue.fields)) {
+      res[k] = parseFirestoreRestValue(val.mapValue.fields[k]);
+    }
+    return res;
+  }
+  return val;
+}
+
+function parseFirestoreRestDoc(docData: any): any {
+  if (!docData || !docData.fields) return null;
+  const res: any = {};
+  for (const k of Object.keys(docData.fields)) {
+    res[k] = parseFirestoreRestValue(docData.fields[k]);
+  }
+  return res;
+}
+
+async function fetchFromFirestoreRest(docId: string): Promise<any | null> {
+  const apiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI";
+  const projectId = process.env.FIREBASE_PROJECT_ID || "jittery-study-nzp2g";
+  const databaseId = process.env.FIREBASE_DATABASE_ID || "ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f";
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/orders/${encodeURIComponent(docId)}?key=${apiKey}`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+
+    if (resp.ok) {
+      const data = await resp.json();
+      return parseFirestoreRestDoc(data);
+    }
+  } catch (err: any) {
+    console.warn(`[Track Order API] REST fetch notice for ${docId}:`, err?.message || err);
+  }
+  return null;
+}
+
 async function fetchOrderRecord(cleanCode: string): Promise<any | null> {
   // Method 0: In-memory recent orders cache (immediate session lookup)
   if (recentOrdersCache && recentOrdersCache.has(cleanCode)) {
@@ -102,7 +159,14 @@ async function fetchOrderRecord(cleanCode: string): Promise<any | null> {
     return recentOrdersCache.get(alt);
   }
 
-  // Method 1: Firebase Admin SDK (if private key available)
+  // Method 1: High-Performance Direct Firestore REST API (Fast, resilient across all cloud platforms)
+  const restDoc = await fetchFromFirestoreRest(cleanCode);
+  if (restDoc) return restDoc;
+
+  const restDocAlt = await fetchFromFirestoreRest(alt);
+  if (restDocAlt) return restDocAlt;
+
+  // Method 2: Firebase Admin SDK (if private key available)
   if (hasAdminCredentials()) {
     try {
       const db = getAdminDb();
@@ -348,6 +412,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       selectedCharms: Array.isArray(it?.selectedCharms) ? it.selectedCharms.map((c: any) => c?.name || String(c)) : undefined,
       selectedOmamoris: Array.isArray(it?.selectedOmamoris) ? it.selectedOmamoris.map((o: any) => ({ name: o?.name || String(o) })) : undefined,
       selectedKhoen: it?.selectedKhoen ? String(it.selectedKhoen) : undefined,
+      customPhotoUrl: it?.customPhotoUrl || undefined,
+      customPhotoNote: it?.customPhotoNote || undefined,
+      customPhotoPrice: it?.customPhotoPrice ? Number(it.customPhotoPrice) : undefined,
       customNote: it?.customNote ? String(it.customNote) : undefined,
     }));
 

@@ -232,7 +232,7 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
 
   // Reset index if out of bounds when messages change
   useEffect(() => {
-    if (currentIndex >= messages.length) {
+    if (messages.length > 0 && currentIndex >= messages.length) {
       setCurrentIndex(0);
     }
   }, [messages.length, currentIndex]);

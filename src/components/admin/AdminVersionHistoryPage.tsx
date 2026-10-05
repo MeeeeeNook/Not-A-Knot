@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, VersionBackup, BackupScheduleConfig } from '../../types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, VersionBackup, BackupScheduleConfig, StoredOrder } from '../../types';
 import { 
   fetchBackupsFromFirestore, 
   saveBackupToFirestore, 
@@ -12,6 +12,7 @@ import {
   pushAndSyncCategoriesToFirestore,
   pushAndSyncCollectionsToFirestore,
   saveSiteContentToFirestore,
+  saveOrdersToFirestore,
   syncLocalBackupsToFirestore
 } from '../../firebase';
 import { 
@@ -32,7 +33,9 @@ import {
   Check,
   Calendar,
   Cloud,
-  CloudUpload
+  CloudUpload,
+  ShoppingBag,
+  Camera
 } from 'lucide-react';
 import { checkAndRunAutoBackup } from '../../utils/autoBackup';
 
@@ -40,10 +43,12 @@ interface AdminVersionHistoryPageProps {
   products: Product[];
   categories: CategoryItem[];
   collections: CollectionInfo[];
+  orders?: StoredOrder[];
   siteContent?: SiteContentConfig;
   onUpdateProducts: (newProducts: Product[]) => void;
   onUpdateCategories: (newCategories: CategoryItem[]) => void;
   onUpdateCollections: (newCollections: CollectionInfo[]) => void;
+  onUpdateOrders?: (newOrders: StoredOrder[]) => void;
   onUpdateSiteContent: (newConfig: SiteContentConfig) => void;
   onNotify?: (msg: string) => void;
   onToast?: (msg: string) => void;
@@ -54,10 +59,12 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
   products,
   categories,
   collections,
+  orders = [],
   siteContent,
   onUpdateProducts,
   onUpdateCategories,
   onUpdateCollections,
+  onUpdateOrders,
   onUpdateSiteContent,
   onNotify,
   onToast,
@@ -195,13 +202,15 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
           productsCount: products.length,
           categoriesCount: categories.length,
           collectionsCount: collections.length,
+          ordersCount: (orders || []).length,
           hasSiteContent: !!siteContent
         },
         data: {
           products,
           categories,
           collections,
-          siteContent
+          siteContent,
+          orders: orders || []
         }
       };
 
@@ -306,6 +315,12 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       if (data.siteContent) {
         onUpdateSiteContent(data.siteContent);
         await saveSiteContentToFirestore(data.siteContent);
+      }
+
+      // 5. Restore Orders (with custom photos and crafting notes)
+      if (data.orders && Array.isArray(data.orders) && data.orders.length > 0 && typeof onUpdateOrders === 'function') {
+        onUpdateOrders(data.orders);
+        await saveOrdersToFirestore(data.orders);
       }
 
       notify(`Khôi phục thành công hệ thống về phiên bản lúc ${restoreCandidate.formattedDate}!`);
@@ -648,6 +663,13 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
                       </span>
                     )}
 
+                    {b.summary.ordersCount !== undefined && b.summary.ordersCount > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md font-bold">
+                        <ShoppingBag className="w-3 h-3 text-rose-600" />
+                        {b.summary.ordersCount} Đơn hàng (kèm ảnh in)
+                      </span>
+                    )}
+
                     {b.createdByName && (
                       <span className="text-slate-400 text-[10px]">
                         Bởi: {b.createdByName}
@@ -717,7 +739,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700 space-y-1.5">
               <div><strong>Thời điểm:</strong> {restoreCandidate.formattedDate}</div>
               <div><strong>Ghi chú:</strong> {restoreCandidate.note || 'Không có'}</div>
-              <div><strong>Nội dung:</strong> {restoreCandidate.summary.productsCount} sản phẩm, {restoreCandidate.summary.categoriesCount} danh mục, {restoreCandidate.summary.collectionsCount} bộ sưu tập.</div>
+              <div><strong>Nội dung:</strong> {restoreCandidate.summary.productsCount} sản phẩm, {restoreCandidate.summary.categoriesCount} danh mục, {restoreCandidate.summary.collectionsCount} bộ sưu tập{restoreCandidate.summary.ordersCount ? `, ${restoreCandidate.summary.ordersCount} đơn hàng (kèm ảnh in)` : ''}.</div>
             </div>
 
             <div className="text-xs text-rose-700 bg-rose-50 p-3 rounded-xl border border-rose-200 font-medium">

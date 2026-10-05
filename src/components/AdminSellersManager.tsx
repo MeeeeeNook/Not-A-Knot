@@ -1463,7 +1463,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                 const initial = displayName.charAt(0).toUpperCase() || 'T';
 
                 return (
-                  <tr key={rootEmail} className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
+                  <tr key={`root-admin-${rootEmail}-${idx}`} className="hover:bg-amber-50/20 transition-colors bg-amber-50/10">
                     <td className="p-3.5 sm:p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-amber-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs">
@@ -1519,8 +1519,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
               })}
 
               {/* STAFF ROWS (NO DUPLICATES) */}
-              {staffAuthorizedList.map((item) => (
-                <tr key={item.email} className="hover:bg-slate-50/80 transition-colors">
+              {staffAuthorizedList.map((item, idx) => (
+                <tr key={`staff-auth-${item.email || idx}`} className="hover:bg-slate-50/80 transition-colors">
                   <td className="p-3.5 sm:p-4">
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-xl text-white font-bold flex items-center justify-center shrink-0 shadow-xs ${

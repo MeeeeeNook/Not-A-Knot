@@ -6,7 +6,16 @@ import { ProductKhoenOption } from '../types';
  */
 
 const createSvgDataUri = (svgContent: string): string => {
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svgContent.trim())}`;
+  const clean = svgContent.trim();
+  try {
+    if (typeof btoa === 'function') {
+      return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(clean)))}`;
+    }
+    if (typeof Buffer !== 'undefined') {
+      return `data:image/svg+xml;base64,${Buffer.from(clean, 'utf-8').toString('base64')}`;
+    }
+  } catch (e) {}
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(clean)}`;
 };
 
 // 1. Khoen Tròn Inox O-Ring (Bạc bóng)

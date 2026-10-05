@@ -72,6 +72,15 @@ export const generateOrderSlipHtml = (
             ]
               .filter(Boolean)
               .join(' | ');
+            const customPhotoHtml = it.customPhotoUrl
+              ? `<div style="margin-top:4px;padding:4px 8px;background:#fff1f2;border:1px solid #fecdd3;border-radius:6px;font-size:11px;color:#9f1239;display:flex;align-items:center;gap:6px;">
+                  <img src="${it.customPhotoUrl}" alt="Ảnh in" style="width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid #f43f5e;" />
+                  <div>
+                    <strong>📷 In ảnh theo yêu cầu:</strong> Có ${it.customPhotoPrice ? `(+${it.customPhotoPrice.toLocaleString('vi-VN')}đ)` : ''}
+                    ${it.customPhotoNote ? `<div style="font-style:italic;color:#881337;">Y/C: ${it.customPhotoNote}</div>` : ''}
+                  </div>
+                </div>`
+              : '';
             const customNote = it.customNote
               ? `<div style="font-size:11px;color:#b45309;font-style:italic;margin-top:2px;">* Ghi chú: ${it.customNote}</div>`
               : '';
@@ -81,6 +90,7 @@ export const generateOrderSlipHtml = (
             <td style="padding:10px;border-bottom:1px solid #e2e8f0;">
               <strong style="color:#0f172a;font-size:13px;">${it.productName}</strong>
               ${comboHtml || (details ? `<div style="font-size:11px;color:#475569;margin-top:3px;font-weight:600;">${details}</div>` : '')}
+              ${customPhotoHtml}
               ${customNote}
             </td>
             <td style="padding:10px;text-align:center;border-bottom:1px solid #e2e8f0;font-weight:bold;color:#0f172a;">${q}</td>

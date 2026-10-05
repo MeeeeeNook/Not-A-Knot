@@ -26,8 +26,8 @@ const STORAGE_KEY_DISMISSED_ORDERS = 'nak_dismissed_order_notifs';
 const STORAGE_KEY_DISMISSED_MSGS = 'nak_dismissed_msg_notifs';
 
 export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
-  orders,
-  messages,
+  orders = [],
+  messages = [],
   onInspectOrder,
   onNavigateToOrders,
   onNavigateToMessages,

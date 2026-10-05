@@ -80,7 +80,51 @@ export const PRODUCTS: Product[] = [
     "isBestSeller": false,
     "price": 39000,
     "isEvent0209": false,
-    "id": "nak-0209-bracelet"
+    "id": "nak-0209-bracelet",
+    "enableCustomPhoto": true,
+    "customPhotoTitle": "Lồng ảnh kỷ niệm",
+    "customPhotoDescription": "Tải ảnh kỷ niệm chân dung hoặc idol để shop in nhiệt mini lồng vào mặt charm của vòng.",
+    "customPhotoPriceDelta": 10000,
+    "customPhotoRequired": false,
+    "customPhotoAspectRatio": "circle"
+  },
+  {
+    "id": "nak-custom-photo-bracelet",
+    "name": "Vòng Tay Chỉ Đan Lồng Ảnh Theo Yêu Cầu",
+    "category": "charm_bracelet",
+    "price": 55000,
+    "originalPrice": 75000,
+    "discountBadge": "Hot Custom",
+    "image": "/assets/img_0.jpg",
+    "images": [
+      "/assets/img_0.jpg",
+      "/assets/0209/img_3.jpg"
+    ],
+    "description": "Vòng tay handmade đan tỉ mỉ kèm mặt locket mini cho phép bạn tải ảnh kỷ niệm (người thương, bạn thân, idol, thú cưng). Shop in nhiệt sắc nét lồng sẵn vào vòng trao gửi yêu thương.",
+    "details": [
+      "Dây đan thủ công chống nước, không bai dão",
+      "Khung locket mini mạ titan chống rỉ sét",
+      "In ảnh chất lượng cao phủ lớp màng bảo vệ chống ố vàng",
+      "Tặng kèm thiệp viết lời chúc theo yêu cầu"
+    ],
+    "inStock": true,
+    "stock": 45,
+    "rating": 5,
+    "reviewsCount": 32,
+    "isBestSeller": true,
+    "isNew": true,
+    "enableColorSelection": true,
+    "colorOptions": [
+      { "name": "Đỏ may mắn", "colorCode": "#EF4444" },
+      { "name": "Đen huyền bí", "colorCode": "#1F2937" },
+      { "name": "Xanh rêu", "colorCode": "#15803D" }
+    ],
+    "enableCustomPhoto": true,
+    "customPhotoTitle": "Tải ảnh kỷ niệm cần in",
+    "customPhotoDescription": "Tải ảnh chụp rõ nét, chính diện (khuyên dùng ảnh vuông hoặc chân dung) để shop cắt và in vừa khít mặt vòng.",
+    "customPhotoPriceDelta": 15000,
+    "customPhotoRequired": false,
+    "customPhotoAspectRatio": "circle"
   },
   {
     "discountBadge": "Giảm giá",

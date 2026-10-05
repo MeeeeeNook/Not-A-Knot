@@ -68,6 +68,9 @@ interface EditableOrderItem {
   selectedOmamoriText?: string;
   selectedOmamoriPrice?: number;
   selectedComboItems?: ComboItemSelection[];
+  customPhotoUrl?: string;
+  customPhotoNote?: string;
+  customPhotoPrice?: number;
   customNote?: string;
 }
 
@@ -280,6 +283,9 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           selectedOmamoriText: omamoriText,
           selectedOmamoriPrice: it.selectedOmamoriPrice,
           selectedComboItems: it.selectedComboItems,
+          customPhotoUrl: it.customPhotoUrl,
+          customPhotoNote: it.customPhotoNote,
+          customPhotoPrice: it.customPhotoPrice,
           customNote: it.customNote || ''
         };
       });
@@ -687,6 +693,9 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             selectedOmamoris: omamoris,
             selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
             selectedComboItems: it.selectedComboItems || undefined,
+            customPhotoUrl: it.customPhotoUrl || undefined,
+            customPhotoNote: it.customPhotoNote || undefined,
+            customPhotoPrice: it.customPhotoPrice || undefined,
             customNote: it.customNote || undefined
           };
         }),
@@ -697,12 +706,17 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             ? `Bùa: ${it.selectedOmamoris.map((o) => o.name).join(', ')}`
             : '';
 
+          const photoLabel = it.customPhotoUrl
+            ? `In ảnh: Có${it.customPhotoPrice ? ` (+${it.customPhotoPrice.toLocaleString('vi-VN')}đ)` : ''}${it.customPhotoNote ? ` [${it.customPhotoNote}]` : ''}`
+            : '';
+
           const specs = [
             it.selectedSize ? `Size: ${it.selectedSize}` : '',
             it.selectedColor ? `Màu: ${it.selectedColor}` : '',
             it.selectedCharm ? `Charm: ${it.selectedCharm}` : '',
             it.selectedKhoen ? `Khoen: ${it.selectedKhoen}` : '',
             omamoriLabel,
+            photoLabel,
             it.selectedComboItems && it.selectedComboItems.length > 0
               ? `Combo: ${it.selectedComboItems.map((ci, i) => `[${ci.itemTitle || `Món ${i + 1}`}: ${[ci.selectedColor ? `Màu: ${ci.selectedColor}` : '', ci.selectedCharms && ci.selectedCharms.length > 0 ? `Charm: ${ci.selectedCharms.map(c => c.name).join(', ')}` : '', ci.selectedOmamoris && ci.selectedOmamoris.length > 0 ? `Bùa: ${ci.selectedOmamoris.map(o => o.name).join(', ')}` : ''].filter(Boolean).join(', ')}]`).join(' + ')}`
               : ''
@@ -1815,8 +1829,8 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs"
                   >
                     <option value="">-- Chưa phân bổ nhân viên --</option>
-                    {uniqueSellers.map((s) => (
-                      <option key={s.id} value={s.name}>
+                    {uniqueSellers.map((s, idx) => (
+                      <option key={`edit-order-seller-${s.id || s.username || idx}`} value={s.name}>
                         {s.name} ({s.username})
                       </option>
                     ))}

@@ -6,6 +6,7 @@ import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
+import { ProductCustomPhotoSelector } from './ProductCustomPhotoSelector';
 import { ProductColorSelector } from './ProductColorSelector';
 import { ProductComboCustomizer } from './ProductComboCustomizer';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
@@ -62,7 +63,10 @@ interface ProductDetailPageProps {
     selectedKhoen?: string,
     selectedKhoenImage?: string,
     selectedKhoenPrice?: number,
-    selectedComboItems?: ComboItemSelection[]
+    selectedComboItems?: ComboItemSelection[],
+    customPhotoUrl?: string,
+    customPhotoNote?: string,
+    customPhotoPrice?: number
   ) => void;
   onBuyNow: (
     product: Product,
@@ -80,17 +84,21 @@ interface ProductDetailPageProps {
     selectedKhoen?: string,
     selectedKhoenImage?: string,
     selectedKhoenPrice?: number,
-    selectedComboItems?: ComboItemSelection[]
+    selectedComboItems?: ComboItemSelection[],
+    customPhotoUrl?: string,
+    customPhotoNote?: string,
+    customPhotoPrice?: number
   ) => void;
 }
 
 const EMPTY_CATEGORIES: CategoryItem[] = [];
 const EMPTY_COLLECTIONS: CollectionInfo[] = [];
 const EMPTY_CART_ITEMS: CartItem[] = [];
+const EMPTY_PRODUCTS: Product[] = [];
 
 export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
-  allProducts,
+  allProducts = EMPTY_PRODUCTS,
   categories = EMPTY_CATEGORIES,
   collections = EMPTY_COLLECTIONS,
   cartItems = EMPTY_CART_ITEMS,
@@ -128,6 +136,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [omamoriError, setOmamoriError] = useState<string | null>(null);
   const [selectedKhoen, setSelectedKhoen] = useState<ProductKhoenOption | null>(null);
   const [khoenError, setKhoenError] = useState<string | null>(null);
+  const [customPhotoUrl, setCustomPhotoUrl] = useState<string | undefined>(undefined);
+  const [customPhotoNote, setCustomPhotoNote] = useState<string>('');
+  const [customPhotoError, setCustomPhotoError] = useState<string | null>(null);
 
   const totalCharmPrice = useMemo(() => {
     return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
@@ -139,11 +150,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const totalKhoenPrice = selectedKhoen?.priceDelta || 0;
 
+  const customPhotoPrice = useMemo(() => {
+    if (!product.enableCustomPhoto) return 0;
+    if (customPhotoUrl && typeof product.customPhotoPriceDelta === 'number') {
+      return product.customPhotoPriceDelta;
+    }
+    return 0;
+  }, [product.enableCustomPhoto, product.customPhotoPriceDelta, customPhotoUrl]);
+
   const totalCartCount = useMemo(() => {
     return cartItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
   }, [cartItems]);
 
-  const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice;
+  const effectiveUnitPrice = product.price + totalCharmPrice + totalOmamoriPrice + totalKhoenPrice + customPhotoPrice;
 
   const selectedCharmNames = useMemo(() => {
     return selectedCharms.map((c) => c.name).join(', ');
@@ -284,6 +303,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     setCharmError(null);
     setOmamoriError(null);
     setKhoenError(null);
+    setCustomPhotoUrl(undefined);
+    setCustomPhotoNote('');
+    setCustomPhotoError(null);
     setIsAdded(false);
     setQuickAddedId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -466,6 +488,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       return;
     }
 
+    const photoTitleLabel = product.customPhotoTitle?.trim() || 'In ảnh theo yêu cầu';
+    if (product.enableCustomPhoto && product.customPhotoRequired && !customPhotoUrl) {
+      setCustomPhotoError(`Vui lòng tải ảnh cho "${photoTitleLabel}" trước khi thêm vào giỏ hàng.`);
+      return;
+    }
+
     const addQty = Math.min(quantity, remainingAddableStock);
 
     if (selectedColorOption && typeof selectedColorOption.stock === 'number') {
@@ -531,7 +559,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       totalOmamoriPrice,
       selectedKhoen?.name || undefined,
       selectedKhoen?.image || undefined,
-      totalKhoenPrice
+      totalKhoenPrice,
+      undefined,
+      customPhotoUrl,
+      customPhotoNote,
+      customPhotoPrice
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -555,6 +587,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     const khoenTitleLabel = product.khoenTitle?.trim() || 'Khoen';
     if (product.enableKhoenSelection && product.khoenSelectionRequired && !selectedKhoen) {
       setKhoenError(`Vui lòng chọn 1 tùy chọn trong "${khoenTitleLabel}" trước khi mua hàng.`);
+      return;
+    }
+
+    const photoTitleLabel = product.customPhotoTitle?.trim() || 'In ảnh theo yêu cầu';
+    if (product.enableCustomPhoto && product.customPhotoRequired && !customPhotoUrl) {
+      setCustomPhotoError(`Vui lòng tải ảnh cho "${photoTitleLabel}" trước khi mua hàng.`);
       return;
     }
 
@@ -623,7 +661,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       totalOmamoriPrice,
       selectedKhoen?.name || undefined,
       selectedKhoen?.image || undefined,
-      totalKhoenPrice
+      totalKhoenPrice,
+      undefined,
+      customPhotoUrl,
+      customPhotoNote,
+      customPhotoPrice
     );
   };
 
@@ -663,7 +705,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Find related products in the same category (strictly visible products only)
   const relatedProducts = useMemo(() => {
-    return allProducts
+    return (allProducts || [])
       .filter((p) => isProductVisible(p) && p.id !== product.id && p.category === product.category)
       .slice(0, 4);
   }, [allProducts, product, isProductVisible]);
@@ -671,7 +713,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Curated 'Có thể bạn sẽ thích' (strictly visible products only)
   const recommendedProducts = useMemo(() => {
     // Exclude current product and hidden products
-    const otherProducts = allProducts.filter(
+    const otherProducts = (allProducts || []).filter(
       (p) => isProductVisible(p) && p.id !== product.id && p.inStock !== false
     );
     if (otherProducts.length === 0) return [];
@@ -1182,6 +1224,27 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                           {khoenError}
                         </p>
                       )}
+                    </div>
+                  )}
+
+                  {/* Custom Photo Upload (if enabled) */}
+                  {product.enableCustomPhoto && (
+                    <div className="space-y-1">
+                      <ProductCustomPhotoSelector
+                        title={product.customPhotoTitle}
+                        description={product.customPhotoDescription}
+                        priceDelta={product.customPhotoPriceDelta || 0}
+                        isRequired={product.customPhotoRequired}
+                        aspectRatio={product.customPhotoAspectRatio || 'square'}
+                        customPhotoUrl={customPhotoUrl}
+                        customPhotoNote={customPhotoNote}
+                        onPhotoChange={(url, note) => {
+                          setCustomPhotoError(null);
+                          setCustomPhotoUrl(url);
+                          if (note !== undefined) setCustomPhotoNote(note);
+                        }}
+                        error={customPhotoError}
+                      />
                     </div>
                   )}
                 </>
