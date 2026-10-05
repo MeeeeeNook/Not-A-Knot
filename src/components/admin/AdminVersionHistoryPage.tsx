@@ -320,7 +320,7 @@ export const AdminVersionHistoryPage: React.FC<AdminVersionHistoryPageProps> = (
       // 5. Restore Orders (with custom photos and crafting notes)
       if (data.orders && Array.isArray(data.orders) && data.orders.length > 0 && typeof onUpdateOrders === 'function') {
         onUpdateOrders(data.orders);
-        await saveOrdersToFirestore(data.orders);
+        await saveOrdersToFirestore(data.orders as any);
       }
 
       notify(`Khôi phục thành công hệ thống về phiên bản lúc ${restoreCandidate.formattedDate}!`);

@@ -1032,10 +1032,14 @@ export const deduplicateSellers = (list: SellerUser[]): SellerUser[] => {
     if (cleanUsername) seenUsernames.add(cleanUsername);
     if (rawName) seenNames.add(rawName);
 
+    // Cap ipHistory to 10 entries to prevent oversized storage bloat
+    const trimmedIpHistory = Array.isArray(s.ipHistory) ? s.ipHistory.slice(-10) : s.ipHistory;
+
     result.push({
       ...s,
       id: cleanId,
-      username: cleanUsername || cleanId
+      username: cleanUsername || cleanId,
+      ipHistory: trimmedIpHistory
     });
   }
   return result;

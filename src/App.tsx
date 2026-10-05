@@ -309,6 +309,72 @@ export default function App() {
     }
   });
 
+  // Immediate Background Photo Cloud Sync for Cart:
+  // Automatically uploads any local base64 custom photos in the cart directly to Firebase Storage in the background
+  // and silently updates the cart item with the permanent CDN URL without interrupting or blocking the user.
+  useEffect(() => {
+    const hasBase64Photo = cartItems.some(
+      (item) =>
+        (item.customPhotoUrl && typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.startsWith('data:image/')) ||
+        (item.selectedComboItems && item.selectedComboItems.some(c => c.customPhotoUrl && c.customPhotoUrl.startsWith('data:image/')))
+    );
+
+    if (!hasBase64Photo) return;
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const { uploadCustomPhotoImmediately } = await import('./firebase');
+        let hasChanges = false;
+        const updatedItems = await Promise.all(
+          cartItems.map(async (item) => {
+            let itemCopy = { ...item };
+            if (
+              itemCopy.customPhotoUrl &&
+              typeof itemCopy.customPhotoUrl === 'string' &&
+              itemCopy.customPhotoUrl.startsWith('data:image/')
+            ) {
+              const uploaded = await uploadCustomPhotoImmediately(itemCopy.customPhotoUrl, 'cart_photos');
+              if (uploaded && uploaded.startsWith('http')) {
+                itemCopy.customPhotoUrl = uploaded;
+                hasChanges = true;
+              }
+            }
+            if (itemCopy.selectedComboItems && itemCopy.selectedComboItems.length > 0) {
+              const updatedCombo = await Promise.all(
+                itemCopy.selectedComboItems.map(async (cItem) => {
+                  if (cItem.customPhotoUrl && cItem.customPhotoUrl.startsWith('data:image/')) {
+                    const cUploaded = await uploadCustomPhotoImmediately(cItem.customPhotoUrl, 'cart_combo_photos');
+                    if (cUploaded && cUploaded.startsWith('http')) {
+                      hasChanges = true;
+                      return { ...cItem, customPhotoUrl: cUploaded };
+                    }
+                  }
+                  return cItem;
+                })
+              );
+              itemCopy.selectedComboItems = updatedCombo;
+            }
+            return itemCopy;
+          })
+        );
+
+        if (isMounted && hasChanges) {
+          setCartItems(updatedItems);
+          try {
+            safeStorageSetItem('nak_cart', serializeCartItems(updatedItems));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('[Cart Photo Sync] Background upload notice:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [cartItems]);
+
   // Modal visibility states
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -777,7 +843,7 @@ export default function App() {
       resetDefaultSEO();
     } else if (currentView === 'catalog') {
       const activeCat = categories.find((c) => c.id === selectedCategory);
-      setCatalogSEO(activeCat ? activeCat.name : undefined, selectedCategory);
+      setCatalogSEO(activeCat ? (activeCat.label || (activeCat as any).name) : undefined, selectedCategory);
     } else if (currentView === 'about') {
       setAboutSEO();
     } else if (currentView === 'contact') {
@@ -1121,6 +1187,23 @@ export default function App() {
     }, options?.duration ?? 3200);
   }, []);
 
+  // Listen for app-wide toasts (including upload guard notifications)
+  useEffect(() => {
+    const handleCustomToast = (e: any) => {
+      const detail = e.detail;
+      if (detail && typeof detail.message === 'string') {
+        showToast(detail.message, {
+          type: detail.type || 'success',
+          duration: detail.duration || 3500
+        });
+      }
+    };
+    window.addEventListener('nak:show_toast', handleCustomToast);
+    return () => {
+      window.removeEventListener('nak:show_toast', handleCustomToast);
+    };
+  }, [showToast]);
+
   const handleAddToCart = (
     product: Product,
     quantity: number = 1,
@@ -1344,7 +1427,7 @@ export default function App() {
       endY = Math.max(20, Math.min(window.innerHeight - 30, endY));
 
       // Always use the primary product image as requested
-      const mainProductImage = product.image || (product.images && product.images[0]) || '/assets/bracelet.jpg';
+      const mainProductImage = product.image || (product.images && product.images[0]) || '/assets/no-image.svg';
 
       const flyingId = `fly-${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${Math.round(performance.now())}`;
       const flyItem: FlyingCartItemData = {
@@ -1600,8 +1683,8 @@ export default function App() {
       return;
     }
     if (cleanTarget === 'custom-order') {
-      setCurrentView('custom-order');
-      navigateTo('/custom-order');
+      setCurrentView('catalog');
+      navigateTo('/products');
       return;
     }
     if (cleanTarget === 'collections') {
@@ -1879,7 +1962,7 @@ export default function App() {
           <>
             {/* Primary Semantic H1 Heading for Accessibility and SEO Hierarchy */}
             <h1 className="sr-only">
-              {siteContent?.brandName || 'NOT A KNOT'} - {siteContent?.tagline || 'Phụ Kiện Vòng Tay Handmade Thủ Công Độc Bản'}
+              {siteContent?.brandName || 'NOT A KNOT'} - {siteContent?.brandTagline || 'Phụ Kiện Vòng Tay Handmade Thủ Công Độc Bản'}
             </h1>
 
             {/* Hero Carousel */}

@@ -663,7 +663,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
         itemDetails,
         totalPrice: grandTotal,
         totalAmount: grandTotal,
-        source: orderSource,
+        source: orderSource as any,
         type: 'manual_order',
         isManual: true,
         status: orderStatus,
@@ -1283,7 +1283,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                           <div className="px-3 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-700 border border-slate-200">
                             {calculatedShippingInfo.fee.toLocaleString('vi-VN')}đ
                             <span className="text-[10px] text-slate-500 font-normal ml-1">
-                              ({calculatedShippingInfo.label})
+                              ({(calculatedShippingInfo as any).label || (calculatedShippingInfo as any).zoneName || 'Khu vực'})
                             </span>
                           </div>
                         </div>
@@ -1565,7 +1565,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                   <div className="bg-slate-50 text-slate-900 rounded-lg p-3 flex items-center justify-between gap-3 border border-slate-200">
                     <div className="flex items-center gap-3">
                       <img
-                        src={bankReceiptImage || '/assets/bracelet.jpg'}
+                        src={bankReceiptImage || '/assets/no-image.svg'}
                         alt="Bill chuyển khoản"
                         className="w-14 h-14 rounded object-cover border border-slate-300 cursor-pointer"
                         onClick={() => setPreviewReceiptModal(bankReceiptImage)}
@@ -1706,7 +1706,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <LoadingImage
-                                  src={p.image || '/assets/bracelet.jpg'}
+                                  src={p.image || '/assets/no-image.svg'}
                                   alt={p.name}
                                   containerClassName="w-10 h-10 rounded border border-slate-200 shrink-0 bg-white"
                                   className="w-full h-full object-cover"
@@ -1756,7 +1756,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                         <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200">
                           <div className="flex items-center gap-3 min-w-0">
                             <LoadingImage
-                              src={pickerColorImage || currentSelectedProduct.image || '/assets/bracelet.jpg'}
+                              src={pickerColorImage || currentSelectedProduct.image || '/assets/no-image.svg'}
                               alt={currentSelectedProduct.name}
                               containerClassName="w-12 h-12 rounded-lg border border-slate-200 shrink-0 bg-white shadow-2xs"
                               className="w-full h-full object-cover"
@@ -1805,8 +1805,8 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                             <div className="flex flex-wrap gap-1.5 pt-1">
                               {(
                                 currentSelectedProduct.colorOptions ||
-                                (currentSelectedProduct.availableColors || []).map((c) => ({ name: c }))
-                              ).map((colOpt, idx) => {
+                                (currentSelectedProduct.availableColors || []).map((c) => ({ name: c } as any))
+                              ).map((colOpt: any, idx: number) => {
                                 const isSelected =
                                   (pickerColor || '').trim().toLowerCase() === colOpt.name.trim().toLowerCase();
                                 return (
@@ -1898,7 +1898,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                                     } ${isOut ? 'opacity-40 cursor-not-allowed' : ''}`}
                                   >
                                     <LoadingImage
-                                      src={charm.image || '/assets/bracelet.jpg'}
+                                      src={charm.image || '/assets/no-image.svg'}
                                       alt={charm.name}
                                       containerClassName="w-9 h-9 rounded border border-slate-200 bg-white shrink-0"
                                       className="w-full h-full object-cover"
@@ -1990,7 +1990,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                                     } ${isOut ? 'opacity-40 cursor-not-allowed' : ''}`}
                                   >
                                     <LoadingImage
-                                      src={omamori.image || '/assets/bracelet.jpg'}
+                                      src={omamori.image || '/assets/no-image.svg'}
                                       alt={omamori.name}
                                       containerClassName="w-9 h-9 rounded border border-slate-200 bg-white shrink-0"
                                       className="w-full h-full object-cover"
@@ -2228,7 +2228,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               src={
                                 item.selectedColorImage ||
                                 item.product.image ||
-                                '/assets/bracelet.jpg'
+                                '/assets/no-image.svg'
                               }
                               alt={item.product.name}
                               containerClassName="w-11 h-11 rounded-lg border border-slate-200 shrink-0"

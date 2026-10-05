@@ -36,7 +36,7 @@ const SPINNER_COLORS = {
 export const LoadingImage: React.FC<LoadingImageProps> = ({
   src,
   alt,
-  fallbackSrc = '/assets/bracelet.jpg',
+  fallbackSrc = '/assets/no-image.svg',
   containerClassName = '',
   className = '',
   spinnerSize = 'sm',
@@ -57,16 +57,15 @@ export const LoadingImage: React.FC<LoadingImageProps> = ({
   const activeSrc = !src || src.trim().length === 0 ? fallbackSrc : src.trim();
   const currentSrc = hasError ? fallbackSrc : activeSrc;
 
-  // Whenever the target source URL prop changes, reset error/loaded state
+  // Whenever source URL changes, reset state and check if cached in memory
   useEffect(() => {
     setHasError(false);
-    const node = imgRef.current;
-    if (node && node.complete && (node.naturalWidth > 0 || (activeSrc.startsWith('data:') && node.width > 0))) {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
       setIsLoaded(true);
     } else {
       setIsLoaded(false);
     }
-  }, [activeSrc]);
+  }, [currentSrc]);
 
   const handleLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setIsLoaded(true);
@@ -113,8 +112,8 @@ export const LoadingImage: React.FC<LoadingImageProps> = ({
       <img
         ref={(node) => {
           imgRef.current = node;
-          // Synchronous check if browser already cached or decoded the image
-          if (node && node.complete && (node.naturalWidth > 0 || (currentSrc.startsWith('data:') && node.width > 0)) && !isLoaded) {
+          // Synchronous check if browser already cached the image
+          if (node && node.complete && node.naturalWidth > 0 && !isLoaded) {
             setIsLoaded(true);
           }
         }}

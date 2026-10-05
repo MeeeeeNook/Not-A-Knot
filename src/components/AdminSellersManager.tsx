@@ -462,7 +462,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
       if (o.status === 'cancelled' || o.status === 'Đã hủy') return;
 
       // Do not track salesperson for orders from website or social media
-      const isLockedSource = o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee';
+      const isLockedSource = (o.source as string) === 'website' || (o.source as string) === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee';
       if (isLockedSource) return;
 
       const sellerKey = o.sellerName ? o.sellerName.toLowerCase().trim() : '';

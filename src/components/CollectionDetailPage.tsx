@@ -112,7 +112,7 @@ export const THEME_PRESETS = [
 
 export const SAMPLE_BANNERS = [
   { name: 'Nàng Thơ Pastel', url: '/assets/img_4_NOT_A_KNOT.jpg' },
-  { name: 'Handmade Survival EDC', url: '/assets/bracelet.jpg' },
+  { name: 'Handmade Survival EDC', url: '/assets/no-image.svg' },
   { name: 'Hào Khí Quốc Khánh', url: '/assets/hero-bg.png' },
   { name: 'Phong Cách Tựu Trường', url: 'https://images.unsplash.com/photo-1577401239170-897942555fb3?auto=format&fit=crop&w=1200&q=80' },
   { name: 'Phụ Kiện Thủ Công Tinh Tế', url: 'https://images.unsplash.com/photo-1611591475883-9b8192376e10?auto=format&fit=crop&w=1200&q=80' }
@@ -542,15 +542,6 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
           <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
             Bộ sưu tập "{currentCollection.title}" hiện đang được tạm ẩn để bảo trì nội dung hoặc chuẩn bị đợt ra mắt mới. Quý khách vui lòng tham khảo các bộ sưu tập khác nhé!
           </p>
-          <div className="pt-2">
-            <button
-              onClick={onBackToLanding}
-              className="px-5 py-2.5 bg-amber-400 hover:bg-amber-500 text-neutral-950 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Quay Lại Trang Chủ</span>
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -563,29 +554,6 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
     return (
       <div id="collection-detail-page" className="w-full bg-[#fdfbf7] text-[#1a1a1a] min-h-screen font-sans">
         
-        {/* Sticky Subnav Bar */}
-        <nav className="sticky top-13 z-30 bg-[#12141A]/95 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 lg:px-8 py-3 text-white">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                id="back-to-landing-btn"
-                onClick={onBackToLanding}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Quay lại</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="bg-rose-600/90 text-white px-3.5 sm:px-5 py-1.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-900/30 border border-white/20 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                <span>SOLD OUT</span>
-              </span>
-            </div>
-          </div>
-        </nav>
-
         {/* 1. Hero Section - SOLD OUT & GRATITUDE NOTIFICATION */}
         <section 
           className="relative min-h-[92vh] flex flex-col justify-center py-20 bg-cover bg-no-repeat bg-top"
@@ -813,35 +781,22 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
         </div>
       )}
 
-      {/* 1. Sticky Navigation Bar with Quick Theme Selector & Edit Shortcut */}
-      <nav className={`sticky top-13 z-30 backdrop-blur-md border-b px-4 sm:px-6 lg:px-8 py-3 transition-colors ${
-        isDark 
-          ? 'bg-[#12141A]/90 border-white/10 text-white' 
-          : 'bg-[#FAF7F2]/90 border-amber-900/10 text-slate-900'
-      }`}>
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          {/* Back button */}
-          <div className="flex items-center gap-3">
-            <button
-              id="back-to-landing-btn"
-              onClick={onBackToLanding}
-              className={`inline-flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-neutral-950'
-              }`}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Quay lại</span>
-            </button>
-            <span className={`text-xs font-semibold hidden sm:inline-block ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>/</span>
-            <span className={`text-xs font-bold truncate max-w-[150px] sm:max-w-xs hidden sm:inline-block ${
-              isDark ? 'text-neutral-300' : 'text-neutral-700'
-            }`}>
-              {stripBstPrefix(currentCollection.title)}
-            </span>
-          </div>
+      {/* 1. Quick Theme Selector & Edit Shortcut (Admin Only) */}
+      {isAdminLoggedIn && (
+        <nav className={`sticky top-13 z-30 backdrop-blur-md border-b px-4 sm:px-6 lg:px-8 py-2.5 transition-colors ${
+          isDark 
+            ? 'bg-[#12141A]/90 border-white/10 text-white' 
+            : 'bg-[#FAF7F2]/90 border-amber-900/10 text-slate-900'
+        }`}>
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className={`text-xs sm:text-sm font-extrabold truncate max-w-xs ${
+                isDark ? 'text-white' : 'text-neutral-900'
+              }`}>
+                {stripBstPrefix(currentCollection.title)}
+              </span>
+            </div>
 
-          {/* Action controls: Only visible when admin is authenticated */}
-          {isAdminLoggedIn && (
             <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-xl">
               <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider hidden sm:inline flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-amber-600" />
@@ -968,9 +923,9 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
                 <span>Xóa</span>
               </button>
             </div>
-          )}
-        </div>
-      </nav>
+          </div>
+        </nav>
+      )}
 
       {/* 2. Collection Hero Section with Optional Backdrop Banner Image */}
       <section 
@@ -1439,7 +1394,7 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
       }`}>
         <div className="max-w-xl mx-auto px-4 space-y-4">
           <p className="text-xs font-medium">
-            Mọi sản phẩm của NOT A KNOT đều được đan thủ công tỉ mỉ và bảo hành nút đan trọn đời.
+            Mọi sản phẩm của NOT A KNOT đều được shop hoàn thiện tỉ mỉ và bảo hành nút đan trọn đời.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
@@ -1453,15 +1408,6 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
               <MessageCircle className="w-4 h-4 text-amber-500" />
               <span>Tư vấn thiết kế riêng qua Messenger</span>
             </a>
-            <span>•</span>
-            <button
-              onClick={onBackToLanding}
-              className={`hover:underline font-semibold cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-black'
-              }`}
-            >
-              Về trang chủ NOT A KNOT
-            </button>
           </div>
         </div>
       </section>

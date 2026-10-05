@@ -16,10 +16,10 @@ import {
   updateDoc,
   increment
 } from 'firebase/firestore';
-import { PRODUCTS } from '../../src/data/products';
-import { DEFAULT_INITIAL_VOUCHERS } from '../../src/utils/voucherManager';
-import { calculateShippingFee, VIETNAM_PROVINCES } from '../../src/data/vietnamLocations';
-import { normalizeVietnamesePhone, isValidVietnamesePhone } from './track';
+import { PRODUCTS } from '../../src/data/products.ts';
+import { DEFAULT_INITIAL_VOUCHERS } from '../../src/utils/voucherManager.ts';
+import { calculateShippingFee, VIETNAM_PROVINCES } from '../../src/data/vietnamLocations.ts';
+import { normalizeVietnamesePhone, isValidVietnamesePhone } from './track.ts';
 
 type App = any;
 
@@ -240,6 +240,98 @@ export async function getAuthoritativeProduct(productId: string): Promise<any | 
   }
 
   return null;
+}
+
+export async function persistCustomPhotoToStorageOrDb(
+  base64Data: string,
+  photoId: string,
+  prefix: string = 'order_custom_photos'
+): Promise<string> {
+  if (!base64Data || typeof base64Data !== 'string') return base64Data;
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://') || base64Data.startsWith('/api/custom-photos/')) {
+    return base64Data;
+  }
+  if (!base64Data.startsWith('data:image/') && base64Data.length < 300) {
+    return base64Data;
+  }
+
+  let mimeType = 'image/jpeg';
+  let rawBase64 = base64Data;
+  if (base64Data.startsWith('data:')) {
+    const match = base64Data.match(/^data:([^;]+);base64,(.+)$/s);
+    if (match) {
+      mimeType = match[1] || 'image/jpeg';
+      rawBase64 = match[2] || '';
+    }
+  }
+
+  // 1. Try Firebase Admin Storage if service account credentials available
+  if (hasAdminCredentials()) {
+    try {
+      const { getStorage } = await import('firebase-admin/storage');
+      const bucket = getStorage().bucket('jittery-study-nzp2g.firebasestorage.app');
+      const file = bucket.file(`${prefix}/${photoId}.jpg`);
+      const buffer = Buffer.from(rawBase64, 'base64');
+      await file.save(buffer, {
+        metadata: {
+          contentType: mimeType,
+          cacheControl: 'public,max-age=31536000,immutable'
+        }
+      });
+      await file.makePublic().catch(() => {});
+      return file.publicUrl();
+    } catch {
+      // Failover gracefully
+    }
+  }
+
+  // 2. Try Client Firebase Storage ONLY if user is already authenticated
+  try {
+    const { auth } = getClientInstances();
+    if (auth?.currentUser) {
+      const buffer = Buffer.from(rawBase64, 'base64');
+      const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { getApp: getClientApp, getApps: getClientApps, initializeApp: initClientApp } = await import('firebase/app');
+      const firebaseClientConfig = {
+        apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI",
+        authDomain: "jittery-study-nzp2g.firebaseapp.com",
+        projectId: "jittery-study-nzp2g",
+        storageBucket: "jittery-study-nzp2g.firebasestorage.app",
+        messagingSenderId: "23301458119",
+        appId: "1:23301458119:web:f7ee271f42bc11fe0216e2"
+      };
+      const app = getClientApps().length > 0 ? getClientApp() : initClientApp(firebaseClientConfig);
+      const storage = getStorage(app);
+      const sRef = storageRef(storage, `${prefix}/${photoId}.jpg`);
+      const snapshot = await uploadBytes(sRef, buffer, {
+        contentType: mimeType,
+        cacheControl: 'public,max-age=31536000,immutable'
+      });
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      if (downloadUrl && downloadUrl.startsWith('http')) {
+        return downloadUrl;
+      }
+    }
+  } catch {
+    // Failover silently to Firestore asset collection
+  }
+
+  // 3. Persist to Firestore collection `uploaded_custom_photos` so it has a permanent HTTP endpoint URL
+  try {
+    const { db } = getClientInstances();
+    const docRef = doc(db, 'uploaded_custom_photos', photoId);
+    await setDoc(docRef, {
+      photoId,
+      mimeType,
+      data: base64Data,
+      createdAt: new Date().toISOString()
+    });
+    return `/api/custom-photos/${photoId}`;
+  } catch (dbErr) {
+    console.warn('[persistCustomPhoto] Firestore uploaded_custom_photos notice:', dbErr);
+  }
+
+  return base64Data;
 }
 
 export async function getAuthoritativeVoucher(code: string): Promise<any | null> {
@@ -644,19 +736,26 @@ export default async function handler(req: any, res: any) {
 
       let customPhotoPriceDelta = 0;
       let hasCustomPhoto = false;
-      const customPhotoUrl = typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim()
+      const rawCustomPhotoUrl = typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim()
         ? item.customPhotoUrl.trim()
         : undefined;
       const customPhotoNote = typeof item.customPhotoNote === 'string' && item.customPhotoNote.trim()
         ? item.customPhotoNote.trim().slice(0, 300)
         : undefined;
 
-      if (customPhotoUrl) {
+      let customPhotoUrl = rawCustomPhotoUrl;
+      if (rawCustomPhotoUrl) {
         hasCustomPhoto = true;
         if (authoritativeProduct.enableCustomPhoto && typeof authoritativeProduct.customPhotoPriceDelta === 'number') {
           customPhotoPriceDelta = Math.max(0, Number(authoritativeProduct.customPhotoPriceDelta));
         } else if (typeof item.customPhotoPrice === 'number') {
           customPhotoPriceDelta = Math.max(0, Number(item.customPhotoPrice));
+        }
+
+        // If photo is still base64 data URL, upload immediately to Firebase Storage or persist to Firestore HTTP URL
+        if (rawCustomPhotoUrl.startsWith('data:image/') || rawCustomPhotoUrl.length > 500) {
+          const photoKey = `${Date.now()}_item_${validatedItemDetails.length + 1}_${Math.random().toString(36).slice(2, 8)}`;
+          customPhotoUrl = await persistCustomPhotoToStorageOrDb(rawCustomPhotoUrl, photoKey, 'order_custom_photos');
         }
       }
 

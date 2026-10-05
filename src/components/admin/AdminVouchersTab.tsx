@@ -88,7 +88,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
       } catch {}
       getOrdersFromFirestore().then((fsOrders) => {
         if (fsOrders && fsOrders.length > 0) {
-          setInternalOrders(fsOrders);
+          setInternalOrders(fsOrders as any);
         }
       }).catch(() => {});
     }

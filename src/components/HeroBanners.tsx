@@ -314,7 +314,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       x: '0%',
       opacity: 1,
       transition: {
-        x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.35 },
+        x: { type: 'tween' as const, ease: [0.16, 1, 0.3, 1] as [number, number, number, number], duration: 0.35 },
         opacity: { duration: 0.2 },
       }
     },
@@ -322,7 +322,7 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
       x: dir >= 0 ? '-100%' : '100%',
       opacity: 1,
       transition: {
-        x: { type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.35 },
+        x: { type: 'tween' as const, ease: [0.16, 1, 0.3, 1] as [number, number, number, number], duration: 0.35 },
         opacity: { duration: 0.2 },
       }
     })

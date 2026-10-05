@@ -79,7 +79,7 @@ export const FlyingProductCartAnimation: React.FC<FlyingProductCartAnimationProp
               {/* Main Product Image inside mini card */}
               <div className="w-full h-full rounded-lg overflow-hidden bg-neutral-100 relative flex items-center justify-center">
                 <img
-                  src={item.image || '/assets/bracelet.jpg'}
+                  src={item.image || '/assets/no-image.svg'}
                   alt="Sản phẩm vào giỏ"
                   className="w-full h-full object-cover"
                   crossOrigin="anonymous"

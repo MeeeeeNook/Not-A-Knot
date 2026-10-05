@@ -130,6 +130,8 @@ export type AdminTabType =
   | 'orders'
   | 'manual_order'
   | 'vouchers'
+  | 'trash'
+  | 'banners'
   | 'sellers'
   | 'messages'
   | 'site_editor'
@@ -511,6 +513,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Modal inspection & receipt zoom
   const [inspectingOrder, setInspectingOrder] = useState<StoredOrder | null>(null);
   const [zoomReceiptImage, setZoomReceiptImage] = useState<string | null>(null);
+  const [zoomCustomPhoto, setZoomCustomPhoto] = useState<{ url: string; title: string; note?: string } | null>(null);
   const [showOrdersExcelPrompt, setShowOrdersExcelPrompt] = useState(false);
 
   // Firebase Quota & Cloud Sync State
@@ -3083,13 +3086,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       const matchSeller = (() => {
         if (orderSellerFilter === 'all') return true;
-        const isLockedSource = (o.source === 'website' || o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee') && !o.sellerId;
+        const isLockedSource = (o.source === 'website' || (o.source as string) === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo' || o.source === 'shopee') && !o.sellerId;
         const sName = (o.sellerName || '').trim().toLowerCase();
         if (orderSellerFilter === 'website') {
           return o.source === 'website' || (!o.sellerId && (!sName || sName === 'website'));
         }
         if (orderSellerFilter === 'social') {
-          return o.source === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo';
+          return (o.source as string) === 'mạng xã hội' || o.source === 'facebook' || o.source === 'tiktok' || o.source === 'instagram' || o.source === 'zalo';
         }
         if (orderSellerFilter === 'unassigned') {
           return isLockedSource || (!o.sellerId && (!sName || sName === 'website' || sName === 'mạng xã hội'));
@@ -3142,15 +3145,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return cB.localeCompare(cA, 'vi');
       }
       if (orderSortBy === 'seller_asc') {
-        const isLockedA = a.source === 'website' || a.source === 'mạng xã hội';
-        const isLockedB = b.source === 'website' || b.source === 'mạng xã hội';
+        const isLockedA = a.source === 'website' || (a.source as string) === 'mạng xã hội';
+        const isLockedB = b.source === 'website' || (b.source as string) === 'mạng xã hội';
         const sA = isLockedA ? '' : (a.sellerName || '').toLowerCase();
         const sB = isLockedB ? '' : (b.sellerName || '').toLowerCase();
         return sA.localeCompare(sB, 'vi');
       }
       if (orderSortBy === 'seller_desc') {
-        const isLockedA = a.source === 'website' || a.source === 'mạng xã hội';
-        const isLockedB = b.source === 'website' || b.source === 'mạng xã hội';
+        const isLockedA = a.source === 'website' || (a.source as string) === 'mạng xã hội';
+        const isLockedB = b.source === 'website' || (b.source as string) === 'mạng xã hội';
         const sA = isLockedA ? '' : (a.sellerName || '').toLowerCase();
         const sB = isLockedB ? '' : (b.sellerName || '').toLowerCase();
         return sB.localeCompare(sA, 'vi');
@@ -3339,7 +3342,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           onNavigateToProducts={() => handleSwitchTab('products')}
           onNavigateToCategories={() => handleSwitchTab('categories')}
           onUpdateOrderStatus={(orderId, status) => handleUpdateOrderStatus(orderId, status)}
-          onMarkMessageRead={handleMarkMessageRead}
+          onMarkMessageRead={(msgId) => {
+            const m = contactMessages.find((c) => c.id === msgId);
+            if (m) handleMarkMessageRead(m);
+          }}
           onRefreshData={() => {
             loadOrders();
             loadMessagesCount();
@@ -3482,11 +3488,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'trash' && (
           <AdminTrashPage
-            orders={orders}
+            orders={orders as any}
             onNotify={showAdminToast}
             onRefreshOrders={() => loadOrders(true)}
             onUpdateOrders={(newOrders) => {
-              setOrders(newOrders);
+              setOrders(newOrders as any);
               safeStorageSetItem('nak_preorders', JSON.stringify(newOrders));
             }}
           />
@@ -3497,8 +3503,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'vouchers' && (
           <AdminVouchersTab
-            orders={orders}
-            onInspectOrder={(ord) => setInspectingOrder(ord)}
+            orders={orders as any}
+            onInspectOrder={(ord) => setInspectingOrder(ord as any)}
           />
         )}
 
@@ -3510,7 +3516,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             products={products}
             categories={localCategories}
             collections={localCollections}
-            orders={orders}
+            orders={orders as any}
             siteContent={siteContent}
             onUpdateProducts={onUpdateProducts}
             onUpdateCategories={(newCats) => {
@@ -3522,13 +3528,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               onUpdateCollections?.(newColls);
             }}
             onUpdateOrders={(newOrders) => {
-              setOrders(newOrders);
+              setOrders(newOrders as any);
             }}
             onUpdateSiteContent={(newCfg) => {
               onUpdateSiteContent?.(newCfg);
             }}
             onNotify={showAdminToast}
-            currentSellerName={currentSeller?.displayName || currentSeller?.username}
+            currentSellerName={currentSeller?.name || currentSeller?.username}
           />
         )}
 
@@ -4136,7 +4142,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     >
                                       <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-100">
                                         <img
-                                          src={imgSrc || '/assets/bracelet.jpg'}
+                                          src={imgSrc || '/assets/no-image.svg'}
                                           alt={`Ảnh ${idx + 1}`}
                                           className="w-full h-full object-cover"
                                         />
@@ -5888,7 +5894,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         {/* Top: Image, Name, Category, Badges */}
                         <div className="flex items-start gap-3">
                           <img
-                            src={p.image || '/assets/bracelet.jpg'}
+                            src={p.image || '/assets/no-image.svg'}
                             alt={p.name}
                             className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
                           />
@@ -6084,7 +6090,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                               <td className="p-4 flex items-center gap-3">
                                 <img
-                                  src={p.image || '/assets/bracelet.jpg'}
+                                  src={p.image || '/assets/no-image.svg'}
                                   alt={p.name}
                                   className="w-12 h-12 rounded-xl object-cover border border-slate-200 flex-shrink-0"
                                 />
@@ -6306,7 +6312,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <div className="flex items-start gap-3">
                               <div className="relative flex-shrink-0">
                                 <img
-                                  src={p.image || '/assets/bracelet.jpg'}
+                                  src={p.image || '/assets/no-image.svg'}
                                   alt={p.name}
                                   className="w-14 h-14 rounded-xl object-cover border border-slate-200 bg-slate-100 opacity-80"
                                 />
@@ -7282,7 +7288,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </div>
                   ) : (
                     paginatedOrders.map((ord, index) => {
-                      const orderKey = ord.id || ord.orderCode || '';
+                      const orderKey = ord.id || (ord as any).orderCode || '';
                       const isSelected = Boolean(orderKey && selectedOrderIds.includes(orderKey));
                       const currentStatus = getNormalizedStatus(ord.status);
                       const currentPayment = getNormalizedPayment(ord.paymentStatus, ord.status);
@@ -7329,7 +7335,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 />
                               )}
                               <span className="text-[11px] font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
-                                #{ord.id?.slice(-8) || ord.orderCode || 'ORD'}
+                                #{ord.id?.slice(-8) || (ord as any).orderCode || 'ORD'}
                               </span>
                               <button 
                                 type="button"
@@ -7337,7 +7343,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 title="Bấm để sao chép mã tra cứu đơn hàng"
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  const code = getOrderTrackingNumber(ord);
+                                  const code = getOrderTrackingNumber(ord as any);
                                   try {
                                     await navigator.clipboard.writeText(code);
                                     alert(`Đã sao chép mã tra cứu: ${code}`);
@@ -7345,7 +7351,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 }}
                               >
                                 <Truck className="w-3 h-3 text-blue-600 shrink-0" />
-                                <span>{getOrderTrackingNumber(ord)}</span>
+                                <span>{getOrderTrackingNumber(ord as any)}</span>
                               </button>
                               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${srcConf.badgeClass}`}>
                                 {srcConf.shortLabel}
@@ -7409,7 +7415,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                 {ord.itemDetails.slice(0, 3).map((item, itIdx) => (
                                   <div key={itIdx} className="space-y-0.5 text-slate-700 text-[11px]">
                                     <div className="flex items-center justify-between">
-                                      <span className="truncate pr-2 font-medium">• {item.name || item.productName || 'Sản phẩm'}</span>
+                                      <span className="truncate pr-2 font-medium">• {item.productName || (item as any).name || 'Sản phẩm'}</span>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
                                     {/* Combo Items breakdown */}
@@ -7471,7 +7477,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         )}
                                         {item.selectedCharm && (
                                           <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded font-medium">
-                                            Charm: {typeof item.selectedCharm === 'object' ? item.selectedCharm.name : item.selectedCharm}
+                                            Charm: {typeof item.selectedCharm === 'object' && item.selectedCharm ? (item.selectedCharm as any).name : item.selectedCharm}
                                           </span>
                                         )}
                                         {item.selectedKhoen && (
@@ -7490,11 +7496,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           </span>
                                         )}
                                         {item.customPhotoUrl && (
-                                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
-                                            <a href={item.customPhotoUrl} target="_blank" rel="noreferrer" title="Bấm để xem ảnh khách tải" className="hover:opacity-80">
-                                              <img src={item.customPhotoUrl} alt="Ảnh custom" className="w-3.5 h-3.5 rounded object-cover border border-rose-300 inline" />
-                                            </a>
-                                            <span>Ảnh custom</span>
+                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setInspectingOrder(ord);
+                                              }}
+                                              title="Bấm để mở chi tiết xem ảnh in"
+                                              className="hover:opacity-80 inline-flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <img src={item.customPhotoUrl} alt="Ảnh custom" className="w-4 h-4 rounded object-cover border border-rose-300 inline" />
+                                              <span className="font-bold text-rose-800">Ảnh in custom</span>
+                                            </button>
                                             {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
                                               <span className="text-rose-700 font-bold">(+{item.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
                                             ) : null}
@@ -7667,13 +7681,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           checked={
                             paginatedOrders.length > 0 &&
                             paginatedOrders.every((o) => {
-                              const key = o.id || o.orderCode;
+                              const key = o.id || (o as any).orderCode;
                               return Boolean(key && selectedOrderIds.includes(key));
                             })
                           }
                           onChange={(e) => {
                             const pageKeys = paginatedOrders
-                              .map((o) => o.id || o.orderCode || '')
+                              .map((o) => o.id || (o as any).orderCode || '')
                               .filter(Boolean);
                             if (e.target.checked) {
                               setSelectedOrderIds((prev) => Array.from(new Set([...prev, ...pageKeys])));
@@ -7764,7 +7778,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </tr>
                     ) : (
                       paginatedOrders.map((ord, index) => {
-                        const orderKey = ord.id || ord.orderCode || '';
+                        const orderKey = ord.id || (ord as any).orderCode || '';
                         const isSelected = Boolean(orderKey && selectedOrderIds.includes(orderKey));
                         const currentStatus = getNormalizedStatus(ord.status);
                         const statusConf = getStatusBadgeConfig(currentStatus);
@@ -7847,7 +7861,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   title="Bấm để sao chép mã tra cứu"
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    const code = getOrderTrackingNumber(ord);
+                                    const code = getOrderTrackingNumber(ord as any);
                                     try {
                                       await navigator.clipboard.writeText(code);
                                       alert(`Đã sao chép mã tra cứu: ${code}`);
@@ -7855,7 +7869,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                   }}
                                 >
                                   <Truck className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                  <span>{getOrderTrackingNumber(ord)}</span>
+                                  <span>{getOrderTrackingNumber(ord as any)}</span>
                                 </span>
                                 {(() => {
                                   const srcConf = getSourceBadgeConfig(ord.source);
@@ -7901,7 +7915,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     <div key={idx} className="text-xs text-slate-700 bg-white border border-slate-200 px-2 py-1 rounded space-y-0.5">
                                       <div className="flex items-center justify-between gap-1">
                                         <span className="font-medium truncate text-slate-800">
-                                          {it.productName || it.name}
+                                          {it.productName || (it as any).name}
                                         </span>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
@@ -7964,7 +7978,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           )}
                                           {it.selectedCharm && (
                                             <span className="inline-flex items-center px-1.5 py-0.2 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded font-medium">
-                                              Charm: {typeof it.selectedCharm === 'object' ? it.selectedCharm.name : it.selectedCharm}
+                                              Charm: {typeof it.selectedCharm === 'object' && it.selectedCharm ? (it.selectedCharm as any).name : it.selectedCharm}
                                             </span>
                                           )}
                                           {it.selectedKhoen && (
@@ -7982,32 +7996,54 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                               Size: {it.selectedSize}
                                             </span>
                                           )}
-                                          {it.customPhotoUrl && (
-                                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-950 border border-rose-300 rounded font-bold">
-                                              <a href={it.customPhotoUrl} target="_blank" rel="noreferrer" title="Mở ảnh kích thước đầy đủ" className="hover:opacity-85">
-                                                <img src={it.customPhotoUrl} alt="Ảnh custom" className="w-4 h-4 rounded object-cover border border-rose-400 inline" />
-                                              </a>
-                                              <span>Ảnh in custom</span>
-                                              {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
-                                                <span className="text-rose-700 font-bold">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
-                                              ) : null}
-                                              <a
-                                                href={it.customPhotoUrl}
-                                                download={`anh-in-don-${ord.id || ord.trackingNumber || 'custom'}.jpg`}
-                                                className="ml-1 text-[9px] text-rose-700 hover:text-rose-900 underline font-semibold cursor-pointer"
-                                                title="Tải ảnh về máy để in"
-                                              >
-                                                Tải ảnh in
-                                              </a>
-                                            </div>
-                                          )}
                                         </div>
                                       ) : null}
-                                      {it.customPhotoNote && (
-                                        <div className="text-[10px] text-rose-900 bg-rose-50/90 px-1.5 py-0.5 rounded border border-rose-200 mt-0.5 font-medium">
-                                          📷 Yêu cầu in ảnh: <span className="font-bold">{it.customPhotoNote}</span>
-                                        </div>
-                                      )}
+                                      {(() => {
+                                        const photoUrl = it.customPhotoUrl || (it as any).customPhoto || (typeof (it as any).customPhotoData === 'string' ? (it as any).customPhotoData : '');
+                                        if (!photoUrl && !it.customPhotoNote) return null;
+                                        return (
+                                          <div className="mt-1 flex flex-wrap items-center gap-1.5 p-1 bg-rose-50/90 border border-rose-200 rounded-md">
+                                            {photoUrl ? (
+                                              <div className="flex items-center gap-1.5">
+                                                <img
+                                                  src={photoUrl}
+                                                  alt="Ảnh in"
+                                                  className="w-5 h-5 rounded object-cover border border-rose-400 shrink-0"
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setZoomCustomPhoto({
+                                                    url: photoUrl,
+                                                    title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                    note: it.customPhotoNote
+                                                  })}
+                                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                                  title="Bấm để xem ảnh in của khách hàng"
+                                                >
+                                                  <Eye className="w-3 h-3" />
+                                                  <span>Xem ảnh</span>
+                                                </button>
+                                                {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
+                                                  <span className="text-[10px] text-rose-700 font-bold">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                                ) : null}
+                                                <a
+                                                  href={photoUrl}
+                                                  download={`anh-in-don-${ord.id || ord.trackingNumber || 'custom'}.jpg`}
+                                                  className="text-[10px] text-rose-700 hover:text-rose-900 underline font-semibold cursor-pointer ml-0.5"
+                                                  title="Tải ảnh về máy để in"
+                                                >
+                                                  Tải ảnh
+                                                </a>
+                                              </div>
+                                            ) : null}
+                                            {it.customPhotoNote && (
+                                              <span className="text-[10px] text-rose-900 font-medium">
+                                                📷 Yêu cầu in: <span className="font-bold">{it.customPhotoNote}</span>
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                       {it.customNote && (
                                         <div className="text-[10px] text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-200/60 mt-0.5">
                                           * {it.customNote}
@@ -8146,7 +8182,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             >
                               {(() => {
                                 const isWebsite = ord.source === 'website';
-                                const isSocial = ord.source === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo';
+                                const isSocial = (ord.source as string) === 'mạng xã hội' || ord.source === 'facebook' || ord.source === 'tiktok' || ord.source === 'instagram' || ord.source === 'zalo';
                                 const isLockedSource = isWebsite || isSocial;
 
                                 if (isLockedSource) {
@@ -9104,6 +9140,65 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 type="button"
                 onClick={() => setZoomReceiptImage(null)}
                 className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX: ZOOM CUSTOM PRINTED PHOTO */}
+      {zoomCustomPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setZoomCustomPhoto(null)}
+        >
+          <div
+            className="relative max-w-xl w-full bg-white p-4 rounded-3xl border border-slate-200 shadow-2xl space-y-3 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="font-bold text-xs text-rose-700 flex items-center gap-1.5 truncate">
+                <Camera className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="truncate">{zoomCustomPhoto.title || 'Ảnh in custom của khách hàng'}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoomCustomPhoto(null)}
+                className="px-2 py-1 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 text-xs font-bold shrink-0 cursor-pointer"
+              >
+                Đóng [X]
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-2xl p-2 border border-slate-100">
+              <img
+                src={zoomCustomPhoto.url}
+                alt="Ảnh in của khách"
+                className="max-h-[65vh] w-auto rounded-xl object-contain shadow-md"
+              />
+            </div>
+
+            {zoomCustomPhoto.note && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900">
+                <span className="font-bold">Ghi chú in của khách:</span> {zoomCustomPhoto.note}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <a
+                href={zoomCustomPhoto.url}
+                download="anh-in-khach-hang.jpg"
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải ảnh về máy</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setZoomCustomPhoto(null)}
+                className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
               >
                 Đóng
               </button>

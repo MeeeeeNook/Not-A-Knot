@@ -3,7 +3,7 @@ import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore as getClientFirestore, doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { recentOrdersCache } from './create';
+import { recentOrdersCache } from './create.ts';
 
 type App = any;
 type ApiRequest = any;
@@ -255,8 +255,8 @@ interface RateLimitRecord {
   resetAt: number;
 }
 const failedAttemptsMap = new Map<string, RateLimitRecord>();
-const MAX_FAILURES = 10;
-const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const MAX_FAILURES = 30;
+const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -356,11 +356,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(200).json({ success: false, message: GENERIC_ERROR_MESSAGE });
     }
 
-    const cleanCode = orderCode.trim().toUpperCase();
-    const cleanPhone = normalizeVietnamesePhone(phone);
+    const cleanCode = String(orderCode || '').trim().toUpperCase();
+    const rawInputPhone = String(phone || '').trim();
+    const inputDigits = rawInputPhone.replace(/\D/g, '');
 
-    // Validate format
-    if (!/^[A-Z0-9_-]{3,40}$/.test(cleanCode) || !isValidVietnamesePhone(cleanPhone)) {
+    // Validate minimum code format and minimum phone digits
+    if (!/^[A-Z0-9_-]{3,50}$/.test(cleanCode) || inputDigits.length < 3) {
       recordFailure(clientIp);
       return res.status(200).json({ success: false, message: GENERIC_ERROR_MESSAGE });
     }
@@ -380,11 +381,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(200).json({ success: false, message: GENERIC_ERROR_MESSAGE });
     }
 
-    // 5. Verify Phone Number matches the exact order
-    const rawStoredPhone = data.phone || data.customerPhone || '';
-    const normalizedStoredPhone = normalizeVietnamesePhone(rawStoredPhone);
+    // 5. Verify Phone Number matches the exact order (flexible comparison)
+    const rawStoredPhone = String(data.phone || data.customerPhone || '').trim();
+    const storedDigits = rawStoredPhone.replace(/\D/g, '');
 
-    if (!normalizedStoredPhone || normalizedStoredPhone !== cleanPhone) {
+    const isMatch =
+      storedDigits === inputDigits ||
+      rawStoredPhone === rawInputPhone ||
+      (storedDigits.length >= 6 && inputDigits.length >= 6 && (
+        storedDigits.endsWith(inputDigits.slice(-9)) ||
+        inputDigits.endsWith(storedDigits.slice(-9))
+      )) ||
+      (inputDigits.length >= 4 && storedDigits.endsWith(inputDigits)) ||
+      (storedDigits.length >= 4 && inputDigits.endsWith(storedDigits));
+
+    if (!isMatch) {
       recordFailure(clientIp);
       // Uniform generic response: never hint whether code was right or phone was wrong
       return res.status(200).json({ success: false, message: GENERIC_ERROR_MESSAGE });
@@ -400,22 +411,35 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       ? data.items.map((it: any) => typeof it === 'string' ? { productName: it, quantity: 1, price: 0 } : it)
       : [];
 
-    const safeItems = rawItems.map((it: any) => ({
-      productName: String(it?.productName || it?.name || 'Sản phẩm thủ công'),
-      quantity: Math.max(1, Number(it?.quantity || 1)),
-      price: Number(it?.price ?? it?.unitPrice ?? 0),
-      image: it?.image || it?.selectedColorImage || it?.imageUrl || it?.productImage || undefined,
-      selectedColorImage: it?.selectedColorImage || it?.image || undefined,
-      selectedSize: it?.selectedSize ? String(it.selectedSize) : undefined,
-      selectedColor: it?.selectedColor ? String(it.selectedColor) : undefined,
-      selectedCharm: it?.selectedCharm ? (it.selectedCharm.name || String(it.selectedCharm)) : undefined,
-      selectedCharms: Array.isArray(it?.selectedCharms) ? it.selectedCharms.map((c: any) => c?.name || String(c)) : undefined,
-      selectedOmamoris: Array.isArray(it?.selectedOmamoris) ? it.selectedOmamoris.map((o: any) => ({ name: o?.name || String(o) })) : undefined,
-      selectedKhoen: it?.selectedKhoen ? String(it.selectedKhoen) : undefined,
-      customPhotoUrl: it?.customPhotoUrl || undefined,
-      customPhotoNote: it?.customPhotoNote || undefined,
-      customPhotoPrice: it?.customPhotoPrice ? Number(it.customPhotoPrice) : undefined,
-      customNote: it?.customNote ? String(it.customNote) : undefined,
+    const safeItems = await Promise.all(rawItems.map(async (it: any, itemIdx: number) => {
+      let photoUrl = it?.customPhotoUrl || undefined;
+      if (photoUrl && typeof photoUrl === 'string' && (photoUrl.startsWith('data:image/') || photoUrl.length > 500)) {
+        try {
+          const { persistCustomPhotoToStorageOrDb } = await import('./create.ts');
+          const pKey = `${cleanCode}_item_${itemIdx + 1}`;
+          photoUrl = await persistCustomPhotoToStorageOrDb(photoUrl, pKey, 'order_custom_photos');
+        } catch (convErr) {
+          console.warn('[Track Order] Photo conversion notice:', convErr);
+        }
+      }
+
+      return {
+        productName: String(it?.productName || it?.name || 'Sản phẩm thủ công'),
+        quantity: Math.max(1, Number(it?.quantity || 1)),
+        price: Number(it?.price ?? it?.unitPrice ?? 0),
+        image: it?.image || it?.selectedColorImage || it?.imageUrl || it?.productImage || undefined,
+        selectedColorImage: it?.selectedColorImage || it?.image || undefined,
+        selectedSize: it?.selectedSize ? String(it.selectedSize) : undefined,
+        selectedColor: it?.selectedColor ? String(it.selectedColor) : undefined,
+        selectedCharm: it?.selectedCharm ? (it.selectedCharm.name || String(it.selectedCharm)) : undefined,
+        selectedCharms: Array.isArray(it?.selectedCharms) ? it.selectedCharms.map((c: any) => c?.name || String(c)) : undefined,
+        selectedOmamoris: Array.isArray(it?.selectedOmamoris) ? it.selectedOmamoris.map((o: any) => ({ name: o?.name || String(o) })) : undefined,
+        selectedKhoen: it?.selectedKhoen ? String(it.selectedKhoen) : undefined,
+        customPhotoUrl: photoUrl,
+        customPhotoNote: it?.customPhotoNote || undefined,
+        customPhotoPrice: it?.customPhotoPrice ? Number(it.customPhotoPrice) : undefined,
+        customNote: it?.customNote ? String(it.customNote) : undefined,
+      };
     }));
 
     const safeStatusHistory = Array.isArray(data.statusHistory)
@@ -448,7 +472,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       craftingStageNote: data.craftingStageNote ? String(data.craftingStageNote) : '',
       statusHistory: safeStatusHistory,
       itemDetails: safeItems,
-      maskedPhone: maskPhoneNumber(normalizedStoredPhone),
+      maskedPhone: maskPhoneNumber(rawStoredPhone),
       maskedLocation: maskLocation(data),
       customerName: data.customerName || data.name ? String(data.customerName || data.name) : 'Khách hàng'
     };

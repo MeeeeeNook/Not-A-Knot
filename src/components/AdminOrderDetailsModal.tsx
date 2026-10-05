@@ -103,7 +103,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   };
 
   const handleDirectWindowPrint = () => {
-    const success = printOrderSlipDirectly(order);
+    const success = printOrderSlipDirectly(order as any);
     if (success) {
       showToast('Đang mở hộp thoại in phiếu...');
     } else {
@@ -111,34 +111,34 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
         window.print();
         showToast('Đang gọi lệnh in của trình duyệt...');
       } catch {
-        openOrderPrintTab(order);
+        openOrderPrintTab(order as any);
         showToast('Đã mở tab in riêng do trình duyệt hạn chế in trực tiếp!');
       }
     }
   };
 
   const handleOpenPrintTab = () => {
-    const success = openOrderPrintTab(order);
+    const success = openOrderPrintTab(order as any);
     if (success) {
       showToast('Đang mở tab in riêng (A4/A5)...');
     } else {
       showToast('Đã tải file phiếu in (.html) về máy của bạn!');
-      downloadOrderSlipHtml(order);
+      downloadOrderSlipHtml(order as any);
     }
   };
 
   const handleDownloadHtml = () => {
-    downloadOrderSlipHtml(order);
+    downloadOrderSlipHtml(order as any);
     showToast('Đã tải phiếu in định dạng HTML!');
   };
 
   const handleDownloadTxt = () => {
-    downloadOrderSlipTxt(order);
+    downloadOrderSlipTxt(order as any);
     showToast('Đã tải phiếu giao hàng định dạng TXT!');
   };
 
   const handleCopyText = async () => {
-    const ok = await copyOrderSlipToClipboard(order);
+    const ok = await copyOrderSlipToClipboard(order as any);
     if (ok) {
       showToast('Đã sao chép toàn bộ thông tin phiếu vào bộ nhớ tạm!');
     } else {
@@ -252,7 +252,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                 </div>
               )}
               {(() => {
-                const isLockedSource = order.source === 'website' || order.source === 'mạng xã hội' || order.source === 'facebook' || order.source === 'tiktok' || order.source === 'instagram' || order.source === 'zalo' || order.source === 'shopee';
+                const isLockedSource = (order.source as string) === 'website' || (order.source as string) === 'mạng xã hội' || order.source === 'facebook' || order.source === 'tiktok' || order.source === 'instagram' || order.source === 'zalo' || order.source === 'shopee';
                 if (isLockedSource) {
                   return (
                     <div className="pt-1 text-[11px] text-slate-600 bg-slate-100 border border-slate-200 px-2 py-1 rounded flex items-center gap-1.5 font-medium">
@@ -609,16 +609,39 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                                 <Eye className="w-3.5 h-3.5 text-rose-600" />
                                 <span>Phóng to xem</span>
                               </button>
-                              <a
-                                href={it.customPhotoUrl}
-                                download={`Anh_In_Don_${order.id || 'order'}_M${idx + 1}.jpg`}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const url = it.customPhotoUrl!;
+                                  const filename = `Anh_In_Don_${order.id || 'order'}_M${idx + 1}.jpg`;
+                                  if (url.startsWith('data:')) {
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    return;
+                                  }
+                                  fetch(url)
+                                    .then((r) => r.blob())
+                                    .then((blob) => {
+                                      const blobUrl = URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.href = blobUrl;
+                                      a.download = filename;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      document.body.removeChild(a);
+                                      URL.revokeObjectURL(blobUrl);
+                                    })
+                                    .catch(() => window.open(url, '_blank'));
+                                }}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
                               >
                                 <Download className="w-3.5 h-3.5" />
                                 <span>Tải ảnh gốc</span>
-                              </a>
+                              </button>
                             </div>
                           </div>
 
@@ -1203,15 +1226,6 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                   <RotateCw className="w-3.5 h-3.5 text-slate-600" />
                   <span>Xoay 90°</span>
                 </button>
-                <a
-                  href={zoomedPhotoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Mở tab mới</span>
-                </a>
               </div>
 
               <div className="flex items-center gap-2">

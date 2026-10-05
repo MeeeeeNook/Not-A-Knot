@@ -136,7 +136,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       });
 
       optionImageUrls.forEach((url) => {
-        if (url && url !== '/assets/bracelet.jpg') {
+        if (url && url !== '/assets/no-image.svg') {
           const img = document.createElement('img');
           img.src = url;
         }
@@ -150,7 +150,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       (img) => typeof img === 'string' && img.trim().length > 0
     );
     const resolved = validBase.map((img) => resolveAssetUrl(img));
-    return resolved.length > 0 ? resolved : ['/assets/bracelet.jpg'];
+    return resolved.length > 0 ? resolved : ['/assets/no-image.svg'];
   }, [product.images, product.image]);
 
   const [compareModalOpen, setCompareModalOpen] = useState(false);
@@ -386,7 +386,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {images.map((imgSrc, idx) => (
                   <div key={idx} className="w-full h-full flex-shrink-0 relative flex items-center justify-center">
                     <LoadingImage
-                      src={imgSrc || product.image || '/assets/bracelet.jpg'}
+                      src={imgSrc || product.image || '/assets/no-image.svg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
                       loading={idx === 0 ? "eager" : "lazy"}
                       fetchPriority={idx === 0 ? "high" : "low"}
@@ -457,7 +457,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     }`}
                   >
                     <LoadingImage
-                      src={img || '/assets/bracelet.jpg'}
+                      src={img || '/assets/no-image.svg'}
                       alt="thumb"
                       containerClassName="w-full h-full"
                       className="w-full h-full object-cover"

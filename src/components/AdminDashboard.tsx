@@ -99,14 +99,11 @@ function getOrderPaidRevenue(o: StoredOrder): number {
 }
 
 const EMPTY_DASHBOARD_SELLERS: SellerUser[] = [];
-const EMPTY_DASHBOARD_ORDERS: StoredOrder[] = [];
-const EMPTY_DASHBOARD_PRODUCTS: Product[] = [];
-const EMPTY_DASHBOARD_CATEGORIES: CategoryItem[] = [];
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  orders = EMPTY_DASHBOARD_ORDERS,
-  products = EMPTY_DASHBOARD_PRODUCTS,
-  categories = EMPTY_DASHBOARD_CATEGORIES,
+  orders,
+  products,
+  categories,
   sellers = EMPTY_DASHBOARD_SELLERS,
   onNavigateToOrders,
   onNavigateToManualOrder

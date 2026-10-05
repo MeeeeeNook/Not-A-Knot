@@ -44,7 +44,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Debounce the search input query by 250ms to prevent heavy re-filtering on each keystroke
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc' | 'newest'>('featured');
-  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock'>('in_stock');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('in_stock');
 
   // Set of hidden category IDs
   const hiddenCategoryIds = useMemo(() => {

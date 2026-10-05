@@ -94,11 +94,10 @@ interface ProductDetailPageProps {
 const EMPTY_CATEGORIES: CategoryItem[] = [];
 const EMPTY_COLLECTIONS: CollectionInfo[] = [];
 const EMPTY_CART_ITEMS: CartItem[] = [];
-const EMPTY_PRODUCTS: Product[] = [];
 
 export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   product,
-  allProducts = EMPTY_PRODUCTS,
+  allProducts,
   categories = EMPTY_CATEGORIES,
   collections = EMPTY_COLLECTIONS,
   cartItems = EMPTY_CART_ITEMS,
@@ -266,7 +265,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         }
       });
 
-      return combined.length > 0 ? combined : ['/assets/bracelet.jpg'];
+      return combined.length > 0 ? combined : ['/assets/no-image.svg'];
     }
 
     return buildProductGalleryImages(product);
@@ -705,7 +704,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   // Find related products in the same category (strictly visible products only)
   const relatedProducts = useMemo(() => {
-    return (allProducts || [])
+    return allProducts
       .filter((p) => isProductVisible(p) && p.id !== product.id && p.category === product.category)
       .slice(0, 4);
   }, [allProducts, product, isProductVisible]);
@@ -713,7 +712,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   // Curated 'Có thể bạn sẽ thích' (strictly visible products only)
   const recommendedProducts = useMemo(() => {
     // Exclude current product and hidden products
-    const otherProducts = (allProducts || []).filter(
+    const otherProducts = allProducts.filter(
       (p) => isProductVisible(p) && p.id !== product.id && p.inStock !== false
     );
     if (otherProducts.length === 0) return [];
@@ -733,21 +732,35 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const categoryName = useMemo(() => {
     if (collections && collections.length > 0) {
       const matchCol = collections.find(
-        (c) => c.id === product.category || c.categoryKey === product.category
+        (c) => c.id === product.category || c.categoryKey === product.category || (product as any).collectionId === c.id
       );
-      if (matchCol && (matchCol.tag || matchCol.title)) return matchCol.tag || matchCol.title;
+      if (matchCol) {
+        if (matchCol.title && matchCol.title.trim() && !matchCol.title.toUpperCase().includes('BỘ SƯU TẬP')) {
+          return matchCol.title.trim();
+        }
+        if (matchCol.tag && !matchCol.tag.toUpperCase().includes('BỘ SƯU TẬP')) {
+          return matchCol.tag.trim();
+        }
+        if (matchCol.title && matchCol.title.trim()) {
+          return matchCol.title.replace(/^(BST|Bộ\s+sưu\s+tập)\s+/i, '').trim();
+        }
+      }
     }
     const match = categories.find((c) => c.id === product.category);
     if (match) return match.label;
-    if (product.category === 'event_0209') return 'Quốc Khánh 02.09';
-    if (product.category === 'event_2010') return 'Phụ Nữ 20.10';
-    if (product.category === 'bracelets') return 'Vòng Tay Handmade';
-    if (product.category === 'back_to_school') return 'Back 2 School';
+    if (product.category === 'event_0209') return '02/09';
+    if (product.category === 'event_2010') return '20/10';
+    if (product.category === 'bracelets') return 'Vòng Tay';
+    if (product.category === 'back_to_school') return 'Back to School';
     if (product.category && product.category.trim().length > 0) {
-      return product.category.replace(/^(BST|Bộ\s+sưu\s+tập)\s+/i, '').trim();
+      const cleaned = product.category.replace(/^(BST|Bộ\s+sưu\s+tập)\s+/i, '').trim();
+      if (cleaned.toLowerCase() === 'event_0209') return '02/09';
+      if (cleaned.toLowerCase() === 'event_2010') return '20/10';
+      if (cleaned.toLowerCase() === 'back_to_school') return 'Back to School';
+      return cleaned;
     }
-    return 'Bộ Sưu Tập NOT A KNOT';
-  }, [categories, collections, product.category]);
+    return 'Phụ kiện';
+  }, [categories, collections, product.category, (product as any).collectionId]);
 
   // Automatically update page title, meta description, keywords, Open Graph, Twitter cards, and JSON-LD schema for this product
   useProductSEO(product, categoryName);
@@ -775,7 +788,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     });
 
     optionImageUrls.forEach((url) => {
-      if (url && url !== '/assets/bracelet.jpg') {
+      if (url && url !== '/assets/no-image.svg') {
         const img = document.createElement('img');
         img.src = url;
       }
@@ -793,15 +806,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
             Mẫu "{product.name}" hiện đang được tạm ẩn khỏi gian hàng trực tuyến. Quý khách vui lòng tham khảo các mẫu sản phẩm khác đang sẵn hàng!
           </p>
-          <div className="pt-2">
-            <button
-              onClick={onBack}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-md inline-flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Quay Lại Cửa Hàng</span>
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -819,20 +823,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       {/* Top Breadcrumb & Navigation Bar */}
       <div className="bg-white/95 backdrop-blur-md border-b border-neutral-200/80 sticky top-14 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-stone-900 hover:text-stone-700 transition-colors cursor-pointer py-1.5 px-3 rounded-xl bg-[#F4F1EA] hover:bg-[#EAE6DE] active:scale-95 border border-[#EAE6DE] shadow-2xs"
-            title="Quay lại cửa hàng (Về shop)"
-          >
-            <ArrowLeft className="w-4 h-4 text-stone-950 stroke-[2.5]" />
-            <span>Về shop</span>
-            <span className="hidden sm:inline font-normal text-stone-600">• {backLabel || 'Danh mục sản phẩm'}</span>
-          </button>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-xs font-bold text-stone-800 bg-[#F4F1EA] border border-[#EAE6DE] px-2.5 py-1 rounded-lg truncate max-w-[160px] sm:max-w-none">
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-sm font-extrabold text-stone-900 bg-[#F4F1EA] border border-[#EAE6DE] px-3.5 py-1.5 rounded-xl shadow-2xs">
               {categoryName}
             </span>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setIsShareModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F4F1EA] hover:bg-[#EAE6DE] text-stone-800 transition-colors cursor-pointer active:scale-95 border border-[#EAE6DE] shadow-2xs"
@@ -868,7 +865,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 {images.map((imgSrc, idx) => (
                   <div key={idx} className="w-full h-full flex-shrink-0 relative flex items-center justify-center">
                     <LoadingImage
-                      src={imgSrc || product.image || '/assets/bracelet.jpg'}
+                      src={imgSrc || product.image || '/assets/no-image.svg'}
                       alt={`${product.name} - Ảnh ${idx + 1}`}
                       loading={idx === 0 ? "eager" : "lazy"}
                       fetchPriority={idx === 0 ? "high" : "low"}
@@ -977,7 +974,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       }`}
                     >
                       <LoadingImage
-                        src={img || '/assets/bracelet.jpg'}
+                        src={img || '/assets/no-image.svg'}
                         alt={`${product.name} thumbnail ${idx + 1}`}
                         containerClassName="w-full h-full"
                         className="w-full h-full object-cover"
@@ -1010,20 +1007,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="lg:col-span-7 xl:col-span-7 space-y-4 sm:space-y-5">
             <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-7 border border-neutral-200/70 sm:border-neutral-200/90 shadow-2xs sm:shadow-xs space-y-3.5 sm:space-y-6">
               
-              {/* Product Title & Quick Share */}
+              {/* Product Title */}
               <div className="flex items-start justify-between gap-2.5 sm:gap-3">
                 <h1 className="text-xl sm:text-3xl font-extrabold text-neutral-950 tracking-tight leading-tight flex-1">
                   {product.name}
                 </h1>
-                <button
-                  type="button"
-                  onClick={() => setIsShareModalOpen(true)}
-                  className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-slate-200/80 shadow-2xs active:scale-95"
-                  title="Chia sẻ sản phẩm"
-                >
-                  <Share2 className="w-4 h-4 text-slate-800" />
-                  <span className="hidden sm:inline">Chia sẻ</span>
-                </button>
               </div>
 
               {/* Price & Sales Row */}
@@ -1561,7 +1549,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     {/* Product Image & Badges */}
                     <div className="relative aspect-square overflow-hidden bg-neutral-100">
                       <img
-                        src={rec.image || '/assets/bracelet.jpg'}
+                        src={rec.image || '/assets/no-image.svg'}
                         alt={rec.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
@@ -1635,7 +1623,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   >
                     <div className="relative aspect-square overflow-hidden bg-neutral-100">
                       <img
-                        src={rel.image || '/assets/bracelet.jpg'}
+                        src={rel.image || '/assets/no-image.svg'}
                         alt={rel.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
@@ -1814,7 +1802,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
                   <img
-                    src={images[0] || '/assets/bracelet.jpg'}
+                    src={images[0] || '/assets/no-image.svg'}
                     alt={product.name}
                     className="w-full h-full object-cover"
                   />

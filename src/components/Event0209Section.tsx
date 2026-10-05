@@ -142,7 +142,7 @@ export const Event0209Section: React.FC<Event0209SectionProps> = ({
               {/* Image Container */}
               <div className="relative aspect-[4/3] bg-neutral-850 overflow-hidden">
                 <img
-                  src={prod.image || '/assets/bracelet.jpg'}
+                  src={prod.image || '/assets/no-image.svg'}
                   alt={prod.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   loading="lazy"

@@ -25,7 +25,9 @@ import {
   AlertCircle,
   X,
   Mail,
-  User
+  User,
+  Eye,
+  RotateCw
 } from 'lucide-react';
 import { StoredOrder, SiteContentConfig } from '../types';
 import { 
@@ -351,6 +353,14 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   const [printSuccessToast, setPrintSuccessToast] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
+  // Custom photo lightbox preview modal
+  const [viewingCustomPhoto, setViewingCustomPhoto] = useState<{
+    url: string;
+    productName: string;
+    note?: string;
+  } | null>(null);
+  const [photoModalRotation, setPhotoModalRotation] = useState<number>(0);
+
   // Email modal state for interactive order email dispatch
   const [emailModalOrder, setEmailModalOrder] = useState<any | null>(null);
   const [emailModalInput, setEmailModalInput] = useState('');
@@ -491,7 +501,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
           localStorage.setItem('nak_last_order_code', cleanCode);
         } catch {}
       } else {
-        // Fallback: If customer placed an order in this browser, check nak_preorders with phone match
+        // Fallback 1: If customer placed an order in this browser, check nak_preorders with phone match
         let localFoundOrder: any = null;
         try {
           const raw = localStorage.getItem('nak_preorders');
@@ -503,7 +513,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
                 const p = String(it?.phone || it?.customerPhone || '').trim().replace(/[^\d+]/g, '');
                 const cleanPhoneDigits = cleanPhone.replace(/[^\d+]/g, '');
                 const codeMatch = c === cleanCode || c === `NAK-${cleanCode}` || cleanCode === `NAK-${c}`;
-                const phoneMatch = p && cleanPhoneDigits && (p.endsWith(cleanPhoneDigits.slice(-9)) || cleanPhoneDigits.endsWith(p.slice(-9)));
+                const phoneMatch = !cleanPhoneDigits || (p && (p === cleanPhoneDigits || p.endsWith(cleanPhoneDigits.slice(-9)) || cleanPhoneDigits.endsWith(p.slice(-9))));
                 return codeMatch && phoneMatch;
               });
               if (matched) {
@@ -512,6 +522,39 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
             }
           }
         } catch {}
+
+        // Fallback 2: Direct Firestore read (rules allow get: if true for individual doc)
+        if (!localFoundOrder) {
+          try {
+            const { doc, getDoc } = await import('firebase/firestore');
+            const { db } = await import('../firebase');
+            let snap = await getDoc(doc(db, 'orders', cleanCode));
+            if (!snap.exists() && cleanCode.startsWith('NAK-')) {
+              snap = await getDoc(doc(db, 'orders', cleanCode.replace(/^NAK-/, '')));
+            } else if (!snap.exists() && !cleanCode.startsWith('NAK-')) {
+              snap = await getDoc(doc(db, 'orders', `NAK-${cleanCode}`));
+            }
+
+            if (snap.exists()) {
+              const d = snap.data();
+              const storedP = String(d?.phone || d?.customerPhone || '').replace(/\D/g, '');
+              const inputP = cleanPhone.replace(/\D/g, '');
+              const matches = 
+                !inputP ||
+                storedP === inputP ||
+                String(d?.phone || '').trim() === cleanPhone.trim() ||
+                (storedP.length >= 6 && inputP.length >= 6 && (storedP.endsWith(inputP.slice(-9)) || inputP.endsWith(storedP.slice(-9)))) ||
+                (inputP.length >= 4 && storedP.endsWith(inputP)) ||
+                (storedP.length >= 4 && inputP.endsWith(storedP));
+
+              if (matches) {
+                localFoundOrder = d;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('[OrderTracker] Direct firestore fallback notice:', dbErr);
+          }
+        }
 
         if (localFoundOrder) {
           setActiveOrder(localFoundOrder);
@@ -739,22 +782,6 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-slate-900 pb-20 pt-6 sm:pt-10 font-sans">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-
-        {/* Back Link & Header */}
-        <div className="mb-6 flex items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
-          <button
-            onClick={onNavigateCatalog}
-            className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-slate-600 hover:text-amber-700 transition-colors cursor-pointer group whitespace-nowrap shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform shrink-0" />
-            <span>Quay lại cửa hàng</span>
-          </button>
-
-          <div className="text-xs font-bold text-slate-400 whitespace-nowrap text-right">
-            Tra cứu đơn
-          </div>
-        </div>
-
         {/* ============================================================ */}
         {/* REFINED SEARCH CONSOLE (ANTI-SLOP: CLEAN & CRAFTED)          */}
         {/* ============================================================ */}
@@ -1273,15 +1300,30 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                                       </span>
                                     )}
                                     {it.customPhotoUrl && (
-                                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-900 border border-rose-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
-                                        <a href={it.customPhotoUrl} target="_blank" rel="noreferrer" title="Bấm để xem ảnh bạn đã tải">
-                                          <img src={it.customPhotoUrl} alt="Ảnh custom" className="w-3.5 h-3.5 rounded object-cover border border-rose-300 inline" />
-                                        </a>
-                                        <span>Ảnh in custom</span>
-                                        {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
-                                          <span className="text-rose-700">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
-                                        ) : null}
-                                      </span>
+                                      <div className="flex items-center gap-2 flex-wrap mt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setPhotoModalRotation(0);
+                                            setViewingCustomPhoto({
+                                              url: it.customPhotoUrl!,
+                                              productName: it.productName,
+                                              note: it.customPhotoNote
+                                            });
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
+                                          title="Bấm để xem ảnh in theo yêu cầu"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>Xem ảnh in</span>
+                                        </button>
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                                          <span>Ảnh in custom</span>
+                                          {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
+                                            <span className="text-rose-700">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                          ) : null}
+                                        </span>
+                                      </div>
                                     )}
                                   </div>
                                 )}
@@ -1913,6 +1955,114 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     </>
                   )}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Customer Custom Photo Lightbox Modal */}
+        {viewingCustomPhoto && (
+          <div 
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 select-none animate-in fade-in duration-200"
+            onClick={() => setViewingCustomPhoto(null)}
+          >
+            <div 
+              className="relative w-full max-w-lg bg-[#181f2a] rounded-3xl border border-slate-700/60 shadow-2xl p-4 sm:p-6 text-white space-y-4 animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-700/60">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                    <span>Ảnh in theo yêu cầu</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{viewingCustomPhoto.productName}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingCustomPhoto(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Photo Viewport */}
+              <div className="relative overflow-hidden bg-black/50 rounded-2xl flex items-center justify-center p-2 min-h-[260px] max-h-[460px] border border-slate-700/50">
+                <img
+                  src={viewingCustomPhoto.url}
+                  alt="Ảnh in theo yêu cầu"
+                  className="max-h-[420px] w-auto max-w-full object-contain rounded-lg transition-transform duration-200 shadow-md"
+                  style={{ transform: `rotate(${photoModalRotation}deg)` }}
+                />
+              </div>
+
+              {/* Custom Note */}
+              {viewingCustomPhoto.note && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-200 leading-relaxed">
+                  <span className="font-bold text-amber-300">Ghi chú của bạn:</span> "{viewingCustomPhoto.note}"
+                </div>
+              )}
+
+              {/* Action Bar */}
+              <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setPhotoModalRotation((r) => (r + 90) % 360)}
+                  className="px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                  title="Xoay ảnh 90 độ"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Xoay ảnh</span>
+                </button>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  {viewingCustomPhoto.url.startsWith('http') && (
+                    <a
+                      href={viewingCustomPhoto.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Mở link gốc</span>
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const orderCodeStr = activeOrder?.trackingNumber || activeOrder?.id || 'DonHang';
+                      const filename = `Anh_In_${orderCodeStr}.jpg`;
+                      if (viewingCustomPhoto.url.startsWith('data:')) {
+                        const a = document.createElement('a');
+                        a.href = viewingCustomPhoto.url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        return;
+                      }
+                      fetch(viewingCustomPhoto.url)
+                        .then((r) => r.blob())
+                        .then((blob) => {
+                          const blobUrl = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = blobUrl;
+                          a.download = filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(blobUrl);
+                        })
+                        .catch(() => window.open(viewingCustomPhoto.url, '_blank'));
+                    }}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Tải ảnh về máy</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

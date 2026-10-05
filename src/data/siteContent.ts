@@ -49,6 +49,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   announcementShowFreeship: true,
   announcementShowWarranty: true,
   announcementSpeed: 4.5,
+  announcementTickerSpeed: 32,
   phone: '079 655 5636',
   zalo: '',
   address: 'Hanoi, Vietnam',
@@ -183,7 +184,7 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
         icon: 'HeartHandshake'
       }
     ],
-    imageUrl: '/assets/bracelet.jpg'
+    imageUrl: '/assets/no-image.svg'
   },
 
   customElements: [],

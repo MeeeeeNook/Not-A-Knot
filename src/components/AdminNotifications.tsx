@@ -26,8 +26,8 @@ const STORAGE_KEY_DISMISSED_ORDERS = 'nak_dismissed_order_notifs';
 const STORAGE_KEY_DISMISSED_MSGS = 'nak_dismissed_msg_notifs';
 
 export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
-  orders = [],
-  messages = [],
+  orders,
+  messages,
   onInspectOrder,
   onNavigateToOrders,
   onNavigateToMessages,
@@ -71,9 +71,9 @@ export const AdminNotifications: React.FC<AdminNotificationsProps> = ({
       .filter((o) => {
         if (o.id && dismissedOrderIds.includes(o.id)) return false;
         // Loại bỏ hoàn toàn đơn hàng tự nhập thủ công
-        if (isManualOrder(o)) return false;
+        if (isManualOrder(o as any)) return false;
         // Chỉ nhận thông báo khi có đơn hàng từ web
-        if (!isWebOrder(o)) return false;
+        if (!isWebOrder(o as any)) return false;
 
         const st = normalizeOrderStatus(o.status);
         return st === 'Chờ xác nhận';

@@ -36,7 +36,7 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
     normalizedOptions.forEach((opt) => {
       if (opt.image) {
         const resolved = resolveAssetUrl(opt.image);
-        if (resolved && resolved !== '/assets/bracelet.jpg') {
+        if (resolved && resolved !== '/assets/no-image.svg') {
           const img = document.createElement('img');
           img.src = resolved;
         }

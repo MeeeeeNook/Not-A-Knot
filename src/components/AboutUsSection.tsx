@@ -78,7 +78,7 @@ export const AboutUsSection: React.FC<AboutUsSectionProps> = ({
           <div className="lg:col-span-5 relative">
             <div className="rounded-3xl overflow-hidden border border-slate-200 bg-slate-100 shadow-lg relative group">
               <img
-                src={content?.imageUrl || '/assets/bracelet.jpg'}
+                src={content?.imageUrl || '/assets/no-image.svg'}
                 alt="Chế tác NOT A KNOT"
                 className="w-full h-64 sm:h-72 object-cover object-center group-hover:scale-105 transition-transform duration-700"
               />

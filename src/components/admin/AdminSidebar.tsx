@@ -14,6 +14,7 @@ export type AdminTabType =
   | 'manual_order'
   | 'vouchers'
   | 'trash'
+  | 'banners'
   | 'sellers'
   | 'messages'
   | 'site_editor'

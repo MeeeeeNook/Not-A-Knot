@@ -27,9 +27,11 @@ import {
   Tag,
   Eye,
   Camera,
-  RotateCw
+  RotateCw,
+  Crop
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
+import { PhotoCropModal } from './PhotoCropModal';
 import { sendOrderConfirmationEmail } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
@@ -86,7 +88,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [createdTrackingCode, setCreatedTrackingCode] = useState('');
   const [copiedTrackingCode, setCopiedTrackingCode] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'cod'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'vietqr'>('cod');
   const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
   const [confirmedTotalAmount, setConfirmedTotalAmount] = useState<number>(0);
   const [cartPhotoPreview, setCartPhotoPreview] = useState<{
@@ -101,6 +103,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [replaceSuccessToast, setReplaceSuccessToast] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
   const [editNoteValue, setEditNoteValue] = useState<string>('');
+  const [cartCropData, setCartCropData] = useState<{
+    isOpen: boolean;
+    imageSrc: string;
+    targetIdx: number;
+    aspectRatio: string;
+  } | null>(null);
   const replaceFileInputRef = React.useRef<HTMLInputElement>(null);
   const targetReplaceIdxRef = React.useRef<number | null>(null);
 
@@ -118,65 +126,67 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const targetIdx = targetReplaceIdxRef.current !== null 
       ? targetReplaceIdxRef.current 
       : (typeof cartPhotoPreview?.index === 'number' ? cartPhotoPreview.index : null);
-    if (targetIdx === null) return;
+    if (targetIdx === null || !cartItems[targetIdx]) return;
 
-    setIsReplacingPhoto(true);
-    const currentNote = cartItems[targetIdx]?.customPhotoNote || cartPhotoPreview?.note;
+    // Validate format
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
+    if (!isImage) {
+      alert('Tệp được chọn không phải là định dạng ảnh. Vui lòng chỉ chọn tệp ảnh hợp lệ (JPG, PNG, HEIC, WEBP).');
+      e.target.value = '';
+      return;
+    }
+
+    // Validate size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh vượt quá 10MB. Vui lòng chọn ảnh có dung lượng tối đa 10MB.');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
       const src = ev.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1200;
-        let width = img.width;
-        let height = img.height;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        let compressed = src;
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          compressed = canvas.toDataURL('image/jpeg', 0.86);
-        }
-
-        setIsReplacingPhoto(false);
-        if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
-          setCartPhotoPreview((prev) => (prev ? { ...prev, url: compressed } : null));
-          setPhotoRotation(0);
-        }
-
-        if (onUpdateItemPhoto) {
-          onUpdateItemPhoto(targetIdx, compressed, currentNote);
-        }
-        setReplaceSuccessToast('Đã đổi ảnh in thành công!');
-        setTimeout(() => setReplaceSuccessToast(null), 3000);
-        targetReplaceIdxRef.current = null;
-      };
-      img.onerror = () => {
-        setIsReplacingPhoto(false);
-        if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
-          setCartPhotoPreview((prev) => (prev ? { ...prev, url: src } : null));
-        }
-        if (onUpdateItemPhoto) {
-          onUpdateItemPhoto(targetIdx, src, currentNote);
-        }
-        targetReplaceIdxRef.current = null;
-      };
-      img.src = src;
+      const targetAspectRatio = cartItems[targetIdx].product.customPhotoAspectRatio || 'square';
+      setCartCropData({
+        isOpen: true,
+        imageSrc: src,
+        targetIdx,
+        aspectRatio: targetAspectRatio
+      });
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleCartCropConfirm = async (croppedDataUrl: string) => {
+    if (!cartCropData) return;
+    const targetIdx = cartCropData.targetIdx;
+    const currentNote = cartItems[targetIdx]?.customPhotoNote || cartPhotoPreview?.note;
+
+    setCartCropData(null);
+    targetReplaceIdxRef.current = null;
+
+    if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
+      setCartPhotoPreview((prev) => (prev ? { ...prev, url: croppedDataUrl } : null));
+      setPhotoRotation(0);
+    }
+
+    if (onUpdateItemPhoto) {
+      onUpdateItemPhoto(targetIdx, croppedDataUrl, currentNote);
+    }
+    setReplaceSuccessToast('Đã đổi ảnh in thành công!');
+    setTimeout(() => setReplaceSuccessToast(null), 3000);
+
+    // Upload to Firebase Storage in background
+    try {
+      const { uploadCustomPhotoImmediately } = await import('../firebase');
+      const uploadedUrl = await uploadCustomPhotoImmediately(croppedDataUrl, 'cart_photos');
+      if (uploadedUrl && uploadedUrl.startsWith('http') && onUpdateItemPhoto) {
+        onUpdateItemPhoto(targetIdx, uploadedUrl, currentNote);
+      }
+    } catch (uploadErr) {
+      console.warn('[CartDrawer] Cloud upload notice:', uploadErr);
+    }
   };
 
   // Voucher states
@@ -829,25 +839,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                   <Eye className="w-4 h-4 text-white drop-shadow-sm" />
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const src = item.selectedColorImage || item.product.image;
-                                  if (src) {
-                                    setCartPhotoPreview({
-                                      url: src,
-                                      title: item.product.name,
-                                      isCustomPhoto: false
-                                    });
-                                    setPhotoRotation(0);
-                                  }
-                                }}
-                                className="mt-1 text-[10px] font-bold text-neutral-600 hover:text-amber-600 inline-flex items-center gap-0.5 cursor-pointer py-0.5 px-1.5 rounded hover:bg-amber-50 border border-neutral-200 transition-colors"
-                                title="Xem ảnh sản phẩm phóng to"
-                              >
-                                <Eye className="w-3 h-3 text-amber-500" />
-                                <span>Xem ảnh</span>
-                              </button>
                             </div>
                             <div className="flex-grow min-w-0">
                               <div className="flex items-start justify-between gap-2">
@@ -1832,15 +1823,26 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <RotateCw className="w-3.5 h-3.5 text-slate-600" />
                   <span>Xoay ảnh</span>
                 </button>
-                <a
-                  href={cartPhotoPreview.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (cartPhotoPreview && typeof cartPhotoPreview.index === 'number') {
+                      const pIdx = cartPhotoPreview.index;
+                      const ratio = cartItems[pIdx]?.product.customPhotoAspectRatio || 'square';
+                      setCartCropData({
+                        isOpen: true,
+                        imageSrc: cartPhotoPreview.url,
+                        targetIdx: pIdx,
+                        aspectRatio: ratio
+                      });
+                    }
+                  }}
                   className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                  title="Căn chỉnh khung ảnh theo tỷ lệ"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Mở tab mới</span>
-                </a>
+                  <Crop className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Căn chỉnh</span>
+                </button>
               </div>
               <button
                 type="button"
@@ -1871,6 +1873,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       className="hidden"
       onChange={handleReplacePhotoFile}
     />
+
+    {/* Interactive Photo Crop & Alignment Modal for CartDrawer */}
+    {cartCropData && cartCropData.isOpen && (
+      <PhotoCropModal
+        isOpen={cartCropData.isOpen}
+        imageSrc={cartCropData.imageSrc}
+        aspectRatio={cartCropData.aspectRatio}
+        onConfirm={handleCartCropConfirm}
+        onCancel={() => {
+          setCartCropData(null);
+          targetReplaceIdxRef.current = null;
+        }}
+      />
+    )}
   </>
   );
 };

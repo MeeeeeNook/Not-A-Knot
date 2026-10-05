@@ -359,7 +359,7 @@ export const AdminProductKhoenSection: React.FC<AdminProductKhoenSectionProps> =
                           referrerPolicy="no-referrer"
                           fallbackSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&auto=format&fit=crop&q=80"
                           spinnerSize="xs"
-                          spinnerColor="emerald"
+                          spinnerColor="amber"
                         />
                       ) : (
                         <span className="text-[10px] text-slate-400 text-center leading-tight">Chưa có ảnh</span>

@@ -118,7 +118,7 @@ export const CartPage: React.FC<CartPageProps> = ({
   const [district, setDistrict] = useState('');
   const [detailedAddress, setDetailedAddress] = useState('');
   const [note, setNote] = useState('');
-  const [paymentMethod] = useState<'cod'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'vietqr'>('cod');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionStep, setSubmissionStep] = useState<'idle' | 'preparing' | 'syncing' | 'confirmed' | 'error'>('idle');
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -866,24 +866,6 @@ export const CartPage: React.FC<CartPageProps> = ({
                                   </div>
                                 )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (itemImage) {
-                                    setCartPhotoPreview({
-                                      url: itemImage,
-                                      title: item.product.name,
-                                      isCustomPhoto: false
-                                    });
-                                    setPhotoRotation(0);
-                                  }
-                                }}
-                                className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 hover:text-amber-600 hover:bg-amber-50 px-2 py-0.5 rounded-md border border-slate-200/80 hover:border-amber-300 transition-colors cursor-pointer shadow-2xs"
-                                title="Xem ảnh lớn sản phẩm"
-                              >
-                                <Eye className="w-3 h-3 text-amber-500" />
-                                <span>Xem ảnh</span>
-                              </button>
                             </div>
 
                             {/* Details */}
@@ -1930,15 +1912,6 @@ export const CartPage: React.FC<CartPageProps> = ({
                     <RotateCw className="w-3.5 h-3.5 text-slate-600" />
                     <span>Xoay ảnh</span>
                   </button>
-                  <a
-                    href={cartPhotoPreview.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Mở tab mới</span>
-                  </a>
                 </div>
                 <button
                   type="button"

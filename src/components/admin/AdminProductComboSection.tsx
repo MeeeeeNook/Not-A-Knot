@@ -386,7 +386,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                       <div className="p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border border-purple-200 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-11 h-11 rounded-xl overflow-hidden border border-purple-300 bg-white shrink-0">
-                            <img src={linkedProduct.image || '/assets/bracelet.jpg'} alt="" className="w-full h-full object-cover" />
+                            <img src={linkedProduct.image || '/assets/no-image.svg'} alt="" className="w-full h-full object-cover" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -1607,7 +1607,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 shrink-0 group-hover:scale-105 transition-transform">
                           <img
-                            src={p.image || '/assets/bracelet.jpg'}
+                            src={p.image || '/assets/no-image.svg'}
                             alt={p.name}
                             className="w-full h-full object-cover"
                           />

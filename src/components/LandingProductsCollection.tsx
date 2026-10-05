@@ -286,7 +286,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
             >
               {displayProducts.map((product, pIdx) => {
                 const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0);
-                const mainImg = (product.images && product.images[0]) || product.image || '/assets/bracelet.jpg';
+                const mainImg = (product.images && product.images[0]) || product.image || '/assets/no-image.svg';
                 const priceFormatted = Number(product.price || 0).toLocaleString('vi-VN') + 'đ';
                 const origPriceFormatted = product.originalPrice ? Number(product.originalPrice).toLocaleString('vi-VN') + 'đ' : null;
                 const hasProductCustomUrl = Boolean(product.customUrl?.trim());
@@ -377,7 +377,7 @@ export const LandingProductsCollection: React.FC<LandingProductsCollectionProps>
           <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 lg:gap-x-10 gap-y-10 sm:gap-y-12 lg:gap-y-16">
             {displayProducts.map((product, pIdx) => {
               const isOutOfStock = product.inStock === false || (product.stock !== undefined && product.stock <= 0);
-              const mainImg = (product.images && product.images[0]) || product.image || '/assets/bracelet.jpg';
+              const mainImg = (product.images && product.images[0]) || product.image || '/assets/no-image.svg';
               const priceFormatted = Number(product.price || 0).toLocaleString('vi-VN') + 'đ';
               const origPriceFormatted = product.originalPrice ? Number(product.originalPrice).toLocaleString('vi-VN') + 'đ' : null;
               const hasProductCustomUrl = Boolean(product.customUrl?.trim());

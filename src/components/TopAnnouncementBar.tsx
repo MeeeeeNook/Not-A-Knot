@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  Sparkles, Truck, Ticket, Copy, Check, ShieldCheck, 
+  Truck, Ticket, Copy, Check, ShieldCheck, 
   ChevronLeft, ChevronRight, ArrowRight, X
 } from 'lucide-react';
 import { SiteContentConfig } from '../types';
@@ -43,6 +43,7 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
   const showControls = siteContent?.announcementShowControls === true; // Default: false (no control buttons unless explicitly enabled)
   const showCloseBtn = siteContent?.announcementShowClose === true; // Default: false (clean bar)
   const slideIntervalSec = siteContent?.announcementSpeed || 4.5;
+  const tickerSpeedSec = siteContent?.announcementTickerSpeed || 32;
 
   const [isDismissed, setIsDismissed] = useState<boolean>(() => {
     try {
@@ -312,6 +313,14 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
     return null;
   }
 
+  // Seamless loop items for continuous marquee ticker (repeats smoothly with wide spacing)
+  const marqueeItems = useMemo(() => {
+    if (!messages.length) return [];
+    const repeatCount = Math.max(3, Math.ceil(8 / messages.length));
+    const baseSet = Array.from({ length: repeatCount }).flatMap(() => messages);
+    return [...baseSet, ...baseSet];
+  }, [messages]);
+
   // Theme styling configurations
   const themeClasses = {
     obsidian: 'bg-neutral-950 text-slate-100 border-b border-amber-400/20',
@@ -348,48 +357,71 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
       )}
 
       {/* Main Single-Line Container: strictly h-9 (36px) to completely eliminate Cumulative Layout Shift (CLS) */}
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 h-9 flex items-center justify-between gap-1 sm:gap-2 relative">
-        
-        {/* Left Arrow: Switch slide (Only if multiple messages in carousel mode and controls enabled) */}
-        {showControls && messages.length > 1 && mode === 'carousel' && (
-          <button
-            type="button"
-            onClick={handlePrev}
-            className={`p-1 rounded-full transition-colors cursor-pointer shrink-0 ${arrowButtonClass}`}
-            title="Ưu đãi trước"
-            aria-label="Ưu đãi trước"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {/* Center: Announcement Content Area */}
-        <div className="flex-1 overflow-hidden min-w-0 flex items-center justify-center">
-          {mode === 'ticker' ? (
-            /* Continuous Marquee Ticker Mode */
-            <div className="flex items-center gap-8 whitespace-nowrap animate-marquee">
-              {messages.map((item, idx) => (
+      {mode === 'ticker' ? (
+        /* Full-Width Edge-to-Edge Container for Continuous Ticker */
+        <div className="w-full h-9 flex items-center relative overflow-hidden">
+          <div className="w-full overflow-hidden flex items-center">
+            <div 
+              className="flex items-center gap-16 sm:gap-24 whitespace-nowrap animate-marquee"
+              style={{ animationDuration: `${tickerSpeedSec}s` }}
+            >
+              {marqueeItems.map((item, idx) => (
                 <div 
-                  key={`${item.id}-${idx}`}
+                  key={`${item.id}-loop-${idx}`}
                   onClick={() => handleActionClick(item)}
-                  className={`inline-flex items-center gap-2 cursor-pointer font-medium ${actionTextClass}`}
+                  className={`inline-flex items-center gap-2.5 cursor-pointer font-medium shrink-0 transition-opacity hover:opacity-90 ${actionTextClass}`}
                 >
                   {item.badge && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${item.badgeColor || 'bg-amber-400 text-slate-950'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${item.badgeColor || 'bg-amber-400 text-slate-950'}`}>
                       {item.badge}
                     </span>
                   )}
-                  <span>{item.text}</span>
+                  <span className="text-xs sm:text-[13px] tracking-tight">{item.text}</span>
                   {item.voucherCode && (
-                    <span className="font-mono font-bold bg-amber-400/20 border border-amber-400/40 px-1 py-0.2 rounded text-[10px] text-amber-300">
+                    <span className="font-mono font-bold bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.5 rounded text-[10px] text-amber-300 tracking-wider">
                       {item.voucherCode}
                     </span>
                   )}
                 </div>
               ))}
             </div>
-          ) : (
-            /* Carousel & Single Mode: Clean Single-Line Slide with Zero Height Jumping */
+          </div>
+
+          {/* Close button floating on the far right if enabled in settings */}
+          {showCloseBtn && (
+            <div className="absolute right-0 top-0 bottom-0 pr-2 pl-8 flex items-center bg-gradient-to-l from-neutral-950 via-neutral-950/80 to-transparent z-20">
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className={`p-1 rounded-full transition-colors cursor-pointer ${arrowButtonClass}`}
+                title="Tắt thông báo này"
+                aria-label="Tắt thông báo này"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Centered max-w-7xl Container for Carousel / Single Slide Mode */
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 h-9 flex items-center justify-between gap-1 sm:gap-2 relative">
+          
+          {/* Left Arrow: Switch slide (Only if multiple messages in carousel mode and controls enabled) */}
+          {showControls && messages.length > 1 && mode === 'carousel' && (
+            <button
+              type="button"
+              onClick={handlePrev}
+              className={`p-1 rounded-full transition-colors cursor-pointer shrink-0 ${arrowButtonClass}`}
+              title="Ưu đãi trước"
+              aria-label="Ưu đãi trước"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Center: Announcement Content Area */}
+          <div className="flex-1 overflow-hidden min-w-0 flex items-center justify-center">
+            {/* Carousel & Single Mode: Clean Single-Line Slide with Zero Height Jumping */}
             <div 
               className={`flex items-center justify-center gap-1.5 sm:gap-2 max-w-full transition-opacity duration-200 ${
                 isTransitioning ? 'opacity-0' : 'opacity-100'
@@ -401,7 +433,6 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
                   {currentMsg.type === 'shipping' && <Truck className="w-3 h-3" />}
                   {currentMsg.type === 'voucher' && <Ticket className="w-3 h-3" />}
                   {currentMsg.type === 'warranty' && <ShieldCheck className="w-3 h-3" />}
-                  {currentMsg.type === 'custom' && <Sparkles className="w-3 h-3" />}
                   <span>{currentMsg.badge}</span>
                 </span>
               )}
@@ -459,59 +490,59 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
                 </button>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Right Controls: Only rendered if controls or close button are enabled */}
-        {(showControls || showCloseBtn) && (
-          <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-            {/* Next Slide Arrow (if multiple messages and controls enabled) */}
-            {showControls && messages.length > 1 && mode === 'carousel' && (
-              <button
-                type="button"
-                onClick={handleNext}
-                className={`p-1 rounded-full transition-colors cursor-pointer ${arrowButtonClass}`}
-                title="Ưu đãi kế tiếp"
-                aria-label="Ưu đãi kế tiếp"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            {/* Dots Indicator for Tablet/Desktop */}
-            {showControls && messages.length > 1 && mode === 'carousel' && (
-              <div className="hidden md:flex items-center gap-1 px-1">
-                {messages.map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => goToSlide(idx)}
-                    className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === currentIndex ? `${dotActiveClass} w-3` : dotInactiveClass
-                    }`}
-                    title={`Chuyển đến thông báo ${idx + 1}`}
-                    aria-label={`Chuyển đến thông báo ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Close/Dismiss Button (if enabled in settings) */}
-            {showCloseBtn && (
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className={`p-1 rounded-full transition-colors cursor-pointer ml-0.5 ${arrowButtonClass}`}
-                title="Tắt thông báo này"
-                aria-label="Tắt thông báo này"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
-        )}
 
-      </div>
+          {/* Right Controls: Only rendered if controls or close button are enabled */}
+          {(showControls || showCloseBtn) && (
+            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+              {/* Next Slide Arrow (if multiple messages and controls enabled) */}
+              {showControls && messages.length > 1 && mode === 'carousel' && (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  className={`p-1 rounded-full transition-colors cursor-pointer ${arrowButtonClass}`}
+                  title="Ưu đãi kế tiếp"
+                  aria-label="Ưu đãi kế tiếp"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {/* Dots Indicator for Tablet/Desktop */}
+              {showControls && messages.length > 1 && mode === 'carousel' && (
+                <div className="hidden md:flex items-center gap-1 px-1">
+                  {messages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => goToSlide(idx)}
+                      className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
+                        idx === currentIndex ? `${dotActiveClass} w-3` : dotInactiveClass
+                      }`}
+                      title={`Chuyển đến thông báo ${idx + 1}`}
+                      aria-label={`Chuyển đến thông báo ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Close/Dismiss Button (if enabled in settings) */}
+              {showCloseBtn && (
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  className={`p-1 rounded-full transition-colors cursor-pointer ml-0.5 ${arrowButtonClass}`}
+                  title="Tắt thông báo này"
+                  aria-label="Tắt thông báo này"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+        </div>
+      )}
     </aside>
   );
 };

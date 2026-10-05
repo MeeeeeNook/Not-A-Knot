@@ -222,7 +222,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
 
   // 1. Core Header & Tracking
   const [trackingNumber, setTrackingNumber] = useState<string>(
-    order.trackingNumber || getOrderTrackingNumber(order)
+    order.trackingNumber || getOrderTrackingNumber(order as any)
   );
   const [orderDate, setOrderDate] = useState<string>(() => {
     return formatToDatetimeLocal(order.createdAt) || formatToDatetimeLocal(order.date) || '';

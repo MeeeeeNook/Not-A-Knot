@@ -12,6 +12,7 @@ import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
 import trackOrderHandler from './api/orders/track.ts';
 import createOrderHandler from './api/orders/create.ts';
@@ -125,6 +126,7 @@ const firebaseClientConfig = {
 
 const fbApp = getApps().length > 0 ? getApp() : initializeApp(firebaseClientConfig);
 const firestoreDb = getFirestore(fbApp, "ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f");
+const serverStorage = getStorage(fbApp);
 
 async function fetchAuthoritativeSeller(username: string): Promise<any | null> {
   const clean = (username || '').trim().toLowerCase();
@@ -557,6 +559,127 @@ async function startServer() {
       });
     }
   );
+
+  // ----------------------------------------------------
+  // CUSTOMER CUSTOM PHOTO UPLOAD & SERVING ENDPOINTS
+  // ----------------------------------------------------
+  const customPhotosStore = new Map<string, { buffer: Buffer; mimeType: string; createdAt: number }>();
+
+  // POST /api/upload-custom-photo
+  app.post('/api/upload-custom-photo', async (req: Request, res: Response) => {
+    try {
+      const { base64Data, prefix } = req.body || {};
+      if (!base64Data || typeof base64Data !== 'string') {
+        return res.status(400).json({ success: false, error: 'Thiếu dữ liệu ảnh' });
+      }
+
+      let mimeType = 'image/jpeg';
+      let rawBase64 = base64Data;
+      if (base64Data.startsWith('data:')) {
+        const match = base64Data.match(/^data:([^;]+);base64,(.+)$/s);
+        if (match) {
+          mimeType = match[1] || 'image/jpeg';
+          rawBase64 = match[2] || '';
+        }
+      }
+
+      const buffer = Buffer.from(rawBase64, 'base64');
+      const photoId = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+
+      customPhotosStore.set(photoId, {
+        buffer,
+        mimeType,
+        createdAt: Date.now()
+      });
+
+      // Keep cache size bounded (max 1000 items)
+      if (customPhotosStore.size > 1000) {
+        const oldestKey = customPhotosStore.keys().next().value;
+        if (oldestKey) customPhotosStore.delete(oldestKey);
+      }
+
+      // Persist to Firestore uploaded_custom_photos collection
+      try {
+        if (firestoreDb) {
+          const docRef = doc(firestoreDb, 'uploaded_custom_photos', photoId);
+          await setDoc(docRef, {
+            photoId,
+            mimeType,
+            prefix: prefix || 'custom_photos',
+            data: base64Data,
+            createdAt: new Date().toISOString()
+          });
+        }
+      } catch (dbErr) {
+        console.warn('[CustomPhoto DB fallback]:', dbErr);
+      }
+
+      let photoUrl = `/api/custom-photos/${photoId}`;
+      try {
+        if (serverStorage) {
+          const sRef = storageRef(serverStorage, `${prefix || 'custom_photos'}/${photoId}.jpg`);
+          const snapshot = await uploadBytes(sRef, buffer, {
+            contentType: mimeType,
+            cacheControl: 'public,max-age=31536000,immutable'
+          });
+          const fbStorageUrl = await getDownloadURL(snapshot.ref);
+          if (fbStorageUrl && fbStorageUrl.startsWith('http')) {
+            photoUrl = fbStorageUrl;
+          }
+        }
+      } catch (stErr) {
+        console.warn('[Server Storage upload notice]:', stErr);
+      }
+
+      return res.json({
+        success: true,
+        photoId,
+        url: photoUrl
+      });
+    } catch (err: any) {
+      console.warn('[API Upload Custom Photo Error]:', err);
+      return res.status(500).json({ success: false, error: err?.message || 'Lỗi tải ảnh' });
+    }
+  });
+
+  // GET /api/custom-photos/:photoId
+  app.get('/api/custom-photos/:photoId', async (req: Request, res: Response) => {
+    try {
+      const { photoId } = req.params;
+      const cached = customPhotosStore.get(photoId);
+      if (cached) {
+        res.setHeader('Content-Type', cached.mimeType);
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.send(cached.buffer);
+      }
+
+      if (firestoreDb) {
+        const docRef = doc(firestoreDb, 'uploaded_custom_photos', photoId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          let mimeType = data.mimeType || 'image/jpeg';
+          let raw = data.data || '';
+          if (raw.startsWith('data:')) {
+            const match = raw.match(/^data:([^;]+);base64,(.+)$/s);
+            if (match) {
+              mimeType = match[1] || mimeType;
+              raw = match[2];
+            }
+          }
+          const buf = Buffer.from(raw, 'base64');
+          customPhotosStore.set(photoId, { buffer: buf, mimeType, createdAt: Date.now() });
+          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          return res.send(buf);
+        }
+      }
+
+      return res.status(404).send('Không tìm thấy ảnh');
+    } catch (err) {
+      return res.status(500).send('Lỗi khi tải ảnh');
+    }
+  });
 
   // ----------------------------------------------------
   // HIGH-PERFORMANCE CACHED CATALOG API ENDPOINTS

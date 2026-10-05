@@ -116,7 +116,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     if (product.image && typeof product.image === 'string' && product.image.trim().length > 0) {
       return [resolveAssetUrl(product.image)];
     }
-    return ['/assets/bracelet.jpg'];
+    return ['/assets/no-image.svg'];
   }, [product]);
 
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -171,7 +171,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return getCategoryLabel(product.category, categories, collections);
   }, [product.category, categories, collections]);
 
-  const activeHoverSrc = images[currentIdx] || product.image || '/assets/bracelet.jpg';
+  const activeHoverSrc = images[currentIdx] || product.image || '/assets/no-image.svg';
   const hoverSrcSet = useMemo(() => generateSrcSet(activeHoverSrc), [activeHoverSrc]);
 
   return (
@@ -213,7 +213,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 }}
                 onLoad={() => setIsLoaded(true)}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/assets/bracelet.jpg';
+                  (e.target as HTMLImageElement).src = '/assets/no-image.svg';
                   setIsLoaded(true);
                 }}
                 className={`w-full h-full object-cover transition-opacity duration-300 ${
@@ -226,7 +226,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </AnimatePresence>
           ) : (
             <LazyProductImage
-              src={images[0] || product.image || '/assets/bracelet.jpg'}
+              src={images[0] || product.image || '/assets/no-image.svg'}
               alt={`${product.name} - Vòng tay handmade NOT A KNOT`}
               sizes={IMAGE_SIZES_PRESETS.productCard}
               priority={priority}

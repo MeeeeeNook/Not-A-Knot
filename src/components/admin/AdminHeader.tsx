@@ -178,7 +178,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           onNavigateToOrders={onNavigateToOrders}
           onNavigateToMessages={onNavigateToMessages}
           onUpdateOrderStatus={onUpdateOrderStatus}
-          onMarkMessageRead={onMarkMessageRead}
+          onMarkMessageRead={(msg) => onMarkMessageRead(typeof msg === 'string' ? msg : msg.id)}
           onRefresh={onRefreshData}
         />
 

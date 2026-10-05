@@ -932,7 +932,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                 {/* Thumbnail Image */}
                 <div className="w-20 h-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0 ml-1 relative">
                   <img
-                    src={col.bannerImage || col.bgImage || '/assets/bracelet.jpg'}
+                    src={col.bannerImage || col.bgImage || '/assets/no-image.svg'}
                     alt={col.title}
                     className={`w-full h-full object-cover ${col.isHidden ? 'opacity-60 grayscale' : ''}`}
                   />
@@ -1092,7 +1092,7 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
                       className="group relative rounded-2xl overflow-hidden border border-neutral-800 bg-neutral-900 shadow-lg aspect-[16/10] flex flex-col justify-end p-5 transition-all hover:border-amber-400/40"
                     >
                       <img
-                        src={col.horizontalImage || col.bannerImage || col.bgImage || '/assets/bracelet.jpg'}
+                        src={col.horizontalImage || col.bannerImage || col.bgImage || '/assets/no-image.svg'}
                         alt={col.title}
                         className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-500"
                       />

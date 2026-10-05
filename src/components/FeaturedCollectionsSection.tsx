@@ -60,7 +60,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-rose-100 flex items-center gap-3 cursor-pointer hover:border-rose-300 transition-colors"
                 >
                   <LoadingImage
-                    src={event2010Item.image || '/assets/bracelet.jpg'}
+                    src={event2010Item.image || '/assets/no-image.svg'}
                     alt={event2010Item.name}
                     containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
                     className="w-full h-full object-cover"
@@ -110,7 +110,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-amber-100 flex items-center gap-3 cursor-pointer hover:border-amber-300 transition-colors"
                 >
                   <LoadingImage
-                    src={charmItem.image || '/assets/bracelet.jpg'}
+                    src={charmItem.image || '/assets/no-image.svg'}
                     alt={charmItem.name}
                     containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
                     className="w-full h-full object-cover"
@@ -160,7 +160,7 @@ export const FeaturedCollectionsSection: React.FC<FeaturedCollectionsSectionProp
                   className="bg-white/90 p-3 rounded-2xl border border-neutral-200 flex items-center gap-3 cursor-pointer hover:border-neutral-400 transition-colors"
                 >
                   <LoadingImage
-                    src={everydayItem.image || '/assets/bracelet.jpg'}
+                    src={everydayItem.image || '/assets/no-image.svg'}
                     alt={everydayItem.name}
                     containerClassName="w-14 h-14 rounded-xl flex-shrink-0"
                     className="w-full h-full object-cover"

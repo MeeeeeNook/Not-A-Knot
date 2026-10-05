@@ -11,7 +11,7 @@ export const ImageWithLoading: React.FC<ImageWithLoadingProps> = ({
   alt = 'Product image',
   className = '',
   containerClassName = '',
-  fallbackSrc = '/assets/bracelet.jpg',
+  fallbackSrc = '/assets/no-image.svg',
   showSkeleton = true,
   ...restProps
 }) => {

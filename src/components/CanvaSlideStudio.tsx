@@ -88,7 +88,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
       id: s.id || `slide-${idx + 1}`,
       order: typeof s.order === 'number' ? s.order : idx + 1,
       isActive: s.isActive !== false,
-      aspectRatio: '16:7',
+      aspectRatio: (s.aspectRatio || '16:7') as '16:7' | '16:9' | 'cinematic' | 'fullscreen' | 'contain' | 'auto',
       bgPositionX: s.bgPositionX ?? 50,
       bgPositionY: s.bgPositionY ?? 50,
       bgZoom: s.bgZoom ?? 100,
@@ -919,7 +919,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                     { label: 'Hero Gốc 2K', url: '/assets/hero-bg.png' },
                     { label: 'Billboard 1 HD', url: '/assets/billboard-slide-1.webp' },
                     { label: 'Billboard 2 HD', url: '/assets/billboard-slide-2.webp' },
-                    { label: 'Vòng Tay', url: '/assets/bracelet.jpg' },
+                    { label: 'Vòng Tay', url: '/assets/no-image.svg' },
                     { label: 'EDC Phụ Kiện', url: '/assets/img_3.jpg' }
                   ].map((preset) => (
                     <button

@@ -46,6 +46,7 @@ import {
   safeOrderTimestamp,
   formatOrderDateWithoutSeconds
 } from './utils/orderFormatters';
+import { startUploadGuard, finishUploadGuard } from './utils/uploadGuard';
 
 // Load client configuration using encrypted database connection parameters
 // protected from plain-text exposure in client bundle
@@ -343,21 +344,39 @@ export const uploadBase64ToStorage = async (
     try {
       const storageRef = ref(storage, storagePath);
       let payload = base64Data;
-      let contentType = 'image/png';
+      let contentType = 'image/jpeg';
       if (!payload.startsWith('data:')) {
-        payload = `data:image/png;base64,${payload}`;
+        payload = `data:image/jpeg;base64,${payload}`;
       } else {
         const mimeMatch = payload.match(/^data:([^;]+);base64,/);
         if (mimeMatch && mimeMatch[1]) {
           contentType = mimeMatch[1];
         }
       }
-      await uploadString(storageRef, payload, 'data_url', {
-        contentType,
-        cacheControl: 'public,max-age=31536000,immutable'
-      });
-      const downloadUrl = await getDownloadURL(storageRef);
-      return downloadUrl;
+
+      // Fast binary Blob conversion for maximum bandwidth utilization (HTTP/2 binary stream)
+      try {
+        const byteCharacters = atob(payload.split(',')[1] || '');
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const blob = new Blob([byteNumbers], { type: contentType });
+        const snapshot = await uploadBytes(storageRef, blob, {
+          contentType,
+          cacheControl: 'public,max-age=31536000,immutable'
+        });
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+        return downloadUrl;
+      } catch {
+        // Fallback to uploadString if Blob construction fails
+        await uploadString(storageRef, payload, 'data_url', {
+          contentType,
+          cacheControl: 'public,max-age=31536000,immutable'
+        });
+        const downloadUrl = await getDownloadURL(storageRef);
+        return downloadUrl;
+      }
     } catch (err) {
       console.warn(`[Firebase Storage] Upload failed for ${storagePath}:`, err);
       return base64Data;
@@ -813,8 +832,11 @@ export const recordOperation = (type: 'read' | 'write' | 'delete', count = 1, de
 // ----------------------------------------------------
 export interface StoredOrder {
   id: string;
+  orderCode?: string;
   date?: string;
   createdAt?: string;
+  isManualAdmin?: boolean;
+  isEvent0209?: boolean;
   name?: string;
   customerName?: string;
   email?: string;
@@ -827,6 +849,7 @@ export interface StoredOrder {
   note?: string;
   items: string[];
   itemDetails?: OrderItemDetail[];
+  subtotal?: number;
   totalPrice?: number;
   totalAmount?: number;
   shippingFee?: number;
@@ -835,7 +858,7 @@ export interface StoredOrder {
   voucherDiscountAmount?: number;
   voucherType?: 'freeship' | 'percent';
   craftingStageNote?: string;
-  source?: 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other';
+  source?: 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other' | 'mạng xã hội' | 'trực tiếp';
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
   isManual?: boolean;
   status: string;
@@ -887,7 +910,7 @@ const inMemoryAssetCache = new Map<string, string>();
  * it returns the hydrated base64 image from memory cache, or falls back to a safe placeholder.
  * It NEVER returns an unresolvable 'asset:...' protocol string to the DOM.
  */
-export const resolveAssetUrl = (val?: string, fallback = '/assets/bracelet.jpg'): string => {
+export const resolveAssetUrl = (val?: string, fallback = '/assets/no-image.svg'): string => {
   if (!val || typeof val !== 'string') return fallback;
   if (!val.startsWith('asset:')) return val;
   const assetId = val.replace('asset:', '');
@@ -935,7 +958,7 @@ function extractProductAssets(prod: Product): {
     return imgVal;
   };
 
-  const cleanMainImage = processImageField(prod.image, 'main') || '/assets/bracelet.jpg';
+  const cleanMainImage = processImageField(prod.image, 'main') || '/assets/no-image.svg';
 
   const cleanImages = Array.isArray(prod.images)
     ? prod.images.map((img, idx) => processImageField(img, `gal_${idx}`) || img)
@@ -1138,13 +1161,13 @@ async function hydrateProductsWithAssets(rawProducts: Product[]): Promise<Produc
           }
         }
       }
-      return '/assets/bracelet.jpg';
+      return '/assets/no-image.svg';
     }
     return val;
   };
 
   const hydrated = rawProducts.map((p) => {
-    const hydMain = replaceToken(p.image) || '/assets/bracelet.jpg';
+    const hydMain = replaceToken(p.image) || '/assets/no-image.svg';
     const hydImages = Array.isArray(p.images)
       ? p.images.map((img) => replaceToken(img) || img)
       : [hydMain];
@@ -1211,10 +1234,10 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         price: data.price || 0,
         originalPrice: typeof data.originalPrice === 'number' ? data.originalPrice : undefined,
         discountBadge: (typeof data.discountBadge === 'string' && data.discountBadge.trim().length > 0) ? data.discountBadge.trim() : undefined,
-        image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
+        image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/no-image.svg',
         images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
           ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
-          : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
+          : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/no-image.svg'],
         description: data.description || '',
         details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây đan thủ công cao cấp'],
         availableColors: data.availableColors,
@@ -1294,10 +1317,10 @@ export const subscribeToProductsFromFirestore = (
             price: data.price || 0,
             originalPrice: typeof data.originalPrice === 'number' ? data.originalPrice : undefined,
             discountBadge: (typeof data.discountBadge === 'string' && data.discountBadge.trim().length > 0) ? data.discountBadge.trim() : undefined,
-            image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg',
+            image: (data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/no-image.svg',
             images: Array.isArray(data.images) && data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0).length > 0
               ? data.images.filter((img: any) => typeof img === 'string' && img.trim().length > 0)
-              : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/bracelet.jpg'],
+              : [(data.image && typeof data.image === 'string' && data.image.trim().length > 0) ? data.image : '/assets/no-image.svg'],
             description: data.description || '',
             details: Array.isArray(data.details) && data.details.length > 0 ? data.details : ['Dây đan thủ công cao cấp'],
             availableColors: data.availableColors,
@@ -1570,7 +1593,67 @@ function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
   });
 }
 
-// Upload customer-provided custom photos directly to Firebase Storage bucket under order_custom_photos/
+// Upload customer-provided custom photos reliably via server endpoint or storage
+export async function uploadCustomPhotoImmediately(
+  base64Data: string,
+  prefix: string = 'custom_photos'
+): Promise<string> {
+  if (!base64Data || typeof base64Data !== 'string') return base64Data;
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://') || base64Data.startsWith('/api/custom-photos/')) {
+    return base64Data;
+  }
+  if (!base64Data.startsWith('data:image/') && base64Data.length < 300) {
+    return base64Data;
+  }
+
+  const cleanPrefix = (prefix || 'custom_photos').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileKey = `${cleanPrefix}/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
+
+  // 1. Immediately cache in IndexedDB as reliable offline backup
+  try {
+    saveAssetToIDB(`local_photo_${fileKey.replace(/\//g, '_')}`, base64Data).catch(() => {});
+  } catch {}
+
+  // 2. Arm browser beforeunload protection during upload
+  const finishGuard = startUploadGuard();
+
+  // 3. Upload directly to Firebase Storage bucket (matches products/.../gallery_0.png)
+  try {
+    const directStorageUrl = await Promise.race([
+      uploadBase64ToStorage(base64Data, fileKey),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Storage timeout')), 4000))
+    ]);
+    if (directStorageUrl && directStorageUrl.startsWith('http')) {
+      finishGuard();
+      return directStorageUrl;
+    }
+  } catch (storageErr) {
+    // Failover to server proxy upload if direct storage was unreachable
+  }
+
+  // 4. Upload via server proxy endpoint (which also uploads to Firebase Storage)
+  try {
+    const res = await fetch('/api/upload-custom-photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Data, prefix: cleanPrefix })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.url) {
+        finishGuard();
+        return data.url;
+      }
+    }
+  } catch {
+    // Failover silently
+  }
+
+  finishGuard();
+  return base64Data;
+}
+
 export async function uploadOrderCustomPhotosToStorage(
   orderId: string,
   itemDetails: any[]
@@ -3459,7 +3542,7 @@ function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000, parentKey?: 
     }
     // If it's a base64 image data URI that is heavy, replace with safe fallback asset
     if (obj.startsWith('data:image/') && obj.length > maxDataUriLen) {
-      return '/assets/bracelet.jpg';
+      return '/assets/no-image.svg';
     }
     return obj;
   }

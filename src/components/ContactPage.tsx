@@ -73,24 +73,6 @@ export const ContactPage: React.FC<ContactPageProps> = ({
 
   return (
     <div id="contact-page-container" className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-24 selection:bg-slate-900 selection:text-white">
-      
-      {/* 1. Clean Minimal Navigation Bar */}
-      <header className="bg-white border-b border-slate-200/80 sticky top-14 z-30 py-3.5 px-4 sm:px-8 shadow-2xs">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <button
-            onClick={onNavigateHome}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại Trang Chủ</span>
-          </button>
-
-          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Liên Hệ {brandName}
-          </span>
-        </div>
-      </header>
-
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 space-y-10">
         
         {/* 2. Header Introduction */}

@@ -4,7 +4,6 @@ import { Check, Flame, X, ZoomIn } from 'lucide-react';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { resolveAssetUrl } from '../firebase';
 import { LoadingImage } from './LoadingImage';
-import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 
 interface ProductOmamoriSelectorProps {
   omamoris: ProductOmamoriOption[];
@@ -39,7 +38,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
       omamoris.forEach((o) => {
         if (o.image) {
           const resolved = resolveAssetUrl(o.image);
-          if (resolved && resolved !== '/assets/bracelet.jpg') {
+          if (resolved && resolved !== '/assets/no-image.svg') {
             const img = document.createElement('img');
             img.src = resolved;
           }
@@ -48,22 +47,11 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
     }
   }, [omamoris]);
 
-  const resolveOmamoriImage = (o: ProductOmamoriOption) => {
-    if (o.image && o.image.trim()) {
-      const resolved = resolveAssetUrl(o.image);
-      if (resolved && resolved !== '/assets/bracelet.jpg') return resolved;
-    }
-    const preset = DEFAULT_OMAMORI_PRESETS.find(
-      (p) => p.id === o.id || p.name.trim().toLowerCase() === o.name.trim().toLowerCase()
-    );
-    return preset?.image || o.image || '';
-  };
-
   const compareItems: CompareItem[] = useMemo(() => {
     return omamoris.map((o, i) => ({
       id: o.id || `omamori-${i}`,
       title: o.name,
-      image: resolveOmamoriImage(o),
+      image: o.image || '',
       priceDelta: o.priceDelta,
       stock: o.stock,
       type: 'omamori',
@@ -263,9 +251,9 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
 
-                {resolveOmamoriImage(omamori) ? (
+                {omamori.image && omamori.image.trim() ? (
                   <LoadingImage
-                    src={resolveOmamoriImage(omamori)}
+                    src={resolveAssetUrl(omamori.image)}
                     alt={omamori.name}
                     containerClassName="w-full h-full"
                     className="w-full h-full object-contain p-1 transition-transform duration-200 group-hover:scale-105"

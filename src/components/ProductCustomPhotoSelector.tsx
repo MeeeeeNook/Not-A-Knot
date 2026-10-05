@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, ZoomIn, RotateCw, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles, Clipboard, MousePointer, ShieldCheck } from 'lucide-react';
+import { Camera, Upload, X, ZoomIn, RotateCw, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles, Clipboard, MousePointer, ShieldCheck, RefreshCw, Crop } from 'lucide-react';
+import { uploadCustomPhotoImmediately } from '../firebase';
+import { PhotoCropModal } from './PhotoCropModal';
 
 interface ProductCustomPhotoSelectorProps {
   title?: string;
@@ -28,58 +30,69 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploadingToCloud, setIsUploadingToCloud] = useState(false);
+  const [uploadSuccessToast, setUploadSuccessToast] = useState<string | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [localNote, setLocalNote] = useState(customPhotoNote);
-  const [uploadSuccessToast, setUploadSuccessToast] = useState<string | null>(null);
+  const [pendingCropImage, setPendingCropImage] = useState<string | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
-  // Compress image on client side using canvas
+  // Validate file & launch crop adjustment interface
   const processImageFile = (file: File) => {
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!file) return;
+
+    // 1. Strictly validate image format
+    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
+    if (!isImage) {
+      alert('Tệp được chọn không phải là định dạng ảnh. Vui lòng chỉ chọn tệp ảnh hợp lệ (JPG, PNG, HEIC, WEBP).');
+      return;
+    }
+
+    // 2. Strictly validate maximum file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh vượt quá 10MB. Vui lòng chọn ảnh có dung lượng tối đa 10MB.');
+      return;
+    }
+
     setIsProcessing(true);
+    setUploadSuccessToast(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
       const src = e.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1200;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.86);
-          setIsProcessing(false);
-          onPhotoChange(compressedDataUrl, localNote);
-          setUploadSuccessToast('Đã nhận ảnh thành công!');
-          setTimeout(() => setUploadSuccessToast(null), 3000);
-        } else {
-          setIsProcessing(false);
-          onPhotoChange(src, localNote);
-          setUploadSuccessToast('Đã nhận ảnh thành công!');
-          setTimeout(() => setUploadSuccessToast(null), 3000);
-        }
-      };
-      img.onerror = () => {
-        setIsProcessing(false);
-      };
-      img.src = src;
+      setIsProcessing(false);
+      setPendingCropImage(src);
+      setIsCropModalOpen(true);
+    };
+    reader.onerror = () => {
+      setIsProcessing(false);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Called when user confirms their crop adjustments in PhotoCropModal
+  const handleCropConfirm = (croppedDataUrl: string) => {
+    setIsCropModalOpen(false);
+    setPendingCropImage(null);
+
+    // 1. Immediately apply the cropped image
+    onPhotoChange(croppedDataUrl, localNote);
+    setIsUploadingToCloud(true);
+
+    // 2. Start background upload to Firebase Storage
+    uploadCustomPhotoImmediately(croppedDataUrl, 'custom_photos')
+      .then((cloudUrl) => {
+        setIsUploadingToCloud(false);
+        if (cloudUrl && cloudUrl.startsWith('http')) {
+          onPhotoChange(cloudUrl, localNote);
+        }
+        setUploadSuccessToast('Đã tải ảnh lên máy chủ thành công! ✨');
+        setTimeout(() => setUploadSuccessToast(null), 3500);
+      })
+      .catch((err) => {
+        setIsUploadingToCloud(false);
+        console.warn('[ProductCustomPhotoSelector] Background upload fallback:', err);
+      });
   };
 
   // Support pasting image from clipboard (Ctrl+V on desktop or paste on mobile)
@@ -191,13 +204,9 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
         </div>
 
         <div className="flex items-center gap-2">
-          {priceDelta > 0 ? (
+          {priceDelta > 0 && (
             <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70">
               +{priceDelta.toLocaleString('vi-VN')}đ
-            </span>
-          ) : (
-            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-              Miễn phí in ảnh
             </span>
           )}
 
@@ -220,7 +229,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
         </p>
       ) : (
         <p className="text-[11px] text-slate-500 leading-relaxed bg-slate-50 p-2 rounded-xl border border-slate-200/60">
-          💡 Tải ảnh rõ nét (chân dung, ảnh kỷ niệm, thú cưng...) để xưởng thủ công in và lồng ảnh chuẩn nét nhất.
+          💡 Tải ảnh rõ nét (chân dung, ảnh kỷ niệm, thú cưng...) để shop in và lồng ảnh chuẩn nét nhất.
         </p>
       )}
 
@@ -266,7 +275,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
                 {isProcessing ? 'Đang xử lý ảnh...' : 'Bấm chọn ảnh từ máy hoặc điện thoại'}
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Hỗ trợ tải trực tiếp mọi định dạng ảnh (JPG, PNG, HEIC, WEBP)
+                Định dạng được hỗ trợ: JPG, PNG, HEIC, WEBP (Tối đa 10MB)
               </p>
             </div>
 
@@ -280,11 +289,6 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
                 <Clipboard className="w-3 h-3 text-rose-600" />
                 <span>Dán ảnh nhanh (Ctrl + V)</span>
               </span>
-            </div>
-
-            <div className="inline-flex items-center gap-1 text-[10px] text-slate-400 font-medium">
-              <ShieldCheck className="w-3 h-3 text-emerald-500" />
-              <span>Tải file ảnh trực tiếp — Tuyệt đối không cần link web</span>
             </div>
           </div>
         </div>
@@ -327,7 +331,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
                 </span>
                 <span className="text-[11px] text-emerald-600 font-semibold flex items-center justify-center sm:justify-start gap-1">
                   <CheckCircle2 className="w-3 h-3" />
-                  <span>Xưởng thủ công sẽ căn chỉnh và in chuẩn nét theo khuôn</span>
+                  <span>Shop sẽ căn chỉnh và in chuẩn nét theo khuôn</span>
                 </span>
               </div>
 
@@ -338,7 +342,21 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
                   className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <Upload className="w-3 h-3" />
-                  <span>Đổi ảnh khác</span>
+                  <span>Đổi ảnh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customPhotoUrl) {
+                      setPendingCropImage(customPhotoUrl);
+                      setIsCropModalOpen(true);
+                    }
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  title="Căn chỉnh khung ảnh theo tỷ lệ"
+                >
+                  <Crop className="w-3 h-3 text-slate-600" />
+                  <span>Căn chỉnh</span>
                 </button>
                 <button
                   type="button"
@@ -377,7 +395,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
           {/* Customer Customization Note for photo */}
           <div className="pt-2 border-t border-slate-100">
             <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              Ghi chú riêng cho xưởng in ảnh (tùy chọn):
+              Ghi chú riêng (tùy chọn):
             </label>
             <input
               type="text"
@@ -392,9 +410,20 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
         </div>
       )}
 
-      {/* Success Toast */}
-      {uploadSuccessToast && (
-        <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+      {/* Cloud Uploading In-Progress Status */}
+      {isUploadingToCloud && (
+        <div className="flex items-center gap-2 text-xs text-amber-900 bg-amber-50/90 border border-amber-200/90 px-3 py-2 rounded-xl animate-pulse">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="font-bold block">Đang tải ảnh lên đám mây...</span>
+            <span className="text-[10px] text-amber-700">Vui lòng không tắt hoặc tải lại trang trong giây lát.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud Upload Success Toast Banner */}
+      {uploadSuccessToast && !isUploadingToCloud && (
+        <div className="flex items-center gap-2 text-xs text-emerald-900 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl animate-in fade-in slide-in-from-top-1 shadow-2xs">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span className="font-bold">{uploadSuccessToast}</span>
         </div>
@@ -453,6 +482,20 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Photo Crop & Alignment Modal */}
+      {isCropModalOpen && pendingCropImage && (
+        <PhotoCropModal
+          isOpen={isCropModalOpen}
+          imageSrc={pendingCropImage}
+          aspectRatio={aspectRatio}
+          onConfirm={handleCropConfirm}
+          onCancel={() => {
+            setIsCropModalOpen(false);
+            setPendingCropImage(null);
+          }}
+        />
       )}
     </div>
   );

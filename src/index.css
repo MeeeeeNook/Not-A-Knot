@@ -123,7 +123,7 @@ body {
   width: max-content;
   contain: layout paint;
   will-change: transform;
-  animation: ticker-scroll 35s linear infinite;
+  animation: ticker-scroll 32s linear infinite;
 }
 
 .animate-ticker:hover {
@@ -139,7 +139,7 @@ body {
   width: max-content;
   contain: layout paint;
   will-change: transform;
-  animation: marquee 35s linear infinite;
+  animation: marquee 32s linear infinite;
 }
 .animate-marquee:hover {
   animation-play-state: paused;

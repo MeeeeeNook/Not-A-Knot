@@ -27,7 +27,7 @@ export const cdnConfig: CDNConfig = {
  * Resolves a static asset path to a CDN-hosted URL if CDN is configured,
  * otherwise returns the normalized local/origin path.
  * 
- * @param path Relative path to asset (e.g. '/assets/bracelet.jpg' or 'assets/logo.png')
+ * @param path Relative path to asset (e.g. '/assets/no-image.svg' or 'assets/logo.png')
  */
 export function getCDNAssetUrl(path: string): string {
   if (!path) return '';

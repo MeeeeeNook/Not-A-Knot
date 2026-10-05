@@ -20,7 +20,8 @@ const PROTECTED_KEYS = new Set([
   'nak_site_content',
   'nak_cart',
   'nak_admin_session',
-  'nak_orders'
+  'nak_orders',
+  'nak_sellers_list'
 ]);
 
 /**
@@ -113,15 +114,11 @@ export function safeStorageGetItem(key: string): string | null {
 }
 
 /**
- * Safely sanitize image URL to avoid stuffing multi-megabyte base64 strings into cart storage
+ * Safely sanitize image URL without replacing user photos with placeholders
  */
 function sanitizeImageUrl(url?: string): string {
-  if (!url) return '';
-  // If image is a massive raw base64 string (> 1500 chars), return placeholder or fallback
-  if (url.startsWith('data:image/') && url.length > 2000) {
-    return '/assets/bracelet.jpg';
-  }
-  return url;
+  if (!url || typeof url !== 'string') return '';
+  return url.trim();
 }
 
 /**
@@ -134,7 +131,7 @@ function sanitizeProductForCart(product: Product): Product {
       name: 'Sản phẩm',
       category: 'general',
       price: 0,
-      image: '/assets/bracelet.jpg',
+      image: '/assets/no-image.svg',
       description: '',
       details: [],
       inStock: true,
@@ -148,7 +145,7 @@ function sanitizeProductForCart(product: Product): Product {
     category: product.category || 'general',
     price: product.price || 0,
     originalPrice: product.originalPrice,
-    image: sanitizeImageUrl(product.image),
+    image: sanitizeImageUrl(product.image) || '/assets/no-image.svg',
     description: (product.description || '').slice(0, 100),
     details: [],
     rating: product.rating,
@@ -184,25 +181,26 @@ export function serializeCartItems(cartItems: CartItem[]): string {
     product: sanitizeProductForCart(item.product),
     quantity: Math.max(1, Number(item.quantity) || 1),
     selectedColor: item.selectedColor,
-    selectedColorImage: sanitizeImageUrl(item.selectedColorImage),
+    selectedColorImage: item.selectedColorImage,
     selectedCharm: item.selectedCharm,
-    selectedCharmImage: sanitizeImageUrl(item.selectedCharmImage),
+    selectedCharmImage: item.selectedCharmImage,
     selectedCharmPrice: item.selectedCharmPrice,
     selectedCharms: item.selectedCharms?.map((c) => ({
       name: c.name,
-      image: sanitizeImageUrl(c.image),
+      image: c.image,
       priceDelta: c.priceDelta,
     })),
     selectedOmamoris: item.selectedOmamoris?.map((o) => ({
       name: o.name,
-      image: sanitizeImageUrl(o.image),
+      image: o.image,
       priceDelta: o.priceDelta,
     })),
     selectedOmamoriPrice: item.selectedOmamoriPrice,
     selectedKhoen: item.selectedKhoen,
-    selectedKhoenImage: sanitizeImageUrl(item.selectedKhoenImage),
+    selectedKhoenImage: item.selectedKhoenImage,
     selectedKhoenPrice: item.selectedKhoenPrice,
-    customPhotoUrl: sanitizeImageUrl(item.customPhotoUrl),
+    // Preserve customer's uploaded photo 100% without alteration
+    customPhotoUrl: item.customPhotoUrl || undefined,
     customPhotoNote: item.customPhotoNote,
     customPhotoPrice: item.customPhotoPrice,
     selectedSize: item.selectedSize,
@@ -237,7 +235,7 @@ export function deserializeCartItems(
             name: 'Sản phẩm',
             category: 'general',
             price: Number(item.price) || 0,
-            image: '/assets/bracelet.jpg',
+            image: '/assets/no-image.svg',
             description: '',
             details: [],
             inStock: true,

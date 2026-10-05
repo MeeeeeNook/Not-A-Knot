@@ -6,16 +6,7 @@ import { ProductCharmOption } from '../types';
  */
 
 const createSvgDataUri = (svgContent: string): string => {
-  const clean = svgContent.trim();
-  try {
-    if (typeof btoa === 'function') {
-      return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(clean)))}`;
-    }
-    if (typeof Buffer !== 'undefined') {
-      return `data:image/svg+xml;base64,${Buffer.from(clean, 'utf-8').toString('base64')}`;
-    }
-  } catch (e) {}
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(clean)}`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svgContent.trim())}`;
 };
 
 // 1. Sao chuông · Xanh

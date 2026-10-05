@@ -1,8 +1,8 @@
-import React from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { RefreshCw, Home, ShieldAlert } from 'lucide-react';
 
 interface Props {
-  children: React.ReactNode;
+  children: ReactNode;
   fallbackTitle?: string;
   onReset?: () => void;
 }
@@ -12,7 +12,7 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends (React.Component as new (props: Props) => any) {
+export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = {
@@ -25,7 +25,7 @@ export class ErrorBoundary extends (React.Component as new (props: Props) => any
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.warn('[ErrorBoundary] Caught render error:', error, errorInfo);
   }
 

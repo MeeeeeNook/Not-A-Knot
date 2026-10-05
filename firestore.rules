@@ -158,5 +158,11 @@ service cloud.firestore {
       allow create: if true; // Any unauthorized attempt can log before session is purged
       allow read, delete: if isAuthorizedStaff();
     }
+
+    // 13. Customer uploaded custom photos
+    match /uploaded_custom_photos/{photoId} {
+      allow create, read: if true;
+      allow update, delete: if isAuthorizedStaff();
+    }
   }
 }

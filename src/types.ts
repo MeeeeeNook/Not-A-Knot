@@ -84,6 +84,8 @@ export interface ComboItemSelection {
   itemTitle: string;
   selectedColor?: string;
   selectedColorImage?: string;
+  selectedCharm?: string;
+  selectedCharmImage?: string;
   selectedCharms?: ProductCharmOption[];
   selectedCharmPrice?: number;
   selectedOmamoris?: ProductOmamoriOption[];
@@ -102,6 +104,7 @@ export interface Product {
   id: string;
   slug?: string;
   name: string;
+  subtitle?: string;
   category: string;
   price: number;
   originalPrice?: number;
@@ -193,7 +196,7 @@ export interface CartItem {
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
-export type OrderSource = 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other';
+export type OrderSource = 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other' | 'mạng xã hội' | 'trực tiếp';
 
 export type PaymentMethod = 'bank_transfer' | 'cod' | 'cash' | 'other';
 export type PaymentStatus = 'paid' | 'unpaid' | 'partial';
@@ -201,6 +204,9 @@ export type PaymentStatus = 'paid' | 'unpaid' | 'partial';
 export interface OrderItemDetail {
   productId: string;
   productName: string;
+  name?: string;
+  image?: string;
+  unitPrice?: number;
   category?: string;
   price: number;
   quantity: number;
@@ -211,6 +217,7 @@ export interface OrderItemDetail {
   selectedCharmPrice?: number;
   selectedCharms?: ProductCharmOption[];
   selectedOmamoris?: ProductOmamoriOption[];
+  selectedOmamoriText?: string;
   selectedOmamoriPrice?: number;
   selectedKhoen?: string;
   selectedKhoenImage?: string;
@@ -280,8 +287,11 @@ export interface UnauthorizedLoginAttemptItem {
 
 export interface OrderRecord {
   id?: string;
+  orderCode?: string;
   date: string;
   createdAt?: string;
+  isManualAdmin?: boolean;
+  isEvent0209?: boolean;
   name: string;
   customerName?: string;
   email?: string;
@@ -294,6 +304,7 @@ export interface OrderRecord {
   note?: string;
   items: string[];
   itemDetails?: OrderItemDetail[];
+  subtotal?: number;
   totalPrice?: number;
   totalAmount?: number;
   shippingFee?: number;
@@ -546,6 +557,7 @@ export interface SiteContentConfig {
   announcementShowFreeship?: boolean;
   announcementShowWarranty?: boolean;
   announcementSpeed?: number;
+  announcementTickerSpeed?: number;
   phone: string;
   zalo: string;
   address: string;
@@ -580,6 +592,13 @@ export interface SiteContentConfig {
     imageUrl?: string;
   };
   customElements: CustomElementBlock[];
+  footer?: {
+    aboutBio?: string;
+    description?: string;
+    copyrightText?: string;
+    warrantyPolicy?: string;
+    shippingPolicy?: string;
+  };
   footerDescription: string;
   copyrightText: string;
   warrantyPolicy: string;
