@@ -197,3 +197,41 @@ export const IMAGE_SIZES_PRESETS = {
   /** Small option thumbnails */
   thumbnail: '(max-width: 640px) 60px, 100px'
 } as const;
+
+/**
+ * Automatically imports any external image (from Facebook, Instagram, or any external link)
+ * converts it into high-fidelity compressed Base64 data and saves it permanently to Firestore.
+ * Completely silent: no warnings, no popups.
+ */
+export const autoImportAndSaveExternalImage = async (url: string): Promise<string> => {
+  if (!url || typeof url !== 'string') return url;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  // If it's already an internal API or base64, return as is
+  if (trimmed.startsWith('/api/') || trimmed.startsWith('data:image/')) {
+    return trimmed;
+  }
+
+  try {
+    const res = await fetch('/api/import-external-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: trimmed })
+    });
+    const data = await res.json();
+    if (data.success && data.base64) {
+      try {
+        const { compressBase64Image } = await import('../firebase');
+        const compressed = await compressBase64Image(data.base64, 1200, 1200, 0.88);
+        return compressed;
+      } catch {
+        return data.base64;
+      }
+    }
+  } catch (err) {
+    console.warn('[autoImportAndSaveExternalImage] Silently fallback to URL:', err);
+  }
+  return trimmed;
+};

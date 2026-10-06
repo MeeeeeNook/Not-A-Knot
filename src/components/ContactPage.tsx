@@ -7,7 +7,8 @@ import {
   MessageSquare,
   ArrowUpRight,
   Phone,
-  Mail
+  Mail,
+  ExternalLink
 } from 'lucide-react';
 import { SiteContentConfig, ContactMessage } from '../types';
 import { saveContactMessageToFirestore } from '../firebase';
@@ -255,21 +256,35 @@ export const ContactPage: React.FC<ContactPageProps> = ({
             {/* Workshop Address & Hotline (Rendered ONLY if at least one contact item exists) */}
             {(siteContent?.address?.trim() || siteContent?.phone?.trim() || siteContent?.email?.trim()) && (
               <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-4">
-                {siteContent?.address?.trim() && (
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <MapPin className="w-5 h-5 text-slate-700" />
+                {(() => {
+                  const displayAddress = (!siteContent?.address || siteContent.address.trim() === 'Hanoi, Vietnam')
+                    ? 'Đại học Kinh tế Quốc dân, Hà Nội'
+                    : siteContent.address;
+                  const mapsUrl = siteContent?.googleMapsUrl?.trim() || 'https://maps.app.goo.gl/jkPcp7rj5RDMbMhA8';
+
+                  return (
+                    <div className="flex flex-row items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
+                          Not A Knot
+                        </span>
+                        <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                          {displayAddress}
+                        </h3>
+                      </div>
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-10 h-10 rounded-xl bg-slate-50 hover:bg-amber-50 active:scale-95 border border-slate-200 hover:border-amber-300 flex items-center justify-center transition-all shadow-2xs hover:shadow-xs shrink-0 cursor-pointer group"
+                        title="Xem vị trí trên bản đồ"
+                        aria-label="Xem vị trí trên bản đồ"
+                      >
+                        <MapPin className="w-5 h-5 text-slate-700 group-hover:text-amber-600 transition-colors" />
+                      </a>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">
-                        Xưởng Chế Tác
-                      </span>
-                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                        {siteContent.address}
-                      </h3>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {(siteContent?.phone?.trim() || siteContent?.email?.trim()) && (
                   <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -298,7 +313,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
               <div className="space-y-1">
                 <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-slate-700" />
-                  <span>Gửi Tin Nhắn Cho Xưởng</span>
+                  <span>Gửi Tin Nhắn Cho Not A Knot</span>
                 </h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
                   Để lại thông tin và lời nhắn, chúng tớ sẽ đọc và phản hồi bạn.

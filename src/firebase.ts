@@ -1510,7 +1510,13 @@ export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<St
     const colRef = collection(db, 'orders');
     // Fetch all documents directly without strict orderBy index constraints
     // This guarantees orders without createdAt or with formatting differences are never omitted
-    const snap = await getDocs(colRef);
+    // Generous 20s timeout ensures slow network/cold starts connect without premature false timeouts
+    const snap = await Promise.race([
+      getDocs(colRef),
+      new Promise<any>((_, reject) =>
+        setTimeout(() => reject(new Error('Mạng tải đơn hàng phản hồi chậm')), 20000)
+      )
+    ]);
     const results: StoredOrder[] = [];
     snap.forEach((docSnap) => {
       const data = docSnap.data();
@@ -1564,8 +1570,20 @@ export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<St
     ordersMemoryCache = { data: deduplicated, expiresAt: now + 30000 };
     return deduplicated;
   } catch (err) {
-    console.error('Lỗi tải đơn hàng từ Firestore:', err);
-    return ordersMemoryCache?.data || [];
+    console.warn('Lưu ý khi tải đơn hàng từ Firestore (sử dụng bộ nhớ đệm):', err);
+    if (ordersMemoryCache && ordersMemoryCache.data.length > 0) {
+      return ordersMemoryCache.data;
+    }
+    try {
+      const local = safeStorageGetItem('nak_preorders');
+      if (local) {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return deduplicateStoredOrders(parsed);
+        }
+      }
+    } catch {}
+    return [];
   }
 };
 

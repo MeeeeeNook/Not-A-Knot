@@ -474,7 +474,7 @@ Hình thức: ${order.paymentMethod === 'bank_transfer' ? 'Chuyển khoản Viet
 Trạng thái: ${order.paymentStatus === 'paid' ? 'Đã thanh toán đủ' : 'Chờ thu COD'}
 
 ----------------------------------------
-Hotline xưởng: ${hotline}
+Hotline shop: ${hotline}
 Cảm ơn quý khách đã tin tưởng và ủng hộ sản phẩm!
 ========================================`;
 };

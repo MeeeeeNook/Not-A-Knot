@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X, ZoomIn, RotateCw, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles, Clipboard, MousePointer, ShieldCheck, RefreshCw, Crop } from 'lucide-react';
+import { Camera, Upload, X, ZoomIn, ZoomOut, RotateCw, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles, Clipboard, MousePointer, ShieldCheck, RefreshCw, Crop } from 'lucide-react';
 import { uploadCustomPhotoImmediately } from '../firebase';
 import { PhotoCropModal } from './PhotoCropModal';
 
@@ -33,6 +33,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
   const [isUploadingToCloud, setIsUploadingToCloud] = useState(false);
   const [uploadSuccessToast, setUploadSuccessToast] = useState<string | null>(null);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewZoomScale, setPreviewZoomScale] = useState(1);
   const [localNote, setLocalNote] = useState(customPhotoNote);
   const [pendingCropImage, setPendingCropImage] = useState<string | null>(null);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -178,8 +179,8 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
   // Determine shape styling based on aspect ratio
   const getShapeClass = () => {
     if (aspectRatio === 'circle') return 'rounded-full aspect-square';
-    if (aspectRatio === 'portrait') return 'rounded-2xl aspect-[3/4]';
-    return 'rounded-2xl aspect-square';
+    if (aspectRatio === 'portrait') return 'rounded-none aspect-[3/4]';
+    return 'rounded-none aspect-square';
   };
 
   return (
@@ -303,7 +304,7 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
               >
                 <img
                   src={customPhotoUrl}
-                  alt="Ảnh custom"
+                  alt=""
                   className="w-full h-full object-cover"
                 />
                 <button
@@ -461,24 +462,58 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
               </button>
             </div>
 
-            <div className="flex items-center justify-center p-2 bg-slate-900 rounded-2xl overflow-hidden max-h-[65vh]">
+            <div className="flex items-center justify-center p-2 bg-slate-900 rounded-none overflow-hidden max-h-[65vh] relative select-none">
               <img
                 src={customPhotoUrl}
-                alt="Ảnh phóng to"
-                className="max-h-[60vh] max-w-full object-contain rounded-lg"
+                alt=""
+                style={{ transform: `scale(${previewZoomScale})` }}
+                className="max-h-[60vh] max-w-full object-contain rounded-none transition-transform duration-200"
               />
+              {previewZoomScale !== 1 && (
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs border border-white/20">
+                  {Math.round(previewZoomScale * 100)}%
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Định dạng khuôn in: <strong>{aspectRatio === 'circle' ? 'Hình tròn (Locket)' : aspectRatio === 'portrait' ? 'Khung dọc' : 'Hình vuông'}</strong></span>
-              <button
-                type="button"
-                onClick={handleRotate}
-                className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 cursor-pointer"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span>Xoay 90°</span>
-              </button>
+            <div className="flex items-center justify-between text-xs text-slate-500 gap-2 flex-wrap">
+              <span>Định dạng khuôn: <strong>{aspectRatio === 'circle' ? 'Hình tròn (Locket)' : aspectRatio === 'portrait' ? 'Khung dọc' : 'Hình vuông'}</strong></span>
+              <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoomScale((s) => Math.max(0.75, s - 0.25))}
+                    className="p-1 hover:bg-white rounded text-slate-700 transition-colors cursor-pointer"
+                    title="Thu nhỏ"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoomScale(1)}
+                    className="px-1.5 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-white rounded transition-colors cursor-pointer"
+                    title="Đặt lại kích thước 100%"
+                  >
+                    {Math.round(previewZoomScale * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewZoomScale((s) => Math.min(3, s + 0.25))}
+                    className="p-1 hover:bg-white rounded text-slate-700 transition-colors cursor-pointer"
+                    title="Phóng to"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRotate}
+                  className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Xoay 90°</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, ExternalLink, X, Download, ShieldAlert, ArrowRight, Check } from 'lucide-react';
+import { AlertTriangle, ExternalLink, X, Download, ShieldAlert, ArrowRight, Check, Sparkles, RefreshCw } from 'lucide-react';
+import { compressBase64Image } from '../../firebase';
 
 /**
  * Checks whether a given string is a Facebook CDN image URL (which expires in 24-48 hours)
@@ -52,10 +53,55 @@ export const FacebookImageWarningModal: React.FC<FacebookImageWarningModalProps>
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [currentUrl, setCurrentUrl] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
 
   const isControlled = controlledIsOpen !== undefined;
   const isVisible = isControlled ? controlledIsOpen : internalIsOpen;
   const activeUrl = isControlled ? controlledImageUrl || '' : currentUrl;
+
+  const handleAutoDownloadAndSave = async () => {
+    if (!activeUrl) return;
+    setIsAutoSaving(true);
+    setAutoSaveError(null);
+    try {
+      const res = await fetch('/api/import-external-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: activeUrl })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Không thể tải ảnh từ liên kết này');
+      }
+
+      // Compress to high-fidelity WebP/JPEG base64 format for Firestore permanence
+      let finalData = data.base64;
+      try {
+        finalData = await compressBase64Image(data.base64, 1200, 1200, 0.88);
+      } catch {}
+
+      // Dispatch event for any active form/manager to consume the permanent data
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('facebook-image-imported', {
+            detail: {
+              originalUrl: activeUrl,
+              permanentBase64: finalData,
+              permanentUrl: data.permanentUrl
+            }
+          })
+        );
+      }
+
+      handleClose();
+    } catch (err: any) {
+      console.warn('Lỗi tự động tải ảnh:', err);
+      setAutoSaveError(err?.message || 'Không thể tải ảnh tự động. Bạn vui lòng tải ảnh về máy rồi tải lên.');
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
 
   const handleClose = useCallback(() => {
     if (isControlled) {
@@ -188,37 +234,51 @@ export const FacebookImageWarningModal: React.FC<FacebookImageWarningModalProps>
                 </div>
               </div>
             )}
+
+            {autoSaveError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                ⚠️ {autoSaveError}
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-2.5">
+          <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-2.5 flex-wrap">
             <button
               type="button"
               onClick={handleProceedAnyway}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer text-center"
+              className="w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-700 transition-colors cursor-pointer text-center"
             >
-              Tôi hiểu và vẫn muốn dùng link này
+              Vẫn giữ link này
             </button>
 
             {activeUrl && (
-              <a
-                href={activeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => handleClose()}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs"
+              <button
+                type="button"
+                disabled={isAutoSaving}
+                onClick={handleAutoDownloadAndSave}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm disabled:opacity-60"
               >
-                <Download className="w-3.5 h-3.5 text-amber-600" />
-                <span>Mở ảnh để lưu về máy</span>
-              </a>
+                {isAutoSaving ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-950" />
+                    <span>Đang tự động tải & lưu vĩnh viễn...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                    <span>⚡ Tự động tải về & lưu vĩnh viễn</span>
+                  </>
+                )}
+              </button>
             )}
 
             <button
               type="button"
               onClick={handleClose}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Đã hiểu, tôi sẽ tải ảnh lên thủ công</span>
+              <span>Đóng</span>
             </button>
           </div>
         </div>

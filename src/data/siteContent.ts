@@ -2,7 +2,7 @@ import { SiteContentConfig } from '../types';
 
 export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   brandName: 'NOT A KNOT',
-  brandTagline: 'Xưởng Chế Tác Phụ Kiện Handmade Thủ Công',
+  brandTagline: 'Not A Knot - Phụ Kiện Handmade Thủ Công',
   announcementText: '🇻🇳 Ưu đãi quà tặng: Tặng kèm móc khóa handmade cao cấp cho đơn từ 299k!',
   announcementLink: '#products',
   announcementActive: true,
@@ -52,7 +52,8 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
   announcementTickerSpeed: 32,
   phone: '079 655 5636',
   zalo: '',
-  address: 'Hanoi, Vietnam',
+  address: 'Đại học Kinh tế Quốc dân, Hà Nội',
+  googleMapsUrl: 'https://maps.app.goo.gl/jkPcp7rj5RDMbMhA8',
   email: 'notaknothandmade@gmail.com',
   bankAccount: {
     bankId: 'VCB',

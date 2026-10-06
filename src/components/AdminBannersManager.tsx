@@ -3,6 +3,7 @@ import { CollectionInfo, CategoryItem } from '../types';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { saveCollectionToFirestore, deleteCollectionFromFirestore } from '../firebase';
 import { Eye, Monitor, Smartphone, X, ArrowRight, Sparkles } from 'lucide-react';
+import { autoImportAndSaveExternalImage } from '../utils/imageUtils';
 
 interface AdminBannersManagerProps {
   collections: CollectionInfo[];
@@ -225,9 +226,13 @@ export const AdminBannersManager: React.FC<AdminBannersManagerProps> = ({
     }
 
     try {
-      const finalMainImage = formImage.trim();
-      const finalHorizImage = formHorizontalImage.trim() || finalMainImage;
-      const finalProdBanner = formProductPageBanner.trim() || finalMainImage;
+      const finalMainImage = await autoImportAndSaveExternalImage(formImage.trim());
+      const finalHorizImage = formHorizontalImage.trim() 
+        ? await autoImportAndSaveExternalImage(formHorizontalImage.trim()) 
+        : finalMainImage;
+      const finalProdBanner = formProductPageBanner.trim() 
+        ? await autoImportAndSaveExternalImage(formProductPageBanner.trim()) 
+        : finalMainImage;
 
       if (editingColId) {
         // Edit existing

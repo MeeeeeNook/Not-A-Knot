@@ -31,7 +31,7 @@ import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { AdminSocialFeedManager } from './admin/AdminSocialFeedManager';
-import { FacebookImageWarningModal, isFacebookImageUrl, triggerFacebookImageWarning } from './admin/FacebookImageWarningModal';
+import { autoImportAndSaveExternalImage } from '../utils/imageUtils';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { ensureGmailDomain, sendOrderConfirmationEmail } from '../utils/emailService';
 import {
@@ -514,6 +514,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [inspectingOrder, setInspectingOrder] = useState<StoredOrder | null>(null);
   const [zoomReceiptImage, setZoomReceiptImage] = useState<string | null>(null);
   const [zoomCustomPhoto, setZoomCustomPhoto] = useState<{ url: string; title: string; note?: string } | null>(null);
+  const [hoveredPhotoPreview, setHoveredPhotoPreview] = useState<{
+    url: string;
+    title: string;
+    note?: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [showOrdersExcelPrompt, setShowOrdersExcelPrompt] = useState(false);
 
   // Firebase Quota & Cloud Sync State
@@ -982,13 +989,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   // Fetch orders directly from Firestore as single source of truth
   const loadOrders = async (isManualReload = false) => {
-    setLoadingOrders(true);
+    // Only set full-table loading state if we have no orders at all yet
+    if (orders.length === 0) {
+      setLoadingOrders(true);
+    }
     if (isManualReload) {
+      setLoadingOrders(true);
       showAdminToast('🔄 Đang đồng bộ và tải lại danh sách đơn hàng...');
     }
     try {
-      const dbOrders = await fetchOrdersFromFirestore();
-      setOrders(dbOrders || []);
+      const dbOrders = await fetchOrdersFromFirestore(isManualReload);
+      if (dbOrders && Array.isArray(dbOrders)) {
+        setOrders(dbOrders);
+      }
 
       if (isManualReload) {
         showAdminToast(`✓ Đã tải lại thành công! Tổng cộng ${(dbOrders || []).length} đơn hàng từ Firestore.`);
@@ -1073,23 +1086,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // Periodic background auto-poll for data sync guarantee across devices (only when tab is active)
-    const autoSyncInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      loadOrders();
-      loadMessagesCount();
-    }, 35000);
-
     const handleVisibilityChange = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
-        loadOrders();
         loadMessagesCount();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(autoSyncInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       unsubscribeOrders();
       unsubscribeMessages();
@@ -1098,10 +1102,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
   }, [currentSeller?.id, currentSeller?.username]);
 
+  // Auto-dismiss hover preview on scroll or keydown so it never gets stuck
+  useEffect(() => {
+    if (!hoveredPhotoPreview) return;
+    const handleDismiss = () => setHoveredPhotoPreview(null);
+    window.addEventListener('scroll', handleDismiss, true);
+    window.addEventListener('keydown', handleDismiss);
+    return () => {
+      window.removeEventListener('scroll', handleDismiss, true);
+      window.removeEventListener('keydown', handleDismiss);
+    };
+  }, [hoveredPhotoPreview]);
+
   // Auto-load orders on initial mount and when switching to dashboard or orders tab
   useEffect(() => {
     if (!currentSeller) return;
-    if (activeTab === 'dashboard' || activeTab === 'orders') {
+    if ((activeTab === 'dashboard' || activeTab === 'orders') && orders.length === 0) {
       loadOrders();
     }
     if (activeTab === 'messages') {
@@ -1692,12 +1708,41 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleAddImageUrl = () => {
+  useEffect(() => {
+    const handleImported = (e: Event) => {
+      const customEvt = e as CustomEvent<{ originalUrl: string; permanentBase64: string }>;
+      if (customEvt.detail?.originalUrl && customEvt.detail?.permanentBase64) {
+        setFormImages((prev) =>
+          prev.map((img) => (img === customEvt.detail.originalUrl ? customEvt.detail.permanentBase64 : img))
+        );
+        setFormImage((prev) => (prev === customEvt.detail.originalUrl ? customEvt.detail.permanentBase64 : prev));
+      }
+    };
+    window.addEventListener('facebook-image-imported', handleImported);
+    return () => window.removeEventListener('facebook-image-imported', handleImported);
+  }, []);
+
+  const handleAddImageUrl = async () => {
     if (!newImageUrlInput.trim()) return;
     const url = newImageUrlInput.trim();
-    if (isFacebookImageUrl(url)) {
-      triggerFacebookImageWarning(url);
+    setNewImageUrlInput('');
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        const permanentData = await autoImportAndSaveExternalImage(url);
+        setFormImages((prev) => {
+          const updated = [...prev, permanentData];
+          if (!formImage || prev.length === 0) {
+            setFormImage(permanentData);
+          }
+          return updated;
+        });
+        return;
+      } catch (e) {
+        console.warn('Auto import external image failed, fallback to direct url:', e);
+      }
     }
+
     setFormImages((prev) => {
       const updated = [...prev, url];
       if (!formImage || prev.length === 0) {
@@ -1705,7 +1750,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       }
       return updated;
     });
-    setNewImageUrlInput('');
   };
 
   const handleMoveImage = (fromIndex: number, toIndex: number) => {
@@ -4054,7 +4098,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <div className="flex items-center justify-between">
                               <div>
                                 <label className="block text-xs font-bold text-slate-800">
-                                  Hình ảnh sản phẩm & Thứ tự hiển thị *
+                                  Up ảnh
                                 </label>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
                                   Ảnh đầu tiên (#1) là <span className="font-bold text-amber-700">ảnh đại diện</span>.
@@ -7499,14 +7543,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
                                             <button
                                               type="button"
+                                              onMouseEnter={(e) => {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setHoveredPhotoPreview({
+                                                  url: item.customPhotoUrl!,
+                                                  title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                  note: item.customPhotoNote,
+                                                  x: rect.right + 12,
+                                                  y: rect.top - 20
+                                                });
+                                              }}
+                                              onMouseLeave={() => setHoveredPhotoPreview(null)}
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                setInspectingOrder(ord);
+                                                setZoomCustomPhoto({
+                                                  url: item.customPhotoUrl!,
+                                                  title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                  note: item.customPhotoNote
+                                                });
                                               }}
-                                              title="Bấm để mở chi tiết xem ảnh in"
                                               className="hover:opacity-80 inline-flex items-center gap-1 cursor-pointer"
                                             >
-                                              <img src={item.customPhotoUrl} alt="Ảnh custom" className="w-4 h-4 rounded object-cover border border-rose-300 inline" />
+                                              <img src={item.customPhotoUrl} alt="" className="w-4 h-4 rounded-none object-cover border border-rose-300 inline" />
                                               <span className="font-bold text-rose-800">Ảnh in custom</span>
                                             </button>
                                             {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
@@ -7764,7 +7822,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {loadingOrders ? (
+                    {loadingOrders && orders.length === 0 ? (
                       <tr>
                         <td colSpan={14} className="p-12 text-center text-slate-500 border-b border-slate-200">
                           <span>Đang tải danh sách đơn hàng từ cơ sở dữ liệu...</span>
@@ -8002,23 +8060,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         const photoUrl = it.customPhotoUrl || (it as any).customPhoto || (typeof (it as any).customPhotoData === 'string' ? (it as any).customPhotoData : '');
                                         if (!photoUrl && !it.customPhotoNote) return null;
                                         return (
-                                          <div className="mt-1 flex flex-wrap items-center gap-1.5 p-1 bg-rose-50/90 border border-rose-200 rounded-md">
+                                          <div className="mt-1 flex flex-wrap items-center gap-1.5 p-1 bg-rose-50/90 border border-rose-200 rounded-none">
                                             {photoUrl ? (
                                               <div className="flex items-center gap-1.5">
                                                 <img
                                                   src={photoUrl}
-                                                  alt="Ảnh in"
-                                                  className="w-5 h-5 rounded object-cover border border-rose-400 shrink-0"
+                                                  alt=""
+                                                  onMouseEnter={(e) => {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setHoveredPhotoPreview({
+                                                      url: photoUrl,
+                                                      title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                      note: it.customPhotoNote,
+                                                      x: rect.right + 12,
+                                                      y: rect.top - 20
+                                                    });
+                                                  }}
+                                                  onMouseLeave={() => setHoveredPhotoPreview(null)}
+                                                  onClick={() => setZoomCustomPhoto({
+                                                    url: photoUrl,
+                                                    title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                    note: it.customPhotoNote
+                                                  })}
+                                                  className="w-5 h-5 rounded-none object-cover border border-rose-400 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
                                                 />
                                                 <button
                                                   type="button"
+                                                  onMouseEnter={(e) => {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setHoveredPhotoPreview({
+                                                      url: photoUrl,
+                                                      title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                                      note: it.customPhotoNote,
+                                                      x: rect.right + 12,
+                                                      y: rect.top - 20
+                                                    });
+                                                  }}
+                                                  onMouseLeave={() => setHoveredPhotoPreview(null)}
                                                   onClick={() => setZoomCustomPhoto({
                                                     url: photoUrl,
                                                     title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
                                                     note: it.customPhotoNote
                                                   })}
                                                   className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
-                                                  title="Bấm để xem ảnh in của khách hàng"
                                                 >
                                                   <Eye className="w-3 h-3" />
                                                   <span>Xem ảnh</span>
@@ -8143,9 +8227,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               {ord.bankReceiptImage ? (
                                 <button
                                   type="button"
+                                  onMouseEnter={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setHoveredPhotoPreview({
+                                      url: ord.bankReceiptImage!,
+                                      title: `Bill chuyển khoản - Đơn ${ord.trackingNumber || ord.id || ''}`,
+                                      x: rect.right + 12,
+                                      y: rect.top - 20
+                                    });
+                                  }}
+                                  onMouseLeave={() => setHoveredPhotoPreview(null)}
                                   onClick={() => setZoomReceiptImage(ord.bankReceiptImage!)}
                                   className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold border border-emerald-300 cursor-pointer"
-                                  title="Xem ảnh Bill chuyển khoản"
                                 >
                                   Xem Bill
                                 </button>
@@ -9103,6 +9196,41 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       )}
 
       {/* ======================================================== */}
+      {/* FLOATING HOVER PREVIEW: TỰ MỞ TO KHI HOVER LÊN ẢNH      */}
+      {/* ======================================================== */}
+      {hoveredPhotoPreview && (
+        <div
+          className="fixed z-[130] pointer-events-none bg-slate-900 text-white p-2.5 rounded-none border-2 border-rose-400 shadow-2xl animate-in fade-in zoom-in-95"
+          style={{
+            left: `${Math.max(12, Math.min(hoveredPhotoPreview.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 340))}px`,
+            top: `${Math.max(12, Math.min(hoveredPhotoPreview.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 380))}px`,
+            width: '320px',
+            maxWidth: 'calc(100vw - 24px)'
+          }}
+        >
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-[11px] font-bold text-rose-400">
+            <span className="truncate pr-2">{hoveredPhotoPreview.title}</span>
+            <span className="text-[9px] font-medium bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-none shrink-0">Tự mở to</span>
+          </div>
+          <div className="mt-2 bg-black/90 rounded-none overflow-hidden flex items-center justify-center p-1 min-h-[220px] max-h-[300px]">
+            <img
+              src={hoveredPhotoPreview.url}
+              alt=""
+              className="max-h-[280px] w-auto max-w-full object-contain rounded-none shadow-sm"
+            />
+          </div>
+          {hoveredPhotoPreview.note && (
+            <div className="mt-2 text-[11px] text-rose-200 bg-rose-950/80 p-1.5 rounded-none border border-rose-800/60 leading-tight">
+              <span className="font-bold text-rose-300">Yêu cầu in:</span> {hoveredPhotoPreview.note}
+            </div>
+          )}
+          <div className="mt-1.5 text-[9px] text-slate-400 text-center font-medium">
+            💡 Bấm vào ảnh để mở toàn màn hình hoặc tải file
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
       {/* LIGHTBOX: ZOOM BILL RECEIPT IMAGE */}
       {/* ======================================================== */}
       {zoomReceiptImage && (
@@ -9127,11 +9255,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </button>
             </div>
 
-            <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-2xl p-2 border border-slate-100">
+            <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-none p-2 border border-slate-100">
               <img
                 src={zoomReceiptImage}
-                alt="Bill chuyển khoản phóng to"
-                className="max-h-[70vh] w-auto rounded-xl object-contain shadow-md"
+                alt=""
+                className="max-h-[70vh] w-auto rounded-none object-contain shadow-md"
               />
             </div>
 
@@ -9172,11 +9300,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </button>
             </div>
 
-            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-2xl p-2 border border-slate-100">
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-50 rounded-none p-2 border border-slate-100">
               <img
                 src={zoomCustomPhoto.url}
-                alt="Ảnh in của khách"
-                className="max-h-[65vh] w-auto rounded-xl object-contain shadow-md"
+                alt=""
+                className="max-h-[65vh] w-auto rounded-none object-contain shadow-md"
               />
             </div>
 
@@ -9410,18 +9538,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         </div>
       )}
       {/* ======================================================== */}
-      {/* MODAL: FACEBOOK IMAGE LINK EXPIRATION WARNING */}
-      {/* ======================================================== */}
-      <FacebookImageWarningModal />
-
-      {/* ======================================================== */}
       {/* MODAL: EXCEL ORDERS EXPORT PROMPT */}
       {/* ======================================================== */}
       <ExcelExportPromptModal
         isOpen={showOrdersExcelPrompt}
         onClose={() => setShowOrdersExcelPrompt(false)}
         title="Xuất Danh Sách Đơn Hàng"
-        description="Bạn có muốn tải về toàn bộ ảnh in theo yêu cầu của khách, ảnh chụp bill chuyển khoản và ảnh sản phẩm đính kèm trong file ZIP cùng file Excel (.xlsx) không?"
+        description="Bạn có muốn tải về toàn bộ ảnh in theo yêu cầu của khách và ảnh chụp bill chuyển khoản đính kèm trong file ZIP cùng file Excel (.xlsx) không?"
         itemCountInfo={`Đang có ${orders.length} đơn hàng trong hệ thống`}
         onConfirm={handleConfirmExportOrdersExcel}
       />

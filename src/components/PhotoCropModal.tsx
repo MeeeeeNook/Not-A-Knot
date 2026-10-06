@@ -279,7 +279,7 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
         <div className="flex items-center justify-center py-1">
           <div
             className={`relative overflow-hidden bg-black/60 shadow-inner flex items-center justify-center border-2 border-white/80 cursor-grab active:cursor-grabbing transition-[width,height] duration-200 ${
-              isCircle ? 'rounded-full' : 'rounded-2xl'
+              isCircle ? 'rounded-full' : 'rounded-none'
             }`}
             style={{ width: `${boxW}px`, height: `${boxH}px` }}
             onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
@@ -311,7 +311,7 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
             />
 
             {/* 3x3 Grid Lines (Rule of thirds) */}
-            <div className={`absolute inset-0 pointer-events-none ${isCircle ? 'rounded-full' : ''}`}>
+            <div className={`absolute inset-0 pointer-events-none ${isCircle ? 'rounded-full' : 'rounded-none'}`}>
               <div className="absolute top-[33.33%] left-0 right-0 h-[1px] bg-white/30" />
               <div className="absolute top-[66.66%] left-0 right-0 h-[1px] bg-white/30" />
               <div className="absolute left-[33.33%] top-0 bottom-0 w-[1px] bg-white/30" />

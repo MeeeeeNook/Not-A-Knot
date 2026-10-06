@@ -1833,7 +1833,7 @@ export default function App() {
   const isCurrentSellerAdmin = Boolean(isRootAdminUser(currentSeller));
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip relative flex flex-col bg-[#FAF9F6] text-slate-900 selection:bg-amber-400 selection:text-slate-950 font-sans">
+    <div className={`min-h-screen min-h-[100dvh] w-full max-w-full overflow-x-clip relative flex flex-col ${currentView === 'admin' ? 'bg-neutral-950' : 'bg-[#FAF9F6]'} text-slate-900 selection:bg-amber-400 selection:text-slate-950 font-sans`}>
       {/* Sticky Admin Notification Bar when Maintenance Mode is ACTIVE */}
       {maintenanceConfig.enabled && currentSeller && (
         <div className="bg-rose-600 text-white text-xs font-bold px-4 py-2.5 flex items-center justify-between shadow-lg sticky top-0 z-50 border-b border-rose-700">
@@ -2076,7 +2076,7 @@ export default function App() {
             <ErrorBoundary fallbackTitle="Bảng điều khiển Quản trị gặp sự cố khi tải">
               <React.Suspense
                 fallback={
-                  <div className="min-h-[85vh] flex flex-col items-center justify-center p-8 bg-neutral-950 text-white select-none">
+                  <div className="min-h-screen min-h-[100dvh] w-full flex flex-col items-center justify-center p-8 bg-neutral-950 text-white select-none">
                     <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
                     <h2 className="text-xl sm:text-2xl font-medium text-amber-200 tracking-wide text-center">
                       Xin chào{(() => {
@@ -2112,7 +2112,12 @@ export default function App() {
               </React.Suspense>
             </ErrorBoundary>
           ) : (
-            <React.Suspense fallback={<ViewLoadingFallback />}>
+            <React.Suspense fallback={
+              <div className="min-h-screen min-h-[100dvh] w-full flex flex-col items-center justify-center bg-neutral-950 text-white select-none">
+                <div className="w-10 h-10 border-3 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-3 shadow-lg shadow-amber-500/10" />
+                <p className="text-xs text-amber-200">Đang nạp cổng quản trị...</p>
+              </div>
+            }>
               <AdminLoginPage
                 onLoginSuccess={(user) => {
                   handleAdminLoginSuccess(user);

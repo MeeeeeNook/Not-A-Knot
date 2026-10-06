@@ -33,9 +33,13 @@ import {
   Eye,
   Camera,
   RotateCw,
+  Crop,
+  ZoomIn,
+  ZoomOut,
   X
 } from 'lucide-react';
 import { CartItem, Product, SiteContentConfig } from '../types';
+import { PhotoCropModal } from './PhotoCropModal';
 import { saveOrderToFirestore, StoredOrder } from '../firebase';
 import { submitOrderToServer } from '../utils/orderService';
 import { sendOrderConfirmationEmail, ensureGmailDomain } from '../utils/emailService';
@@ -138,6 +142,13 @@ export const CartPage: React.FC<CartPageProps> = ({
     isCustomPhoto?: boolean;
   } | null>(null);
   const [photoRotation, setPhotoRotation] = useState<number>(0);
+  const [photoZoomScale, setPhotoZoomScale] = useState<number>(1);
+  const [cartCropData, setCartCropData] = useState<{
+    isOpen: boolean;
+    imageSrc: string;
+    targetIdx: number;
+    aspectRatio: string;
+  } | null>(null);
   const [isReplacingPhoto, setIsReplacingPhoto] = useState<boolean>(false);
   const [replaceSuccessToast, setReplaceSuccessToast] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
@@ -159,65 +170,65 @@ export const CartPage: React.FC<CartPageProps> = ({
     const targetIdx = targetReplaceIdxRef.current !== null 
       ? targetReplaceIdxRef.current 
       : (typeof cartPhotoPreview?.index === 'number' ? cartPhotoPreview.index : null);
-    if (targetIdx === null) return;
+    if (targetIdx === null || !cartItems[targetIdx]) return;
 
-    setIsReplacingPhoto(true);
-    const currentNote = cartItems[targetIdx]?.customPhotoNote || cartPhotoPreview?.note;
+    // Validate size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Dung lượng ảnh vượt quá 10MB. Vui lòng chọn ảnh có dung lượng tối đa 10MB.');
+      e.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
       const src = ev.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 1200;
-        let width = img.width;
-        let height = img.height;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        let compressed = src;
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          compressed = canvas.toDataURL('image/jpeg', 0.86);
-        }
-
-        setIsReplacingPhoto(false);
-        if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
-          setCartPhotoPreview((prev) => (prev ? { ...prev, url: compressed } : null));
-          setPhotoRotation(0);
-        }
-
-        if (onUpdateItemPhoto) {
-          onUpdateItemPhoto(targetIdx, compressed, currentNote);
-        }
-        setReplaceSuccessToast('Đã đổi ảnh in thành công!');
-        setTimeout(() => setReplaceSuccessToast(null), 3000);
-        targetReplaceIdxRef.current = null;
-      };
-      img.onerror = () => {
-        setIsReplacingPhoto(false);
-        if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
-          setCartPhotoPreview((prev) => (prev ? { ...prev, url: src } : null));
-        }
-        if (onUpdateItemPhoto) {
-          onUpdateItemPhoto(targetIdx, src, currentNote);
-        }
-        targetReplaceIdxRef.current = null;
-      };
-      img.src = src;
+      const targetAspectRatio = cartItems[targetIdx].product.customPhotoAspectRatio || 'square';
+      setCartCropData({
+        isOpen: true,
+        imageSrc: src,
+        targetIdx,
+        aspectRatio: targetAspectRatio
+      });
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleCartCropConfirm = async (croppedDataUrl: string) => {
+    if (!cartCropData) return;
+    const targetIdx = cartCropData.targetIdx;
+    const currentNote = cartItems[targetIdx]?.customPhotoNote || cartPhotoPreview?.note;
+
+    setCartCropData(null);
+    targetReplaceIdxRef.current = null;
+
+    // Immediately display preview with zoom & rotate interface
+    setCartPhotoPreview({
+      index: targetIdx,
+      url: croppedDataUrl,
+      title: cartItems[targetIdx]?.product.name || 'Ảnh in custom',
+      note: currentNote,
+      isCustomPhoto: true
+    });
+    setPhotoRotation(0);
+    setPhotoZoomScale(1);
+
+    if (onUpdateItemPhoto) {
+      onUpdateItemPhoto(targetIdx, croppedDataUrl, currentNote);
+    }
+    setReplaceSuccessToast('Đã lưu ảnh in và căn chỉnh thành công!');
+    setTimeout(() => setReplaceSuccessToast(null), 3000);
+
+    // Upload to Firebase Storage in background
+    try {
+      const { uploadCustomPhotoImmediately } = await import('../firebase');
+      const uploadedUrl = await uploadCustomPhotoImmediately(croppedDataUrl, 'cart_photos');
+      if (uploadedUrl && uploadedUrl.startsWith('http') && onUpdateItemPhoto) {
+        onUpdateItemPhoto(targetIdx, uploadedUrl, currentNote);
+      }
+    } catch (uploadErr) {
+      console.warn('[CartPage] Cloud upload notice:', uploadErr);
+    }
   };
 
   // Customer Email Option on Success Screen (Toggleable via Admin Settings)
@@ -882,6 +893,20 @@ export const CartPage: React.FC<CartPageProps> = ({
                                         <span>Sản phẩm không tồn tại</span>
                                       </div>
                                     )}
+
+                                    {Boolean(item.product.enableCustomPhoto || item.product.customPhotoTitle) && !item.customPhotoUrl && (
+                                      <div className="pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTriggerReplacePhoto(index)}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-dashed border-rose-300 hover:border-rose-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                                          title="Tải ảnh in theo yêu cầu cho sản phẩm này"
+                                        >
+                                          <Camera className="w-3.5 h-3.5 text-rose-500" />
+                                          <span>+ Thêm ảnh in theo yêu cầu</span>
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                   <button
                                     type="button"
@@ -950,16 +975,17 @@ export const CartPage: React.FC<CartPageProps> = ({
                                             isCustomPhoto: true
                                           });
                                           setPhotoRotation(0);
+                                          setPhotoZoomScale(1);
                                         }}
                                         className="relative group/custompic cursor-pointer shrink-0"
                                         title="Bấm xem ảnh in theo yêu cầu"
                                       >
                                         <img
                                           src={item.customPhotoUrl}
-                                          alt="Ảnh in theo yêu cầu"
-                                          className="w-5 h-5 rounded-md object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform"
+                                          alt=""
+                                          className="w-5 h-5 rounded-none object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform"
                                         />
-                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/custompic:opacity-100 rounded-md transition-opacity flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/custompic:opacity-100 rounded-none transition-opacity flex items-center justify-center">
                                           <Eye className="w-2.5 h-2.5 text-white" />
                                         </div>
                                       </button>
@@ -982,6 +1008,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                                             isCustomPhoto: true
                                           });
                                           setPhotoRotation(0);
+                                          setPhotoZoomScale(1);
                                         }}
                                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
                                         title="Xem ảnh in bạn đã tải lên"
@@ -1792,14 +1819,19 @@ export const CartPage: React.FC<CartPageProps> = ({
                 </button>
               </div>
 
-              {/* Lightbox Image Preview */}
-              <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[260px] max-h-[55vh] overflow-hidden">
+              {/* Lightbox Image Preview with Zoom & Rotate */}
+              <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[260px] max-h-[55vh] overflow-hidden relative select-none">
                 <img
                   src={cartPhotoPreview.url}
-                  alt="Ảnh phóng to"
-                  style={{ transform: `rotate(${photoRotation}deg)` }}
-                  className="max-h-[50vh] max-w-full object-contain rounded-lg shadow-lg transition-transform duration-200"
+                  alt=""
+                  style={{ transform: `rotate(${photoRotation}deg) scale(${photoZoomScale})` }}
+                  className="max-h-[50vh] max-w-full object-contain rounded-none shadow-lg transition-transform duration-200"
                 />
+                {photoZoomScale !== 1 && (
+                  <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs border border-white/20">
+                    {Math.round(photoZoomScale * 100)}%
+                  </div>
+                )}
               </div>
 
               {/* Toast Message on replacement */}
@@ -1898,11 +1930,41 @@ export const CartPage: React.FC<CartPageProps> = ({
                       ) : (
                         <>
                           <Camera className="w-3.5 h-3.5" />
-                          <span>Thay ảnh khác</span>
+                          <span>Thay ảnh</span>
                         </>
                       )}
                     </button>
                   )}
+
+                  {/* Zoom controls */}
+                  <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg border border-slate-300/60">
+                    <button
+                      type="button"
+                      onClick={() => setPhotoZoomScale((s) => Math.max(0.75, s - 0.25))}
+                      className="p-1.5 hover:bg-white rounded-md text-slate-700 transition-colors cursor-pointer"
+                      title="Thu nhỏ"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoZoomScale(1)}
+                      className="px-1.5 py-1 text-[10px] font-bold text-slate-600 hover:bg-white rounded-md transition-colors cursor-pointer"
+                      title="Đặt lại kích thước 100%"
+                    >
+                      {Math.round(photoZoomScale * 100)}%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoZoomScale((s) => Math.min(3, s + 0.25))}
+                      className="p-1.5 hover:bg-white rounded-md text-slate-700 transition-colors cursor-pointer"
+                      title="Phóng to"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Rotate */}
                   <button
                     type="button"
                     onClick={() => setPhotoRotation((r) => (r + 90) % 360)}
@@ -1912,7 +1974,32 @@ export const CartPage: React.FC<CartPageProps> = ({
                     <RotateCw className="w-3.5 h-3.5 text-slate-600" />
                     <span>Xoay ảnh</span>
                   </button>
+
+                  {/* Crop / Re-adjust */}
+                  {cartPhotoPreview.isCustomPhoto && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (cartPhotoPreview && typeof cartPhotoPreview.index === 'number') {
+                          const pIdx = cartPhotoPreview.index;
+                          const ratio = cartItems[pIdx]?.product.customPhotoAspectRatio || 'square';
+                          setCartCropData({
+                            isOpen: true,
+                            imageSrc: cartPhotoPreview.url,
+                            targetIdx: pIdx,
+                            aspectRatio: ratio
+                          });
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                      title="Căn chỉnh khung ảnh, zoom và cắt theo tỷ lệ chuẩn"
+                    >
+                      <Crop className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Căn chỉnh</span>
+                    </button>
+                  )}
                 </div>
+
                 <button
                   type="button"
                   onClick={() => setCartPhotoPreview(null)}
@@ -1923,6 +2010,20 @@ export const CartPage: React.FC<CartPageProps> = ({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Photo Crop & Zoom Adjustment Modal */}
+        {cartCropData && (
+          <PhotoCropModal
+            isOpen={cartCropData.isOpen}
+            imageSrc={cartCropData.imageSrc}
+            aspectRatio={cartCropData.aspectRatio}
+            onConfirm={handleCartCropConfirm}
+            onCancel={() => {
+              setCartCropData(null);
+              targetReplaceIdxRef.current = null;
+            }}
+          />
         )}
 
         {/* Global hidden file input for replacing custom print photos anytime */}

@@ -402,7 +402,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             style={{
               aspectRatio: `${getAspectRatioValue()}`
             }}
-            className={`relative w-full max-w-3xl max-h-[50vh] rounded-xl overflow-hidden border-2 border-amber-500 shadow-2xl select-none bg-black flex items-center justify-center ${
+            className={`relative w-full max-w-3xl max-h-[50vh] rounded-none overflow-hidden border-2 border-amber-500 shadow-2xl select-none bg-black flex items-center justify-center ${
               isDragging ? 'cursor-grabbing' : 'cursor-grab'
             }`}
           >

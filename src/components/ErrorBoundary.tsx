@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center bg-neutral-950 text-white select-none">
+        <div className="min-h-screen min-h-[100dvh] w-full flex-grow flex flex-col items-center justify-center p-6 text-center bg-neutral-950 text-white select-none">
           <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/10">
             <ShieldAlert className="w-8 h-8" />
           </div>

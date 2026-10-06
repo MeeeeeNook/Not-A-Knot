@@ -576,7 +576,7 @@ export async function exportOrdersWithImageOption({
   }
 
   // Package Excel + Images into a ZIP bundle
-  onProgress?.(hasCustomPhotos ? 'Đang thu thập và nén hình ảnh in theo yêu cầu của khách...' : 'Đang thu thập và nén hình ảnh bill & sản phẩm...');
+  onProgress?.(hasCustomPhotos ? 'Đang thu thập và nén hình ảnh in theo yêu cầu của khách...' : 'Đang thu thập và nén hình ảnh bill chuyển khoản...');
   const zip = new JSZip();
 
   // 1. Add Excel file to ZIP
@@ -627,22 +627,6 @@ export async function exportOrdersWithImageOption({
           const safeId = sanitizeFilename(ord.id || `ORD_${i + 1}`);
           billFolder.file(`Bill_Don_${safeId}.${imgObj.extension}`, imgObj.data);
           billCount++;
-        }
-      }
-    }
-
-    // 4. Fetch and add Product Images folder (only when includeImages is requested)
-    if (products && products.length > 0) {
-      const prodFolder = zip.folder('Anh_San_Pham');
-      let prodImgCount = 0;
-      for (const p of products) {
-        if (p.image) {
-          const imgObj = await fetchImageBlob(p.image);
-          if (imgObj && prodFolder) {
-            const safeName = sanitizeFilename(`${p.id}_${p.name}`);
-            prodFolder.file(`${safeName}.${imgObj.extension}`, imgObj.data);
-            prodImgCount++;
-          }
         }
       }
     }

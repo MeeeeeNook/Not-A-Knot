@@ -1370,10 +1370,10 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                 />
               </div>
 
-              {/* 3. Địa Chỉ Xưởng */}
+              {/* 3. Địa Chỉ Not A Knot */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-semibold text-slate-600">Địa Chỉ Xưởng</label>
+                  <label className="text-[11px] font-semibold text-slate-600">Địa Chỉ Not A Knot</label>
                   {config.address && (
                     <button
                       type="button"
@@ -1389,8 +1389,32 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                   type="text"
                   value={config.address || ''}
                   onChange={(e) => setConfig({ ...config, address: e.target.value })}
-                  placeholder="Để trống nếu không có"
+                  placeholder="Ví dụ: Đại học Kinh tế Quốc dân, Hà Nội"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white"
+                />
+              </div>
+
+              {/* 3b. Đường dẫn Google Maps */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-semibold text-slate-600">Liên Kết Google Maps (Tùy chọn)</label>
+                  {config.googleMapsUrl && (
+                    <a
+                      href={config.googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-blue-600 hover:underline"
+                    >
+                      Xem thử map ↗
+                    </a>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  value={config.googleMapsUrl || ''}
+                  onChange={(e) => setConfig({ ...config, googleMapsUrl: e.target.value })}
+                  placeholder="Để trống hệ thống sẽ tự tạo link tìm kiếm theo địa chỉ"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 outline-none focus:bg-white font-mono"
                 />
               </div>
 

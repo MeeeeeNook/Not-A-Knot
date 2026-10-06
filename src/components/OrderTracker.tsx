@@ -645,7 +645,7 @@ Trạng thái: ${payment}
 Phương thức: ${order.paymentMethod === 'bank_transfer' && order.source !== 'website' ? 'Chuyển khoản VietQR' : order.paymentMethod === 'cash' ? 'Tiền mặt tại xưởng' : 'Thanh toán khi nhận hàng (COD)'}
 ${order.shippingCarrier ? `Vận chuyển: ${order.shippingCarrier} ${order.shippingCode ? `(Mã: ${order.shippingCode})` : ''}\n` : ''}
 ----------------------------------------
-Hotline xưởng: ${hotline}
+Hotline shop: ${hotline}
 Cảm ơn quý khách đã tin tưởng và ủng hộ!
 ========================================`;
   };
@@ -889,13 +889,8 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
             <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs">
               <div className="pb-5 sm:pb-6 border-b border-slate-100">
                 
-                {/* Row 1 on mobile: Badges (Source + Status) neatly aligned */}
-                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/60 inline-flex items-center gap-1.5 shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    {getSourceBadgeConfig(activeOrder.source).label}
-                  </span>
-
+                {/* Row 1 on mobile: Status Badge neatly aligned to right */}
+                <div className="flex items-center justify-end gap-2 mb-3">
                   {/* Status Badge */}
                   <div className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-xl border font-bold text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     normalizeOrderStatus(activeOrder.status) === 'Đơn hàng giao thành công'
@@ -946,8 +941,8 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                   </div>
                 </div>
 
-                {/* Row 3: Key Info Grid (Clean structured cards with no awkward wrap or dangling dots) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mt-3.5 pt-3.5 border-t border-slate-100 text-xs text-slate-600">
+                {/* Row 3: Key Info Grid (Clean structured 2-column cards) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mt-3.5 pt-3.5 border-t border-slate-100 text-xs text-slate-600">
                   <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
                     <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
                     <span className="text-slate-500">Thời gian:</span>
@@ -961,13 +956,6 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     <strong className="text-slate-900 font-bold truncate max-w-[150px] sm:max-w-none ml-auto sm:ml-0">
                       {activeOrder.customerName || activeOrder.name}
                     </strong>
-                  </div>
-                  <div className="flex items-center gap-2 p-2.5 sm:p-0 rounded-xl bg-slate-50/80 sm:bg-transparent">
-                    <Phone className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="text-slate-500">Hotline:</span>
-                    <a href={`tel:${hotline.replace(/\s+/g, '')}`} className="text-amber-800 hover:underline font-bold font-mono ml-auto sm:ml-0">
-                      {hotline}
-                    </a>
                   </div>
                 </div>
 
@@ -1592,18 +1580,17 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
 
                   <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
                     <Phone className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Hotline xưởng đan: <strong className="text-slate-800">{hotline}</strong></span>
+                    <span>Hotline shop: <strong className="text-slate-800">{hotline}</strong></span>
                   </div>
-                </div>
-
-                {/* Lifetime Warranty Pledge */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 flex items-center gap-3 text-xs text-slate-600">
-                  <Sparkles className="w-5 h-5 text-amber-600 shrink-0" />
-                  <span>Cảm ơn quý khách đã tin tưởng & lựa chọn sản phẩm thủ công NOT A KNOT.</span>
                 </div>
 
               </div>
 
+            </div>
+
+            {/* Centered Thank You Footer Note (No box, no sparkles, cleanly centered) */}
+            <div className="text-center pt-3 pb-1 text-xs sm:text-sm text-slate-500 font-medium">
+              Cảm ơn quý khách đã tin tưởng & lựa chọn sản phẩm thủ công NOT A KNOT.
             </div>
 
           </div>
@@ -1989,11 +1976,11 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
               </div>
 
               {/* Photo Viewport */}
-              <div className="relative overflow-hidden bg-black/50 rounded-2xl flex items-center justify-center p-2 min-h-[260px] max-h-[460px] border border-slate-700/50">
+              <div className="relative overflow-hidden bg-black/50 rounded-none flex items-center justify-center p-2 min-h-[260px] max-h-[460px] border border-slate-700/50">
                 <img
                   src={viewingCustomPhoto.url}
-                  alt="Ảnh in theo yêu cầu"
-                  className="max-h-[420px] w-auto max-w-full object-contain rounded-lg transition-transform duration-200 shadow-md"
+                  alt=""
+                  className="max-h-[420px] w-auto max-w-full object-contain rounded-none transition-transform duration-200 shadow-md"
                   style={{ transform: `rotate(${photoModalRotation}deg)` }}
                 />
               </div>

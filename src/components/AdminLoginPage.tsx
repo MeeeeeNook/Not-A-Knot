@@ -70,7 +70,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
   return (
     <div
-      className="min-h-screen w-full relative flex flex-col items-center justify-between p-4 sm:p-8 select-none bg-cover bg-center overflow-y-auto"
+      className="min-h-screen min-h-[100dvh] w-full flex-grow relative flex flex-col items-center justify-between p-4 sm:p-8 select-none bg-cover bg-center overflow-y-auto"
       style={{
         backgroundImage: "url('/assets/admin-login-bg.jpg')",
         backgroundColor: '#0a160f'

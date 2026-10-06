@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
@@ -616,7 +617,8 @@ async function startServer() {
 
       let photoUrl = `/api/custom-photos/${photoId}`;
       try {
-        if (serverStorage) {
+        const serverAuth = getAuth(fbApp);
+        if (serverAuth?.currentUser && serverStorage) {
           const sRef = storageRef(serverStorage, `${prefix || 'custom_photos'}/${photoId}.jpg`);
           const snapshot = await uploadBytes(sRef, buffer, {
             contentType: mimeType,
@@ -627,8 +629,8 @@ async function startServer() {
             photoUrl = fbStorageUrl;
           }
         }
-      } catch (stErr) {
-        console.warn('[Server Storage upload notice]:', stErr);
+      } catch {
+        // Fallback gracefully to self-hosted /api/custom-photos/:photoId URL
       }
 
       return res.json({
@@ -678,6 +680,87 @@ async function startServer() {
       return res.status(404).send('Không tìm thấy ảnh');
     } catch (err) {
       return res.status(500).send('Lỗi khi tải ảnh');
+    }
+  });
+
+  // POST /api/import-external-image
+  // Fetches any external image (e.g. from Facebook CDN, Instagram, or external host)
+  // converts to Base64 data URL and saves to permanent storage / Firestore so it never expires!
+  app.post('/api/import-external-image', async (req: Request, res: Response) => {
+    try {
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ success: false, error: 'Thiếu đường dẫn hình ảnh hợp lệ' });
+      }
+
+      const trimmedUrl = url.trim();
+      if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
+        return res.status(400).json({ success: false, error: 'Đường dẫn phải bắt đầu bằng http:// hoặc https://' });
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const fetchRes = await fetch(trimmedUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+          'Referer': trimmedUrl.includes('facebook.com') || trimmedUrl.includes('fbcdn.net') ? 'https://www.facebook.com/' : ''
+        }
+      });
+      clearTimeout(timeoutId);
+
+      if (!fetchRes.ok) {
+        return res.status(400).json({
+          success: false,
+          error: `Máy chủ ảnh phản hồi mã lỗi ${fetchRes.status}. Có thể liên kết Facebook đã hết hạn bảo mật (lỗi 403/404).`
+        });
+      }
+
+      const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      if (buffer.length > 20 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: 'Ảnh vượt quá kích thước 20MB' });
+      }
+
+      const base64Data = `data:${contentType};base64,${buffer.toString('base64')}`;
+
+      // Persist to uploaded_custom_photos for permanent direct URL access and Firestore durability
+      const photoId = `imported_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+      try {
+        if (firestoreDb) {
+          const docRef = doc(firestoreDb, 'uploaded_custom_photos', photoId);
+          await setDoc(docRef, {
+            photoId,
+            mimeType: contentType,
+            prefix: 'social_feed_import',
+            data: base64Data,
+            createdAt: new Date().toISOString()
+          });
+        }
+        customPhotosStore.set(photoId, { buffer, mimeType: contentType, createdAt: Date.now() });
+      } catch (saveErr) {
+        console.warn('[Import External Image Save Error]:', saveErr);
+      }
+
+      return res.json({
+        success: true,
+        base64: base64Data,
+        permanentUrl: `/api/custom-photos/${photoId}`,
+        contentType,
+        size: buffer.length
+      });
+    } catch (err: any) {
+      console.warn('[API Import External Image Error]:', err);
+      const isAbort = err?.name === 'AbortError';
+      return res.status(500).json({
+        success: false,
+        error: isAbort ? 'Quá thời gian kết nối tải ảnh (15s)' : (err?.message || 'Lỗi khi tải ảnh từ đường dẫn')
+      });
     }
   });
 

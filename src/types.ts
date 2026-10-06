@@ -561,6 +561,7 @@ export interface SiteContentConfig {
   phone: string;
   zalo: string;
   address: string;
+  googleMapsUrl?: string;
   email: string;
   bankAccount?: BankAccountConfig;
   heroSlides: SiteHeroSlide[];

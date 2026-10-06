@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Share2, 
   Save, 
@@ -18,8 +18,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { SiteContentConfig, SocialFeedConfig, SocialFeedPost } from '../../types';
-import { saveSiteContentToFirestore, uploadBase64ToStorage, compressBase64Image } from '../../firebase';
-import { isFacebookImageUrl, triggerFacebookImageWarning } from './FacebookImageWarningModal';
+import { saveSiteContentToFirestore, compressBase64Image } from '../../firebase';
+import { autoImportAndSaveExternalImage } from '../../utils/imageUtils';
 
 interface AdminSocialFeedManagerProps {
   siteContent: SiteContentConfig;
@@ -87,6 +87,7 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [isDraggingOver, setIsDraggingOver] = useState<boolean>(false);
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [isImportingUrl, setIsImportingUrl] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -101,6 +102,23 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
       };
       return { ...prev, posts: nextPosts };
     });
+  };
+
+  const handleAutoImportExternalImage = async (targetUrl?: string) => {
+    const urlToImport = (targetUrl || currentPost.image || '').trim();
+    if (!urlToImport || !urlToImport.startsWith('http')) return;
+
+    setIsImportingUrl(true);
+    try {
+      const permanentData = await autoImportAndSaveExternalImage(urlToImport);
+      if (permanentData && permanentData !== urlToImport) {
+        handleUpdatePostField('image', permanentData);
+      }
+    } catch (err: any) {
+      console.warn('Silent auto import notice:', err);
+    } finally {
+      setIsImportingUrl(false);
+    }
   };
 
   const handleFileProcess = async (file: File) => {
@@ -316,48 +334,20 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
               
               {/* Photo Upload & Drag-and-Drop Zone */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-800 block">Ảnh bài viết</label>
+                <label className="text-xs font-bold text-slate-800 block">Up ảnh</label>
                 
-                {/* Drag and Drop Box */}
+                {/* Unified Dropzone matching Admin style */}
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`relative border-2 border-dashed rounded-2xl p-4 transition-all cursor-pointer flex flex-col sm:flex-row items-center gap-4 ${
+                  className={`relative border-2 border-dashed rounded-2xl p-4 sm:p-5 transition-all cursor-pointer flex flex-col items-center justify-center text-center space-y-2 ${
                     isDraggingOver
-                      ? 'border-amber-500 bg-amber-50 scale-[1.01]'
-                      : 'border-slate-200 hover:border-amber-400 bg-slate-50/70 hover:bg-amber-50/20'
+                      ? 'border-amber-500 bg-amber-100/90 scale-[1.01] ring-4 ring-amber-400/30'
+                      : 'border-amber-300/80 bg-amber-50/50 hover:border-amber-500 hover:bg-amber-50/90'
                   }`}
                 >
-                  {/* Current image preview */}
-                  <div className="w-20 h-20 rounded-2xl overflow-hidden border border-slate-200 bg-white shrink-0 shadow-2xs relative">
-                    <img
-                      src={currentPost.image}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLElement).setAttribute('src', '/assets/no-image.svg');
-                      }}
-                    />
-                    {isUploadingImage && (
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white">
-                        <RefreshCw className="w-5 h-5 animate-spin text-amber-400" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Dropzone text */}
-                  <div className="flex-1 text-center sm:text-left space-y-1">
-                    <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-slate-800">
-                      <CloudUpload className="w-4 h-4 text-amber-600" />
-                      <span>{isUploadingImage ? 'Đang xử lý tải ảnh...' : 'Kéo thả ảnh vào đây hoặc bấm để chọn'}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Hỗ trợ định dạng PNG, JPG, WEBP. Ảnh hiển thị trọn vẹn theo phong cách kính mờ.
-                    </p>
-                  </div>
-
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -365,61 +355,67 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                     onChange={handleImageFileUpload}
                     className="hidden"
                   />
+                  <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shadow-xs">
+                    {isUploadingImage || isImportingUrl ? (
+                      <RefreshCw className="w-5 h-5 text-amber-700 animate-spin" />
+                    ) : (
+                      <Upload className="w-5 h-5 text-amber-700" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xs sm:text-sm font-black text-slate-900">
+                      Kéo thả ảnh vào đây hoặc <span className="text-amber-700 underline underline-offset-2">Bấm để tải từ máy</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">
+                      Hỗ trợ PNG, JPG, WEBP
+                    </div>
+                  </div>
                 </div>
 
-                {/* Direct image link input */}
-                <div>
+                {/* Direct image link input: Automatically imports silently on paste or blur */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-500">Hoặc dán URL ảnh trực tiếp (tự động lưu vào hệ thống)</span>
+                    {isImportingUrl && (
+                      <span className="text-[11px] text-amber-600 font-semibold flex items-center gap-1">
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        Đang lưu ảnh...
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={currentPost.image}
                     onPaste={(e) => {
                       const pasted = e.clipboardData?.getData('text') || '';
-                      if (isFacebookImageUrl(pasted)) {
-                        triggerFacebookImageWarning(pasted);
+                      if (pasted.startsWith('http://') || pasted.startsWith('https://')) {
+                        handleAutoImportExternalImage(pasted);
                       }
                     }}
                     onChange={(e) => {
                       const val = e.target.value;
                       handleUpdatePostField('image', val);
-                      if (isFacebookImageUrl(val)) {
-                        triggerFacebookImageWarning(val);
+                    }}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if ((val.startsWith('http://') || val.startsWith('https://')) && !val.startsWith('data:image/')) {
+                        handleAutoImportExternalImage(val);
                       }
                     }}
-                    placeholder="Hoặc dán URL ảnh trực tiếp (https://..., /assets/...)"
+                    placeholder="https://... (dán link web, facebook... tự động lưu vào hệ thống)"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono text-slate-600 focus:outline-none focus:border-amber-500"
                   />
-                  {currentPost.image && isFacebookImageUrl(currentPost.image) && (
-                    <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2 shadow-2xs">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div className="flex-1 space-y-1">
-                        <p>
-                          <strong>Cảnh báo link Facebook (hết hạn sau 24–48h):</strong> Link ảnh từ CDN của Facebook sẽ tự động bị khóa sau 24-48 giờ (lỗi 403). Hãy tải ảnh về máy rồi bấm chọn ảnh ở trên để hệ thống lưu trữ vĩnh viễn trên Cloud!
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => triggerFacebookImageWarning(currentPost.image)}
-                          className="inline-flex items-center gap-1 text-amber-800 font-bold hover:underline cursor-pointer"
-                        >
-                          <span>Xem hướng dẫn xử lý</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Caption / Description with Line Break Support */}
+              {/* Description */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-800">Lời dẫn bài viết (Caption & Mô tả chi tiết)</label>
-                  <span className="text-[11px] text-slate-400">Hỗ trợ xuống dòng (Enter) thoải mái</span>
-                </div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Description</label>
                 <textarea
                   rows={4}
                   value={currentPost.caption}
                   onChange={(e) => handleUpdatePostField('caption', e.target.value)}
-                  placeholder="Nhập mô tả bài viết. Bạn có thể nhấn phím Enter để xuống dòng theo ý muốn..."
+                  placeholder="Nhập mô tả bài viết..."
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-amber-500 resize-y whitespace-pre-line leading-relaxed"
                 />
               </div>
@@ -449,14 +445,6 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                 </div>
               </div>
 
-              {/* Styling note */}
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-                <span className="font-bold text-slate-800 block">Định dạng hiển thị chuẩn:</span>
-                <p className="text-[11px] text-slate-500">
-                  Tất cả các card được tự động áp dụng lớp kính mờ trắng tinh tế (<code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">white tinted glass</code>) với đường viền đen sắc nét (<code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">black border</code>), không còn dải gradient màu mè.
-                </p>
-              </div>
-
             </div>
 
           </div>
@@ -468,7 +456,7 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
               <Eye className="w-4 h-4 text-amber-500" />
-              <span>Xem Trước Trực Tiếp</span>
+              <span>Xem trước</span>
             </h2>
 
             {/* Toggle Desktop vs Mobile Preview */}
@@ -594,12 +582,6 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
                 </div>
               </div>
             )}
-          </div>
-
-          <div className="text-center">
-            <span className="text-xs text-slate-400">
-              Nhấn trực tiếp vào bất kỳ ô nào trong khung xem trước để chuyển nhanh sang chỉnh sửa ô đó.
-            </span>
           </div>
         </div>
 

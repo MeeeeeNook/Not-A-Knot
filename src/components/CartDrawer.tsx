@@ -28,7 +28,9 @@ import {
   Eye,
   Camera,
   RotateCw,
-  Crop
+  Crop,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { PhotoCropModal } from './PhotoCropModal';
@@ -99,6 +101,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     isCustomPhoto?: boolean;
   } | null>(null);
   const [photoRotation, setPhotoRotation] = useState<number>(0);
+  const [photoZoomScale, setPhotoZoomScale] = useState<number>(1);
   const [isReplacingPhoto, setIsReplacingPhoto] = useState<boolean>(false);
   const [replaceSuccessToast, setReplaceSuccessToast] = useState<string | null>(null);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
@@ -166,15 +169,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setCartCropData(null);
     targetReplaceIdxRef.current = null;
 
-    if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
-      setCartPhotoPreview((prev) => (prev ? { ...prev, url: croppedDataUrl } : null));
-      setPhotoRotation(0);
-    }
+    // Immediately display preview with zoom & rotate interface
+    setCartPhotoPreview({
+      index: targetIdx,
+      url: croppedDataUrl,
+      title: cartItems[targetIdx]?.product.name || 'Ảnh in custom',
+      note: currentNote,
+      isCustomPhoto: true
+    });
+    setPhotoRotation(0);
+    setPhotoZoomScale(1);
 
     if (onUpdateItemPhoto) {
       onUpdateItemPhoto(targetIdx, croppedDataUrl, currentNote);
     }
-    setReplaceSuccessToast('Đã đổi ảnh in thành công!');
+    setReplaceSuccessToast('Đã lưu ảnh in và căn chỉnh thành công!');
     setTimeout(() => setReplaceSuccessToast(null), 3000);
 
     // Upload to Firebase Storage in background
@@ -976,16 +985,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                             isCustomPhoto: true
                                           });
                                           setPhotoRotation(0);
+                                          setPhotoZoomScale(1);
                                         }}
                                         className="relative group/custompic cursor-pointer shrink-0"
                                         title="Bấm xem ảnh in theo yêu cầu"
                                       >
                                         <img
                                           src={item.customPhotoUrl}
-                                          alt="Ảnh in theo yêu cầu"
-                                          className="w-5 h-5 rounded-md object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform"
+                                          alt=""
+                                          className="w-5 h-5 rounded-none object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform"
                                         />
-                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/custompic:opacity-100 rounded-md transition-opacity flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/custompic:opacity-100 rounded-none transition-opacity flex items-center justify-center">
                                           <Eye className="w-2.5 h-2.5 text-white" />
                                         </div>
                                       </button>
@@ -1008,6 +1018,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                             isCustomPhoto: true
                                           });
                                           setPhotoRotation(0);
+                                          setPhotoZoomScale(1);
                                         }}
                                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
                                         title="Xem ảnh in bạn đã tải lên"
@@ -1030,6 +1041,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         Ghi chú in: <span className="font-semibold text-rose-900">"{item.customPhotoNote}"</span>
                                       </div>
                                     )}
+                                  </div>
+                                )}
+
+                                {Boolean(item.product.enableCustomPhoto || item.product.customPhotoTitle) && !item.customPhotoUrl && (
+                                  <div className="pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTriggerReplacePhoto(idx)}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-dashed border-rose-300 hover:border-rose-400 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                                      title="Tải ảnh in theo yêu cầu cho sản phẩm này"
+                                    >
+                                      <Camera className="w-3.5 h-3.5 text-rose-500" />
+                                      <span>+ Thêm ảnh in theo yêu cầu</span>
+                                    </button>
                                   </div>
                                 )}
                                 {item.selectedSize && (
@@ -1766,14 +1791,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </button>
             </div>
 
-            {/* Lightbox Image Preview */}
-            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[260px] max-h-[55vh] overflow-hidden">
+            {/* Lightbox Image Preview with Zoom & Rotate */}
+            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[260px] max-h-[55vh] overflow-hidden relative select-none">
               <img
                 src={cartPhotoPreview.url}
-                alt="Ảnh phóng to"
-                style={{ transform: `rotate(${photoRotation}deg)` }}
-                className="max-h-[50vh] max-w-full object-contain rounded-lg shadow-lg transition-transform duration-200"
+                alt=""
+                style={{ transform: `rotate(${photoRotation}deg) scale(${photoZoomScale})` }}
+                className="max-h-[50vh] max-w-full object-contain rounded-none shadow-lg transition-transform duration-200"
               />
+              {photoZoomScale !== 1 && (
+                <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold backdrop-blur-xs border border-white/20">
+                  {Math.round(photoZoomScale * 100)}%
+                </div>
+              )}
             </div>
 
             {/* Note & Details */}
@@ -1814,6 +1844,36 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     )}
                   </button>
                 )}
+
+                {/* Zoom controls */}
+                <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg border border-slate-300/60">
+                  <button
+                    type="button"
+                    onClick={() => setPhotoZoomScale((s) => Math.max(0.75, s - 0.25))}
+                    className="p-1.5 hover:bg-white rounded-md text-slate-700 transition-colors cursor-pointer"
+                    title="Thu nhỏ"
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoZoomScale(1)}
+                    className="px-1.5 py-1 text-[10px] font-bold text-slate-600 hover:bg-white rounded-md transition-colors cursor-pointer"
+                    title="Đặt lại kích thước 100%"
+                  >
+                    {Math.round(photoZoomScale * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoZoomScale((s) => Math.min(3, s + 0.25))}
+                    className="p-1.5 hover:bg-white rounded-md text-slate-700 transition-colors cursor-pointer"
+                    title="Phóng to"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Rotate button */}
                 <button
                   type="button"
                   onClick={() => setPhotoRotation((r) => (r + 90) % 360)}
