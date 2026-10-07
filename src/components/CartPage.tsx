@@ -366,6 +366,10 @@ export const CartPage: React.FC<CartPageProps> = ({
       setVoucherError('Vui lòng nhập mã voucher.');
       return;
     }
+    if (code === 'GIAM100K') {
+      setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
+      return;
+    }
     const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee);
     if (!res.isValid || !res.voucher) {
       setVoucherError(res.message || 'Mã voucher không hợp lệ.');
@@ -1274,9 +1278,9 @@ export const CartPage: React.FC<CartPageProps> = ({
                     <div className="flex items-center gap-2">
                       <input type="text" value={voucherInput}
                         onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null); }}
-                        placeholder="Nhập mã giảm giá hoặc freeship"
-                        aria-label="Mã giảm giá hoặc freeship"
-                        className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs uppercase" />
+                        placeholder="Ví dụ: GIAM100K"
+                        aria-label="Ví dụ: GIAM100K"
+                        className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs uppercase placeholder:normal-case" />
                       <button type="button" onClick={handleApplyVoucher}
                         className="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs">Áp dụng</button>
                     </div>

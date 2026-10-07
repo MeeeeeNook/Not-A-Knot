@@ -219,6 +219,10 @@ export function validateVoucherCode(
     return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Vui lòng nhập mã voucher.' };
   }
 
+  if (cleanCode === 'GIAM100K') {
+    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Đây chỉ là ví dụ thôi hahahahaha' };
+  }
+
   const voucher = vouchers.find((v) => v.code.toUpperCase().trim() === cleanCode);
   if (!voucher) {
     return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Mã voucher không tồn tại.' };
