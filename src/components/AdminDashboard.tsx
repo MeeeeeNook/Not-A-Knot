@@ -24,6 +24,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { AdminHeatmapSection } from './AdminHeatmapSection';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 
 const SLICE_COLORS = [
   '#2563EB', // Blue
@@ -872,59 +873,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div id="admin-dashboard-section" className="space-y-5">
       {/* Top Controls & Comprehensive Filters */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3.5">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
-                Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh
-              </h3>
-              {selectedSellerFilter !== 'all' && (
-                <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold inline-flex items-center gap-1">
-                  <UserCheck className="w-3 h-3 text-amber-600" />
-                  {sellers.find(s => s.username === selectedSellerFilter || s.id === selectedSellerFilter)?.name || (selectedSellerFilter === 'website' ? 'Website' : selectedSellerFilter === 'social_media' ? 'Mạng xã hội' : selectedSellerFilter)}
-                </span>
-              )}
-              {selectedSourceFilter !== 'all' && (
-                <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-900 border border-sky-300 text-[10px] font-bold inline-flex items-center gap-1">
-                  <Globe className="w-3 h-3 text-sky-600" />
-                  {selectedSourceFilter === 'website' ? 'Nguồn Website' : selectedSourceFilter === 'social_media' ? 'Nguồn Mạng xã hội' : 'Nguồn Trực tiếp'}
-                </span>
-              )}
-              {selectedCategoryFilter !== 'all' && (
-                <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-300 text-[10px] font-bold inline-flex items-center gap-1">
-                  <Layers className="w-3 h-3 text-indigo-600" />
-                  {categories.find(c => c.id === selectedCategoryFilter)?.label || selectedCategoryFilter}
-                </span>
-              )}
-              {(dateFrom || dateTo) && (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-bold inline-flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-emerald-600" />
-                  {formatDisplayDateRange(dateFrom, dateTo, timeRange)}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và theo từng nhân sự bán hàng
-            </p>
+      <AdminTabHeader
+        icon={<TrendingUp className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Thống Kê Doanh Thu & Hiệu Suất"
+        title="Báo Cáo Doanh Thu & Chỉ Số Kinh Doanh"
+        description="Thống kê số liệu kinh doanh từ các kênh bán hàng trực tuyến và theo từng nhân sự bán hàng"
+        badge={
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {selectedSellerFilter !== 'all' && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 text-[10px] font-bold inline-flex items-center gap-1">
+                <UserCheck className="w-3 h-3 text-amber-600" />
+                {sellers.find(s => s.username === selectedSellerFilter || s.id === selectedSellerFilter)?.name || (selectedSellerFilter === 'website' ? 'Website' : selectedSellerFilter === 'social_media' ? 'Mạng xã hội' : selectedSellerFilter)}
+              </span>
+            )}
+            {selectedSourceFilter !== 'all' && (
+              <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-900 border border-sky-300 text-[10px] font-bold inline-flex items-center gap-1">
+                <Globe className="w-3 h-3 text-sky-600" />
+                {selectedSourceFilter === 'website' ? 'Nguồn Website' : selectedSourceFilter === 'social_media' ? 'Nguồn Mạng xã hội' : 'Nguồn Trực tiếp'}
+              </span>
+            )}
+            {selectedCategoryFilter !== 'all' && (
+              <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-300 text-[10px] font-bold inline-flex items-center gap-1">
+                <Layers className="w-3 h-3 text-indigo-600" />
+                {categories.find(c => c.id === selectedCategoryFilter)?.label || selectedCategoryFilter}
+              </span>
+            )}
+            {(dateFrom || dateTo) && (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-900 border border-emerald-300 text-[10px] font-bold inline-flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-emerald-600" />
+                {formatDisplayDateRange(dateFrom, dateTo, timeRange)}
+              </span>
+            )}
           </div>
-
-          {/* Reset button if any filter is applied */}
-          {isAnyFilterActive && (
+        }
+        actions={
+          isAnyFilterActive ? (
             <button
               type="button"
               onClick={resetAllFilters}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer shrink-0"
               title="Đặt lại toàn bộ bộ lọc về mặc định"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3.5 h-3.5" />
               <span>Đặt lại bộ lọc</span>
             </button>
-          )}
-        </div>
-
+          ) : undefined
+        }
+      >
         {/* Filters Row */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           {/* Seller Filter Selector */}
           <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs">
             <UserCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -1122,7 +1120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ))}
           </div>
         </div>
-      </div>
+      </AdminTabHeader>
 
       {/* KPI Highlight Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">

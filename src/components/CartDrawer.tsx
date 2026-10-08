@@ -30,10 +30,14 @@ import {
   RotateCw,
   Crop,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { saveOrderToFirestore } from '../firebase';
 import { PhotoCropModal } from './PhotoCropModal';
+import { PhotoQuantityConfirmModal } from './PhotoQuantityConfirmModal';
+import { PhotoDeleteSelectModal } from './PhotoDeleteSelectModal';
 import { sendOrderConfirmationEmail } from '../utils/emailService';
 import {
   trackGA4BeginCheckout,
@@ -59,7 +63,13 @@ interface CartDrawerProps {
   onClearCart: () => void;
   onOrderPlaced: (orderData: any) => void;
   onOpenOrderTracker?: (trackingCode: string) => void;
-  onUpdateItemPhoto?: (index: number, newPhotoUrl: string, newPhotoNote?: string) => void;
+  onUpdateItemPhoto?: (
+    index: number,
+    newPhotoUrl: string,
+    newPhotoNote?: string,
+    newPhotoUrls?: string[],
+    newQuantity?: number
+  ) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -99,6 +109,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     title: string;
     note?: string;
     isCustomPhoto?: boolean;
+    urls?: string[];
+    activePhotoIdx?: number;
   } | null>(null);
   const [photoRotation, setPhotoRotation] = useState<number>(0);
   const [photoZoomScale, setPhotoZoomScale] = useState<number>(1);
@@ -108,12 +120,125 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [editNoteValue, setEditNoteValue] = useState<string>('');
   const [cartCropData, setCartCropData] = useState<{
     isOpen: boolean;
-    imageSrc: string;
+    imageSrc?: string;
+    imageSrcs?: string[];
     targetIdx: number;
     aspectRatio: string;
+    mode: 'replace' | 'append';
   } | null>(null);
   const replaceFileInputRef = React.useRef<HTMLInputElement>(null);
+  const appendFileInputRef = React.useRef<HTMLInputElement>(null);
   const targetReplaceIdxRef = React.useRef<number | null>(null);
+  const targetAppendIdxRef = React.useRef<number | null>(null);
+  const [confirmModalItemIndex, setConfirmModalItemIndex] = useState<number | null>(null);
+  const [deleteModalItemIndex, setDeleteModalItemIndex] = useState<number | null>(null);
+
+  const handleDecreaseDrawerQuantity = (targetIdx: number) => {
+    const item = cartItems[targetIdx];
+    if (!item) return;
+    if (item.quantity <= 1) {
+      onRemoveItem(targetIdx);
+      return;
+    }
+    const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
+      ? item.customPhotoUrls
+      : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
+    if (pList.length > 1 && item.quantity <= pList.length) {
+      setDeleteModalItemIndex(targetIdx);
+      return;
+    }
+    onUpdateQuantity(targetIdx, item.quantity - 1);
+  };
+
+  const handleDeletePhotoDirect = (targetIdx: number, photoIdx: number) => {
+    if (!cartItems[targetIdx]) return;
+    const item = cartItems[targetIdx];
+    const prevList = item.customPhotoUrls && item.customPhotoUrls.length > 0
+      ? item.customPhotoUrls
+      : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
+    const updatedUrls = prevList.filter((_, i) => i !== photoIdx);
+    const newQty = Math.max(1, item.quantity - 1);
+    if (onUpdateItemPhoto) {
+      onUpdateItemPhoto(targetIdx, updatedUrls[0] || '', item.customPhotoNote, updatedUrls, newQty);
+    } else {
+      onUpdateQuantity(targetIdx, newQty);
+    }
+    if (cartPhotoPreview && cartPhotoPreview.index === targetIdx) {
+      if (updatedUrls.length > 0) {
+        const nextActiveIdx = Math.min(photoIdx, updatedUrls.length - 1);
+        setCartPhotoPreview((prev) => prev ? {
+          ...prev,
+          url: updatedUrls[nextActiveIdx],
+          urls: updatedUrls,
+          activePhotoIdx: nextActiveIdx
+        } : null);
+      } else {
+        setCartPhotoPreview(null);
+      }
+    }
+    setReplaceSuccessToast('Đã xóa 1 ảnh in theo yêu cầu.');
+    setTimeout(() => setReplaceSuccessToast(null), 2500);
+  };
+
+  const handleDeletePhotoFromDrawerItem = (photoIdx: number) => {
+    if (deleteModalItemIndex === null || !cartItems[deleteModalItemIndex]) return;
+    handleDeletePhotoDirect(deleteModalItemIndex, photoIdx);
+    setDeleteModalItemIndex(null);
+  };
+
+  const handleIncreaseDrawerQuantity = (targetIdx: number) => {
+    const item = cartItems[targetIdx];
+    if (!item) return;
+    if (item.customPhotoUrl || (item.customPhotoUrls && item.customPhotoUrls.length > 0)) {
+      setConfirmModalItemIndex(targetIdx);
+    } else {
+      onUpdateQuantity(targetIdx, item.quantity + 1);
+    }
+  };
+
+  const handleTriggerAppendPhoto = (targetIndex: number) => {
+    targetAppendIdxRef.current = targetIndex;
+    if (appendFileInputRef.current) {
+      appendFileInputRef.current.value = '';
+      appendFileInputRef.current.click();
+    }
+  };
+
+  const handleAppendPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const targetIdx = targetAppendIdxRef.current;
+    if (targetIdx === null || !cartItems[targetIdx]) return;
+
+    const fileList = Array.from(files);
+    const readers = fileList.map((file) => {
+      return new Promise<string>((resolve) => {
+        if (file.size > 10 * 1024 * 1024) {
+          resolve('');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve((ev.target?.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readers).then((newUrls) => {
+      const valid = newUrls.filter(Boolean);
+      if (valid.length > 0) {
+        const targetAspectRatio = cartItems[targetIdx].product.customPhotoAspectRatio || 'square';
+        setCartCropData({
+          isOpen: true,
+          imageSrcs: valid,
+          targetIdx,
+          aspectRatio: targetAspectRatio,
+          mode: 'append'
+        });
+      }
+    });
+    e.target.value = '';
+  };
 
   const handleTriggerReplacePhoto = (targetIndex: number) => {
     targetReplaceIdxRef.current = targetIndex;
@@ -124,78 +249,126 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   const handleReplacePhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     const targetIdx = targetReplaceIdxRef.current !== null 
       ? targetReplaceIdxRef.current 
       : (typeof cartPhotoPreview?.index === 'number' ? cartPhotoPreview.index : null);
     if (targetIdx === null || !cartItems[targetIdx]) return;
 
-    // Validate format
-    const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif|gif|bmp|tiff)$/i.test(file.name);
-    if (!isImage) {
-      alert('Tệp được chọn không phải là định dạng ảnh. Vui lòng chỉ chọn tệp ảnh hợp lệ (JPG, PNG, HEIC, WEBP).');
-      e.target.value = '';
-      return;
-    }
-
-    // Validate size (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Dung lượng ảnh vượt quá 10MB. Vui lòng chọn ảnh có dung lượng tối đa 10MB.');
-      e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const src = ev.target?.result as string;
-      const targetAspectRatio = cartItems[targetIdx].product.customPhotoAspectRatio || 'square';
-      setCartCropData({
-        isOpen: true,
-        imageSrc: src,
-        targetIdx,
-        aspectRatio: targetAspectRatio
+    const fileList = Array.from(files);
+    const readers = fileList.map((file) => {
+      return new Promise<string>((resolve) => {
+        if (file.size > 10 * 1024 * 1024) {
+          resolve('');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve((ev.target?.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
       });
-    };
-    reader.readAsDataURL(file);
+    });
+
+    Promise.all(readers).then((newUrls) => {
+      const valid = newUrls.filter(Boolean);
+      if (valid.length > 0) {
+        setCartPhotoPreview(null);
+        const targetAspectRatio = cartItems[targetIdx].product.customPhotoAspectRatio || 'square';
+        setCartCropData({
+          isOpen: true,
+          imageSrcs: valid,
+          targetIdx,
+          aspectRatio: targetAspectRatio,
+          mode: 'replace'
+        });
+      }
+    });
     e.target.value = '';
   };
 
-  const handleCartCropConfirm = async (croppedDataUrl: string) => {
-    if (!cartCropData) return;
+  const handleCartCropConfirmMultiple = async (croppedDataUrls: string[]) => {
+    if (!cartCropData || !croppedDataUrls || croppedDataUrls.length === 0) return;
     const targetIdx = cartCropData.targetIdx;
     const currentNote = cartItems[targetIdx]?.customPhotoNote || cartPhotoPreview?.note;
+    const isAppendMode = cartCropData.mode === 'append';
 
     setCartCropData(null);
     targetReplaceIdxRef.current = null;
+    targetAppendIdxRef.current = null;
 
-    // Immediately display preview with zoom & rotate interface
-    setCartPhotoPreview({
-      index: targetIdx,
-      url: croppedDataUrl,
-      title: cartItems[targetIdx]?.product.name || 'Ảnh in custom',
-      note: currentNote,
-      isCustomPhoto: true
-    });
-    setPhotoRotation(0);
-    setPhotoZoomScale(1);
+    if (isAppendMode) {
+      const prevUrls = cartItems[targetIdx]?.customPhotoUrls && cartItems[targetIdx].customPhotoUrls.length > 0
+        ? cartItems[targetIdx].customPhotoUrls
+        : (cartItems[targetIdx]?.customPhotoUrl ? [cartItems[targetIdx].customPhotoUrl] : []);
+      const updatedUrls = [...prevUrls, ...croppedDataUrls];
+      const newQty = (cartItems[targetIdx]?.quantity || 1) + croppedDataUrls.length;
 
-    if (onUpdateItemPhoto) {
-      onUpdateItemPhoto(targetIdx, croppedDataUrl, currentNote);
+      setCartPhotoPreview({
+        index: targetIdx,
+        url: croppedDataUrls[0],
+        title: cartItems[targetIdx]?.product.name || 'Ảnh in custom',
+        note: currentNote,
+        isCustomPhoto: true,
+        urls: updatedUrls,
+        activePhotoIdx: updatedUrls.length - 1
+      });
+      setPhotoRotation(0);
+      setPhotoZoomScale(1);
+
+      if (onUpdateItemPhoto) {
+        onUpdateItemPhoto(targetIdx, updatedUrls[0], currentNote, updatedUrls, newQty);
+      } else {
+        onUpdateQuantity(targetIdx, newQty);
+      }
+      setReplaceSuccessToast(`Đã thêm ${croppedDataUrls.length} ảnh in mới! Số lượng đã tăng lên ${newQty}. ✨`);
+    } else {
+      const updatedUrls = croppedDataUrls;
+      setCartPhotoPreview({
+        index: targetIdx,
+        url: updatedUrls[0],
+        title: cartItems[targetIdx]?.product.name || 'Ảnh in custom',
+        note: currentNote,
+        isCustomPhoto: true,
+        urls: updatedUrls,
+        activePhotoIdx: 0
+      });
+      setPhotoRotation(0);
+      setPhotoZoomScale(1);
+
+      if (onUpdateItemPhoto) {
+        onUpdateItemPhoto(targetIdx, updatedUrls[0], currentNote, updatedUrls);
+      }
+      setReplaceSuccessToast('Đã lưu ảnh in và căn chỉnh thành công!');
     }
-    setReplaceSuccessToast('Đã lưu ảnh in và căn chỉnh thành công!');
     setTimeout(() => setReplaceSuccessToast(null), 3000);
 
     // Upload to Firebase Storage in background
     try {
       const { uploadCustomPhotoImmediately } = await import('../firebase');
-      const uploadedUrl = await uploadCustomPhotoImmediately(croppedDataUrl, 'cart_photos');
-      if (uploadedUrl && uploadedUrl.startsWith('http') && onUpdateItemPhoto) {
-        onUpdateItemPhoto(targetIdx, uploadedUrl, currentNote);
+      const cloudUploadPromises = croppedDataUrls.map((u) =>
+        uploadCustomPhotoImmediately(u, 'cart_photos').catch(() => u)
+      );
+      const uploadedUrls = await Promise.all(cloudUploadPromises);
+      if (uploadedUrls.some((u) => u && u.startsWith('http')) && onUpdateItemPhoto) {
+        if (isAppendMode) {
+          const currentList = cartItems[targetIdx]?.customPhotoUrls || croppedDataUrls;
+          const replacedList = currentList.map((u) => {
+            const matchIdx = croppedDataUrls.indexOf(u);
+            return matchIdx !== -1 && uploadedUrls[matchIdx] ? uploadedUrls[matchIdx] : u;
+          });
+          onUpdateItemPhoto(targetIdx, replacedList[0], currentNote, replacedList);
+        } else {
+          onUpdateItemPhoto(targetIdx, uploadedUrls[0] || croppedDataUrls[0], currentNote, uploadedUrls);
+        }
       }
     } catch (uploadErr) {
       console.warn('[CartDrawer] Cloud upload notice:', uploadErr);
     }
+  };
+
+  const handleCartCropConfirm = async (croppedDataUrl: string) => {
+    return handleCartCropConfirmMultiple([croppedDataUrl]);
   };
 
   // Voucher states
@@ -527,6 +700,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         selectedSize: item.selectedSize,
         customNote: item.customNote,
         customPhotoUrl: item.customPhotoUrl,
+        customPhotoUrls: item.customPhotoUrls && item.customPhotoUrls.length > 0 ? item.customPhotoUrls : (item.customPhotoUrl ? [item.customPhotoUrl] : undefined),
         customPhotoNote: item.customPhotoNote,
         customPhotoPrice: item.customPhotoPrice,
         selectedComboItems: item.selectedComboItems
@@ -975,78 +1149,105 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                   </div>
                                 )}
 
-                                {item.customPhotoUrl && (
-                                  <div className="space-y-1.5 pt-0.5">
-                                    <div className="flex items-center gap-1.5 flex-wrap bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200/90 px-2 py-1 rounded-xl w-fit shadow-2xs">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setCartPhotoPreview({
-                                            index: idx,
-                                            url: item.customPhotoUrl!,
-                                            title: item.product.name,
-                                            note: item.customPhotoNote,
-                                            isCustomPhoto: true
-                                          });
-                                          setPhotoRotation(0);
-                                          setPhotoZoomScale(1);
-                                        }}
-                                        className="relative group/custompic cursor-pointer shrink-0"
-                                        title="Bấm xem ảnh in theo yêu cầu"
-                                      >
-                                        <img
-                                          src={item.customPhotoUrl}
-                                          alt=""
-                                          className="w-5 h-5 rounded-none object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform"
-                                        />
-                                        <div className="absolute inset-0 bg-black/25 opacity-0 group-hover/custompic:opacity-100 rounded-none transition-opacity flex items-center justify-center">
-                                          <Eye className="w-2.5 h-2.5 text-white" />
+                                {(item.customPhotoUrl || (item.customPhotoUrls && item.customPhotoUrls.length > 0)) && (() => {
+                                  const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
+                                    ? item.customPhotoUrls
+                                    : [item.customPhotoUrl!];
+                                  return (
+                                    <div className="space-y-1.5 pt-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200/90 px-2 py-1 rounded-xl w-fit shadow-2xs">
+                                        <div className="flex items-center -space-x-1.5">
+                                          {pList.map((u, pIdx) => (
+                                            <div key={pIdx} className="relative group/custompic shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setCartPhotoPreview({
+                                                    index: idx,
+                                                    url: u,
+                                                    title: item.product.name,
+                                                    note: item.customPhotoNote,
+                                                    isCustomPhoto: true,
+                                                    urls: pList,
+                                                    activePhotoIdx: pIdx
+                                                  });
+                                                  setPhotoRotation(0);
+                                                  setPhotoZoomScale(1);
+                                                }}
+                                                className="relative cursor-pointer shrink-0 block"
+                                                title={`Bấm xem ảnh #${pIdx + 1}`}
+                                              >
+                                                <img
+                                                  src={u}
+                                                  alt=""
+                                                  className="w-5 h-5 rounded-md object-cover border border-rose-300 shadow-2xs group-hover/custompic:scale-110 transition-transform bg-white"
+                                                />
+                                              </button>
+                                              {pList.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDeletePhotoDirect(idx, pIdx);
+                                                  }}
+                                                  className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover/custompic:opacity-100 transition-opacity shadow-xs cursor-pointer z-10"
+                                                  title={`Xóa ảnh #${pIdx + 1}`}
+                                                >
+                                                  <X className="w-2 h-2 stroke-[3]" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          ))}
                                         </div>
-                                      </button>
-                                      <span className="text-[11px] font-bold text-rose-900">
-                                        {item.product.customPhotoTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'In ảnh theo yêu cầu'}
-                                      </span>
-                                      {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
-                                        <span className="text-[10px] text-rose-700 font-bold bg-white/70 px-1 py-0.2 rounded">
-                                          (+{item.customPhotoPrice.toLocaleString('vi-VN')}đ)
+                                        <span className="text-[11px] font-bold text-rose-900">
+                                          {pList.length > 1
+                                            ? `In ${pList.length} ảnh theo yêu cầu`
+                                            : (item.product.customPhotoTitle?.replace(/^(Chọn\s+|Chọn\s*)/i, '').trim() || 'In ảnh theo yêu cầu')}
                                         </span>
-                                      ) : null}
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setCartPhotoPreview({
-                                            index: idx,
-                                            url: item.customPhotoUrl!,
-                                            title: item.product.name,
-                                            note: item.customPhotoNote,
-                                            isCustomPhoto: true
-                                          });
-                                          setPhotoRotation(0);
-                                          setPhotoZoomScale(1);
-                                        }}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
-                                        title="Xem ảnh in bạn đã tải lên"
-                                      >
-                                        <Eye className="w-3.5 h-3.5" />
-                                        <span>Xem ảnh</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleTriggerReplacePhoto(idx)}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-800 border border-rose-300 hover:border-rose-400 rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
-                                        title="Thay ảnh in khác cho sản phẩm này"
-                                      >
-                                        <Camera className="w-3.5 h-3.5 text-rose-600" />
-                                        <span>Thay ảnh</span>
-                                      </button>
-                                    </div>
-                                    {item.customPhotoNote && (
-                                      <div className="text-[10px] text-rose-800 bg-rose-50/80 px-2.5 py-1 rounded-lg border border-rose-100/90 leading-tight">
-                                        Ghi chú in: <span className="font-semibold text-rose-900">"{item.customPhotoNote}"</span>
+                                        {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
+                                          <span className="text-[10px] text-rose-700 font-bold bg-white/70 px-1 py-0.2 rounded">
+                                            (+{item.customPhotoPrice.toLocaleString('vi-VN')}đ{pList.length > 1 ? '/ảnh' : ''})
+                                          </span>
+                                        ) : null}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setCartPhotoPreview({
+                                              index: idx,
+                                              url: pList[0],
+                                              title: item.product.name,
+                                              note: item.customPhotoNote,
+                                              isCustomPhoto: true,
+                                              urls: pList,
+                                              activePhotoIdx: 0
+                                            });
+                                            setPhotoRotation(0);
+                                            setPhotoZoomScale(1);
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-500 hover:bg-rose-600 text-white rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
+                                          title="Xem ảnh in bạn đã tải lên"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>{pList.length > 1 ? `Xem (${pList.length})` : 'Xem ảnh'}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleTriggerReplacePhoto(idx)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-800 border border-rose-300 hover:border-rose-400 rounded-md text-[11px] font-bold shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95 ml-0.5"
+                                          title="Thay ảnh in khác cho sản phẩm này"
+                                        >
+                                          <Camera className="w-3.5 h-3.5 text-rose-600" />
+                                          <span>Thay ảnh</span>
+                                        </button>
                                       </div>
-                                    )}
-                                  </div>
-                                )}
+                                      {item.customPhotoNote && (
+                                        <div className="text-[10px] text-rose-800 bg-rose-50/80 px-2.5 py-1 rounded-lg border border-rose-100/90 leading-tight">
+                                          <span className="font-bold">Yêu cầu in:</span> <span className="font-semibold text-rose-900">"{item.customPhotoNote}"</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
 
                                 {Boolean(item.product.enableCustomPhoto || item.product.customPhotoTitle) && !item.customPhotoUrl && (
                                   <div className="pt-1">
@@ -1057,7 +1258,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                       title="Tải ảnh in theo yêu cầu cho sản phẩm này"
                                     >
                                       <Camera className="w-3.5 h-3.5 text-rose-500" />
-                                      <span>+ Thêm ảnh in theo yêu cầu</span>
+                                      <span>Thêm ảnh in theo yêu cầu</span>
                                     </button>
                                   </div>
                                 )}
@@ -1131,7 +1332,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                       <div className="flex items-center border border-neutral-300 rounded-full bg-white overflow-hidden text-xs shadow-2xs">
                                         <button
                                           type="button"
-                                          onClick={() => onUpdateQuantity(idx, Math.max(1, item.quantity - 1))}
+                                          onClick={() => handleDecreaseDrawerQuantity(idx)}
                                           className="px-2.5 py-1 hover:bg-neutral-100 font-bold text-neutral-800 cursor-pointer transition-colors"
                                         >
                                           -
@@ -1140,7 +1341,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                                         <button
                                           type="button"
                                           disabled={isStockMax}
-                                          onClick={() => onUpdateQuantity(idx, item.quantity + 1)}
+                                          onClick={() => handleIncreaseDrawerQuantity(idx)}
                                           className="px-2.5 py-1 hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-white font-bold text-neutral-800 cursor-pointer transition-colors"
                                           title={isStockMax ? `Đã đạt giới hạn (${prodStock} cái)` : 'Tăng số lượng'}
                                         >
@@ -1348,11 +1549,18 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <div className="flex items-center gap-2">
                       <input type="text" value={voucherInput}
                         onChange={(e) => { setVoucherInput(e.target.value.toUpperCase()); setVoucherError(null); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.keyCode === 13) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleApplyVoucher();
+                          }
+                        }}
                         placeholder="Ví dụ: GIAM100K"
                         aria-label="Ví dụ: GIAM100K"
                         className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs uppercase placeholder:normal-case" />
                       <button type="button" onClick={handleApplyVoucher}
-                        className="px-3 py-2 bg-slate-900 text-white rounded-xl text-xs">Áp dụng</button>
+                        className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors">Áp dụng</button>
                     </div>
 
                     {voucherError && (
@@ -1797,6 +2005,47 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
             {/* Lightbox Image Preview with Zoom & Rotate */}
             <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[260px] max-h-[55vh] overflow-hidden relative select-none">
+              {cartPhotoPreview.urls && cartPhotoPreview.urls.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const urls = cartPhotoPreview.urls!;
+                      const cur = cartPhotoPreview.activePhotoIdx ?? 0;
+                      const nextIdx = (cur - 1 + urls.length) % urls.length;
+                      setCartPhotoPreview((prev) =>
+                        prev ? { ...prev, activePhotoIdx: nextIdx, url: urls[nextIdx] } : null
+                      );
+                      setPhotoRotation(0);
+                      setPhotoZoomScale(1);
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 active:scale-95 text-white flex items-center justify-center border border-white/20 transition-all cursor-pointer"
+                    title="Ảnh trước"
+                  >
+                    <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const urls = cartPhotoPreview.urls!;
+                      const cur = cartPhotoPreview.activePhotoIdx ?? 0;
+                      const nextIdx = (cur + 1) % urls.length;
+                      setCartPhotoPreview((prev) =>
+                        prev ? { ...prev, activePhotoIdx: nextIdx, url: urls[nextIdx] } : null
+                      );
+                      setPhotoRotation(0);
+                      setPhotoZoomScale(1);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 active:scale-95 text-white flex items-center justify-center border border-white/20 transition-all cursor-pointer"
+                    title="Ảnh tiếp theo"
+                  >
+                    <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+                  </button>
+                  <div className="absolute bottom-3 left-1/2 -translate-y-0 -translate-x-1/2 z-10 px-3 py-1 rounded-full bg-black/70 text-amber-300 text-xs font-mono font-bold backdrop-blur-xs border border-white/20">
+                    Ảnh {(cartPhotoPreview.activePhotoIdx ?? 0) + 1} / {cartPhotoPreview.urls.length}
+                  </div>
+                </>
+              )}
               <img
                 src={cartPhotoPreview.url}
                 alt=""
@@ -1887,26 +2136,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <RotateCw className="w-3.5 h-3.5 text-slate-600" />
                   <span>Xoay ảnh</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (cartPhotoPreview && typeof cartPhotoPreview.index === 'number') {
-                      const pIdx = cartPhotoPreview.index;
-                      const ratio = cartItems[pIdx]?.product.customPhotoAspectRatio || 'square';
-                      setCartCropData({
-                        isOpen: true,
-                        imageSrc: cartPhotoPreview.url,
-                        targetIdx: pIdx,
-                        aspectRatio: ratio
-                      });
-                    }
-                  }}
-                  className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-                  title="Căn chỉnh khung ảnh theo tỷ lệ"
-                >
-                  <Crop className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Căn chỉnh</span>
-                </button>
+
+                {/* Delete this photo button if custom photo */}
+                {cartPhotoPreview.isCustomPhoto && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof cartPhotoPreview.index === 'number') {
+                        const itemIdx = cartPhotoPreview.index;
+                        const photoIdx = cartPhotoPreview.activePhotoIdx ?? 0;
+                        handleDeletePhotoDirect(itemIdx, photoIdx);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                    title="Xóa ảnh in này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Xóa ảnh này</span>
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -1933,6 +2181,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     <input
       type="file"
       ref={replaceFileInputRef}
+      multiple
       accept="image/*"
       className="hidden"
       onChange={handleReplacePhotoFile}
@@ -1943,14 +2192,72 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       <PhotoCropModal
         isOpen={cartCropData.isOpen}
         imageSrc={cartCropData.imageSrc}
+        imageSrcs={cartCropData.imageSrcs}
         aspectRatio={cartCropData.aspectRatio}
         onConfirm={handleCartCropConfirm}
+        onConfirmMultiple={handleCartCropConfirmMultiple}
         onCancel={() => {
           setCartCropData(null);
           targetReplaceIdxRef.current = null;
+          targetAppendIdxRef.current = null;
         }}
       />
     )}
+
+    {/* Modal hỏi dùng lại ảnh hay thêm ảnh mới khi tăng số lượng */}
+    {confirmModalItemIndex !== null && cartItems[confirmModalItemIndex] && (
+      <PhotoQuantityConfirmModal
+        isOpen={true}
+        onClose={() => setConfirmModalItemIndex(null)}
+        photoUrl={
+          cartItems[confirmModalItemIndex].customPhotoUrl ||
+          cartItems[confirmModalItemIndex].customPhotoUrls?.[0]
+        }
+        photosCount={
+          cartItems[confirmModalItemIndex].customPhotoUrls?.length ||
+          (cartItems[confirmModalItemIndex].customPhotoUrl ? 1 : 0)
+        }
+        productName={cartItems[confirmModalItemIndex].product.name}
+        onReusePhoto={() => {
+          const idx = confirmModalItemIndex;
+          setConfirmModalItemIndex(null);
+          if (idx !== null && cartItems[idx]) {
+            onUpdateQuantity(idx, cartItems[idx].quantity + 1);
+          }
+        }}
+        onAddNewPhoto={() => {
+          const idx = confirmModalItemIndex;
+          setConfirmModalItemIndex(null);
+          if (idx !== null) {
+            handleTriggerAppendPhoto(idx);
+          }
+        }}
+      />
+    )}
+
+    {/* Modal chọn xóa ảnh khi giảm số lượng trong Drawer */}
+    {deleteModalItemIndex !== null && cartItems[deleteModalItemIndex] && (
+      <PhotoDeleteSelectModal
+        isOpen={true}
+        onClose={() => setDeleteModalItemIndex(null)}
+        photos={
+          cartItems[deleteModalItemIndex].customPhotoUrls && cartItems[deleteModalItemIndex].customPhotoUrls!.length > 0
+            ? cartItems[deleteModalItemIndex].customPhotoUrls!
+            : (cartItems[deleteModalItemIndex].customPhotoUrl ? [cartItems[deleteModalItemIndex].customPhotoUrl!] : [])
+        }
+        productName={cartItems[deleteModalItemIndex].product.name}
+        onDeletePhoto={handleDeletePhotoFromDrawerItem}
+      />
+    )}
+
+    <input
+      type="file"
+      ref={appendFileInputRef}
+      multiple
+      accept="image/*"
+      className="hidden"
+      onChange={handleAppendPhotoFile}
+    />
   </>
   );
 };

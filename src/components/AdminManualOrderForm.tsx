@@ -32,8 +32,10 @@ import {
   RotateCcw,
   Gift,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  PlusCircle
 } from 'lucide-react';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode } from '../utils/voucherManager';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
@@ -427,6 +429,10 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
     if (!code) {
       setVoucherError('Vui lòng nhập mã voucher.');
+      return;
+    }
+    if (code === 'GIAM100K') {
+      setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
       return;
     }
     const res = validateVoucherCode(code, availableVouchers, subtotal, baseShippingFee);
@@ -882,27 +888,22 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   return (
     <div id="admin-manual-order-form" className="space-y-6">
       {/* Header Info Banner */}
-      <div className="bg-white text-slate-900 p-5 rounded-xl border border-slate-200 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="inline-block px-2.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold uppercase tracking-wider mb-1 border border-slate-200">
-              Nhập đơn thủ công
-            </div>
-            <h3 className="text-xl font-bold text-slate-900">Tạo Đơn Hàng Mới</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Hỗ trợ đầy đủ chọn Charm, Bùa Omamori, Khoen, Màu sắc, Tỉnh/Thành, Phí vận chuyển, Freeship và Voucher giảm giá.
-            </p>
-          </div>
-
+      <AdminTabHeader
+        icon={<PlusCircle className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Tạo Đơn & Đặt Hàng Trực Tiếp"
+        title="Nhập Đơn Hàng Mới"
+        description="Hỗ trợ đầy đủ chọn Charm, Bùa Omamori, Khoen, Màu sắc, Tỉnh/Thành, Phí vận chuyển, Freeship và Voucher giảm giá."
+        actions={
           <button
             type="button"
             onClick={onNavigateToOrders}
-            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold whitespace-nowrap self-start sm:self-auto transition-colors"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold whitespace-nowrap transition-colors cursor-pointer shadow-2xs"
           >
             Xem Danh Sách Đơn Hàng
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Success Notification Box */}
       {submittedOrder && (
@@ -1329,7 +1330,14 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                         type="text"
                         value={voucherCodeInput}
                         onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                        placeholder="Nhập mã voucher (ví dụ: NAKNEW, FREESHIP...)"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.keyCode === 13) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleApplyVoucher();
+                          }
+                        }}
+                        placeholder="Ví dụ: GIAM100K"
                         className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold uppercase text-slate-900 focus:outline-none focus:bg-white"
                       />
                       <button
@@ -2179,7 +2187,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                             className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
                           >
                             <Plus className="w-4 h-4" />
-                            <span>+ Thêm Sản Phẩm Vào Đơn</span>
+                            <span>Thêm Sản Phẩm Vào Đơn</span>
                           </button>
                         </div>
                       </div>
@@ -2210,7 +2218,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                 <div className="text-center py-8 text-slate-400 space-y-1">
                   <p className="text-xs font-medium">Chưa có sản phẩm nào được thêm vào đơn hàng.</p>
                   <p className="text-[11px] text-slate-400">
-                    Chọn sản phẩm và các tùy chọn charm, bùa, màu... ở trên rồi nhấn "+ Thêm Sản Phẩm".
+                    Chọn sản phẩm và các tùy chọn charm, bùa, màu... ở trên rồi nhấn "Thêm Sản Phẩm".
                   </p>
                 </div>
               ) : (

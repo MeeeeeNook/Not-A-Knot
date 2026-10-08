@@ -24,6 +24,7 @@ import {
 } from '../../utils/maintenanceManager';
 import { MaintenanceScreen } from '../MaintenanceScreen';
 import { TurnOffMaintenanceConfirmModal } from './TurnOffMaintenanceConfirmModal';
+import { AdminTabHeader } from './AdminTabHeader';
 
 interface AdminMaintenanceTabProps {
   maintenanceConfig: MaintenanceConfig;
@@ -201,56 +202,40 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
 
   return (
     <div className="space-y-6 pb-20">
-      {/* Top Header Card - Responsive Mobile & Desktop Layout */}
-      <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-start sm:items-center gap-3">
-            <div
-              className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                formConfig.enabled
-                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
-                  : 'bg-amber-100 text-amber-800'
+      {/* Top Header Card - Unified Header */}
+      <AdminTabHeader
+        icon={<Wrench className="w-5 h-5 text-amber-900" />}
+        iconBgColor={formConfig.enabled ? 'bg-rose-100 text-rose-900 border-rose-200' : 'bg-amber-100 text-amber-900 border-amber-200'}
+        eyebrow="Bảo Trì & Trạng Thái Hệ Thống"
+        title="Chế Độ Bảo Trì (Maintenance Mode)"
+        badge={
+          <button
+            type="button"
+            onClick={handleToggleEnabled}
+            disabled={isSaving}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              formConfig.enabled
+                ? 'bg-rose-500 text-white shadow-xs hover:bg-rose-600'
+                : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+            }`}
+            title="Bấm để Bật/Tắt chế độ bảo trì"
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                formConfig.enabled ? 'bg-white animate-pulse' : 'bg-slate-400'
               }`}
-            >
-              <Wrench className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-slate-900">
-                  Chế độ bảo trì (Maintenance mode)
-                </h1>
-                <button
-                  type="button"
-                  onClick={handleToggleEnabled}
-                  disabled={isSaving}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    formConfig.enabled
-                      ? 'bg-rose-500 text-white shadow-xs hover:bg-rose-600'
-                      : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                  }`}
-                  title="Bấm để Bật/Tắt chế độ bảo trì"
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      formConfig.enabled ? 'bg-white animate-pulse' : 'bg-slate-400'
-                    }`}
-                  />
-                  <span>{formConfig.enabled ? 'Đang bật (Khách bị chặn)' : 'Đang tắt (Web mở)'}</span>
-                </button>
-              </div>
-              <p className="text-xs text-slate-500 leading-snug">
-                Kiểm soát trạng thái hiển thị của website khi nâng cấp, sửa chữa hoặc bảo trì khẩn cấp.
-              </p>
-            </div>
-          </div>
-        </div>
-
+            />
+            <span>{formConfig.enabled ? 'Đang bật (Khách bị chặn)' : 'Đang tắt (Web mở)'}</span>
+          </button>
+        }
+        description="Kiểm soát trạng thái hiển thị của website khi nâng cấp, sửa chữa hoặc bảo trì khẩn cấp."
+      >
         {/* Responsive Toolbar Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
           <button
             type="button"
             onClick={() => setIsPreviewModalOpen(true)}
-            className="w-full justify-center px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 transition-all border border-slate-200 cursor-pointer active:scale-95"
+            className="w-full justify-center px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-2 transition-all border border-slate-200 cursor-pointer active:scale-95 shadow-2xs"
           >
             <Eye className="w-4 h-4 text-slate-500" />
             <span>Xem trước (Preview)</span>
@@ -259,7 +244,7 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
           <button
             type="button"
             onClick={handleDownloadStandaloneHtml}
-            className="w-full justify-center px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-2 transition-all border border-amber-200 cursor-pointer active:scale-95"
+            className="w-full justify-center px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-2 transition-all border border-amber-200 cursor-pointer active:scale-95 shadow-2xs"
             title="Tải về file HTML độc lập có thể mở offline mà không cần server"
           >
             <FileCode className="w-4 h-4 text-amber-600" />
@@ -276,7 +261,7 @@ export const AdminMaintenanceTab: React.FC<AdminMaintenanceTabProps> = ({
             <span>{isSaving ? 'Đang lưu...' : 'Lưu cài đặt'}</span>
           </button>
         </div>
-      </div>
+      </AdminTabHeader>
 
       {/* Emergency Standalone HTML Instruction Guide */}
       <div className="bg-amber-50/80 border border-amber-200/90 rounded-2xl p-4 sm:p-5 text-slate-900 space-y-3 shadow-2xs">

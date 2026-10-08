@@ -251,7 +251,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
               title="Chọn một sản phẩm đã có trong shop (nạp tự động toàn bộ ảnh, màu sắc, charm và tồn kho)"
             >
               <Package className="w-3.5 h-3.5" />
-              <span>+ Chọn Từ SP Có Sẵn</span>
+              <span>Chọn Từ SP Có Sẵn</span>
             </button>
           )}
 
@@ -262,7 +262,7 @@ export const AdminProductComboSection: React.FC<AdminProductComboSectionProps> =
             title="Tự nhập tay một món mới từ đầu"
           >
             <Plus className="w-3.5 h-3.5 text-purple-700" />
-            <span>+ Tự Nhập Món Mới</span>
+            <span>Tự Nhập Món Mới</span>
           </button>
         </div>
       </div>

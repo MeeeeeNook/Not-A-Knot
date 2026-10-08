@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ensureGmailDomain } from '../../utils/emailService';
 import { getAdminToken } from '../../utils/auth';
+import { AdminTabHeader } from './AdminTabHeader';
 import { db } from '../../firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 
@@ -444,24 +445,24 @@ export const AdminEmailSettingsPage: React.FC<AdminEmailSettingsPageProps> = ({ 
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Clean Minimal Title Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight">Cài Đặt Email & Gửi Thư</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Quản lý gửi thư xác nhận đơn hàng, bộ lọc thông báo và giám sát hạn mức gửi hàng ngày.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={fetchEmailSettings}
-          className="self-start sm:self-auto px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Làm mới dữ liệu</span>
-        </button>
-      </div>
+      {/* Unified Tab Header */}
+      <AdminTabHeader
+        icon={<Mail className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Thông Báo Tự Động & Hộp Thư"
+        title="Cài Đặt Email & Gửi Thư"
+        description="Quản lý gửi thư xác nhận đơn hàng, bộ lọc thông báo và giám sát hạn mức gửi hàng ngày."
+        actions={
+          <button
+            type="button"
+            onClick={fetchEmailSettings}
+            className="self-start sm:self-auto px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-2xs"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Làm mới dữ liệu</span>
+          </button>
+        }
+      />
 
       {/* Usage Counters / Quota Cards */}
       <div className="space-y-2">

@@ -28,6 +28,7 @@ import {
   Check
 } from 'lucide-react';
 import { SystemLogItem, LogType, LogLevel } from '../../types';
+import { AdminTabHeader } from './AdminTabHeader';
 import { 
   fetchSystemLogsFromFirestore, 
   subscribeToSystemLogs, 
@@ -191,68 +192,55 @@ export const AdminLogsPage: React.FC<AdminLogsPageProps> = ({ isRootAdmin }) => 
 
   return (
     <div className="space-y-6 pb-20">
-      {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-slate-100 text-slate-900 border border-slate-200">
-              <Terminal className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                System Log
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Nhật ký lỗi hệ thống, sự cố ứng dụng của khách hàng & hoạt động vận hành.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={handleTriggerTestLog}
-            className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all border border-amber-200/60 flex items-center justify-center gap-1.5 cursor-pointer"
-            title="Tạo 1 log lỗi thử nghiệm để kiểm tra hiển thị"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>Thử nghiệm log lỗi</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportLogs}
-            disabled={logs.length === 0}
-            className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            title="Xuất file JSON toàn bộ nhật ký"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Xuất File</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200"
-            title="Làm mới dữ liệu"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-
-          {isRootAdmin && logs.length > 0 && (
+      {/* 1. Header - Unified Tab Header */}
+      <AdminTabHeader
+        title="System Logs & Truy Vết Hoạt Động"
+        actions={
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               type="button"
-              onClick={() => setShowClearConfirm(true)}
-              className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all border border-rose-200 flex items-center gap-1.5 cursor-pointer"
-              title="Xóa sạch toàn bộ nhật ký"
+              onClick={handleTriggerTestLog}
+              className="flex-1 sm:flex-none px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition-all border border-amber-200/60 flex items-center justify-center gap-1.5 cursor-pointer"
+              title="Tạo 1 log lỗi thử nghiệm để kiểm tra hiển thị"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Xóa Logs</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>Thử nghiệm log lỗi</span>
             </button>
-          )}
-        </div>
-      </div>
+
+            <button
+              type="button"
+              onClick={handleExportLogs}
+              disabled={logs.length === 0}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Xuất file JSON toàn bộ nhật ký"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Xuất File</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer border border-slate-200"
+              title="Làm mới dữ liệu"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+
+            {isRootAdmin && logs.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all border border-rose-200 flex items-center gap-1.5 cursor-pointer"
+                title="Xóa sạch toàn bộ nhật ký"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xóa Logs</span>
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* Helpful notification about member login logs */}
       <div className="p-3.5 bg-sky-50/80 border border-sky-200 text-sky-950 rounded-2xl text-xs flex items-center justify-between gap-3 shadow-2xs">

@@ -69,6 +69,7 @@ interface EditableOrderItem {
   selectedOmamoriPrice?: number;
   selectedComboItems?: ComboItemSelection[];
   customPhotoUrl?: string;
+  customPhotoUrls?: string[];
   customPhotoNote?: string;
   customPhotoPrice?: number;
   customNote?: string;
@@ -284,6 +285,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
           selectedOmamoriPrice: it.selectedOmamoriPrice,
           selectedComboItems: it.selectedComboItems,
           customPhotoUrl: it.customPhotoUrl,
+          customPhotoUrls: it.customPhotoUrls && it.customPhotoUrls.length > 0 ? it.customPhotoUrls : (it.customPhotoUrl ? [it.customPhotoUrl] : undefined),
           customPhotoNote: it.customPhotoNote,
           customPhotoPrice: it.customPhotoPrice,
           customNote: it.customNote || ''
@@ -694,6 +696,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             selectedOmamoriPrice: it.selectedOmamoriPrice || undefined,
             selectedComboItems: it.selectedComboItems || undefined,
             customPhotoUrl: it.customPhotoUrl || undefined,
+            customPhotoUrls: it.customPhotoUrls && it.customPhotoUrls.length > 0 ? it.customPhotoUrls : (it.customPhotoUrl ? [it.customPhotoUrl] : undefined),
             customPhotoNote: it.customPhotoNote || undefined,
             customPhotoPrice: it.customPhotoPrice || undefined,
             customNote: it.customNote || undefined

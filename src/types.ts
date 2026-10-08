@@ -96,6 +96,7 @@ export interface ComboItemSelection {
   selectedSize?: string;
   customNote?: string;
   customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoUrls?: string[]; // Multiple custom photos (e.g. 1 per item quantity)
   customPhotoNote?: string; // Special instruction for photo
   customPhotoPrice?: number; // Extra fee for custom photo
 }
@@ -191,6 +192,7 @@ export interface CartItem {
   selectedSize?: string;
   customNote?: string;
   customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoUrls?: string[]; // Multiple custom photos (e.g. 1 per item quantity)
   customPhotoNote?: string; // Special instruction for photo
   customPhotoPrice?: number; // Extra fee for custom photo
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
@@ -225,6 +227,7 @@ export interface OrderItemDetail {
   selectedSize?: string;
   customNote?: string;
   customPhotoUrl?: string; // Uploaded custom photo (data URL / Storage URL)
+  customPhotoUrls?: string[]; // Multiple custom photos (e.g. 1 per item quantity)
   customPhotoNote?: string; // Special instruction for photo
   customPhotoPrice?: number; // Extra fee for custom photo
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo

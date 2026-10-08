@@ -20,6 +20,7 @@ import {
 import { SiteContentConfig, SocialFeedConfig, SocialFeedPost } from '../../types';
 import { saveSiteContentToFirestore, compressBase64Image } from '../../firebase';
 import { autoImportAndSaveExternalImage } from '../../utils/imageUtils';
+import { AdminTabHeader } from './AdminTabHeader';
 
 interface AdminSocialFeedManagerProps {
   siteContent: SiteContentConfig;
@@ -219,30 +220,25 @@ export const AdminSocialFeedManager: React.FC<AdminSocialFeedManagerProps> = ({
   return (
     <div className="space-y-6 sm:space-y-8 font-sans pb-16">
       
-      {/* Top Banner Header */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-600">
-            <Share2 className="w-4 h-4" />
-            <span>Quản trị Trang Chủ</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Quản Lý Góc Tin Tức
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-3">
+      {/* Unified Tab Header */}
+      <AdminTabHeader
+        icon={<Share2 className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Bản Tin & Lookbook Khách Hàng"
+        title="Quản Lý Góc Tin Tức"
+        description="Cấu hình 5 bài viết mạng xã hội trên trang chủ, hình ảnh lookbook và liên kết đến các bài đăng Facebook, TikTok, Instagram."
+        actions={
           <button
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-sm shadow-md transition-all cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
           >
             {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             <span>{isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {savedSuccess && (
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold flex items-center gap-3 animate-fadeIn">

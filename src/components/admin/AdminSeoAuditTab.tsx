@@ -26,6 +26,7 @@ import {
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig } from '../../types';
 import { slugify, getProductSlug, getCollectionSlug } from '../../utils/slugify';
 import { SITE_DOMAIN } from '../../utils/seo';
+import { AdminTabHeader } from './AdminTabHeader';
 
 export interface SeoAuditItem {
   id: string;
@@ -494,22 +495,14 @@ export const AdminSeoAuditTab: React.FC<AdminSeoAuditTabProps> = ({
 
   return (
     <div className="space-y-6 pb-16">
-      {/* Clean Professional Header */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-stone-900 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-            <Globe className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-slate-900 tracking-tight">
-              Quản Lý SEO Meta & Schema
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Tùy chỉnh tiêu đề, mô tả và đường dẫn tĩnh cho danh mục và sản phẩm
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Clean Professional Header - Unified Header */}
+      <AdminTabHeader
+        icon={<Globe className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Tối Ưu Hóa Công Cụ Tìm Kiếm"
+        title="Quản Lý SEO Meta & Schema"
+        description="Tùy chỉnh tiêu đề, mô tả và đường dẫn tĩnh cho danh mục, bộ sưu tập và sản phẩm thủ công."
+      />
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5">

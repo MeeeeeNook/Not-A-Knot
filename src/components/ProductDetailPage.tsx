@@ -11,6 +11,9 @@ import { ProductColorSelector } from './ProductColorSelector';
 import { ProductComboCustomizer } from './ProductComboCustomizer';
 import { ProductImageCompareModal, CompareItem } from './ProductImageCompareModal';
 import { ShareProductModal } from './ShareProductModal';
+import { PhotoQuantityConfirmModal } from './PhotoQuantityConfirmModal';
+import { PhotoDeleteSelectModal } from './PhotoDeleteSelectModal';
+import { PhotoCropModal } from './PhotoCropModal';
 import { LoadingImage } from './LoadingImage';
 import {
   ChevronLeft,
@@ -66,7 +69,8 @@ interface ProductDetailPageProps {
     selectedComboItems?: ComboItemSelection[],
     customPhotoUrl?: string,
     customPhotoNote?: string,
-    customPhotoPrice?: number
+    customPhotoPrice?: number,
+    customPhotoUrls?: string[]
   ) => void;
   onBuyNow: (
     product: Product,
@@ -87,7 +91,8 @@ interface ProductDetailPageProps {
     selectedComboItems?: ComboItemSelection[],
     customPhotoUrl?: string,
     customPhotoNote?: string,
-    customPhotoPrice?: number
+    customPhotoPrice?: number,
+    customPhotoUrls?: string[]
   ) => void;
 }
 
@@ -136,8 +141,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   const [selectedKhoen, setSelectedKhoen] = useState<ProductKhoenOption | null>(null);
   const [khoenError, setKhoenError] = useState<string | null>(null);
   const [customPhotoUrl, setCustomPhotoUrl] = useState<string | undefined>(undefined);
+  const [customPhotoUrls, setCustomPhotoUrls] = useState<string[]>([]);
   const [customPhotoNote, setCustomPhotoNote] = useState<string>('');
   const [customPhotoError, setCustomPhotoError] = useState<string | null>(null);
+  const [isPhotoQuantityConfirmOpen, setIsPhotoQuantityConfirmOpen] = useState(false);
+  const [pendingAppendImages, setPendingAppendImages] = useState<string[]>([]);
+  const [isAppendCropOpen, setIsAppendCropOpen] = useState(false);
+  const appendPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const totalCharmPrice = useMemo(() => {
     return selectedCharms.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
@@ -151,11 +161,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const customPhotoPrice = useMemo(() => {
     if (!product.enableCustomPhoto) return 0;
-    if (customPhotoUrl && typeof product.customPhotoPriceDelta === 'number') {
+    if ((customPhotoUrl || customPhotoUrls.length > 0) && typeof product.customPhotoPriceDelta === 'number') {
       return product.customPhotoPriceDelta;
     }
     return 0;
-  }, [product.enableCustomPhoto, product.customPhotoPriceDelta, customPhotoUrl]);
+  }, [product.enableCustomPhoto, product.customPhotoPriceDelta, customPhotoUrl, customPhotoUrls]);
 
   const totalCartCount = useMemo(() => {
     return cartItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
@@ -562,7 +572,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       undefined,
       customPhotoUrl,
       customPhotoNote,
-      customPhotoPrice
+      customPhotoPrice,
+      customPhotoUrls.length > 0 ? customPhotoUrls : (customPhotoUrl ? [customPhotoUrl] : undefined)
     );
     setIsAdded(true);
     setTimeout(() => {
@@ -664,8 +675,77 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       undefined,
       customPhotoUrl,
       customPhotoNote,
-      customPhotoPrice
+      customPhotoPrice,
+      customPhotoUrls.length > 0 ? customPhotoUrls : (customPhotoUrl ? [customPhotoUrl] : undefined)
     );
+  };
+
+  const [isPhotoDeleteSelectOpen, setIsPhotoDeleteSelectOpen] = useState(false);
+
+  const handleDecreaseQuantity = () => {
+    if (quantity <= 1) return;
+    if (product.enableCustomPhoto && customPhotoUrls && customPhotoUrls.length > 1 && quantity <= customPhotoUrls.length) {
+      setIsPhotoDeleteSelectOpen(true);
+      return;
+    }
+    setQuantity((q) => Math.max(1, q - 1));
+  };
+
+  const handleDeletePhotoOnDecrease = (photoIdx: number) => {
+    const updated = customPhotoUrls.filter((_, i) => i !== photoIdx);
+    setCustomPhotoUrls(updated);
+    setCustomPhotoUrl(updated[0] || undefined);
+    setQuantity(Math.max(1, updated.length));
+  };
+
+  const handleIncreaseQuantity = () => {
+    if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
+      triggerStockNotice();
+      return;
+    }
+    if (product.enableCustomPhoto && (customPhotoUrl || customPhotoUrls.length > 0)) {
+      setIsPhotoQuantityConfirmOpen(true);
+    } else {
+      setQuantity((q) => Math.min(remainingAddableStock, q + 1));
+    }
+  };
+
+  const handleAppendPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+    const readers = fileList.map((f) => {
+      return new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve((ev.target?.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(f);
+      });
+    });
+
+    Promise.all(readers).then((newUrls) => {
+      const valid = newUrls.filter(Boolean);
+      if (valid.length > 0) {
+        setPendingAppendImages(valid);
+        setIsAppendCropOpen(true);
+      }
+    });
+    e.target.value = '';
+  };
+
+  const handleAppendCropConfirmMultiple = (croppedUrls: string[]) => {
+    setIsAppendCropOpen(false);
+    setPendingAppendImages([]);
+    if (!croppedUrls || croppedUrls.length === 0) return;
+    const baseList = customPhotoUrls.length > 0 ? customPhotoUrls : (customPhotoUrl ? [customPhotoUrl] : []);
+    const updated = [...baseList, ...croppedUrls];
+    setCustomPhotoUrls(updated);
+    setCustomPhotoUrl(updated[0]);
+    setQuantity((q) => Math.min(remainingAddableStock, q + croppedUrls.length));
+  };
+
+  const handleAppendCropConfirm = (croppedUrl: string) => {
+    handleAppendCropConfirmMultiple([croppedUrl]);
   };
 
   const handleShare = () => {
@@ -1225,12 +1305,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                         isRequired={product.customPhotoRequired}
                         aspectRatio={product.customPhotoAspectRatio || 'square'}
                         customPhotoUrl={customPhotoUrl}
+                        customPhotoUrls={customPhotoUrls}
                         customPhotoNote={customPhotoNote}
                         onPhotoChange={(url, note) => {
                           setCustomPhotoError(null);
                           setCustomPhotoUrl(url);
+                          if (!url) setCustomPhotoUrls([]);
                           if (note !== undefined) setCustomPhotoNote(note);
                         }}
+                        onPhotosChange={(urls, note) => {
+                          setCustomPhotoError(null);
+                          setCustomPhotoUrls(urls);
+                          setCustomPhotoUrl(urls[0]);
+                          if (note !== undefined) setCustomPhotoNote(note);
+                        }}
+                        onQuantityChange={(newQty) => {
+                          setQuantity(Math.min(remainingAddableStock, Math.max(1, newQty)));
+                        }}
+                        currentQuantity={quantity}
                         error={customPhotoError}
                       />
                     </div>
@@ -1274,7 +1366,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       <button
                         type="button"
                         disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
-                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        onClick={handleDecreaseQuantity}
                         className="w-8 h-8 rounded-lg bg-neutral-50 hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer text-sm"
                         aria-label="Giảm số lượng"
                       >
@@ -1285,13 +1377,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                       </span>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
-                            triggerStockNotice();
-                          } else {
-                            setQuantity((q) => Math.min(remainingAddableStock, q + 1));
-                          }
-                        }}
+                        onClick={handleIncreaseQuantity}
                         className={`w-8 h-8 rounded-lg font-bold flex items-center justify-center transition-colors cursor-pointer text-sm ${
                           quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct
                             ? 'bg-neutral-200 text-neutral-400 hover:bg-neutral-300'
@@ -1832,7 +1918,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <button
                   type="button"
                   disabled={quantity <= 1 || isOutOfStock || isCartFullForProduct}
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  onClick={handleDecreaseQuantity}
                   className="w-7 h-7 rounded-lg bg-white hover:bg-neutral-200 text-neutral-800 font-bold flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer text-xs"
                   aria-label="Giảm số lượng"
                 >
@@ -1843,13 +1929,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
-                      triggerStockNotice();
-                    } else {
-                      setQuantity((q) => Math.min(remainingAddableStock, q + 1));
-                    }
-                  }}
+                  onClick={handleIncreaseQuantity}
                   onMouseEnter={() => {
                     if (quantity >= remainingAddableStock || isOutOfStock || isCartFullForProduct) {
                       triggerStockNotice();
@@ -1989,6 +2069,53 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         onClose={() => setIsShareModalOpen(false)}
         product={product}
         categoryName={categoryName}
+      />
+
+      {/* Hidden File Input for Adding Additional Photo on Quantity Increase */}
+      <input
+        type="file"
+        ref={appendPhotoInputRef}
+        multiple
+        accept="image/*"
+        onChange={handleAppendPhotoFile}
+        className="hidden"
+      />
+
+      {/* Photo Quantity Increment Dialog */}
+      <PhotoQuantityConfirmModal
+        isOpen={isPhotoQuantityConfirmOpen}
+        onClose={() => setIsPhotoQuantityConfirmOpen(false)}
+        photoUrl={customPhotoUrl || customPhotoUrls[0]}
+        photosCount={customPhotoUrls.length > 0 ? customPhotoUrls.length : (customPhotoUrl ? 1 : 0)}
+        productName={product.name}
+        onReusePhoto={() => {
+          setQuantity((q) => Math.min(remainingAddableStock, q + 1));
+        }}
+        onAddNewPhoto={() => {
+          appendPhotoInputRef.current?.click();
+        }}
+      />
+
+      {/* Crop Modal when adding extra photo */}
+      <PhotoCropModal
+        isOpen={isAppendCropOpen}
+        imageSrcs={pendingAppendImages}
+        aspectRatio={product.customPhotoAspectRatio || 'square'}
+        onConfirm={handleAppendCropConfirm}
+        onConfirmMultiple={handleAppendCropConfirmMultiple}
+        onCancel={() => {
+          setIsAppendCropOpen(false);
+          setPendingAppendImages([]);
+        }}
+      />
+
+      {/* Modal chọn xóa ảnh khi giảm số lượng */}
+      <PhotoDeleteSelectModal
+        isOpen={isPhotoDeleteSelectOpen}
+        onClose={() => setIsPhotoDeleteSelectOpen(false)}
+        photos={customPhotoUrls}
+        productName={product.name}
+        onDeletePhoto={handleDeletePhotoOnDecrease}
       />
     </motion.div>
   );

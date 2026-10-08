@@ -22,6 +22,7 @@ import {
   emptyOrderTrash,
   isMatchingOrderDoc
 } from '../../firebase';
+import { AdminTabHeader } from './AdminTabHeader';
 
 interface AdminTrashPageProps {
   orders: StoredOrder[];
@@ -212,36 +213,25 @@ export const AdminTrashPage: React.FC<AdminTrashPageProps> = ({
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900">
-                Thùng rác Đơn hàng
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-                Nơi lưu trữ các đơn hàng đã xóa tạm thời. Bạn có thể khôi phục lại bất cứ lúc nào.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          {deletedOrders.length > 0 && (
+      <AdminTabHeader
+        icon={<Trash2 className="w-5 h-5 text-rose-600" />}
+        iconBgColor="bg-rose-50 text-rose-600 border-rose-200"
+        eyebrow="Khôi Phục & Dọn Dẹp"
+        title="Thùng rác Đơn hàng"
+        description="Nơi lưu trữ các đơn hàng đã xóa tạm thời. Bạn có thể khôi phục lại bất cứ lúc nào."
+        actions={
+          deletedOrders.length > 0 ? (
             <button
               onClick={confirmEmptyAllTrash}
               disabled={isProcessing}
-              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
             >
               <Trash2 className="w-4 h-4" />
-              Dọn sạch Thùng rác ({deletedOrders.length})
+              <span>Dọn sạch Thùng rác ({deletedOrders.length})</span>
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Toolbar & Controls */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between gap-4">

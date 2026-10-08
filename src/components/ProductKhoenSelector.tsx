@@ -20,8 +20,6 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
   onSelectKhoen,
   isRequired = false,
 }) => {
-  if (!khoenOptions || khoenOptions.length === 0) return null;
-
   const displayTitle = title?.trim() || 'Chọn Khoen';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
@@ -42,6 +40,7 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
   }, [khoenOptions]);
 
   const compareItems: CompareItem[] = useMemo(() => {
+    if (!khoenOptions) return [];
     return khoenOptions.map((k, i) => ({
       id: k.id || `khoen-${i}`,
       title: k.name,
@@ -52,6 +51,8 @@ export const ProductKhoenSelector: React.FC<ProductKhoenSelectorProps> = ({
       originalData: k,
     }));
   }, [khoenOptions]);
+
+  if (!khoenOptions || khoenOptions.length === 0) return null;
 
   const handleToggle = (khoen: ProductKhoenOption) => {
     const isAlreadySelected =

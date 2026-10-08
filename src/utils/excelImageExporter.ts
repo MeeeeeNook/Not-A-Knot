@@ -299,11 +299,21 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
       o.itemDetails.forEach((it, itIdx) => {
         const pName = safeCellText(formatOrderItemFullNameAndOptions(it));
         let photoDesc = '';
-        if (it.customPhotoUrl) {
-          const zipFilename = `Anh_In_Don_${safeId}_M${itIdx + 1}`;
+        const pUrls = it.customPhotoUrls && it.customPhotoUrls.length > 0
+          ? it.customPhotoUrls
+          : (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+
+        if (pUrls.length > 0) {
+          const zipPrefix = `Anh_In_Don_${safeId}_M${itIdx + 1}`;
           const noteStr = it.customPhotoNote ? ` - Y/C: ${it.customPhotoNote}` : '';
-          const onlineLink = it.customPhotoUrl.startsWith('http') ? ` (Link: ${it.customPhotoUrl})` : '';
-          photoDesc = `[File ZIP: ${zipFilename}]${noteStr}${onlineLink}`;
+          const onlineLinks = pUrls
+            .filter((u) => u.startsWith('http'))
+            .map((u, idx) => `[Link ${idx + 1}: ${u}]`)
+            .join(' ');
+          const zipNote = pUrls.length > 1
+            ? `[File ZIP: ${zipPrefix}_Anh1..${pUrls.length} (${pUrls.length} ảnh)]`
+            : `[File ZIP: ${zipPrefix}]`;
+          photoDesc = `${zipNote}${noteStr}${onlineLinks ? ` ${onlineLinks}` : ''}`;
         }
         const qty = Number(it.quantity) > 0 ? Number(it.quantity) : 1;
         let price: number | '' = '';
@@ -314,7 +324,7 @@ export function buildStyledOrdersWorksheet(orders: StoredOrder[]): any {
         } else if (o.itemDetails!.length === 1 && typeof orderTotal === 'number') {
           price = Math.round(orderTotal / qty);
         }
-        items.push({ name: pName, customPhotoDesc: photoDesc, customPhotoUrl: it.customPhotoUrl, quantity: qty, unitPrice: price });
+        items.push({ name: pName, customPhotoDesc: photoDesc, customPhotoUrl: pUrls[0] || it.customPhotoUrl, quantity: qty, unitPrice: price });
       });
     } else if (o.items && o.items.length > 0) {
       o.items.forEach((itStr) => {
@@ -594,20 +604,30 @@ export async function exportOrdersWithImageOption({
     if (Array.isArray(ord.itemDetails)) {
       for (let itIdx = 0; itIdx < ord.itemDetails.length; itIdx++) {
         const it = ord.itemDetails[itIdx];
-        if (it && it.customPhotoUrl) {
-          onProgress?.(`Đang tải ảnh in của khách đơn ${safeId} (món ${itIdx + 1})...`);
-          const imgObj = await fetchImageBlob(it.customPhotoUrl);
-          if (imgObj && customPhotoFolder) {
-            const prodName = sanitizeFilename(it.productName || (it as any).name || `SP_${itIdx + 1}`);
-            const baseFileName = `Anh_In_Don_${safeId}_M${itIdx + 1}_${cleanCustomerName}_${prodName}`;
-            customPhotoFolder.file(`${baseFileName}.${imgObj.extension}`, imgObj.data);
-            customPhotoCount++;
+        const pUrls = it && (it.customPhotoUrls && it.customPhotoUrls.length > 0
+          ? it.customPhotoUrls
+          : (it.customPhotoUrl ? [it.customPhotoUrl] : []));
 
-            // If customer provided custom notes for photo crafting, save a companion text note
-            if (it.customPhotoNote) {
-              const noteContent = `=========================================\nTHÔNG TIN ẢNH IN THEO YÊU CẦU CỦA KHÁCH\n=========================================\n- Mã đơn hàng: ${ord.id || ord.trackingNumber || ''}\n- Khách hàng: ${ord.name || ord.customerName || ''}\n- Số điện thoại: ${ord.phone || ''}\n- Sản phẩm: ${it.productName || (it as any).name || ''}\n- Số lượng: ${it.quantity || 1}\n- Phụ thu in ảnh: ${it.customPhotoPrice ? `${it.customPhotoPrice.toLocaleString('vi-VN')}đ` : 'Miễn phí'}\n\n👉 YÊU CẦU CHẾ TÁC / IN ẤN CỦA KHÁCH:\n${it.customPhotoNote}\n\n(File ảnh đính kèm tương ứng: ${baseFileName}.${imgObj.extension})\n`;
-              customPhotoFolder.file(`${baseFileName}_YEU_CAU.txt`, noteContent);
+        if (pUrls && pUrls.length > 0) {
+          const prodName = sanitizeFilename(it.productName || (it as any).name || `SP_${itIdx + 1}`);
+
+          for (let pIdx = 0; pIdx < pUrls.length; pIdx++) {
+            const pUrl = pUrls[pIdx];
+            onProgress?.(`Đang tải ảnh in đơn ${safeId} (món ${itIdx + 1}, ảnh ${pIdx + 1}/${pUrls.length})...`);
+            const imgObj = await fetchImageBlob(pUrl);
+            if (imgObj && customPhotoFolder) {
+              const suffix = pUrls.length > 1 ? `_Anh${pIdx + 1}` : '';
+              const baseFileName = `Anh_In_Don_${safeId}_M${itIdx + 1}${suffix}_${cleanCustomerName}_${prodName}`;
+              customPhotoFolder.file(`${baseFileName}.${imgObj.extension}`, imgObj.data);
+              customPhotoCount++;
             }
+          }
+
+          // If customer provided custom notes for photo crafting, save a companion text note
+          if (it.customPhotoNote && customPhotoFolder) {
+            const baseFileName = `Anh_In_Don_${safeId}_M${itIdx + 1}_${cleanCustomerName}_${prodName}`;
+            const noteContent = `=========================================\nTHÔNG TIN ẢNH IN THEO YÊU CẦU CỦA KHÁCH\n=========================================\n- Mã đơn hàng: ${ord.id || ord.trackingNumber || ''}\n- Khách hàng: ${ord.name || ord.customerName || ''}\n- Số điện thoại: ${ord.phone || ''}\n- Sản phẩm: ${it.productName || (it as any).name || ''}\n- Số lượng đặt: ${it.quantity || 1}\n- Tổng số ảnh in: ${pUrls.length} ảnh\n- Phụ thu in ảnh: ${it.customPhotoPrice ? `${it.customPhotoPrice.toLocaleString('vi-VN')}đ` : 'Miễn phí'}\n\n👉 YÊU CẦU CHẾ TÁC / IN ẤN CỦA KHÁCH:\n${it.customPhotoNote}\n\n(Các file ảnh đính kèm tương ứng: ${baseFileName}_Anh1..${pUrls.length})\n`;
+            customPhotoFolder.file(`${baseFileName}_YEU_CAU.txt`, noteContent);
           }
         }
       }

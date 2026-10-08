@@ -340,6 +340,24 @@ export default function App() {
                 hasChanges = true;
               }
             }
+            if (itemCopy.customPhotoUrls && itemCopy.customPhotoUrls.length > 0) {
+              const updatedUrls = await Promise.all(
+                itemCopy.customPhotoUrls.map(async (u) => {
+                  if (typeof u === 'string' && u.startsWith('data:image/')) {
+                    const up = await uploadCustomPhotoImmediately(u, 'cart_photos');
+                    if (up && up.startsWith('http')) {
+                      hasChanges = true;
+                      return up;
+                    }
+                  }
+                  return u;
+                })
+              );
+              itemCopy.customPhotoUrls = updatedUrls;
+              if (updatedUrls[0] && updatedUrls[0].startsWith('http')) {
+                itemCopy.customPhotoUrl = updatedUrls[0];
+              }
+            }
             if (itemCopy.selectedComboItems && itemCopy.selectedComboItems.length > 0) {
               const updatedCombo = await Promise.all(
                 itemCopy.selectedComboItems.map(async (cItem) => {
@@ -1223,7 +1241,8 @@ export default function App() {
     selectedComboItems?: ComboItemSelection[],
     customPhotoUrl?: string,
     customPhotoNote?: string,
-    customPhotoPrice?: number
+    customPhotoPrice?: number,
+    customPhotoUrls?: string[]
   ) => {
     if (product.inStock === false) {
       showToast(`Sản phẩm "${product.name}" hiện đã hết hàng.`, { type: 'warning' });
@@ -1359,11 +1378,22 @@ export default function App() {
       });
 
       if (existingIdx > -1) {
-        return prev.map((item, idx) =>
-          idx === existingIdx
-            ? { ...item, quantity: item.quantity + qtyToAdd }
-            : item
-        );
+        return prev.map((item, idx) => {
+          if (idx !== existingIdx) return item;
+          const incomingUrls = customPhotoUrls && customPhotoUrls.length > 0
+            ? customPhotoUrls
+            : (customPhotoUrl ? [customPhotoUrl] : []);
+          const existingUrls = item.customPhotoUrls && item.customPhotoUrls.length > 0
+            ? item.customPhotoUrls
+            : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
+          const mergedUrls = incomingUrls.length > 0 ? Array.from(new Set([...existingUrls, ...incomingUrls])) : existingUrls;
+          return {
+            ...item,
+            quantity: item.quantity + qtyToAdd,
+            customPhotoUrls: mergedUrls.length > 0 ? mergedUrls : item.customPhotoUrls,
+            customPhotoUrl: mergedUrls.length > 0 ? mergedUrls[0] : item.customPhotoUrl
+          };
+        });
       } else {
         return [
           ...prev,
@@ -1384,6 +1414,7 @@ export default function App() {
             selectedSize,
             customNote,
             customPhotoUrl,
+            customPhotoUrls: customPhotoUrls && customPhotoUrls.length > 0 ? customPhotoUrls : (customPhotoUrl ? [customPhotoUrl] : undefined),
             customPhotoNote,
             customPhotoPrice,
             selectedComboItems
@@ -1506,14 +1537,26 @@ export default function App() {
     showToast('Đã xóa sản phẩm khỏi giỏ hàng.');
   };
 
-  const handleUpdateCartItemPhoto = (index: number, newPhotoUrl: string, newPhotoNote?: string) => {
+  const handleUpdateCartItemPhoto = (
+    index: number,
+    newPhotoUrl: string,
+    newPhotoNote?: string,
+    newPhotoUrls?: string[],
+    newQuantity?: number
+  ) => {
     setCartItems((prev) => {
       if (!prev[index]) return prev;
       const updated = [...prev];
+      const prevItem = updated[index];
+      const mergedUrls = newPhotoUrls && newPhotoUrls.length > 0
+        ? newPhotoUrls
+        : (prevItem.customPhotoUrls && prevItem.customPhotoUrls.length > 0 ? prevItem.customPhotoUrls : [newPhotoUrl]);
       updated[index] = {
-        ...updated[index],
+        ...prevItem,
+        quantity: typeof newQuantity === 'number' ? newQuantity : prevItem.quantity,
         customPhotoUrl: newPhotoUrl,
-        customPhotoNote: newPhotoNote !== undefined ? newPhotoNote : updated[index].customPhotoNote
+        customPhotoUrls: mergedUrls,
+        customPhotoNote: newPhotoNote !== undefined ? newPhotoNote : prevItem.customPhotoNote
       };
       return updated;
     });
@@ -2154,11 +2197,11 @@ export default function App() {
               }
               onBack={handleCloseProductDetail}
               onSelectProduct={handleOpenProductDetail}
-              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice);
+              onAddToCart={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice, photoUrls) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice, photoUrls);
               }}
-              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice) => {
-                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice);
+              onBuyNow={(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice, photoUrls) => {
+                handleAddToCart(p, qty, color, size, note, charm, colorImg, charmImg, charmPrice, charms, omamoris, omamoriPrice, khoen, khoenImg, khoenPrice, comboItems, photoUrl, photoNote, photoPrice, photoUrls);
                 handleOpenCartDrawer();
               }}
             />

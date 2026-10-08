@@ -26,8 +26,6 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   maxAllowed = 1,
   isRequired = false,
 }) => {
-  if (!charms || charms.length === 0) return null;
-
   const displayTitle = title?.trim() || 'Chọn Charm';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
@@ -49,6 +47,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
 
   // Convert charms to CompareItems for zoom/compare modal
   const compareItems: CompareItem[] = useMemo(() => {
+    if (!charms) return [];
     return charms.map((c, i) => ({
       id: c.id || `charm-${i}`,
       title: c.name,
@@ -65,7 +64,7 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
     if (selectedCharms && selectedCharms.length > 0) {
       return selectedCharms;
     }
-    if (selectedCharm) {
+    if (selectedCharm && charms) {
       const found = charms.find(
         (c) => c.name.trim().toLowerCase() === selectedCharm.trim().toLowerCase()
       );
@@ -79,6 +78,8 @@ export const ProductCharmSelector: React.FC<ProductCharmSelectorProps> = ({
   const totalExtraPrice = React.useMemo(() => {
     return currentSelection.reduce((sum, c) => sum + (c.priceDelta || 0), 0);
   }, [currentSelection]);
+
+  if (!charms || charms.length === 0) return null;
 
   const handleToggleCharm = (charm: ProductCharmOption) => {
     const isAlreadySelected = currentSelection.some(

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
   MapPin, 
+  Map,
   Send, 
   CheckCircle2, 
   ArrowLeft,
@@ -280,7 +281,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
                         title="Xem vị trí trên bản đồ"
                         aria-label="Xem vị trí trên bản đồ"
                       >
-                        <MapPin className="w-5 h-5 text-slate-700 group-hover:text-amber-600 transition-colors" />
+                        <Map className="w-5 h-5 text-slate-700 group-hover:text-amber-600 transition-colors" />
                       </a>
                     </div>
                   );

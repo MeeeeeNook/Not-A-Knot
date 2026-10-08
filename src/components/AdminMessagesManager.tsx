@@ -19,6 +19,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { ContactMessage } from '../types';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 import {
   fetchContactMessagesFromFirestore,
   updateContactMessageStatusInFirestore,
@@ -176,42 +177,35 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
         </div>
       )}
 
-      {/* Header Banner - Streamlined and clean */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        <div className="flex items-start sm:items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20">
-            <Mail className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-base sm:text-lg font-black text-slate-900">
-                Tin Nhắn & Liên Hệ
-              </h3>
-              {unreadCount > 0 ? (
-                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[11px] font-black animate-pulse">
-                  {unreadCount} mới
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold">
-                  Tất cả đã đọc
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Xem và xử lý tin nhắn từ biểu mẫu liên hệ của khách hàng.
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={loadMessages}
-          disabled={isRefreshing}
-          className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-60"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-600' : 'text-slate-500'}`} />
-          <span>{isRefreshing ? 'Đang tải lại...' : 'Làm mới'}</span>
-        </button>
-      </div>
+      {/* Unified Tab Header */}
+      <AdminTabHeader
+        icon={<Mail className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Hộp Thư Khách Hàng"
+        title="Tin Nhắn & Liên Hệ"
+        badge={
+          unreadCount > 0 ? (
+            <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[11px] font-black animate-pulse">
+              {unreadCount} mới
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold">
+              Tất cả đã đọc
+            </span>
+          )
+        }
+        description="Xem và xử lý tin nhắn từ biểu mẫu liên hệ của khách hàng gửi về xưởng."
+        actions={
+          <button
+            onClick={loadMessages}
+            disabled={isRefreshing}
+            className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-600' : 'text-slate-500'}`} />
+            <span>{isRefreshing ? 'Đang tải lại...' : 'Làm mới'}</span>
+          </button>
+        }
+      />
 
       {/* Main Grid: Left List (7 Cols) & Right Detail View (5 Cols on desktop) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">

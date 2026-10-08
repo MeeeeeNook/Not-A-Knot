@@ -309,10 +309,6 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
     touchStartXRef.current = null;
   };
 
-  if (!isEnabled || isDismissed) {
-    return null;
-  }
-
   // Seamless loop items for continuous marquee ticker (repeats smoothly with wide spacing)
   const marqueeItems = useMemo(() => {
     if (!messages.length) return [];
@@ -320,6 +316,10 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
     const baseSet = Array.from({ length: repeatCount }).flatMap(() => messages);
     return [...baseSet, ...baseSet];
   }, [messages]);
+
+  if (!isEnabled || isDismissed) {
+    return null;
+  }
 
   // Theme styling configurations
   const themeClasses = {

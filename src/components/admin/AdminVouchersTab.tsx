@@ -9,6 +9,7 @@ import {
   generateVoucherEncryption
 } from '../../utils/voucherManager';
 import { getOrdersFromFirestore } from '../../firebase';
+import { AdminTabHeader } from './AdminTabHeader';
 import {
   Ticket,
   Plus,
@@ -364,44 +365,39 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
   return (
     <div className="space-y-6">
       {/* Header & Main Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-neutral-200 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center font-bold">
-            <Ticket className="w-5 h-5 text-amber-800" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-black text-neutral-950">Quản Lý & Thống Kê Voucher</h2>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-extrabold flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-emerald-600" />
-                Đo lường tự động
-              </span>
-            </div>
-            <p className="text-xs text-neutral-500 font-medium mt-0.5">
-              Theo dõi chính xác số lượt áp dụng, tổng tiền đã giảm và doanh thu mang lại của từng mã giảm giá.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={loadVouchers}
-            className="p-2.5 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 transition-colors cursor-pointer"
-            title="Tải lại danh sách"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenAddModal}
-            className="px-4 py-2.5 bg-neutral-950 hover:bg-neutral-800 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>Tạo Mã Mới</span>
-          </button>
-        </div>
-      </div>
+      <AdminTabHeader
+        icon={<Ticket className="w-5 h-5 text-amber-800" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Khuyến Mãi & Giảm Giá"
+        title="Quản Lý & Thống Kê Voucher"
+        badge={
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-extrabold flex items-center gap-1 shadow-2xs">
+            <Sparkles className="w-3 h-3 text-emerald-600" />
+            Đo lường tự động
+          </span>
+        }
+        description="Theo dõi chính xác số lượt áp dụng, tổng tiền đã giảm và doanh thu mang lại của từng mã giảm giá."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={loadVouchers}
+              className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-all shadow-2xs cursor-pointer"
+              title="Tải lại danh sách"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenAddModal}
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-all shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>Tạo Mã Mới</span>
+            </button>
+          </>
+        }
+      />
 
       {/* KPI Overview Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

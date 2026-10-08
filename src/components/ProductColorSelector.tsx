@@ -15,10 +15,9 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
   selectedColor,
   onSelectColor,
 }) => {
-  if (!colors || colors.length === 0) return null;
-
   // Normalize options to ProductColorOption format
   const normalizedOptions: ProductColorOption[] = React.useMemo(() => {
+    if (!colors) return [];
     return colors.map((c) => {
       if (typeof c === 'string') {
         return { name: c };
@@ -43,6 +42,8 @@ export const ProductColorSelector: React.FC<ProductColorSelectorProps> = ({
       }
     });
   }, [normalizedOptions]);
+
+  if (!colors || colors.length === 0) return null;
 
   return (
     <div className="space-y-2 pt-1">

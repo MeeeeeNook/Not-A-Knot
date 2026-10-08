@@ -52,6 +52,7 @@ import { AboutUsSection } from './AboutUsSection';
 import { LandingFaqCommitments } from './LandingFaqCommitments';
 import { Footer } from './Footer';
 import { Lock } from './common/LockIcon';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 
 interface AdminSiteEditorProps {
   initialConfig?: SiteContentConfig;
@@ -684,17 +685,9 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
     <div id="admin-site-editor" className="space-y-5">
       
       {/* Top Header & Action Controls Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-0.5">
-            Cấu Hình Giao Diện & Nội Dung
-          </div>
-          <h2 className="text-lg font-bold text-slate-900">Chỉnh Sửa Website & Hero Slides</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Quản lý thanh thông báo, slide trình diễn đầu trang, câu hỏi thường gặp và chân trang.
-          </p>
-        </div>
-      </div>
+      <AdminTabHeader
+        title="Chỉnh Sửa Website & Hero Slides"
+      />
 
       {/* Status Banner */}
       {statusMsg && (
@@ -1552,7 +1545,7 @@ export const AdminSiteEditor: React.FC<AdminSiteEditorProps> = ({
                   className="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ Thêm Khối Mới</span>
+                  <span>Thêm Khối Mới</span>
                 </button>
               </div>
             </div>

@@ -131,8 +131,6 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     }
   }, [activeSlides.length, currentIndex]);
 
-  if (activeSlides.length === 0) return null;
-
   const currentSlide = activeSlides[currentIndex] || activeSlides[0];
 
   // Automatic bottom-region luminance detection & natural image ratio calculation
@@ -246,6 +244,8 @@ export const HeroBanners: React.FC<HeroBannersProps> = ({
     (currentSlide as SiteHeroSlide)?.overlayOpacity,
     (currentSlide as SiteHeroSlide)?.hideOverlay
   ]);
+
+  if (activeSlides.length === 0 || !currentSlide) return null;
 
   const handleCta = (slide: typeof currentSlide) => {
     if (slide.categoryLink === 'event_0209') {

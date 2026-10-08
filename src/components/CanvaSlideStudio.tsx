@@ -622,7 +622,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                 className="px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-neutral-200"
               >
                 <Type className="w-3.5 h-3.5 text-neutral-700" />
-                <span>+ Thêm Chữ (Text)</span>
+                <span>Thêm Chữ (Text)</span>
               </button>
               <button
                 type="button"
@@ -630,7 +630,7 @@ export const CanvaSlideStudio: React.FC<CanvaSlideStudioProps> = ({
                 className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
               >
                 <MousePointerClick className="w-3.5 h-3.5 text-amber-400" />
-                <span>+ Thêm Nút Bấm (CTA)</span>
+                <span>Thêm Nút Bấm (CTA)</span>
               </button>
             </div>
 

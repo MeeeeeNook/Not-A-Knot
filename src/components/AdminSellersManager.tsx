@@ -7,6 +7,7 @@ import {
   LayoutGrid, Table as TableIcon, PhoneCall, ChevronDown
 } from 'lucide-react';
 import { Lock } from './common/LockIcon';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -1173,64 +1174,59 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   return (
     <div className="space-y-6 sm:space-y-8 text-slate-900 animate-fadeIn pb-24 sm:pb-12">
       
-      {/* 1. Header Banner & Quick Actions - 100% Light Theme */}
-      <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 sm:gap-2.5 mb-1.5 flex-wrap">
-            <span className="p-2 rounded-xl bg-amber-50 text-amber-900 border border-amber-200 shrink-0">
-              <ShieldCheck className="w-5 h-5" />
+      {/* 1. Header Banner & Quick Actions - Unified Header */}
+      <AdminTabHeader
+        icon={<ShieldCheck className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Phân Quyền & Quản Trị Hệ Thống"
+        title="Quản Trị Hệ Thống & Phân Quyền (Firebase Auth)"
+        badge={
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200 text-xs font-black">
+              {totalCount} Tài khoản
             </span>
-            <h2 className="text-base sm:text-xl font-black text-slate-900 tracking-tight">
-              Quản Trị Hệ Thống & Phân Quyền (Firebase Auth)
-            </h2>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-950 border border-amber-200 text-xs font-black">
-                {totalCount} Tài khoản
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
-                2 Tổng bí thư
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold">
-                {deputyCount} Chủ tịch nước
-              </span>
-              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold">
-                {memberCount} Bộ trưởng
-              </span>
-            </div>
+            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[11px] font-bold">
+              2 Tổng bí thư
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-bold">
+              {deputyCount} Chủ tịch nước
+            </span>
+            <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold">
+              {memberCount} Bộ trưởng
+            </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 line-clamp-2">
-            Quản trị quyền truy cập Google Authentication cấp Cloud. Chỉ những email được phê duyệt dưới đây mới có quyền đăng nhập vào hệ thống.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={loadAuthorizedEmails}
-            disabled={isLoadingAuthEmails}
-            className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm border border-slate-300 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Tải lại danh sách từ Firestore Cloud"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoadingAuthEmails ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Đồng bộ Cloud</span>
-          </button>
-
-          {isRootAdmin && (
+        }
+        description="Quản trị quyền truy cập Google Authentication cấp Cloud. Chỉ những email được phê duyệt dưới đây mới có quyền đăng nhập vào hệ thống."
+        actions={
+          <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0">
             <button
               type="button"
-              onClick={handleToggleAddForm}
-              className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl shadow-xs transition-all cursor-pointer ${
-                isAddFormOpen 
-                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' 
-                  : 'bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-sm active:scale-95'
-              }`}
+              onClick={loadAuthorizedEmails}
+              disabled={isLoadingAuthEmails}
+              className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm border border-slate-300 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Tải lại danh sách từ Firestore Cloud"
             >
-              {isAddFormOpen ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-              <span>{isAddFormOpen ? 'Đóng Biểu Mẫu' : 'Cấp quyền'}</span>
+              <RefreshCw className={`w-4 h-4 ${isLoadingAuthEmails ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Đồng bộ Cloud</span>
             </button>
-          )}
-        </div>
-      </div>
+
+            {isRootAdmin && (
+              <button
+                type="button"
+                onClick={handleToggleAddForm}
+                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 font-bold text-xs sm:text-sm rounded-xl shadow-2xs transition-all cursor-pointer ${
+                  isAddFormOpen 
+                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300' 
+                    : 'bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-sm active:scale-95'
+                }`}
+              >
+                {isAddFormOpen ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                <span>{isAddFormOpen ? 'Đóng Biểu Mẫu' : 'Cấp quyền'}</span>
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* Notifications */}
       {authEmailSuccess && (

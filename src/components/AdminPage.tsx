@@ -31,6 +31,7 @@ import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
 import { AdminSocialFeedManager } from './admin/AdminSocialFeedManager';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 import { autoImportAndSaveExternalImage } from '../utils/imageUtils';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { ensureGmailDomain, sendOrderConfirmationEmail } from '../utils/emailService';
@@ -3439,7 +3440,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           {[
             { id: 'dashboard', label: 'Tổng quan' },
             { id: 'orders', label: `Đơn hàng (${activeOrders.length})` },
-            { id: 'manual_order', label: '+ Nhập đơn' },
+            { id: 'manual_order', label: 'Nhập đơn' },
             { id: 'products', label: `Sản phẩm (${products.length})` },
             { id: 'categories', label: `Danh mục (${localCategories.length})` },
             { id: 'vouchers', label: 'Vouchers' },
@@ -3588,6 +3589,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'products' && (
           <div className="space-y-6 animate-fadeIn pb-24 sm:pb-8">
             
+            {/* Unified Products Header */}
+            <AdminTabHeader
+              title={`Sản Phẩm & Tồn Kho (${products.length})`}
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleOpenAddForm}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  >
+                    <span>Thêm Sản Phẩm Đơn</span>
+                  </button>
+                  <button
+                    onClick={handleOpenAddComboForm}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  >
+                    <span>Thêm Combo Tiết Kiệm</span>
+                  </button>
+                </div>
+              }
+            />
+
             {/* Quick Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
@@ -3642,7 +3664,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   title="Thêm sản phẩm đơn lẻ (vòng tay, charm hoặc móc khóa đơn)"
                 >
                   <Plus className="w-4 h-4 text-slate-950" />
-                  <span>+ Thêm Sản Phẩm Đơn</span>
+                  <span>Thêm Sản Phẩm Đơn</span>
                 </button>
 
                 <button
@@ -6456,26 +6478,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'categories' && (
           <div className="space-y-6 animate-fadeIn pb-24 sm:pb-8">
             {/* Header & Actions */}
-            <div className="bg-gradient-to-r from-amber-50 to-amber-100/60 p-6 rounded-3xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
-              <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-200/80 text-amber-900 text-xs font-bold uppercase tracking-wider mb-2 border border-amber-300">
-                  <span>Quản Lý Phân Loại & Bộ Sưu Tập</span>
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900">
-                  Danh Mục Sản Phẩm ({localCategories.length})
-                </h3>
-                <p className="text-xs text-slate-600 mt-1 max-w-xl">
-                  Thêm, sửa tên, đổi màu nhận diện, và cập nhật mô tả các Bộ sưu tập handmade. Các thay đổi sẽ cập nhật tức thì trên toàn bộ Cửa Hàng và Bộ Lọc.
-                </p>
-              </div>
-
-              <button
-                onClick={handleOpenAddCategory}
-                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 transition-all shadow-sm self-start sm:self-auto"
-              >
-                <span>+ Thêm Danh Mục Mới</span>
-              </button>
-            </div>
+            <AdminTabHeader
+              title={`Danh Mục Sản Phẩm (${localCategories.length})`}
+              actions={
+                <button
+                  onClick={handleOpenAddCategory}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                >
+                  <span>Thêm Danh Mục Mới</span>
+                </button>
+              }
+            />
 
             {/* Category Add/Edit Modal/Drawer */}
             {isAddingCategory && (
@@ -6755,6 +6768,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fadeIn pb-24 sm:pb-8">
             
+            {/* Unified Orders Header */}
+            <AdminTabHeader
+              icon={<ShoppingBag className="w-5 h-5 text-emerald-900" />}
+              iconBgColor="bg-emerald-100 text-emerald-900 border-emerald-200"
+              eyebrow="Xử Lý Giao Dịch & Vận Chuyển"
+              title={`Quản Lý Đơn Hàng (${activeOrders.length})`}
+              description="Theo dõi toàn bộ đơn hàng từ Website và Mạng xã hội, cập nhật tiến độ xử lý, đóng gói, giao hàng và thanh toán."
+              actions={
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReloadOrders}
+                    disabled={loadingOrders}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 shadow-2xs cursor-pointer disabled:opacity-60"
+                    title="Tải lại danh sách đơn hàng"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-amber-600' : 'text-slate-600'}`} />
+                    <span>{loadingOrders ? 'Đang tải...' : 'Tải lại đơn'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchTab('manual_order')}
+                    className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-slate-950" />
+                    <span>Nhập Đơn Mới</span>
+                  </button>
+                </div>
+              }
+            />
+
             {/* Quick Status Funnel Bar & Top "Tạo Đơn" Action */}
             <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2.5 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-2.5">
               <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
@@ -7539,44 +7583,57 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                             Size: {item.selectedSize}
                                           </span>
                                         )}
-                                        {item.customPhotoUrl && (
-                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
-                                            <button
-                                              type="button"
-                                              onMouseEnter={(e) => {
-                                                const rect = e.currentTarget.getBoundingClientRect();
-                                                setHoveredPhotoPreview({
-                                                  url: item.customPhotoUrl!,
-                                                  title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                  note: item.customPhotoNote,
-                                                  x: rect.right + 12,
-                                                  y: rect.top - 20
-                                                });
-                                              }}
-                                              onMouseLeave={() => setHoveredPhotoPreview(null)}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setZoomCustomPhoto({
-                                                  url: item.customPhotoUrl!,
-                                                  title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                  note: item.customPhotoNote
-                                                });
-                                              }}
-                                              className="hover:opacity-80 inline-flex items-center gap-1 cursor-pointer"
-                                            >
-                                              <img src={item.customPhotoUrl} alt="" className="w-4 h-4 rounded-none object-cover border border-rose-300 inline" />
-                                              <span className="font-bold text-rose-800">Ảnh in custom</span>
-                                            </button>
-                                            {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
-                                              <span className="text-rose-700 font-bold">(+{item.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
-                                            ) : null}
-                                          </span>
-                                        )}
+                                        {(item.customPhotoUrl || (item.customPhotoUrls && item.customPhotoUrls.length > 0)) && (() => {
+                                          const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
+                                            ? item.customPhotoUrls
+                                            : [item.customPhotoUrl!];
+                                          return (
+                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-rose-50 text-rose-900 border border-rose-200 rounded font-medium">
+                                              <div className="flex items-center -space-x-1">
+                                                {pList.map((pUrl, pIdx) => (
+                                                  <button
+                                                    key={pIdx}
+                                                    type="button"
+                                                    onMouseEnter={(e) => {
+                                                      const rect = e.currentTarget.getBoundingClientRect();
+                                                      setHoveredPhotoPreview({
+                                                        url: pUrl,
+                                                        title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''} (Ảnh ${pIdx + 1}/${pList.length})`,
+                                                        note: item.customPhotoNote,
+                                                        x: rect.right + 12,
+                                                        y: rect.top - 20
+                                                      });
+                                                    }}
+                                                    onMouseLeave={() => setHoveredPhotoPreview(null)}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setZoomCustomPhoto({
+                                                        url: pUrl,
+                                                        title: `${item.productName || (item as any).name || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''} (Ảnh ${pIdx + 1}/${pList.length})`,
+                                                        note: item.customPhotoNote
+                                                      });
+                                                    }}
+                                                    className="hover:opacity-80 inline-flex items-center cursor-pointer"
+                                                    title={`Bấm xem ảnh #${pIdx + 1}`}
+                                                  >
+                                                    <img src={pUrl} alt="" className="w-4 h-4 rounded-xs object-cover border border-rose-300 inline bg-white" />
+                                                  </button>
+                                                ))}
+                                              </div>
+                                              <span className="font-bold text-rose-800">
+                                                {pList.length > 1 ? `In ${pList.length} ảnh` : 'Ảnh in custom'}
+                                              </span>
+                                              {item.customPhotoPrice && item.customPhotoPrice > 0 ? (
+                                                <span className="text-rose-700 font-bold">(+{item.customPhotoPrice.toLocaleString('vi-VN')}đ{pList.length > 1 ? '/ảnh' : ''})</span>
+                                              ) : null}
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
                                     ) : null}
                                     {item.customPhotoNote && (
                                       <div className="text-[10px] text-rose-800 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/60 pl-2">
-                                        * Yêu cầu ảnh: {item.customPhotoNote}
+                                        * Yêu cầu in: {item.customPhotoNote}
                                       </div>
                                     )}
                                     {item.customNote && (
@@ -8057,67 +8114,64 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </div>
                                       ) : null}
                                       {(() => {
-                                        const photoUrl = it.customPhotoUrl || (it as any).customPhoto || (typeof (it as any).customPhotoData === 'string' ? (it as any).customPhotoData : '');
-                                        if (!photoUrl && !it.customPhotoNote) return null;
+                                        const pUrls = (it.customPhotoUrls && it.customPhotoUrls.length > 0)
+                                          ? it.customPhotoUrls
+                                          : (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+                                        if (pUrls.length === 0 && !it.customPhotoNote) return null;
                                         return (
-                                          <div className="mt-1 flex flex-wrap items-center gap-1.5 p-1 bg-rose-50/90 border border-rose-200 rounded-none">
-                                            {photoUrl ? (
-                                              <div className="flex items-center gap-1.5">
-                                                <img
-                                                  src={photoUrl}
-                                                  alt=""
-                                                  onMouseEnter={(e) => {
-                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                    setHoveredPhotoPreview({
-                                                      url: photoUrl,
-                                                      title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                      note: it.customPhotoNote,
-                                                      x: rect.right + 12,
-                                                      y: rect.top - 20
-                                                    });
-                                                  }}
-                                                  onMouseLeave={() => setHoveredPhotoPreview(null)}
-                                                  onClick={() => setZoomCustomPhoto({
-                                                    url: photoUrl,
-                                                    title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                    note: it.customPhotoNote
-                                                  })}
-                                                  className="w-5 h-5 rounded-none object-cover border border-rose-400 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
-                                                />
-                                                <button
-                                                  type="button"
-                                                  onMouseEnter={(e) => {
-                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                    setHoveredPhotoPreview({
-                                                      url: photoUrl,
-                                                      title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                      note: it.customPhotoNote,
-                                                      x: rect.right + 12,
-                                                      y: rect.top - 20
-                                                    });
-                                                  }}
-                                                  onMouseLeave={() => setHoveredPhotoPreview(null)}
-                                                  onClick={() => setZoomCustomPhoto({
-                                                    url: photoUrl,
-                                                    title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''}`,
-                                                    note: it.customPhotoNote
-                                                  })}
-                                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold shadow-2xs transition-colors cursor-pointer"
-                                                >
-                                                  <Eye className="w-3 h-3" />
-                                                  <span>Xem ảnh</span>
-                                                </button>
+                                          <div className="mt-1 flex flex-wrap items-center gap-2 p-1.5 bg-rose-50/90 border border-rose-200 rounded-xl">
+                                            {pUrls.length > 0 ? (
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                {pUrls.map((pUrl, pIdx) => (
+                                                  <div key={pIdx} className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-rose-200/80 shadow-2xs">
+                                                    <img
+                                                      src={pUrl}
+                                                      alt=""
+                                                      onMouseEnter={(e) => {
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        setHoveredPhotoPreview({
+                                                          url: pUrl,
+                                                          title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''} (Ảnh ${pIdx + 1}/${pUrls.length})`,
+                                                          note: it.customPhotoNote,
+                                                          x: rect.right + 12,
+                                                          y: rect.top - 20
+                                                        });
+                                                      }}
+                                                      onMouseLeave={() => setHoveredPhotoPreview(null)}
+                                                      onClick={() => setZoomCustomPhoto({
+                                                        url: pUrl,
+                                                        title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''} (Ảnh ${pIdx + 1}/${pUrls.length})`,
+                                                        note: it.customPhotoNote
+                                                      })}
+                                                      className="w-6 h-6 rounded-md object-cover border border-rose-400 shrink-0 cursor-zoom-in hover:scale-125 transition-transform"
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setZoomCustomPhoto({
+                                                        url: pUrl,
+                                                        title: `${it.productName || 'Sản phẩm'} - Đơn ${ord.trackingNumber || ord.id || ''} (Ảnh ${pIdx + 1}/${pUrls.length})`,
+                                                        note: it.customPhotoNote
+                                                      })}
+                                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer"
+                                                    >
+                                                      <Eye className="w-2.5 h-2.5" />
+                                                      <span>Ảnh {pIdx + 1}</span>
+                                                    </button>
+                                                    <a
+                                                      href={pUrl}
+                                                      download={`anh-in-don-${ord.id || ord.trackingNumber || 'custom'}-${pIdx + 1}.jpg`}
+                                                      className="text-[10px] text-rose-700 hover:text-rose-900 underline font-semibold cursor-pointer ml-0.5"
+                                                      title="Tải ảnh về máy để in"
+                                                    >
+                                                      Tải
+                                                    </a>
+                                                  </div>
+                                                ))}
                                                 {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
-                                                  <span className="text-[10px] text-rose-700 font-bold">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
+                                                  <span className="text-[10px] text-rose-700 font-bold bg-white px-1.5 py-0.5 rounded border border-rose-200">
+                                                    (+{it.customPhotoPrice.toLocaleString('vi-VN')}đ{pUrls.length > 1 ? '/ảnh' : ''})
+                                                  </span>
                                                 ) : null}
-                                                <a
-                                                  href={photoUrl}
-                                                  download={`anh-in-don-${ord.id || ord.trackingNumber || 'custom'}.jpg`}
-                                                  className="text-[10px] text-rose-700 hover:text-rose-900 underline font-semibold cursor-pointer ml-0.5"
-                                                  title="Tải ảnh về máy để in"
-                                                >
-                                                  Tải ảnh
-                                                </a>
                                               </div>
                                             ) : null}
                                             {it.customPhotoNote && (

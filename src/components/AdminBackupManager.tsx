@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage } from '../types';
 import { Download, Upload, Check, Database, FileSpreadsheet, HardDrive, RefreshCw, AlertCircle, ShieldCheck, FileJson, CheckCircle2, FileText } from 'lucide-react';
+import { AdminTabHeader } from './admin/AdminTabHeader';
 import { StoredOrder, saveSiteContentToFirestore, saveCategoriesToFirestore, saveCollectionsToFirestore, saveProductsToFirestore, saveOrdersToFirestore } from '../firebase';
 import { ExcelExportPromptModal } from './ExcelExportPromptModal';
 import { exportMasterBackupWithImageOption } from '../utils/excelImageExporter';
@@ -249,6 +250,9 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
             ? item.itemDetails.map((it: any) => ({
                 ...it,
                 customPhotoUrl: it.customPhotoUrl || undefined,
+                customPhotoUrls: Array.isArray(it.customPhotoUrls) && it.customPhotoUrls.length > 0
+                  ? it.customPhotoUrls
+                  : (it.customPhotoUrl ? [it.customPhotoUrl] : undefined),
                 customPhotoNote: it.customPhotoNote || undefined,
                 customPhotoPrice: it.customPhotoPrice !== undefined ? Number(it.customPhotoPrice) : undefined
               }))
@@ -478,25 +482,23 @@ export const AdminBackupManager: React.FC<AdminBackupManagerProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       
-      {/* Top Banner: Clean System Backup Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-base font-black text-slate-900 tracking-tight">
-            Sao Lưu Dữ Liệu & Xuất Báo Cáo
-          </h2>
-          <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-            Xuất file Excel báo cáo kèm ảnh hoặc tải file JSON sao lưu toàn bộ đơn hàng, sản phẩm và giao diện website.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Tài khoản Cloud</span>
-            <span className="text-xs font-bold text-emerald-700 font-mono">Đã kết nối Firebase</span>
+      {/* Top Banner: Unified Header */}
+      <AdminTabHeader
+        icon={<Database className="w-5 h-5 text-amber-900" />}
+        iconBgColor="bg-amber-100 text-amber-900 border-amber-200"
+        eyebrow="Sao Lưu & An Toàn Dữ Liệu"
+        title="Sao Lưu Dữ Liệu & Xuất Báo Cáo"
+        description="Xuất file Excel báo cáo kèm ảnh hoặc tải file JSON sao lưu toàn bộ đơn hàng, sản phẩm và cấu hình giao diện website."
+        actions={
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">Tài khoản Cloud</span>
+              <span className="text-xs font-bold text-emerald-700 font-mono">Đã kết nối Firebase</span>
+            </div>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100" title="Cloud Realtime Active" />
           </div>
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100" title="Cloud Realtime Active" />
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

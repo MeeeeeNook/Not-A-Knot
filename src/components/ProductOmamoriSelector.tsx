@@ -26,8 +26,6 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   maxAllowed = 1,
   isRequired = false,
 }) => {
-  if (!omamoris || omamoris.length === 0) return null;
-
   const displayTitle = title?.trim() || 'Chọn Bùa Omamori';
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [activeCompareIdx, setActiveCompareIdx] = useState(0);
@@ -48,6 +46,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   }, [omamoris]);
 
   const compareItems: CompareItem[] = useMemo(() => {
+    if (!omamoris) return [];
     return omamoris.map((o, i) => ({
       id: o.id || `omamori-${i}`,
       title: o.name,
@@ -64,7 +63,7 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
     if (selectedOmamoris && selectedOmamoris.length > 0) {
       return selectedOmamoris;
     }
-    if (selectedOmamori) {
+    if (selectedOmamori && omamoris) {
       const found = omamoris.find(
         (o) => o.name.trim().toLowerCase() === selectedOmamori.trim().toLowerCase()
       );
@@ -78,6 +77,8 @@ export const ProductOmamoriSelector: React.FC<ProductOmamoriSelectorProps> = ({
   const totalExtraPrice = React.useMemo(() => {
     return currentSelection.reduce((sum, o) => sum + (o.priceDelta || 0), 0);
   }, [currentSelection]);
+
+  if (!omamoris || omamoris.length === 0) return null;
 
   const handleToggleOmamori = (omamori: ProductOmamoriOption) => {
     const isAlreadySelected = currentSelection.some(

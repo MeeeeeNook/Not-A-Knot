@@ -201,10 +201,12 @@ export function serializeCartItems(cartItems: CartItem[]): string {
     selectedKhoenPrice: item.selectedKhoenPrice,
     // Preserve customer's uploaded photo 100% without alteration
     customPhotoUrl: item.customPhotoUrl || undefined,
+    customPhotoUrls: item.customPhotoUrls && item.customPhotoUrls.length > 0 ? item.customPhotoUrls : undefined,
     customPhotoNote: item.customPhotoNote,
     customPhotoPrice: item.customPhotoPrice,
     selectedSize: item.selectedSize,
     customNote: item.customNote,
+    selectedComboItems: item.selectedComboItems,
   }));
 
   return JSON.stringify(lightweightItems);
@@ -228,6 +230,10 @@ export function deserializeCartItems(
       .map((item) => {
         const prodId = item.productId || item.product?.id;
         const matchedProduct = availableProducts.find((p) => p.id === prodId);
+
+        const rawPhotoUrls = Array.isArray(item.customPhotoUrls) && item.customPhotoUrls.length > 0
+          ? item.customPhotoUrls
+          : (item.customPhotoUrl ? [item.customPhotoUrl] : undefined);
 
         return {
           product: matchedProduct || item.product || {
@@ -253,10 +259,12 @@ export function deserializeCartItems(
           selectedKhoenImage: item.selectedKhoenImage,
           selectedKhoenPrice: item.selectedKhoenPrice,
           customPhotoUrl: item.customPhotoUrl,
+          customPhotoUrls: rawPhotoUrls,
           customPhotoNote: item.customPhotoNote,
           customPhotoPrice: item.customPhotoPrice,
           selectedSize: item.selectedSize,
           customNote: item.customNote,
+          selectedComboItems: item.selectedComboItems,
         };
       });
   } catch (e) {
