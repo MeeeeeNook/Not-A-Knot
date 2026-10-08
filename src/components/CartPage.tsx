@@ -184,7 +184,7 @@ export const CartPage: React.FC<CartPageProps> = ({
     const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
       ? item.customPhotoUrls
       : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
-    if (pList.length > 1 && item.quantity <= pList.length) {
+    if (pList.length > 0) {
       setDeleteModalItemIndex(targetIdx);
       return;
     }
@@ -1679,7 +1679,7 @@ export const CartPage: React.FC<CartPageProps> = ({
                       ) : isSuccessEmailSent ? (
                         '✓ Đã gửi email'
                       ) : (
-                        'Gửi Email'
+                        'Email'
                       )}
                     </button>
                   </div>
@@ -2161,31 +2161,49 @@ export const CartPage: React.FC<CartPageProps> = ({
               <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   {cartPhotoPreview.isCustomPhoto && (
-                    <button
-                      type="button"
-                      disabled={isReplacingPhoto}
-                      onClick={() => {
-                        if (typeof cartPhotoPreview.index === 'number') {
-                          handleTriggerReplacePhoto(cartPhotoPreview.index);
-                        } else {
-                          replaceFileInputRef.current?.click();
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                      title="Chọn ảnh khác thay thế từ máy của bạn"
-                    >
-                      {isReplacingPhoto ? (
-                        <>
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          <span>Đang đổi ảnh...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>Thay ảnh</span>
-                        </>
+                    <>
+                      <button
+                        type="button"
+                        disabled={isReplacingPhoto}
+                        onClick={() => {
+                          if (typeof cartPhotoPreview.index === 'number') {
+                            handleTriggerReplacePhoto(cartPhotoPreview.index);
+                          } else {
+                            replaceFileInputRef.current?.click();
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                        title="Chọn ảnh khác thay thế từ máy của bạn"
+                      >
+                        {isReplacingPhoto ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Đang đổi ảnh...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>Thay ảnh</span>
+                          </>
+                        )}
+                      </button>
+
+                      {typeof cartPhotoPreview.index === 'number' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const itemIdx = cartPhotoPreview.index!;
+                            const curPhotoIdx = cartPhotoPreview.activePhotoIdx ?? 0;
+                            handleDeletePhotoDirect(itemIdx, curPhotoIdx);
+                          }}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 border border-rose-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                          title="Xóa ảnh đang xem khỏi sản phẩm này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Xóa ảnh này</span>
+                        </button>
                       )}
-                    </button>
+                    </>
                   )}
 
                   {/* Zoom controls */}
@@ -2318,7 +2336,14 @@ export const CartPage: React.FC<CartPageProps> = ({
                 : (cartItems[deleteModalItemIndex].customPhotoUrl ? [cartItems[deleteModalItemIndex].customPhotoUrl!] : [])
             }
             productName={cartItems[deleteModalItemIndex].product.name}
+            itemQuantity={cartItems[deleteModalItemIndex].quantity}
             onDeletePhoto={handleDeletePhotoFromCartItem}
+            onDecreaseQuantityOnly={() => {
+              const idx = deleteModalItemIndex;
+              if (idx !== null && cartItems[idx]) {
+                onUpdateQuantity(idx, cartItems[idx].quantity - 1);
+              }
+            }}
           />
         )}
 

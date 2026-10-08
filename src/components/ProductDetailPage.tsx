@@ -684,7 +684,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const handleDecreaseQuantity = () => {
     if (quantity <= 1) return;
-    if (product.enableCustomPhoto && customPhotoUrls && customPhotoUrls.length > 1 && quantity <= customPhotoUrls.length) {
+    if (product.enableCustomPhoto && customPhotoUrls && customPhotoUrls.length > 1) {
       setIsPhotoDeleteSelectOpen(true);
       return;
     }
@@ -2115,7 +2115,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
         onClose={() => setIsPhotoDeleteSelectOpen(false)}
         photos={customPhotoUrls}
         productName={product.name}
+        itemQuantity={quantity}
         onDeletePhoto={handleDeletePhotoOnDecrease}
+        onDecreaseQuantityOnly={() => setQuantity((q) => Math.max(1, q - 1))}
       />
     </motion.div>
   );

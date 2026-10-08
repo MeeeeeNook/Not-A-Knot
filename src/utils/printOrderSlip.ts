@@ -72,11 +72,16 @@ export const generateOrderSlipHtml = (
             ]
               .filter(Boolean)
               .join(' | ');
-            const customPhotoHtml = it.customPhotoUrl
-              ? `<div style="margin-top:4px;padding:4px 8px;background:#fff1f2;border:1px solid #fecdd3;border-radius:6px;font-size:11px;color:#9f1239;display:flex;align-items:center;gap:6px;">
-                  <img src="${it.customPhotoUrl}" alt="Ảnh in" style="width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid #f43f5e;" />
+            const pUrls = (it.customPhotoUrls && it.customPhotoUrls.length > 0)
+              ? it.customPhotoUrls
+              : (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+            const customPhotoHtml = pUrls.length > 0
+              ? `<div style="margin-top:4px;padding:4px 8px;background:#fff1f2;border:1px solid #fecdd3;border-radius:6px;font-size:11px;color:#9f1239;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${pUrls.map((u, pIdx) => `<img src="${u}" alt="Ảnh in #${pIdx + 1}" style="width:28px;height:28px;object-fit:cover;border-radius:4px;border:1px solid #f43f5e;" />`).join('')}
+                  </div>
                   <div>
-                    <strong>📷 In ảnh theo yêu cầu:</strong> Có ${it.customPhotoPrice ? `(+${it.customPhotoPrice.toLocaleString('vi-VN')}đ)` : ''}
+                    <strong>📷 In ${pUrls.length > 1 ? `${pUrls.length} ảnh` : 'ảnh'} theo yêu cầu:</strong> ${it.customPhotoPrice ? `(+${it.customPhotoPrice.toLocaleString('vi-VN')}đ)` : 'Đã bao gồm'}
                     ${it.customPhotoNote ? `<div style="font-style:italic;color:#881337;">Y/C: ${it.customPhotoNote}</div>` : ''}
                   </div>
                 </div>`

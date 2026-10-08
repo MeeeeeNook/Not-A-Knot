@@ -201,6 +201,14 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
     theme
   ]);
 
+  // Seamless loop items for continuous marquee ticker (repeats smoothly with wide spacing)
+  const marqueeItems = useMemo(() => {
+    if (!messages.length) return [];
+    const repeatCount = Math.max(3, Math.ceil(8 / messages.length));
+    const baseSet = Array.from({ length: repeatCount }).flatMap(() => messages);
+    return [...baseSet, ...baseSet];
+  }, [messages]);
+
   // Handle slide transitions with smooth animation
   const goToSlide = useCallback((nextIdx: number) => {
     setIsTransitioning(true);
@@ -308,14 +316,6 @@ export const TopAnnouncementBar: React.FC<TopAnnouncementBarProps> = ({
     }
     touchStartXRef.current = null;
   };
-
-  // Seamless loop items for continuous marquee ticker (repeats smoothly with wide spacing)
-  const marqueeItems = useMemo(() => {
-    if (!messages.length) return [];
-    const repeatCount = Math.max(3, Math.ceil(8 / messages.length));
-    const baseSet = Array.from({ length: repeatCount }).flatMap(() => messages);
-    return [...baseSet, ...baseSet];
-  }, [messages]);
 
   if (!isEnabled || isDismissed) {
     return null;

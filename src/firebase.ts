@@ -1681,7 +1681,41 @@ export async function uploadOrderCustomPhotosToStorage(
   return Promise.all(
     itemDetails.map(async (item, idx) => {
       const copy = { ...item };
-      if (
+
+      // Handle array of custom photos if present
+      if (Array.isArray(copy.customPhotoUrls) && copy.customPhotoUrls.length > 0) {
+        try {
+          const uploadedUrls = await Promise.all(
+            copy.customPhotoUrls.map(async (pUrl, pIdx) => {
+              if (
+                pUrl &&
+                typeof pUrl === 'string' &&
+                (pUrl.startsWith('data:image/') || pUrl.length > 300) &&
+                !pUrl.startsWith('http')
+              ) {
+                try {
+                  saveAssetToIDB(`order_custom_photo_${safeOrderId}_item_${idx + 1}_p${pIdx + 1}`, pUrl).catch(() => {});
+                } catch {}
+
+                try {
+                  const uploadedUrl = await Promise.race([
+                    uploadBase64ToStorage(pUrl, `order_custom_photos/${safeOrderId}_item_${idx + 1}_p${pIdx + 1}.jpg`),
+                    new Promise<string>((resolve) => setTimeout(() => resolve(pUrl), 5000))
+                  ]);
+                  return uploadedUrl;
+                } catch {
+                  return pUrl;
+                }
+              }
+              return pUrl;
+            })
+          );
+          copy.customPhotoUrls = uploadedUrls;
+          copy.customPhotoUrl = uploadedUrls[0];
+        } catch (err) {
+          console.warn(`[uploadOrderCustomPhotosToStorage] Món ${idx + 1} lưu danh sách ảnh fallback:`, err);
+        }
+      } else if (
         copy.customPhotoUrl &&
         typeof copy.customPhotoUrl === 'string' &&
         (copy.customPhotoUrl.startsWith('data:image/') || copy.customPhotoUrl.length > 300) &&
@@ -1698,6 +1732,9 @@ export async function uploadOrderCustomPhotosToStorage(
             new Promise<string>((resolve) => setTimeout(() => resolve(copy.customPhotoUrl!), 5000))
           ]);
           copy.customPhotoUrl = uploadedUrl;
+          if (!copy.customPhotoUrls || copy.customPhotoUrls.length === 0) {
+            copy.customPhotoUrls = [uploadedUrl];
+          }
         } catch (err) {
           console.warn(`[uploadOrderCustomPhotosToStorage] Món ${idx + 1} lưu fallback:`, err);
         }

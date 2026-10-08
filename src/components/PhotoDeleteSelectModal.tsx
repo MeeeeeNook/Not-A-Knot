@@ -6,7 +6,9 @@ export interface PhotoDeleteSelectModalProps {
   onClose: () => void;
   photos: string[];
   productName?: string;
+  itemQuantity?: number;
   onDeletePhoto: (photoIndex: number) => void;
+  onDecreaseQuantityOnly?: () => void;
 }
 
 export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
@@ -14,9 +16,14 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
   onClose,
   photos,
   productName,
+  itemQuantity,
   onDeletePhoto,
+  onDecreaseQuantityOnly,
 }) => {
   if (!isOpen || photos.length === 0) return null;
+
+  const currentQty = itemQuantity ?? photos.length;
+  const canDecreaseWithoutDeleting = Boolean(onDecreaseQuantityOnly && currentQty > photos.length);
 
   return (
     <div
@@ -35,10 +42,12 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Chọn ảnh cần xóa để giảm số lượng
+                {photos.length > 1
+                  ? 'Chọn ảnh cần xóa để giảm số lượng'
+                  : 'Xác nhận xóa ảnh in theo yêu cầu'}
               </h3>
               <p className="text-[11px] text-slate-500">
-                {productName ? `${productName} • ` : ''}Đang có {photos.length} ảnh in
+                {productName ? `${productName} • ` : ''}Đang có {photos.length} ảnh in • Số lượng hiện tại: {currentQty}
               </p>
             </div>
           </div>
@@ -53,8 +62,29 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
 
         {/* Description */}
         <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-          Mỗi sản phẩm tương ứng với 1 ảnh in. Để giảm số lượng xuống còn <strong className="text-slate-900 font-bold">{Math.max(1, photos.length - 1)}</strong>, vui lòng bấm chọn ảnh bạn muốn bỏ bớt:
+          {photos.length > 1
+            ? `Mỗi sản phẩm tương ứng với 1 ảnh in. Để giảm bớt số lượng, vui lòng bấm chọn ảnh bạn muốn bỏ bớt:`
+            : `Bạn có muốn gỡ bỏ ảnh in này khỏi sản phẩm trong giỏ hàng?`}
         </p>
+
+        {/* Optional Action when Qty > Photos: decrease item quantity only */}
+        {canDecreaseWithoutDeleting && (
+          <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 flex items-center justify-between gap-2.5">
+            <div className="text-[11px] text-amber-900 font-medium">
+              Bạn đang có {currentQty} món nhưng chỉ có {photos.length} ảnh in.
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (onDecreaseQuantityOnly) onDecreaseQuantityOnly();
+                onClose();
+              }}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+            >
+              Chỉ giảm món (Giữ nguyên {photos.length} ảnh)
+            </button>
+          </div>
+        )}
 
         {/* Photos Grid */}
         <div className="flex-1 overflow-y-auto pr-1">
@@ -99,7 +129,7 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
           >
-            Giữ nguyên số lượng ({photos.length})
+            Hủy / Giữ nguyên ({currentQty} món)
           </button>
         </div>
       </div>

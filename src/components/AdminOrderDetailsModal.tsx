@@ -217,7 +217,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                 title="Gửi email hóa đơn xác nhận đơn hàng cho khách hoặc quản trị viên"
               >
                 <Mail className="w-3.5 h-3.5 text-amber-700" />
-                <span>{isSendingEmail ? 'Đang gửi...' : 'Gửi Email'}</span>
+                <span>{isSendingEmail ? 'Đang gửi...' : 'Email'}</span>
               </button>
 
               <button
@@ -581,89 +581,138 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                       )}
 
                       {/* Customer Requested Print Photo (Ảnh in kỷ niệm theo yêu cầu) */}
-                      {it.customPhotoUrl && (
-                        <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-rose-50/90 via-pink-50/80 to-amber-50/60 border border-rose-200/90 shadow-2xs space-y-2">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-950">
-                              <Camera className="w-4 h-4 text-rose-600 shrink-0" />
-                              <span>Ảnh khách đặt in theo yêu cầu</span>
-                              {it.customPhotoPrice ? (
-                                <span className="text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-300">
-                                  Phụ thu: +{it.customPhotoPrice.toLocaleString('vi-VN')}đ
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
-                                  Đã bao gồm
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPhotoRotation(0);
-                                  setZoomedPhotoUrl(it.customPhotoUrl!);
-                                }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-100/80 text-rose-900 border border-rose-300 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Phóng to xem</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const url = it.customPhotoUrl!;
-                                  const filename = `Anh_In_Don_${order.id || 'order'}_M${idx + 1}.jpg`;
-                                  if (url.startsWith('data:')) {
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = filename;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    return;
-                                  }
-                                  fetch(url)
-                                    .then((r) => r.blob())
-                                    .then((blob) => {
-                                      const blobUrl = URL.createObjectURL(blob);
-                                      const a = document.createElement('a');
-                                      a.href = blobUrl;
-                                      a.download = filename;
-                                      document.body.appendChild(a);
-                                      a.click();
-                                      document.body.removeChild(a);
-                                      URL.revokeObjectURL(blobUrl);
-                                    })
-                                    .catch(() => window.open(url, '_blank'));
-                                }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Tải ảnh gốc</span>
-                              </button>
-                            </div>
-                          </div>
+                      {(() => {
+                        const itemPhotos = (it.customPhotoUrls && it.customPhotoUrls.length > 0)
+                          ? it.customPhotoUrls
+                          : (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+                        if (itemPhotos.length === 0) return null;
 
-                          <div className="flex items-start gap-3 pt-1">
-                            <div
-                              onClick={() => {
-                                setPhotoRotation(0);
-                                setZoomedPhotoUrl(it.customPhotoUrl!);
-                              }}
-                              className="relative group cursor-pointer shrink-0"
-                              title="Bấm để phóng to và xoay ảnh"
-                            >
-                              <img
-                                src={it.customPhotoUrl}
-                                alt="Ảnh in theo yêu cầu"
-                                className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-rose-300 shadow-sm group-hover:scale-105 transition-transform"
-                              />
-                              <div className="absolute inset-0 bg-black/30 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                <Eye className="w-5 h-5 drop-shadow" />
+                        const handleDownloadSinglePhoto = (url: string, pIdx: number) => {
+                          const filename = `Anh_In_Don_${order.id || 'order'}_M${idx + 1}_P${pIdx + 1}.jpg`;
+                          if (url.startsWith('data:')) {
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            return;
+                          }
+                          fetch(url)
+                            .then((r) => r.blob())
+                            .then((blob) => {
+                              const blobUrl = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = blobUrl;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(blobUrl);
+                            })
+                            .catch(() => window.open(url, '_blank'));
+                        };
+
+                        const handleDownloadAllItemPhotos = () => {
+                          itemPhotos.forEach((url, pIdx) => {
+                            setTimeout(() => {
+                              handleDownloadSinglePhoto(url, pIdx);
+                            }, pIdx * 300);
+                          });
+                        };
+
+                        return (
+                          <div className="mt-2.5 p-3 rounded-xl bg-gradient-to-r from-rose-50/90 via-pink-50/80 to-amber-50/60 border border-rose-200/90 shadow-2xs space-y-2.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-rose-950">
+                                <Camera className="w-4 h-4 text-rose-600 shrink-0" />
+                                <span>Ảnh khách đặt in theo yêu cầu ({itemPhotos.length} ảnh)</span>
+                                {it.customPhotoPrice ? (
+                                  <span className="text-[10px] font-bold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-300">
+                                    Phụ thu: +{it.customPhotoPrice.toLocaleString('vi-VN')}đ{itemPhotos.length > 1 ? '/ảnh' : ''}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                                    Đã bao gồm
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPhotoRotation(0);
+                                    setZoomedPhotoUrl(itemPhotos[0]);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-100/80 text-rose-900 border border-rose-300 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>Phóng to xem</span>
+                                </button>
+                                {itemPhotos.length > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={handleDownloadAllItemPhotos}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                    title="Tải lần lượt toàn bộ ảnh của món này về máy"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Tải tất cả ({itemPhotos.length} ảnh)</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadSinglePhoto(itemPhotos[0], 0)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Tải ảnh gốc</span>
+                                  </button>
+                                )}
                               </div>
                             </div>
-                            <div className="space-y-1 text-xs text-slate-700 flex-1 min-w-0">
+
+                            {/* Grid of all custom photos */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
+                              {itemPhotos.map((pUrl, pIdx) => (
+                                <div
+                                  key={pIdx}
+                                  className="relative group bg-white p-1.5 rounded-xl border border-rose-200/90 shadow-2xs flex flex-col items-center gap-1.5"
+                                >
+                                  <div
+                                    onClick={() => {
+                                      setPhotoRotation(0);
+                                      setZoomedPhotoUrl(pUrl);
+                                    }}
+                                    className="relative w-full aspect-square rounded-lg overflow-hidden cursor-pointer group/img"
+                                    title="Bấm để phóng to và xoay ảnh"
+                                  >
+                                    <img
+                                      src={pUrl}
+                                      alt={`Ảnh in #${pIdx + 1}`}
+                                      className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
+                                    />
+                                    <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-black/75 text-white text-[9px] font-mono font-bold z-10">
+                                      #{pIdx + 1}
+                                    </span>
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                      <Eye className="w-4 h-4 drop-shadow" />
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDownloadSinglePhoto(pUrl, pIdx)}
+                                    className="w-full py-1 px-1.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                                    title={`Tải ảnh #${pIdx + 1}`}
+                                  >
+                                    <Download className="w-3 h-3" />
+                                    <span>Tải #{pIdx + 1}</span>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="space-y-1 text-xs text-slate-700 pt-1">
                               {it.customPhotoNote ? (
                                 <div className="p-2 rounded-lg bg-white/90 border border-rose-200 text-[11px] leading-relaxed">
                                   <span className="font-bold text-rose-900 block mb-0.5">👉 Yêu cầu in / căn chỉnh của khách:</span>
@@ -676,12 +725,12 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                               )}
                               <div className="text-[10px] text-slate-500 flex items-center gap-1 pt-0.5">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                <span>Đã lưu vào bộ nhớ storage & sẵn sàng đóng gói trong file ZIP</span>
+                                <span>Đã lưu vào bộ nhớ storage & sẵn sàng phục vụ gia công xưởng</span>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {it.customNote && (
                         <div className="text-[11px] text-amber-900 bg-amber-100/70 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">

@@ -1548,14 +1548,31 @@ export default function App() {
       if (!prev[index]) return prev;
       const updated = [...prev];
       const prevItem = updated[index];
-      const mergedUrls = newPhotoUrls && newPhotoUrls.length > 0
-        ? newPhotoUrls
-        : (prevItem.customPhotoUrls && prevItem.customPhotoUrls.length > 0 ? prevItem.customPhotoUrls : [newPhotoUrl]);
+      
+      let finalPhotoUrls: string[] | undefined;
+      let finalPhotoUrl: string | undefined;
+
+      if (Array.isArray(newPhotoUrls)) {
+        if (newPhotoUrls.length > 0) {
+          finalPhotoUrls = newPhotoUrls;
+          finalPhotoUrl = newPhotoUrls[0];
+        } else {
+          finalPhotoUrls = undefined;
+          finalPhotoUrl = undefined;
+        }
+      } else if (newPhotoUrl && newPhotoUrl.trim()) {
+        finalPhotoUrl = newPhotoUrl;
+        finalPhotoUrls = [newPhotoUrl];
+      } else {
+        finalPhotoUrl = undefined;
+        finalPhotoUrls = undefined;
+      }
+
       updated[index] = {
         ...prevItem,
         quantity: typeof newQuantity === 'number' ? newQuantity : prevItem.quantity,
-        customPhotoUrl: newPhotoUrl,
-        customPhotoUrls: mergedUrls,
+        customPhotoUrl: finalPhotoUrl,
+        customPhotoUrls: finalPhotoUrls,
         customPhotoNote: newPhotoNote !== undefined ? newPhotoNote : prevItem.customPhotoNote
       };
       return updated;

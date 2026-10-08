@@ -8561,7 +8561,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       }}
                       className="w-full px-3.5 py-1.5 text-left font-bold text-amber-800 hover:bg-amber-50 flex items-center justify-between transition-colors cursor-pointer"
                     >
-                      <span>Gửi email đơn hàng</span>
+                      <span>Email</span>
                       <Mail className="w-3.5 h-3.5 text-amber-600" />
                     </button>
                   )}

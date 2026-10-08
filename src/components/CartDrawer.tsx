@@ -143,7 +143,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
       ? item.customPhotoUrls
       : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
-    if (pList.length > 1 && item.quantity <= pList.length) {
+    if (pList.length > 0) {
       setDeleteModalItemIndex(targetIdx);
       return;
     }
@@ -2246,7 +2246,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             : (cartItems[deleteModalItemIndex].customPhotoUrl ? [cartItems[deleteModalItemIndex].customPhotoUrl!] : [])
         }
         productName={cartItems[deleteModalItemIndex].product.name}
+        itemQuantity={cartItems[deleteModalItemIndex].quantity}
         onDeletePhoto={handleDeletePhotoFromDrawerItem}
+        onDecreaseQuantityOnly={() => {
+          const idx = deleteModalItemIndex;
+          if (idx !== null && cartItems[idx]) {
+            onUpdateQuantity(idx, cartItems[idx].quantity - 1);
+          }
+        }}
       />
     )}
 

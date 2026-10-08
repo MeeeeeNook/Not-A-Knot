@@ -27,7 +27,9 @@ import {
   Mail,
   User,
   Eye,
-  RotateCw
+  RotateCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { StoredOrder, SiteContentConfig } from '../types';
 import { 
@@ -356,6 +358,8 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
   // Custom photo lightbox preview modal
   const [viewingCustomPhoto, setViewingCustomPhoto] = useState<{
     url: string;
+    urls?: string[];
+    activeIndex?: number;
     productName: string;
     note?: string;
   } | null>(null);
@@ -986,7 +990,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     ) : (
                       <>
                         <Mail className="w-4 h-4 text-slate-950 shrink-0" />
-                        <span className="truncate">Gửi email</span>
+                        <span className="truncate">Email</span>
                       </>
                     )}
                   </button>
@@ -1287,32 +1291,69 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                                         Khoen: {it.selectedKhoen}
                                       </span>
                                     )}
-                                    {it.customPhotoUrl && (
-                                      <div className="flex items-center gap-2 flex-wrap mt-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setPhotoModalRotation(0);
-                                            setViewingCustomPhoto({
-                                              url: it.customPhotoUrl!,
-                                              productName: it.productName,
-                                              note: it.customPhotoNote
-                                            });
-                                          }}
-                                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
-                                          title="Bấm để xem ảnh in theo yêu cầu"
-                                        >
-                                          <Eye className="w-3.5 h-3.5" />
-                                          <span>Xem ảnh in</span>
-                                        </button>
-                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
-                                          <span>Ảnh in custom</span>
-                                          {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
-                                            <span className="text-rose-700">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ)</span>
-                                          ) : null}
-                                        </span>
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const itemPhotos = (it.customPhotoUrls && it.customPhotoUrls.length > 0)
+                                        ? it.customPhotoUrls
+                                        : (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+                                      if (itemPhotos.length === 0) return null;
+
+                                      return (
+                                        <div className="space-y-1.5 mt-1.5 w-full">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPhotoModalRotation(0);
+                                                setViewingCustomPhoto({
+                                                  url: itemPhotos[0],
+                                                  urls: itemPhotos,
+                                                  activeIndex: 0,
+                                                  productName: it.productName,
+                                                  note: it.customPhotoNote
+                                                });
+                                              }}
+                                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
+                                              title="Bấm để xem ảnh in theo yêu cầu"
+                                            >
+                                              <Eye className="w-3.5 h-3.5" />
+                                              <span>Xem {itemPhotos.length > 1 ? `${itemPhotos.length} ảnh in` : 'ảnh in'}</span>
+                                            </button>
+                                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                                              <span>Ảnh in theo yêu cầu ({itemPhotos.length})</span>
+                                              {it.customPhotoPrice && it.customPhotoPrice > 0 ? (
+                                                <span className="text-rose-700">(+{it.customPhotoPrice.toLocaleString('vi-VN')}đ{itemPhotos.length > 1 ? '/ảnh' : ''})</span>
+                                              ) : null}
+                                            </span>
+                                          </div>
+
+                                          {/* Photo thumbnails row */}
+                                          <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                            {itemPhotos.map((pUrl, pIdx) => (
+                                              <div
+                                                key={pIdx}
+                                                onClick={() => {
+                                                  setPhotoModalRotation(0);
+                                                  setViewingCustomPhoto({
+                                                   url: pUrl,
+                                                   urls: itemPhotos,
+                                                   activeIndex: pIdx,
+                                                   productName: it.productName,
+                                                   note: it.customPhotoNote
+                                                  });
+                                                }}
+                                                className="relative group cursor-pointer w-10 h-10 rounded-lg overflow-hidden border border-rose-300 shadow-2xs hover:scale-105 transition-transform shrink-0"
+                                                title={`Bấm xem ảnh #${pIdx + 1}`}
+                                              >
+                                                <img src={pUrl} alt="" className="w-full h-full object-cover" />
+                                                <span className="absolute bottom-0 right-0 px-1 py-0.2 bg-black/75 text-white text-[8px] font-mono font-bold rounded-tl">
+                                                  #{pIdx + 1}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 )}
 
@@ -1846,7 +1887,7 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
                     ) : (
                       <>
                         <Mail className="w-4 h-4 text-amber-400" />
-                        <span>Gửi Email</span>
+                        <span>Email</span>
                       </>
                     )}
                   </button>
@@ -1977,6 +2018,41 @@ Cảm ơn quý khách đã tin tưởng và ủng hộ!
 
               {/* Photo Viewport */}
               <div className="relative overflow-hidden bg-black/50 rounded-none flex items-center justify-center p-2 min-h-[260px] max-h-[460px] border border-slate-700/50">
+                {viewingCustomPhoto.urls && viewingCustomPhoto.urls.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const urls = viewingCustomPhoto.urls!;
+                        const cur = viewingCustomPhoto.activeIndex ?? 0;
+                        const nextIdx = (cur - 1 + urls.length) % urls.length;
+                        setViewingCustomPhoto((prev) => prev ? { ...prev, activeIndex: nextIdx, url: urls[nextIdx] } : null);
+                        setPhotoModalRotation(0);
+                      }}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition-colors shadow-md border border-white/20"
+                      title="Ảnh trước"
+                    >
+                      <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const urls = viewingCustomPhoto.urls!;
+                        const cur = viewingCustomPhoto.activeIndex ?? 0;
+                        const nextIdx = (cur + 1) % urls.length;
+                        setViewingCustomPhoto((prev) => prev ? { ...prev, activeIndex: nextIdx, url: urls[nextIdx] } : null);
+                        setPhotoModalRotation(0);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer transition-colors shadow-md border border-white/20"
+                      title="Ảnh tiếp"
+                    >
+                      <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2.5 py-0.5 rounded-full bg-black/75 text-amber-300 text-[11px] font-mono font-bold border border-white/20">
+                      Ảnh {(viewingCustomPhoto.activeIndex ?? 0) + 1} / {viewingCustomPhoto.urls.length}
+                    </div>
+                  </>
+                )}
                 <img
                   src={viewingCustomPhoto.url}
                   alt=""
