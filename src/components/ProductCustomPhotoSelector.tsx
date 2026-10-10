@@ -221,6 +221,13 @@ export const ProductCustomPhotoSelector: React.FC<ProductCustomPhotoSelectorProp
   const handleRemoveSinglePhoto = (idxToRemove: number) => {
     const updated = activePhotoList.filter((_, idx) => idx !== idxToRemove);
     if (updated.length === 0) {
+      // BẢO VỆ UX: Nếu khách in nhiều sản phẩm dùng chung 1 file ảnh (currentQuantity > 1),
+      // khi bấm bỏ bớt ảnh (giảm số lượng), giảm số lượng sản phẩm xuống 1 và GIỮ LẠI ảnh in cho sản phẩm còn lại!
+      // Tuyệt đối không xóa sạch ảnh khiến sản phẩm vẫn còn mà không có ảnh!
+      if (currentQuantity > 1 && onQuantityChange) {
+        onQuantityChange(currentQuantity - 1);
+        return;
+      }
       handleRemoveAll();
       return;
     }

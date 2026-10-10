@@ -23,7 +23,9 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
   if (!isOpen || photos.length === 0) return null;
 
   const currentQty = itemQuantity ?? photos.length;
-  const canDecreaseWithoutDeleting = Boolean(onDecreaseQuantityOnly && currentQty > photos.length);
+  const uniquePhotos = Array.from(new Set(photos.filter(Boolean)));
+  const isSharedPhoto = uniquePhotos.length <= 1;
+  const canDecreaseWithoutDeleting = Boolean(onDecreaseQuantityOnly && (currentQty > photos.length || isSharedPhoto));
 
   return (
     <div
@@ -64,14 +66,16 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
         <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200">
           {photos.length > 1
             ? `Mỗi sản phẩm tương ứng với 1 ảnh in. Để giảm bớt số lượng, vui lòng bấm chọn ảnh bạn muốn bỏ bớt:`
-            : `Bạn có muốn gỡ bỏ ảnh in này khỏi sản phẩm trong giỏ hàng?`}
+            : currentQty > 1
+              ? `Bạn đang có ${currentQty} sản phẩm dùng chung 1 ảnh in này. Bạn muốn giảm bớt 1 sản phẩm nhưng vẫn giữ ảnh in?`
+              : `Bạn có muốn gỡ bỏ ảnh in này khỏi sản phẩm trong giỏ hàng?`}
         </p>
 
-        {/* Optional Action when Qty > Photos: decrease item quantity only */}
-        {canDecreaseWithoutDeleting && (
-          <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200/90 flex items-center justify-between gap-2.5">
-            <div className="text-[11px] text-amber-900 font-medium">
-              Bạn đang có {currentQty} món nhưng chỉ có {photos.length} ảnh in.
+        {/* Action when Qty > 1 and sharing photo: decrease item quantity while keeping photo */}
+        {(onDecreaseQuantityOnly && (currentQty > photos.length || photos.length === 1 || isSharedPhoto)) && (
+          <div className="p-3 bg-amber-50/90 rounded-2xl border border-amber-300 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            <div className="text-[11px] text-amber-950 font-medium">
+              Giữ nguyên ảnh in cho {Math.max(1, currentQty - 1)} sản phẩm còn lại.
             </div>
             <button
               type="button"
@@ -79,9 +83,9 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
                 if (onDecreaseQuantityOnly) onDecreaseQuantityOnly();
                 onClose();
               }}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer shadow-2xs"
             >
-              Chỉ giảm món (Giữ nguyên {photos.length} ảnh)
+              ✓ Giảm 1 món (Giữ lại ảnh in)
             </button>
           </div>
         )}
@@ -108,13 +112,17 @@ export const PhotoDeleteSelectModal: React.FC<PhotoDeleteSelectModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onDeletePhoto(idx);
+                      if ((photos.length <= 1 || isSharedPhoto) && currentQty > 1 && onDecreaseQuantityOnly) {
+                        onDecreaseQuantityOnly();
+                      } else {
+                        onDeletePhoto(idx);
+                      }
                       onClose();
                     }}
                     className="w-full py-1.5 px-2 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-98"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Xóa ảnh này</span>
+                    <span>{(photos.length <= 1 || isSharedPhoto) && currentQty > 1 ? 'Giảm 1 món (Giữ ảnh)' : 'Bỏ bớt ảnh này'}</span>
                   </button>
                 </div>
               </div>

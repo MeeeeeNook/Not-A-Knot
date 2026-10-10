@@ -274,6 +274,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [orderHasReceiptFilter, setOrderHasReceiptFilter] = useState<'all' | 'has_receipt' | 'no_receipt'>('all');
   const [orderSellerFilter, setOrderSellerFilter] = useState<string>('all');
   const [orderCategoryFilter, setOrderCategoryFilter] = useState<string>('all');
+  const [orderProductFilter, setOrderProductFilter] = useState<string>('all');
+
+  // Push hidden products to the bottom of the list in order management
+  const sortedProductsForOrders = useMemo(() => {
+    return [...products].sort((a, b) => {
+      const aHidden = a.isHidden === true;
+      const bHidden = b.isHidden === true;
+      if (aHidden === bHidden) return 0;
+      return aHidden ? 1 : -1;
+    });
+  }, [products]);
   const [orderSortBy, setOrderSortBy] = useState<
     'date_desc' | 'date_asc' | 'seller_asc' | 'seller_desc' | 'total_desc' | 'total_asc' | 'name_asc' | 'category_asc' | 'category_desc'
   >('date_desc');
@@ -457,9 +468,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     if (orderSellerFilter !== 'all') count++;
     if (orderPaymentStatusFilter !== 'all') count++;
     if (orderHasReceiptFilter !== 'all') count++;
+    if (orderProductFilter !== 'all') count++;
     if (orderDateFromFilter || orderDateToFilter) count++;
     return count;
-  }, [orderSortBy, orderSellerFilter, orderPaymentStatusFilter, orderHasReceiptFilter, orderDateFromFilter, orderDateToFilter]);
+  }, [orderSortBy, orderSellerFilter, orderPaymentStatusFilter, orderHasReceiptFilter, orderProductFilter, orderDateFromFilter, orderDateToFilter]);
 
   // Calculate pixel-perfect clamped context menu position right at cursor
   const getClampedContextMenuPos = (clientX: number, clientY: number) => {
@@ -3183,7 +3195,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         return true;
       })();
 
-      return matchSearch && matchType && matchCategory && matchSource && matchStatus && matchPaymentStatus && matchReceipt && matchSeller && matchDateRange;
+      const matchProduct = (() => {
+        if (orderProductFilter === 'all') return true;
+        const targetProd = products.find((p) => p.id === orderProductFilter);
+        const targetName = (targetProd?.name || '').trim().toLowerCase();
+        const inDetails = Array.isArray(o.itemDetails) && o.itemDetails.some((it: any) =>
+          it.productId === orderProductFilter ||
+          (it.productName && it.productName.trim().toLowerCase() === targetName) ||
+          (it.name && it.name.trim().toLowerCase() === targetName)
+        );
+        if (inDetails) return true;
+        const inItems = Array.isArray(o.items) && o.items.some((i: string) =>
+          targetName && typeof i === 'string' && i.toLowerCase().includes(targetName)
+        );
+        return inItems;
+      })();
+
+      return matchSearch && matchType && matchCategory && matchSource && matchStatus && matchPaymentStatus && matchReceipt && matchSeller && matchDateRange && matchProduct;
     });
 
     // Dynamic Multi-field Sorting
@@ -3251,6 +3279,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     orderPaymentStatusFilter,
     orderHasReceiptFilter,
     orderSellerFilter,
+    orderProductFilter,
     orderSortBy,
     orderDateFromFilter,
     orderDateToFilter
@@ -3263,6 +3292,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     orderSearchQuery,
     orderFilterType,
     orderCategoryFilter,
+    orderProductFilter,
     orderSourceFilter,
     orderStatusFilter,
     orderPaymentStatusFilter,
@@ -7165,6 +7195,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   ))}
                 </select>
 
+                {/* Product Filter (Desktop & Tablet) - Sản phẩm bị ẩn đẩy xuống dưới */}
+                <select
+                  id="admin-order-filter-product"
+                  value={orderProductFilter}
+                  onChange={(e: any) => setOrderProductFilter(e.target.value)}
+                  className="hidden md:inline-block px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer max-w-[150px] truncate"
+                  title="Lọc đơn hàng theo sản phẩm (Sản phẩm bị ẩn ở cuối)"
+                >
+                  <option value="all">Tất cả sản phẩm</option>
+                  {sortedProductsForOrders.map((p) => (
+                    <option key={`tb-order-prod-${p.id}`} value={p.id}>
+                      {p.name}{p.isHidden ? ' [Bị ẩn]' : ''}
+                    </option>
+                  ))}
+                </select>
+
                 {/* Source Filter (Desktop & Tablet) */}
                 <select
                   value={orderSourceFilter}
@@ -7260,6 +7306,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                               setOrderDateFromFilter('');
                               setOrderDateToFilter('');
                               setOrderCategoryFilter('all');
+                              setOrderProductFilter('all');
                               setOrderSourceFilter('all');
                             }}
                             className="text-[11px] font-bold text-amber-700 hover:underline cursor-pointer"
@@ -7470,6 +7517,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                           <option value="all">Bill CK: Tất cả</option>
                           <option value="has_receipt">Có ảnh Bill CK</option>
                           <option value="no_receipt">Chưa có ảnh Bill</option>
+                        </select>
+                      </div>
+
+                      {/* 6. Lọc theo sản phẩm (Sản phẩm bị ẩn ở cuối cùng) */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Sản phẩm trong đơn (Sản phẩm bị ẩn ở cuối):
+                        </label>
+                        <select
+                          value={orderProductFilter}
+                          onChange={(e: any) => setOrderProductFilter(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white cursor-pointer"
+                        >
+                          <option value="all">Tất cả sản phẩm</option>
+                          {sortedProductsForOrders.map((p) => (
+                            <option key={`extra-ord-filter-p-${p.id}`} value={p.id}>
+                              {p.name}{p.isHidden ? ' [Bị ẩn]' : ''}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -7738,10 +7804,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             </div>
                             {ord.itemDetails && ord.itemDetails.length > 0 ? (
                               <div className="space-y-1.5">
-                                {ord.itemDetails.slice(0, 3).map((item, itIdx) => (
+                                {ord.itemDetails.slice(0, 3).map((item, itIdx) => {
+                                  const matchedP = products.find(
+                                    (p) => p.id === item.productId || p.name.trim().toLowerCase() === (item.productName || (item as any).name || '').trim().toLowerCase()
+                                  );
+                                  const isItemHidden = matchedP?.isHidden === true;
+
+                                  return (
                                   <div key={itIdx} className="space-y-0.5 text-slate-700 text-[11px]">
-                                    <div className="flex items-center justify-between">
-                                      <span className="truncate pr-2 font-medium">• {item.productName || (item as any).name || 'Sản phẩm'}</span>
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="flex items-center gap-1 min-w-0">
+                                        <span className="truncate font-medium">• {item.productName || (item as any).name || 'Sản phẩm'}</span>
+                                        {isItemHidden && (
+                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 inline-flex items-center gap-0.5 shrink-0">
+                                            <EyeOff className="w-2.5 h-2.5 text-neutral-500" />
+                                            <span>Bị ẩn</span>
+                                          </span>
+                                        )}
+                                      </div>
                                       <span className="shrink-0 font-bold text-slate-700">x{item.quantity || 1}</span>
                                     </div>
                                     {/* Combo Items breakdown */}
@@ -7880,7 +7960,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                );
+                              })}
                                 {ord.itemDetails.length > 3 && (
                                   <div className="text-[10px] text-slate-400 italic">
                                     + {ord.itemDetails.length - 3} sản phẩm khác...
@@ -8264,12 +8345,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <td className="p-3 max-w-sm border-r border-b border-slate-200">
                               <div className="space-y-1">
                                 {ord.itemDetails && ord.itemDetails.length > 0 ? (
-                                  ord.itemDetails.map((it, idx) => (
+                                  ord.itemDetails.map((it, idx) => {
+                                    const matchedP = products.find(
+                                      (p) => p.id === it.productId || p.name.trim().toLowerCase() === (it.productName || (it as any).name || '').trim().toLowerCase()
+                                    );
+                                    const isItemHidden = matchedP?.isHidden === true;
+
+                                    return (
                                     <div key={idx} className="text-xs text-slate-700 bg-white border border-slate-200 px-2 py-1 rounded space-y-0.5">
                                       <div className="flex items-center justify-between gap-1">
-                                        <span className="font-medium truncate text-slate-800">
-                                          {it.productName || (it as any).name}
-                                        </span>
+                                        <div className="flex items-center gap-1 min-w-0">
+                                          <span className="font-medium truncate text-slate-800">
+                                            {it.productName || (it as any).name}
+                                          </span>
+                                          {isItemHidden && (
+                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 inline-flex items-center gap-0.5 shrink-0">
+                                              <EyeOff className="w-2.5 h-2.5 text-neutral-500" />
+                                              <span>Bị ẩn</span>
+                                            </span>
+                                          )}
+                                        </div>
                                         <span className="font-bold text-slate-900 text-[11px] shrink-0">x{it.quantity}</span>
                                       </div>
                                       {/* Combo Items breakdown */}
@@ -8426,7 +8521,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </div>
                                       )}
                                     </div>
-                                  ))
+                                  );
+                                })
                                 ) : (
                                   (Array.isArray(ord.items) ? ord.items : ord.items ? [String(ord.items)] : []).map((it, idx) => (
                                     <div key={idx} className="text-xs text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
@@ -9462,6 +9558,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       {inspectingOrder && (
         <AdminOrderDetailsModal
           order={inspectingOrder}
+          products={products}
           onClose={() => setInspectingOrder(null)}
           onUpdateStatus={(orderId, status) => {
             handleUpdateOrderStatus(orderId, status);

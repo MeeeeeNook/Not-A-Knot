@@ -46,7 +46,9 @@ import {
   Palette,
   Layers,
   HeartHandshake,
-  ZoomIn
+  ZoomIn,
+  EyeOff,
+  Camera
 } from 'lucide-react';
 
 interface EditableOrderItem {
@@ -173,7 +175,16 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   onSaved,
   onSave
 }) => {
-  const products = useMemo(() => propProducts || allProducts || [], [propProducts, allProducts]);
+  const rawProducts = useMemo(() => propProducts || allProducts || [], [propProducts, allProducts]);
+  // Push hidden products to the bottom of the list
+  const products = useMemo(() => {
+    return [...rawProducts].sort((a, b) => {
+      const aHidden = a.isHidden === true;
+      const bHidden = b.isHidden === true;
+      if (aHidden === bHidden) return 0;
+      return aHidden ? 1 : -1;
+    });
+  }, [rawProducts]);
 
   // Aggregate shop-wide options from active products in store (as catalog fallbacks)
   const shopCatalogOptions = useMemo(() => {
@@ -397,6 +408,40 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
   const [addKhoen, setAddKhoen] = useState('');
   const [addOmamori, setAddOmamori] = useState('');
   const [addCustomNote, setAddCustomNote] = useState('');
+
+  // Item custom photo upload ref and state
+  const editItemFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetEditItemIndexForPhoto, setTargetEditItemIndexForPhoto] = useState<number | null>(null);
+
+  const handleEditItemPhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || targetEditItemIndexForPhoto === null) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn tệp hình ảnh.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        setItems((prev) => {
+          const copy = [...prev];
+          const it = copy[targetEditItemIndexForPhoto];
+          if (it) {
+            const oldList = it.customPhotoUrls || (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+            copy[targetEditItemIndexForPhoto] = {
+              ...it,
+              customPhotoUrl: dataUrl,
+              customPhotoUrls: [...oldList, dataUrl]
+            };
+          }
+          return copy;
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Update addition drawer defaults when product changes
   useEffect(() => {
@@ -941,6 +986,14 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
             {/* SECTION 3: PRODUCTS IN ORDER (REAL CONFIGURED OPTIONS ONLY)  */}
             {/* ============================================================ */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+              {/* Hidden file input for uploading photo directly to an order item */}
+              <input
+                type="file"
+                ref={editItemFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleEditItemPhotoSelect}
+              />
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="w-4 h-4 text-amber-600" />
@@ -988,7 +1041,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                       >
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.name} — {p.price.toLocaleString('vi-VN')}đ
+                            {p.name}{p.isHidden ? ' [Bị ẩn]' : ''} — {p.price.toLocaleString('vi-VN')}đ
                           </option>
                         ))}
                         <option value="custom">✏️ Tự nhập sản phẩm tùy biến...</option>
@@ -1162,13 +1215,19 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                           )}
 
                           <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
                                 Món #{idx + 1}
                               </span>
                               <span className="text-sm font-black text-slate-900 truncate">
                                 {it.productName}
                               </span>
+                              {matchedProduct?.isHidden && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 inline-flex items-center gap-1 shrink-0">
+                                  <EyeOff className="w-2.5 h-2.5 text-neutral-500" />
+                                  <span>Bị ẩn</span>
+                                </span>
+                              )}
                             </div>
                             <span className="text-[11px] text-slate-500 block truncate mt-0.5">
                               {matchedProduct ? `Sản phẩm kho: ${matchedProduct.name}` : 'Món thủ công tự đặt'}
@@ -1203,7 +1262,7 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                         >
                           {products.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.name} ({p.price.toLocaleString('vi-VN')}đ)
+                              {p.name}{p.isHidden ? ' [Bị ẩn]' : ''} ({p.price.toLocaleString('vi-VN')}đ)
                             </option>
                           ))}
                           <option value="__custom__">✏️ Tự đặt tên khác (Tùy biến ngoài danh mục)...</option>
@@ -1526,6 +1585,70 @@ export const AdminEditOrderModal: React.FC<AdminEditOrderModalProps> = ({
                             placeholder="VD: Cắt ngắn dây 1cm, charm thắt chặt..."
                             className="w-full px-3 py-1.5 bg-slate-50 focus:bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-amber-500 shadow-2xs"
                           />
+                        </div>
+
+                        {/* Custom Photo Management for this item */}
+                        <div className="pt-2 border-t border-slate-100 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                              <Camera className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Ảnh in theo yêu cầu (Custom Photo):</span>
+                              {(it.customPhotoUrl || (it.customPhotoUrls && it.customPhotoUrls.length > 0)) && (
+                                <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.2 rounded">
+                                  {(it.customPhotoUrls && it.customPhotoUrls.length > 0) ? it.customPhotoUrls.length : 1} ảnh
+                                </span>
+                              )}
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetEditItemIndexForPhoto(idx);
+                                  editItemFileInputRef.current?.click();
+                                }}
+                                className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1"
+                              >
+                                <Camera className="w-3 h-3 text-amber-700" />
+                                <span>{(it.customPhotoUrl || (it.customPhotoUrls && it.customPhotoUrls.length > 0)) ? 'Thêm ảnh' : 'Tải ảnh in'}</span>
+                              </button>
+                              {(it.customPhotoUrl || (it.customPhotoUrls && it.customPhotoUrls.length > 0)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleUpdateItemField(idx, 'customPhotoUrl', undefined);
+                                    handleUpdateItemField(idx, 'customPhotoUrls', undefined);
+                                    handleUpdateItemField(idx, 'customPhotoNote', undefined);
+                                  }}
+                                  className="text-[11px] text-rose-600 hover:underline font-bold cursor-pointer"
+                                >
+                                  Gỡ ảnh
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {(it.customPhotoUrl || (it.customPhotoUrls && it.customPhotoUrls.length > 0)) && (
+                            <div className="p-2 bg-amber-50/70 rounded-xl border border-amber-200/90 space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                {((it.customPhotoUrls && it.customPhotoUrls.length > 0) ? it.customPhotoUrls : [it.customPhotoUrl!]).map((photoUrl, pIdx) => (
+                                  <div key={pIdx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-amber-300 bg-white shrink-0 shadow-2xs">
+                                    <img
+                                      src={photoUrl}
+                                      alt={`Ảnh in ${pIdx + 1}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                value={it.customPhotoNote || ''}
+                                onChange={(e) => handleUpdateItemField(idx, 'customPhotoNote', e.target.value)}
+                                placeholder="Ghi chú in ảnh (VD: Cắt viền tròn, in màu sáng...)"
+                                className="w-full px-2.5 py-1 bg-white border border-amber-200 rounded-lg text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

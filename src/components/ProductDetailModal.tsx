@@ -340,7 +340,26 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   const handleDecreaseQuantity = () => {
     if (quantity <= 1) return;
-    if (product?.enableCustomPhoto && customPhotoUrls && customPhotoUrls.length > 1) {
+    const allExisting = customPhotoUrls && customPhotoUrls.length > 0
+      ? customPhotoUrls
+      : (customPhotoUrl ? [customPhotoUrl] : []);
+    const uniquePhotos = Array.from(new Set(allExisting.filter(Boolean)));
+    // Nếu chỉ có 1 ảnh dùng chung cho nhiều sản phẩm, hoặc số lượng món > số ảnh, hoặc tất cả ảnh trùng nhau:
+    // Chỉ giảm số lượng món, giữ nguyên ảnh in cho món còn lại! Tuyệt đối không xóa ảnh hay mở modal!
+    if (uniquePhotos.length <= 1 || quantity > allExisting.length) {
+      const newQty = Math.max(1, quantity - 1);
+      setQuantity(newQty);
+      if (allExisting.length > newQty && newQty > 0) {
+        const trimmed = allExisting.slice(0, newQty);
+        setCustomPhotoUrls(trimmed);
+        setCustomPhotoUrl(trimmed[0] || customPhotoUrl);
+      } else if (allExisting.length > 0) {
+        setCustomPhotoUrls(allExisting);
+        setCustomPhotoUrl(allExisting[0] || customPhotoUrl);
+      }
+      return;
+    }
+    if (product?.enableCustomPhoto && allExisting.length > 1) {
       setIsPhotoDeleteSelectOpen(true);
       return;
     }
@@ -348,10 +367,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   };
 
   const handleDeletePhotoOnDecrease = (photoIdx: number) => {
-    const updated = customPhotoUrls.filter((_, i) => i !== photoIdx);
-    setCustomPhotoUrls(updated);
-    setCustomPhotoUrl(updated[0] || undefined);
-    setQuantity(Math.max(1, updated.length));
+    const allExisting = customPhotoUrls.length > 0 ? customPhotoUrls : (customPhotoUrl ? [customPhotoUrl] : []);
+    const updated = allExisting.filter((_, i) => i !== photoIdx);
+    // BẢO VỆ UX: Nếu giảm số lượng mà sản phẩm vẫn còn (quantity >= 1), không bao giờ để sản phẩm bị mất sạch ảnh!
+    const finalUrls = updated.length > 0 ? updated : (allExisting.length > 0 ? [allExisting[0]] : []);
+    setCustomPhotoUrls(finalUrls);
+    setCustomPhotoUrl(finalUrls[0] || customPhotoUrl || undefined);
+    setQuantity(Math.max(1, quantity - 1));
   };
 
   const handleIncreaseQuantity = () => {

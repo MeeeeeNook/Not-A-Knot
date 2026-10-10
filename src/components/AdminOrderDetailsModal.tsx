@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
+import { Product } from '../types';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb, Camera, Eye, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb, Camera, Eye, RotateCw, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import {
   printOrderSlipDirectly,
@@ -15,6 +16,7 @@ import { sendOrderConfirmationEmail, ensureGmailDomain } from '../utils/emailSer
 
 interface AdminOrderDetailsModalProps {
   order: StoredOrder;
+  products?: Product[];
   onClose: () => void;
   onUpdateStatus: (orderId: string, status: string) => void;
   onUpdatePaymentStatus?: (orderId: string, paymentStatus: 'paid' | 'unpaid') => void;
@@ -25,6 +27,7 @@ interface AdminOrderDetailsModalProps {
 
 export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   order,
+  products = [],
   onClose,
   onUpdateStatus,
   onUpdatePaymentStatus,
@@ -462,13 +465,25 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
 
             <div className="space-y-3 divide-y divide-slate-200">
               {(order.itemDetails && order.itemDetails.length > 0) ? (
-                order.itemDetails.map((it, idx) => (
+                order.itemDetails.map((it, idx) => {
+                  const matchedProduct = products.find(
+                    (p) => p.id === it.productId || p.name.trim().toLowerCase() === (it.productName || it.name || '').trim().toLowerCase()
+                  );
+                  const isProductHidden = matchedProduct?.isHidden === true;
+
+                  return (
                   <div key={idx} className="pt-3 first:pt-0 flex items-start justify-between gap-3">
                     <div className="space-y-1.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-xs sm:text-sm">
                           {it.productName || it.name || 'Sản phẩm'}
                         </span>
+                        {isProductHidden && (
+                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 inline-flex items-center gap-1 shrink-0">
+                            <EyeOff className="w-2.5 h-2.5 text-neutral-500" />
+                            <span>Bị ẩn</span>
+                          </span>
+                        )}
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px]">
                           x{it.quantity || 1}
                         </span>
@@ -767,7 +782,8 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                       {((it.unitPrice || it.price || 0) * (it.quantity || 1)).toLocaleString('vi-VN')}đ
                     </span>
                   </div>
-                ))
+                );
+              })
               ) : (
                 (Array.isArray(order.items) ? order.items : order.items ? [String(order.items)] : []).map((itText, idx) => (
                   <div key={idx} className="pt-2 first:pt-0 text-xs text-slate-800">

@@ -184,11 +184,30 @@ export const CartPage: React.FC<CartPageProps> = ({
     const pList = item.customPhotoUrls && item.customPhotoUrls.length > 0
       ? item.customPhotoUrls
       : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
-    if (pList.length > 0) {
-      setDeleteModalItemIndex(targetIdx);
+
+    const uniquePhotos = Array.from(new Set(pList.filter(Boolean)));
+
+    // Nếu chỉ có 1 file ảnh dùng chung cho nhiều sản phẩm (hoặc số lượng món > số ảnh, hoặc tất cả ảnh trùng nhau):
+    // Chỉ giảm số lượng sản phẩm xuống 1, và GIỮ NGUYÊN ảnh in cho các sản phẩm còn lại! Tuyệt đối không xóa ảnh!
+    if (uniquePhotos.length <= 1 || item.quantity > pList.length) {
+      const newQty = item.quantity - 1;
+      let updatedUrls = pList;
+      if (pList.length > newQty && newQty > 0) {
+        updatedUrls = pList.slice(0, newQty);
+      } else if (pList.length === 1) {
+        updatedUrls = [pList[0]];
+      }
+      const finalMainUrl = updatedUrls[0] || item.customPhotoUrl || (pList[0] || '');
+      if (onUpdateItemPhoto) {
+        onUpdateItemPhoto(targetIdx, finalMainUrl, item.customPhotoNote, updatedUrls, newQty);
+      } else {
+        onUpdateQuantity(targetIdx, newQty);
+      }
       return;
     }
-    onUpdateQuantity(targetIdx, item.quantity - 1);
+
+    // Chỉ khi có nhiều ảnh KHÁC NHAU và mỗi sản phẩm ứng với 1 ảnh riêng, mới mở modal để khách chọn bỏ bớt ảnh
+    setDeleteModalItemIndex(targetIdx);
   };
 
   const handleDeletePhotoDirect = (targetIdx: number, photoIdx: number) => {
@@ -199,8 +218,13 @@ export const CartPage: React.FC<CartPageProps> = ({
       : (item.customPhotoUrl ? [item.customPhotoUrl] : []);
     const updatedUrls = prevList.filter((_, i) => i !== photoIdx);
     const newQty = Math.max(1, item.quantity - 1);
+
+    // BẢO VỆ UX: Nếu giảm số lượng mà sản phẩm vẫn còn (newQty >= 1), không bao giờ để sản phẩm bị mất sạch ảnh!
+    const finalUrls = updatedUrls.length > 0 ? updatedUrls : (prevList.length > 0 ? [prevList[0]] : []);
+    const finalMainUrl = finalUrls[0] || item.customPhotoUrl || (prevList[0] || '');
+
     if (onUpdateItemPhoto) {
-      onUpdateItemPhoto(targetIdx, updatedUrls[0] || '', item.customPhotoNote, updatedUrls, newQty);
+      onUpdateItemPhoto(targetIdx, finalMainUrl, item.customPhotoNote, finalUrls, newQty);
     } else {
       onUpdateQuantity(targetIdx, newQty);
     }
@@ -768,8 +792,10 @@ export const CartPage: React.FC<CartPageProps> = ({
         selectedKhoenPrice: item.selectedKhoenPrice,
         selectedSize: item.selectedSize,
         customNote: item.customNote,
-        customPhotoUrl: item.customPhotoUrl,
-        customPhotoUrls: item.customPhotoUrls && item.customPhotoUrls.length > 0 ? item.customPhotoUrls : (item.customPhotoUrl ? [item.customPhotoUrl] : undefined),
+        customPhotoUrl: item.customPhotoUrl || item.customPhotoUrls?.[0] || undefined,
+        customPhotoUrls: item.customPhotoUrls && item.customPhotoUrls.length > 0
+          ? item.customPhotoUrls
+          : (item.customPhotoUrl ? [item.customPhotoUrl] : undefined),
         customPhotoNote: item.customPhotoNote,
         customPhotoPrice: item.customPhotoPrice,
         selectedComboItems: item.selectedComboItems

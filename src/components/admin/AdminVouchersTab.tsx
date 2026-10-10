@@ -107,16 +107,15 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     return 'Không có';
   };
 
-  // Get authentic human creator name, never showing fake titles (Tổng bí thư, Bộ trưởng, Hệ thống)
+  // Get authentic creator name
   const getDisplayCreator = (creator?: string, voucherCode?: string): string | null => {
+    if (creator && creator.trim()) {
+      return creator.trim();
+    }
     if (voucherCode && voucherCode.toUpperCase().includes('HUY')) {
       return 'Trần Việt Huy';
     }
-    if (!creator) return null;
-    const trimmed = creator.trim();
-    const fakeTitles = ['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'];
-    if (fakeTitles.includes(trimmed.toLowerCase())) return null;
-    return trimmed;
+    return null;
   };
 
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -147,7 +146,6 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
   const [applicableProductIds, setApplicableProductIds] = useState<string[]>([]);
   const [maxApplicableQuantity, setMaxApplicableQuantity] = useState<number>(0);
   const [usageLimit, setUsageLimit] = useState<number>(0);
-  const [createdByInput, setCreatedByInput] = useState<string>('');
   const [productSearchInModal, setProductSearchInModal] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -357,10 +355,6 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     setApplicableProductIds([]);
     setMaxApplicableQuantity(0);
     setUsageLimit(0);
-    const realUserName = sessionUser?.name && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(sessionUser.name.trim().toLowerCase())
-      ? sessionUser.name
-      : '';
-    setCreatedByInput(realUserName);
     setProductSearchInModal('');
     setFormError(null);
     setIsModalOpen(true);
@@ -380,10 +374,6 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     setApplicableProductIds(v.applicableProductIds || []);
     setMaxApplicableQuantity(v.maxApplicableQuantity || 0);
     setUsageLimit(v.usageLimit || 0);
-    const existingCreator = v.createdBy && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(v.createdBy.trim().toLowerCase())
-      ? v.createdBy
-      : (v.code.toUpperCase().includes('HUY') ? 'Trần Việt Huy' : '');
-    setCreatedByInput(existingCreator);
     setProductSearchInModal('');
     setFormError(null);
     setIsModalOpen(true);
@@ -412,21 +402,13 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     setIsSaving(true);
     try {
       const voucherId = editingVoucher ? editingVoucher.id : `VOUCHER_${Date.now()}`;
-      const cleanCreator = createdByInput.trim();
-      const isFakeTitle = ['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(cleanCreator.toLowerCase());
-      let creatorName: string | undefined = undefined;
-      if (cleanCreator && !isFakeTitle) {
-        creatorName = cleanCreator;
-      } else if (cleanCode.includes('HUY')) {
-        creatorName = 'Trần Việt Huy';
-      } else if (editingVoucher?.createdBy && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(editingVoucher.createdBy.trim().toLowerCase())) {
-        creatorName = editingVoucher.createdBy;
-      }
+      const currentAdminIdentity = sessionUser?.name || sessionUser?.username || sessionUser?.email || 'Admin';
+      const creatorName: string = editingVoucher
+        ? (editingVoucher.createdBy || currentAdminIdentity)
+        : currentAdminIdentity;
 
       const createdAtVal = editingVoucher?.createdAt || new Date().toISOString();
-      const realUpdater = sessionUser?.name && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(sessionUser.name.trim().toLowerCase())
-        ? sessionUser.name
-        : undefined;
+      const realUpdater = currentAdminIdentity;
 
       const payloadWithoutEncrypt: Omit<Voucher, 'encryptedData'> = {
         id: voucherId,
@@ -1440,23 +1422,6 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-medium text-neutral-950 focus:bg-white focus:border-neutral-950 focus:outline-none"
                   />
                 </div>
-              </div>
-
-              {/* Creator Name (Họ tên người tạo thực tế: Trần Việt Huy, Hảo Như...) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-neutral-950 text-xs">
-                    Người tạo voucher (Họ tên):
-                  </label>
-                  <span className="text-[10px] text-neutral-400">Không bắt buộc</span>
-                </div>
-                <input
-                  type="text"
-                  value={createdByInput}
-                  onChange={(e) => setCreatedByInput(e.target.value)}
-                  placeholder="Ví dụ: Trần Việt Huy, Hảo Như... (Để trống nếu không rõ)"
-                  className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-medium text-neutral-950 focus:bg-white focus:border-neutral-950 focus:outline-none"
-                />
               </div>
 
               {/* Is Active */}

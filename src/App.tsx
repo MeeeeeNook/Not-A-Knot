@@ -1551,11 +1551,17 @@ export default function App() {
       
       let finalPhotoUrls: string[] | undefined;
       let finalPhotoUrl: string | undefined;
+      const targetQty = typeof newQuantity === 'number' ? newQuantity : prevItem.quantity;
 
       if (Array.isArray(newPhotoUrls)) {
         if (newPhotoUrls.length > 0) {
           finalPhotoUrls = newPhotoUrls;
           finalPhotoUrl = newPhotoUrls[0];
+        } else if (targetQty >= 1 && (prevItem.customPhotoUrl || (prevItem.customPhotoUrls && prevItem.customPhotoUrls.length > 0))) {
+          // BẢO VỆ: Nếu sản phẩm vẫn còn số lượng trong giỏ (targetQty >= 1), giữ lại ảnh in trước đó
+          const fallbackPhoto = prevItem.customPhotoUrl || prevItem.customPhotoUrls?.[0];
+          finalPhotoUrl = fallbackPhoto;
+          finalPhotoUrls = fallbackPhoto ? [fallbackPhoto] : undefined;
         } else {
           finalPhotoUrls = undefined;
           finalPhotoUrl = undefined;
@@ -1563,6 +1569,10 @@ export default function App() {
       } else if (newPhotoUrl && newPhotoUrl.trim()) {
         finalPhotoUrl = newPhotoUrl;
         finalPhotoUrls = [newPhotoUrl];
+      } else if (targetQty >= 1 && (prevItem.customPhotoUrl || (prevItem.customPhotoUrls && prevItem.customPhotoUrls.length > 0))) {
+        const fallbackPhoto = prevItem.customPhotoUrl || prevItem.customPhotoUrls?.[0];
+        finalPhotoUrl = fallbackPhoto;
+        finalPhotoUrls = fallbackPhoto ? [fallbackPhoto] : undefined;
       } else {
         finalPhotoUrl = undefined;
         finalPhotoUrls = undefined;

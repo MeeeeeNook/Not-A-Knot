@@ -82,6 +82,8 @@ export interface ComboItemConfig {
 export interface ComboItemSelection {
   itemId: string;
   itemTitle: string;
+  comboItemId?: string; // Compatibility alias for itemId
+  title?: string; // Compatibility alias for itemTitle
   selectedColor?: string;
   selectedColorImage?: string;
   selectedCharm?: string;

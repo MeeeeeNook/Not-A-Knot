@@ -8,6 +8,8 @@ import {
   ProductOmamoriOption,
   ProductKhoenOption,
   ProductColorOption,
+  ComboItemSelection,
+  ComboItemConfig,
   Voucher
 } from '../types';
 import { StoredOrder, saveOrderToFirestore, saveProductToFirestore } from '../firebase';
@@ -33,7 +35,12 @@ import {
   Gift,
   ChevronDown,
   ChevronUp,
-  PlusCircle
+  PlusCircle,
+  Camera,
+  EyeOff,
+  Image as ImageIcon,
+  ZoomIn,
+  Layers
 } from 'lucide-react';
 import { AdminTabHeader } from './admin/AdminTabHeader';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
@@ -44,6 +51,7 @@ import { ProductCharmSelector } from './ProductCharmSelector';
 import { ProductOmamoriSelector } from './ProductOmamoriSelector';
 import { ProductKhoenSelector } from './ProductKhoenSelector';
 import { ProductColorSelector } from './ProductColorSelector';
+import { ProductCustomPhotoSelector } from './ProductCustomPhotoSelector';
 import { LoadingImage } from './LoadingImage';
 
 interface AdminManualOrderFormProps {
@@ -71,6 +79,11 @@ interface ManualOrderItem {
   selectedKhoenImage?: string;
   selectedKhoenPrice?: number;
   selectedSize?: string;
+  customPhotoUrl?: string;
+  customPhotoUrls?: string[];
+  customPhotoNote?: string;
+  customPhotoPrice?: number;
+  selectedComboItems?: ComboItemSelection[];
 }
 
 export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
@@ -81,9 +94,14 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   onOrderCreated,
   onNavigateToOrders
 }) => {
-  // 1. FILTER OUT HIDDEN PRODUCTS (Ẩn các sản phẩm bị ẩn)
-  const activeProducts = useMemo(() => {
-    return products.filter((p) => p.isHidden !== true);
+  // 1. HIỂN THỊ TẤT CẢ SẢN PHẨM (Sản phẩm bị ẩn được đẩy xuống dưới cùng danh sách)
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
+      const aHidden = a.isHidden === true;
+      const bHidden = b.isHidden === true;
+      if (aHidden === bHidden) return 0;
+      return aHidden ? 1 : -1; // Đẩy sản phẩm bị ẩn xuống cuối
+    });
   }, [products]);
 
   // Priority sort sellers list so that the currently logged-in seller is ALWAYS FIRST on the list, with strict deduplication
@@ -201,7 +219,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   const [orderItems, setOrderItems] = useState<ManualOrderItem[]>([]);
 
   // Item picker & Fast Search state
-  const [selectedProductId, setSelectedProductId] = useState<string>(activeProducts[0]?.id || '');
+  const [selectedProductId, setSelectedProductId] = useState<string>(sortedProducts[0]?.id || '');
   const [productSearch, setProductSearch] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   // Options state for the CURRENTLY selected product in picker
@@ -214,12 +232,53 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   const [pickerQuantity, setPickerQuantity] = useState<number | string>(1);
   const [pickerNote, setPickerNote] = useState<string>('');
 
+  // Custom photo upload state for picker
+  const [pickerCustomPhotoUrl, setPickerCustomPhotoUrl] = useState<string | undefined>(undefined);
+  const [pickerCustomPhotoUrls, setPickerCustomPhotoUrls] = useState<string[]>([]);
+  const [pickerCustomPhotoNote, setPickerCustomPhotoNote] = useState<string>('');
+  const [showCustomPhotoUpload, setShowCustomPhotoUpload] = useState<boolean>(false);
+
+  // Combo items state for picker
+  const [pickerComboItems, setPickerComboItems] = useState<ComboItemSelection[]>([]);
+
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<StoredOrder | null>(null);
 
   const receiptFileInputRef = useRef<HTMLInputElement>(null);
+  const itemFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetItemIndexForUpload, setTargetItemIndexForUpload] = useState<number | null>(null);
   const dropzoneRef = useRef<HTMLDivElement>(null);
+
+  const handleItemPhotoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || targetItemIndexForUpload === null) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Vui lòng chọn file hình ảnh (JPG, PNG, WebP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        setOrderItems((prev) => {
+          const copy = [...prev];
+          const it = copy[targetItemIndexForUpload];
+          if (it) {
+            const oldList = it.customPhotoUrls || (it.customPhotoUrl ? [it.customPhotoUrl] : []);
+            copy[targetItemIndexForUpload] = {
+              ...it,
+              customPhotoUrl: dataUrl,
+              customPhotoUrls: [...oldList, dataUrl]
+            };
+          }
+          return copy;
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // Helper to compress and convert image file to optimized Base64
   const processImageFile = (file: File) => {
@@ -324,19 +383,19 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     }
   };
 
-  // Categories of non-hidden products
+  // Categories of all products
   const availableCategories = useMemo(() => {
     const cats = new Set<string>();
-    activeProducts.forEach((p) => {
+    sortedProducts.forEach((p) => {
       if (p.category) cats.add(p.category);
     });
     return Array.from(cats);
-  }, [activeProducts]);
+  }, [sortedProducts]);
 
-  // Fast filtered non-hidden products
+  // Fast filtered products (non-hidden first, hidden at the bottom)
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim().toLowerCase();
-    return activeProducts.filter((p) => {
+    return sortedProducts.filter((p) => {
       const matchCat = selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter;
       if (!matchCat) return false;
       if (!q) return true;
@@ -345,11 +404,11 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       const matchDesc = p.description?.toLowerCase().includes(q);
       return matchName || matchId || matchDesc;
     });
-  }, [activeProducts, productSearch, selectedCategoryFilter]);
+  }, [sortedProducts, productSearch, selectedCategoryFilter]);
 
   const currentSelectedProduct = useMemo(() => {
-    return activeProducts.find((p) => p.id === selectedProductId) || activeProducts[0];
-  }, [activeProducts, selectedProductId]);
+    return sortedProducts.find((p) => p.id === selectedProductId) || sortedProducts[0];
+  }, [sortedProducts, selectedProductId]);
 
   // Reset/sync options when selected product changes
   useEffect(() => {
@@ -380,20 +439,54 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     setPickerKhoen(null);
     setPickerQuantity(1);
     setPickerNote('');
+
+    // Reset custom photo state
+    setPickerCustomPhotoUrl(undefined);
+    setPickerCustomPhotoUrls([]);
+    setPickerCustomPhotoNote('');
+    setShowCustomPhotoUpload(Boolean(currentSelectedProduct.enableCustomPhoto));
+
+    // Reset combo items state
+    if (currentSelectedProduct.isCombo && currentSelectedProduct.comboItems && currentSelectedProduct.comboItems.length > 0) {
+      const initialCombos: ComboItemSelection[] = currentSelectedProduct.comboItems.map((ci) => {
+        const defaultColor = ci.colorOptions?.[0]?.name || ci.availableColors?.[0] || '';
+        const defaultColorImg = ci.colorOptions?.[0]?.image || '';
+        const defaultSize = ci.availableSizes?.[0] || '';
+        return {
+          itemId: ci.id,
+          itemTitle: ci.title,
+          comboItemId: ci.id,
+          title: ci.title,
+          selectedColor: defaultColor || undefined,
+          selectedColorImage: defaultColorImg || undefined,
+          selectedSize: defaultSize || undefined,
+          selectedCharms: [],
+          selectedOmamoris: [],
+          selectedKhoen: undefined,
+          customPhotoUrl: undefined,
+          customPhotoNote: undefined
+        };
+      });
+      setPickerComboItems(initialCombos);
+    } else {
+      setPickerComboItems([]);
+    }
   }, [currentSelectedProduct?.id]);
 
-  // Calculate unit price for any manual item (including accessories)
+  // Calculate unit price for any manual item (including accessories & photo printing)
   const getItemUnitPrice = (it: {
     product: Product;
     selectedCharmPrice?: number;
     selectedOmamoriPrice?: number;
     selectedKhoenPrice?: number;
+    customPhotoPrice?: number;
   }) => {
     return (
       it.product.price +
       (it.selectedCharmPrice || 0) +
       (it.selectedOmamoriPrice || 0) +
-      (it.selectedKhoenPrice || 0)
+      (it.selectedKhoenPrice || 0) +
+      (it.customPhotoPrice || 0)
     );
   };
 
@@ -491,6 +584,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     const charmExtra = pickerCharms.reduce((s, c) => s + (c.priceDelta || 0), 0);
     const omamoriExtra = pickerOmamoris.reduce((s, o) => s + (o.priceDelta || 0), 0);
     const khoenExtra = pickerKhoen?.priceDelta || 0;
+    const photoExtra = pickerCustomPhotoExtra;
 
     const newItem: ManualOrderItem = {
       product: currentSelectedProduct,
@@ -507,7 +601,12 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       selectedOmamoriPrice: omamoriExtra > 0 ? omamoriExtra : undefined,
       selectedKhoen: pickerKhoen ? pickerKhoen.name : undefined,
       selectedKhoenImage: pickerKhoen?.image || undefined,
-      selectedKhoenPrice: khoenExtra > 0 ? khoenExtra : undefined
+      selectedKhoenPrice: khoenExtra > 0 ? khoenExtra : undefined,
+      customPhotoUrl: pickerCustomPhotoUrl || (pickerCustomPhotoUrls.length > 0 ? pickerCustomPhotoUrls[0] : undefined),
+      customPhotoUrls: pickerCustomPhotoUrls.length > 0 ? pickerCustomPhotoUrls : (pickerCustomPhotoUrl ? [pickerCustomPhotoUrl] : undefined),
+      customPhotoNote: pickerCustomPhotoNote.trim() || undefined,
+      customPhotoPrice: photoExtra > 0 ? photoExtra : undefined,
+      selectedComboItems: pickerComboItems.length > 0 ? [...pickerComboItems] : undefined
     };
 
     setOrderItems([...orderItems, newItem]);
@@ -516,6 +615,10 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
     setPickerCharms([]);
     setPickerOmamoris([]);
     setPickerKhoen(null);
+    setPickerCustomPhotoUrl(undefined);
+    setPickerCustomPhotoUrls([]);
+    setPickerCustomPhotoNote('');
+    setShowCustomPhotoUpload(Boolean(currentSelectedProduct.enableCustomPhoto));
   };
 
   const handleRemoveItem = (index: number) => {
@@ -582,6 +685,15 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
         if (it.selectedKhoen) {
           extras.push(`Khoen: ${it.selectedKhoen}`);
         }
+        if (it.customPhotoUrl || (it.customPhotoUrls && it.customPhotoUrls.length > 0)) {
+          extras.push(it.customPhotoUrls && it.customPhotoUrls.length > 1 ? `Ảnh in (${it.customPhotoUrls.length} ảnh)` : 'Ảnh in');
+        }
+        if (it.customPhotoNote) {
+          extras.push(`Note ảnh: ${it.customPhotoNote}`);
+        }
+        if (it.selectedComboItems && it.selectedComboItems.length > 0) {
+          extras.push(`Combo ${it.selectedComboItems.length} món`);
+        }
         if (it.customNote) extras.push(`Note: ${it.customNote}`);
         if (extras.length > 0) {
           text += ` [${extras.join(' | ')}]`;
@@ -620,7 +732,12 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
           selectedKhoenImage: it.selectedKhoenImage,
           selectedKhoenPrice: it.selectedKhoenPrice,
           selectedSize: it.selectedSize,
-          customNote: it.customNote
+          customNote: it.customNote,
+          customPhotoUrl: it.customPhotoUrl,
+          customPhotoUrls: it.customPhotoUrls,
+          customPhotoNote: it.customPhotoNote,
+          customPhotoPrice: it.customPhotoPrice,
+          selectedComboItems: it.selectedComboItems
         };
       });
 
@@ -882,10 +999,25 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       currentSelectedProduct.availableSizes.length > 0
   );
 
+  const hasCustomPhoto = Boolean(
+    currentSelectedProduct && (currentSelectedProduct.enableCustomPhoto || currentSelectedProduct.customPhotoPriceDelta !== undefined)
+  );
+
+  const hasComboItems = Boolean(
+    currentSelectedProduct && currentSelectedProduct.isCombo && currentSelectedProduct.comboItems && currentSelectedProduct.comboItems.length > 0
+  );
+
+  const pickerCustomPhotoExtra =
+    (currentSelectedProduct?.enableCustomPhoto || showCustomPhotoUpload) &&
+    (pickerCustomPhotoUrl || (pickerCustomPhotoUrls && pickerCustomPhotoUrls.length > 0))
+      ? currentSelectedProduct?.customPhotoPriceDelta || 0
+      : 0;
+
   const pickerUnitExtraPrice =
     pickerCharms.reduce((s, c) => s + (c.priceDelta || 0), 0) +
     pickerOmamoris.reduce((s, o) => s + (o.priceDelta || 0), 0) +
-    (pickerKhoen?.priceDelta || 0);
+    (pickerKhoen?.priceDelta || 0) +
+    pickerCustomPhotoExtra;
 
   const pickerTotalUnitPrice = (currentSelectedProduct?.price || 0) + pickerUnitExtraPrice;
 
@@ -1674,10 +1806,10 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
-                        Tất cả ({activeProducts.length})
+                        Tất cả ({sortedProducts.length})
                       </button>
                       {availableCategories.map((catKey) => {
-                        const count = activeProducts.filter((p) => p.category === catKey).length;
+                        const count = sortedProducts.filter((p) => p.category === catKey).length;
                         return (
                           <button
                             key={catKey}
@@ -1714,7 +1846,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                                 isSelected
                                   ? 'bg-amber-100/70 border border-amber-400/80 shadow-2xs'
                                   : 'hover:bg-white bg-white/70 border border-transparent'
-                              } ${isOutOfStock ? 'opacity-50' : ''}`}
+                              } ${isOutOfStock ? 'opacity-50' : ''} ${p.isHidden ? 'bg-neutral-100/60' : ''}`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <LoadingImage
@@ -1726,9 +1858,17 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                                   spinnerColor="amber"
                                 />
                                 <div className="min-w-0">
-                                  <span className="font-bold text-xs text-slate-900 block truncate">
-                                    {p.name}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-slate-900 truncate">
+                                      {p.name}
+                                    </span>
+                                    {p.isHidden && (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 shrink-0 flex items-center gap-0.5">
+                                        <EyeOff className="w-2.5 h-2.5" />
+                                        <span>Bị ẩn</span>
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-1.5 text-[10px]">
                                     <span className="font-bold text-amber-800">
                                       {p.price.toLocaleString('vi-VN')}đ
@@ -1740,6 +1880,11 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
+                                {p.isHidden && (
+                                  <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-700 text-[10px] font-bold rounded border border-neutral-300">
+                                    Bị ẩn
+                                  </span>
+                                )}
                                 {isOutOfStock ? (
                                   <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-bold rounded">
                                     Hết hàng
@@ -1776,16 +1921,24 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               spinnerColor="amber"
                             />
                             <div className="min-w-0">
-                              <span className="font-bold text-sm text-slate-900 block truncate">
-                                {currentSelectedProduct.name}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-slate-900 truncate">
+                                  {currentSelectedProduct.name}
+                                </span>
+                                {currentSelectedProduct.isHidden && (
+                                  <span className="px-2 py-0.5 bg-neutral-200 text-neutral-700 border border-neutral-300 text-[10px] font-bold rounded flex items-center gap-1 shrink-0">
+                                    <EyeOff className="w-3 h-3 text-neutral-500" />
+                                    <span>Sản phẩm bị ẩn</span>
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="font-extrabold text-amber-800 text-sm">
                                   {pickerTotalUnitPrice.toLocaleString('vi-VN')}đ / cái
                                 </span>
                                 {pickerUnitExtraPrice > 0 && (
                                   <span className="text-[10px] text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
-                                    +{pickerUnitExtraPrice.toLocaleString('vi-VN')}đ phụ kiện
+                                    +{pickerUnitExtraPrice.toLocaleString('vi-VN')}đ tùy chọn
                                   </span>
                                 )}
                               </div>
@@ -2110,6 +2263,303 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                           </div>
                         )}
 
+                        {/* OPTION 5: Tải / Đính kèm Ảnh in theo yêu cầu (Custom Photo Upload) - Luôn hiển thị sẵn sàng cho mọi sản phẩm */}
+                        <div className="space-y-2 bg-white p-3.5 rounded-xl border border-amber-200/90 shadow-2xs bg-amber-50/15">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <Camera className="w-4 h-4 text-amber-600" />
+                              <span>{currentSelectedProduct.customPhotoTitle || 'In ảnh theo yêu cầu (Khách gửi ảnh riêng)'}:</span>
+                              {(pickerCustomPhotoUrl || (pickerCustomPhotoUrls && pickerCustomPhotoUrls.length > 0)) && (
+                                <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded-md text-[11px] border border-amber-300">
+                                  Đã chọn {(pickerCustomPhotoUrls && pickerCustomPhotoUrls.length > 0) ? pickerCustomPhotoUrls.length : 1} ảnh
+                                </span>
+                              )}
+                            </label>
+                            <div className="flex items-center gap-2">
+                              {(pickerCustomPhotoUrl || (pickerCustomPhotoUrls && pickerCustomPhotoUrls.length > 0)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPickerCustomPhotoUrl(undefined);
+                                    setPickerCustomPhotoUrls([]);
+                                    setPickerCustomPhotoNote('');
+                                  }}
+                                  className="text-[11px] text-rose-600 hover:underline font-bold cursor-pointer"
+                                >
+                                  Xóa tất cả ảnh
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <ProductCustomPhotoSelector
+                            title={currentSelectedProduct.customPhotoTitle || 'Tải ảnh in theo yêu cầu'}
+                            description={currentSelectedProduct.customPhotoDescription || 'Chọn ảnh từ máy, kéo thả hoặc dán Ctrl+V. Hỗ trợ in nhiều ảnh cho sản phẩm.'}
+                            priceDelta={currentSelectedProduct.customPhotoPriceDelta || 0}
+                            isRequired={false}
+                            aspectRatio={currentSelectedProduct.customPhotoAspectRatio || 'square'}
+                            customPhotoUrl={pickerCustomPhotoUrl}
+                            customPhotoUrls={pickerCustomPhotoUrls}
+                            customPhotoNote={pickerCustomPhotoNote}
+                            onPhotoChange={(url, note) => {
+                              setPickerCustomPhotoUrl(url);
+                              if (!url) setPickerCustomPhotoUrls([]);
+                              if (note !== undefined) setPickerCustomPhotoNote(note);
+                            }}
+                            onPhotosChange={(urls, note) => {
+                              setPickerCustomPhotoUrls(urls);
+                              setPickerCustomPhotoUrl(urls[0]);
+                              if (note !== undefined) setPickerCustomPhotoNote(note);
+                            }}
+                            onQuantityChange={(newQty) => {
+                              setPickerQuantity(newQty);
+                            }}
+                            currentQuantity={typeof pickerQuantity === 'number' ? pickerQuantity : 1}
+                          />
+                        </div>
+
+                        {/* OPTION 6: Combo Multi-Product Customization */}
+                        {hasComboItems && currentSelectedProduct.comboItems && (
+                          <div className="space-y-3 bg-white p-3.5 rounded-lg border border-amber-200 shadow-2xs bg-amber-50/20">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Tùy biến từng món trong Combo ({currentSelectedProduct.comboItems.length} món):</span>
+                              </label>
+                            </div>
+
+                            <div className="space-y-3">
+                              {currentSelectedProduct.comboItems.map((cConfig, cIdx) => {
+                                const currentSelection: ComboItemSelection = pickerComboItems[cIdx] || {
+                                  itemId: cConfig.id,
+                                  itemTitle: cConfig.title,
+                                  comboItemId: cConfig.id,
+                                  title: cConfig.title
+                                };
+
+                                return (
+                                  <div
+                                    key={cConfig.id || cIdx}
+                                    className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 text-xs shadow-2xs"
+                                  >
+                                    <div className="flex items-center justify-between font-bold text-slate-900 border-b border-slate-100 pb-1.5">
+                                      <span className="flex items-center gap-1.5">
+                                        <span className="w-4 h-4 rounded-full bg-amber-500 text-neutral-950 text-[9px] font-black flex items-center justify-center shrink-0">
+                                          {cIdx + 1}
+                                        </span>
+                                        <span>{cConfig.title}</span>
+                                      </span>
+                                      {cConfig.subtitle && (
+                                        <span className="text-[10px] text-slate-500 font-normal">
+                                          {cConfig.subtitle}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Sub-item Color selection */}
+                                    {cConfig.enableColorSelection !== false &&
+                                      ((cConfig.colorOptions && cConfig.colorOptions.length > 0) ||
+                                        (cConfig.availableColors && cConfig.availableColors.length > 0)) && (
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-bold text-slate-700">Màu sắc:</div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {(
+                                              cConfig.colorOptions ||
+                                              (cConfig.availableColors || []).map((c) => ({ name: c } as any))
+                                            ).map((colOpt: any, colIdx: number) => {
+                                              const isColSelected =
+                                                (currentSelection.selectedColor || '').toLowerCase() ===
+                                                colOpt.name.toLowerCase();
+                                              return (
+                                                <button
+                                                  key={colIdx}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = [...pickerComboItems];
+                                                    updated[cIdx] = {
+                                                      ...currentSelection,
+                                                      selectedColor: colOpt.name,
+                                                      selectedColorImage: colOpt.image || ''
+                                                    };
+                                                    setPickerComboItems(updated);
+                                                  }}
+                                                  className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer font-medium ${
+                                                    isColSelected
+                                                      ? 'bg-amber-100 text-amber-950 border-amber-400 font-bold'
+                                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                  }`}
+                                                >
+                                                  {colOpt.name}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                    {/* Sub-item Size selection */}
+                                    {cConfig.enableSizeSelection &&
+                                      cConfig.availableSizes &&
+                                      cConfig.availableSizes.length > 0 && (
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-bold text-slate-700">Size:</div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {cConfig.availableSizes.map((sz, szIdx) => {
+                                              const isSzSelected = currentSelection.selectedSize === sz;
+                                              return (
+                                                <button
+                                                  key={szIdx}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = [...pickerComboItems];
+                                                    updated[cIdx] = {
+                                                      ...currentSelection,
+                                                      selectedSize: sz
+                                                    };
+                                                    setPickerComboItems(updated);
+                                                  }}
+                                                  className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer font-medium ${
+                                                    isSzSelected
+                                                      ? 'bg-amber-100 text-amber-950 border-amber-400 font-bold'
+                                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                  }`}
+                                                >
+                                                  {sz}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                    {/* Sub-item Charms */}
+                                    {cConfig.enableCharmSelection &&
+                                      cConfig.charmOptions &&
+                                      cConfig.charmOptions.length > 0 && (
+                                        <div className="space-y-1">
+                                          <div className="text-[11px] font-bold text-slate-700">Charm:</div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {cConfig.charmOptions.map((ch, chIdx) => {
+                                              const isChSelected = currentSelection.selectedCharms?.some(
+                                                (c) => c.name === ch.name
+                                              );
+                                              return (
+                                                <button
+                                                  key={chIdx}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const updated = [...pickerComboItems];
+                                                    const existingCharms = currentSelection.selectedCharms || [];
+                                                    const nextCharms = isChSelected
+                                                      ? existingCharms.filter((c) => c.name !== ch.name)
+                                                      : [ch];
+                                                    updated[cIdx] = {
+                                                      ...currentSelection,
+                                                      selectedCharms: nextCharms,
+                                                      selectedCharm: nextCharms[0]?.name,
+                                                      selectedCharmImage: nextCharms[0]?.image
+                                                    };
+                                                    setPickerComboItems(updated);
+                                                  }}
+                                                  className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer font-medium ${
+                                                    isChSelected
+                                                      ? 'bg-amber-100 text-amber-950 border-amber-400 font-bold'
+                                                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                  }`}
+                                                >
+                                                  {ch.name}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                    {/* Sub-item Omamori */}
+                                    {cConfig.enableOmamoriSelection && (
+                                      <div className="space-y-1">
+                                        <div className="text-[11px] font-bold text-slate-700">Bùa Omamori:</div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {(cConfig.omamoriOptions && cConfig.omamoriOptions.length > 0
+                                            ? cConfig.omamoriOptions
+                                            : DEFAULT_OMAMORI_PRESETS
+                                          ).map((om, omIdx) => {
+                                            const isOmSelected = currentSelection.selectedOmamoris?.some(
+                                              (o) => o.name === om.name
+                                            );
+                                            return (
+                                              <button
+                                                key={omIdx}
+                                                type="button"
+                                                onClick={() => {
+                                                  const updated = [...pickerComboItems];
+                                                  const existing = currentSelection.selectedOmamoris || [];
+                                                  const next = isOmSelected
+                                                    ? existing.filter((o) => o.name !== om.name)
+                                                    : [om];
+                                                  updated[cIdx] = {
+                                                    ...currentSelection,
+                                                    selectedOmamoris: next
+                                                  };
+                                                  setPickerComboItems(updated);
+                                                }}
+                                                className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer font-medium ${
+                                                  isOmSelected
+                                                    ? 'bg-rose-100 text-rose-950 border-rose-400 font-bold'
+                                                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                }`}
+                                              >
+                                                {om.name}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Sub-item Khoen */}
+                                    {cConfig.enableKhoenSelection && (
+                                      <div className="space-y-1">
+                                        <div className="text-[11px] font-bold text-slate-700">Khoen móc khóa:</div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {(cConfig.khoenOptions && cConfig.khoenOptions.length > 0
+                                            ? cConfig.khoenOptions
+                                            : DEFAULT_KHOEN_PRESETS
+                                          ).map((kh, khIdx) => {
+                                            const isKhSelected = currentSelection.selectedKhoen === kh.name;
+                                            return (
+                                              <button
+                                                key={khIdx}
+                                                type="button"
+                                                onClick={() => {
+                                                  const updated = [...pickerComboItems];
+                                                  updated[cIdx] = {
+                                                    ...currentSelection,
+                                                    selectedKhoen: isKhSelected ? undefined : kh.name,
+                                                    selectedKhoenImage: isKhSelected ? undefined : kh.image
+                                                  };
+                                                  setPickerComboItems(updated);
+                                                }}
+                                                className={`px-2 py-0.5 rounded text-[11px] border cursor-pointer font-medium ${
+                                                  isKhSelected
+                                                    ? 'bg-sky-100 text-sky-950 border-sky-400 font-bold'
+                                                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                }`}
+                                              >
+                                                {kh.name}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Quantity & Note row */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                           <div>
@@ -2218,6 +2668,15 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                 )}
               </div>
 
+              {/* Hidden file input for uploading photo directly to order item */}
+              <input
+                type="file"
+                ref={itemFileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleItemPhotoFileSelect}
+              />
+
               {orderItems.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 space-y-1">
                   <p className="text-xs font-medium">Chưa có sản phẩm nào được thêm vào đơn hàng.</p>
@@ -2249,9 +2708,17 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               spinnerColor="amber"
                             />
                             <div className="min-w-0">
-                              <span className="font-bold text-xs text-slate-900 block truncate">
-                                {item.product.name}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 truncate">
+                                  {item.product.name}
+                                </span>
+                                {item.product.isHidden && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-200 text-neutral-700 border border-neutral-300 inline-flex items-center gap-0.5 shrink-0">
+                                    <EyeOff className="w-2.5 h-2.5 text-neutral-500" />
+                                    <span>Bị ẩn</span>
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 text-xs font-bold text-slate-900 mt-0.5">
                                 <span>{(unitPrice * item.quantity).toLocaleString('vi-VN')}đ</span>
                                 <span className="text-[11px] text-slate-400 font-normal">
@@ -2334,7 +2801,108 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
                               Note: {item.customNote}
                             </span>
                           )}
+
+                          {/* Button to quickly attach/add photo to this item */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetItemIndexForUpload(idx);
+                              itemFileInputRef.current?.click();
+                            }}
+                            className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded font-semibold flex items-center gap-1 text-[11px] cursor-pointer"
+                          >
+                            <Camera className="w-3 h-3 text-amber-700" />
+                            <span>{(item.customPhotoUrl || (item.customPhotoUrls && item.customPhotoUrls.length > 0)) ? 'Thêm ảnh in' : 'Đính kèm ảnh in'}</span>
+                          </button>
                         </div>
+
+                        {/* Custom Photo Previews for this item */}
+                        {(item.customPhotoUrl || (item.customPhotoUrls && item.customPhotoUrls.length > 0)) && (
+                          <div className="mt-2 p-2 bg-amber-50/70 rounded-lg border border-amber-200/90 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-bold text-amber-950">
+                              <span className="flex items-center gap-1.5">
+                                <Camera className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Ảnh in kèm theo ({(item.customPhotoUrls && item.customPhotoUrls.length) || 1} ảnh):</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetItemIndexForUpload(idx);
+                                    itemFileInputRef.current?.click();
+                                  }}
+                                  className="text-[11px] text-amber-800 hover:underline font-bold cursor-pointer"
+                                >
+                                  + Thêm ảnh
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOrderItems((prev) => {
+                                      const copy = [...prev];
+                                      copy[idx] = {
+                                        ...copy[idx],
+                                        customPhotoUrl: undefined,
+                                        customPhotoUrls: [],
+                                        customPhotoNote: undefined
+                                      };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="text-[11px] text-rose-600 hover:underline font-bold cursor-pointer"
+                                >
+                                  Gỡ ảnh
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {((item.customPhotoUrls && item.customPhotoUrls.length > 0) ? item.customPhotoUrls : [item.customPhotoUrl!]).map((photoUrl, pIdx) => (
+                                <div key={pIdx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-amber-300 bg-white shrink-0 shadow-2xs">
+                                  <LoadingImage
+                                    src={photoUrl}
+                                    alt={`Ảnh in ${pIdx + 1}`}
+                                    containerClassName="w-full h-full"
+                                    className="w-full h-full object-cover"
+                                    spinnerSize="xs"
+                                    spinnerColor="amber"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                            {item.customPhotoNote && (
+                              <p className="text-[11px] text-slate-700 italic">
+                                Ghi chú in: "{item.customPhotoNote}"
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Combo breakdown for this item */}
+                        {item.selectedComboItems && item.selectedComboItems.length > 0 && (
+                          <div className="mt-2 p-2 bg-amber-50/70 rounded-lg border border-amber-200/90 space-y-1 text-xs">
+                            <span className="font-bold text-amber-950 block">Chi tiết Combo ({item.selectedComboItems.length} món):</span>
+                            <div className="space-y-1 pl-1">
+                              {item.selectedComboItems.map((ci, cIdx) => (
+                                <div key={cIdx} className="bg-white p-1.5 rounded border border-amber-200 text-[11px] space-y-0.5 shadow-2xs">
+                                  <span className="font-bold text-slate-800 block">{cIdx + 1}. {ci.title || ci.itemTitle}</span>
+                                  <div className="flex flex-wrap gap-1 text-[10px] text-slate-600">
+                                    {ci.selectedColor && <span className="bg-slate-100 px-1.5 py-0.2 rounded font-medium">Màu: {ci.selectedColor}</span>}
+                                    {ci.selectedSize && <span className="bg-slate-100 px-1.5 py-0.2 rounded font-medium">Size: {ci.selectedSize}</span>}
+                                    {ci.selectedCharms && ci.selectedCharms.length > 0 && (
+                                      <span className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded font-medium">Charm: {ci.selectedCharms.map((c) => c.name).join(', ')}</span>
+                                    )}
+                                    {ci.selectedOmamoris && ci.selectedOmamoris.length > 0 && (
+                                      <span className="bg-rose-100 text-rose-900 px-1.5 py-0.2 rounded font-medium">Bùa: {ci.selectedOmamoris.map((o) => o.name).join(', ')}</span>
+                                    )}
+                                    {ci.selectedKhoen && (
+                                      <span className="bg-sky-100 text-sky-900 px-1.5 py-0.2 rounded font-medium">Khoen: {ci.selectedKhoen}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
