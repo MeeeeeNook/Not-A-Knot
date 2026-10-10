@@ -150,7 +150,7 @@ service cloud.firestore {
 
     // 11. Point-in-time database backups & snapshots
     match /backups/{backupId} {
-      allow read, write: if isRootAdmin();
+      allow read, write: if isAuthorizedStaff();
     }
 
     // 12. Security unauthorized login attempts log

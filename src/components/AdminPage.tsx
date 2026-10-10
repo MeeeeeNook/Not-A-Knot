@@ -27,6 +27,7 @@ import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { AdminProductCustomPhotoSection } from './admin/AdminProductCustomPhotoSection';
 import { AdminProductComboSection } from './admin/AdminProductComboSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
+import { getVouchers, Voucher } from '../utils/voucherManager';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
 import { AdminSeoAuditTab } from './admin/AdminSeoAuditTab';
@@ -219,6 +220,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       return prev;
     });
   }, [categories]);
+
+  useEffect(() => {
+    getVouchers().then(setAllStoreVouchers).catch(() => {});
+  }, []);
 
   const handleUpdateCategoriesInternal = (newCats: CategoryItem[]) => {
     setLocalCategories(newCats);
@@ -584,7 +589,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formIsCombo, setFormIsCombo] = useState(false);
   const [isComboMode, setIsComboMode] = useState(false);
   const [formComboItems, setFormComboItems] = useState<ComboItemConfig[]>([]);
-  const [productFormTab, setProductFormTab] = useState<'basic' | 'customizations' | 'combo'>('basic');
+  const [productFormTab, setProductFormTab] = useState<'basic' | 'customizations' | 'combo' | 'vouchers'>('basic');
+  const [allStoreVouchers, setAllStoreVouchers] = useState<Voucher[]>([]);
+  const [formApplyAllVouchers, setFormApplyAllVouchers] = useState<boolean>(true);
+  const [formApplicableVoucherIds, setFormApplicableVoucherIds] = useState<string[]>([]);
   const [draggedCharmIndex, setDraggedCharmIndex] = useState<number | null>(null);
   const [draggedOmamoriIndex, setDraggedOmamoriIndex] = useState<number | null>(null);
   const [activeCharmDropIndex, setActiveCharmDropIndex] = useState<number | null>(null);
@@ -1478,6 +1486,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormEnableSizeSelection(false);
     setFormAvailableSizes(['14cm - 15cm', '15cm - 16cm (Chuẩn)', '16cm - 17cm', '17cm - 18cm', 'Custom theo yêu cầu']);
     setFormComboItems([]);
+    setFormApplyAllVouchers(true);
+    setFormApplicableVoucherIds([]);
+    getVouchers().then(setAllStoreVouchers).catch(() => {});
     setProductFormTab('basic');
     setIsAddingNew(true);
     setTimeout(() => {
@@ -1556,6 +1567,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     // Combo loading
     setFormComboItems(prod.comboItems || []);
     setFormEnableSizeSelection(false);
+    // Voucher eligibility loading
+    setFormApplyAllVouchers(prod.applyAllVouchers !== false);
+    setFormApplicableVoucherIds(prod.applicableVoucherIds || []);
+    getVouchers().then(setAllStoreVouchers).catch(() => {});
     setProductFormTab(isCombo ? 'combo' : 'basic');
     setIsAddingNew(true);
     setTimeout(() => {
@@ -1906,6 +1921,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isNew: formIsNew,
         isHidden: formIsHidden,
         customUrl: formCustomUrl.trim() || undefined,
+        applyAllVouchers: formApplyAllVouchers,
+        applicableVoucherIds: formApplyAllVouchers ? undefined : formApplicableVoucherIds,
         updatedAt: new Date().toISOString()
       };
 
@@ -2001,6 +2018,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         isNew: formIsNew,
         isHidden: formIsHidden,
         customUrl: formCustomUrl.trim() || undefined,
+        applyAllVouchers: formApplyAllVouchers,
+        applicableVoucherIds: formApplyAllVouchers ? undefined : formApplicableVoucherIds,
         reviewsCount: 0,
         updatedAt: new Date().toISOString()
       };
@@ -3548,7 +3567,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'vouchers' && (
           <AdminVouchersTab
+            products={products}
             orders={orders as any}
+            currentSeller={currentSeller}
+            isRootAdmin={isRootAdmin}
             onInspectOrder={(ord) => setInspectingOrder(ord as any)}
           />
         )}
@@ -3853,21 +3875,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 </div>
 
                 {/* Workflow Tabs: Separated for Single Product vs Combo */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200">
                   {/* TAB 1: Common for both modes */}
                   <button
                     type="button"
                     onClick={() => setProductFormTab('basic')}
-                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    className={`px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       productFormTab === 'basic'
                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                   >
-                    <span>{isComboMode ? '1. Thông tin gói Combo & Ảnh bìa' : '1. Thông tin chung & Ảnh'}</span>
+                    <span>{isComboMode ? '1. Gói Combo & Ảnh' : '1. Thông tin chung & Ảnh'}</span>
                     {formImages.length > 0 && (
                       <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold">
-                        {formImages.length} ảnh
+                        {formImages.length}
                       </span>
                     )}
                   </button>
@@ -3877,16 +3899,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setProductFormTab('customizations')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                         productFormTab === 'customizations'
                           ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                       }`}
                     >
-                      <span>2. Tùy chọn phối (Màu, Charm, Bùa, Khoen, In ảnh)</span>
+                      <span>2. Tùy chọn phối</span>
                       {(formEnableColorSelection || formEnableCharmSelection || formEnableOmamoriSelection || formEnableKhoenSelection || formEnableCustomPhoto) && (
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
-                          Đang bật
+                          Bật
                         </span>
                       )}
                     </button>
@@ -3897,19 +3919,39 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setProductFormTab('combo')}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                         productFormTab === 'combo'
                           ? 'bg-purple-600 text-white shadow-xs'
                           : 'bg-purple-100 text-purple-900 hover:bg-purple-200'
                       }`}
                     >
                       <Layers className="w-3.5 h-3.5" />
-                      <span>2. Các Món Trong Combo ({formComboItems.length} món)</span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-bold">
-                        {formComboItems.length} món
-                      </span>
+                      <span>2. Các Món Combo ({formComboItems.length})</span>
                     </button>
                   )}
+
+                  {/* TAB 3: Mã Giảm Giá Áp Dụng */}
+                  <button
+                    type="button"
+                    onClick={() => setProductFormTab('vouchers')}
+                    className={`px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      productFormTab === 'vouchers'
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200 ring-2 ring-amber-400/40'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    <Ticket className="w-3.5 h-3.5 text-amber-600" />
+                    <span>3. Mã Giảm Giá</span>
+                    {formApplyAllVouchers ? (
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-bold">
+                        Tất cả
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-900 text-[10px] font-bold">
+                        {formApplicableVoucherIds.length} mã
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 <form onSubmit={handleSaveProduct} className="space-y-6">
@@ -5834,6 +5876,202 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                     <div className="text-xs text-slate-500 font-medium">
                       Bước 2/2: Đã cấu hình {formComboItems.length} món trong Combo.
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: CẤU HÌNH MÃ GIẢM GIÁ ÁP DỤNG CHO SẢN PHẨM NÀY */}
+              {productFormTab === 'vouchers' && (
+                <div className="space-y-5 bg-white p-5 rounded-2xl border border-slate-200">
+                  {/* Header info */}
+                  <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 rounded-2xl border border-amber-200">
+                    <div className="p-2.5 bg-amber-100 rounded-xl text-amber-900 shrink-0">
+                      <Ticket className="w-6 h-6 text-amber-700" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        Cấu hình Mã Giảm Giá cho sản phẩm này
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        Bạn có thể chủ động bật hoặc tắt các mã giảm giá áp dụng cho sản phẩm này. Ví dụ: Tạo mã giảm giá chỉ dành cho sản phẩm này, bạn chỉ cần chọn "Tùy chỉnh bật/tắt từng mã" và bật mã tương ứng.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mode selector: Cho phép tất cả mã vs Chọn từng mã */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormApplyAllVouchers(true)}
+                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                        formApplyAllVouchers
+                          ? 'border-emerald-500 bg-emerald-50/70 shadow-xs ring-2 ring-emerald-500/30'
+                          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/70 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 font-black text-xs text-slate-900">
+                        <CheckCircle2 className={`w-4 h-4 ${formApplyAllVouchers ? 'text-emerald-600' : 'text-slate-400'}`} />
+                        <span>Cho phép áp dụng TẤT CẢ mã giảm giá (Mặc định)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                        Bất kỳ voucher hợp lệ nào của shop cũng có thể dùng cho sản phẩm này.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormApplyAllVouchers(false);
+                        if (formApplicableVoucherIds.length === 0 && allStoreVouchers.length > 0) {
+                          setFormApplicableVoucherIds([allStoreVouchers[0].id]);
+                        }
+                      }}
+                      className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                        !formApplyAllVouchers
+                          ? 'border-purple-500 bg-purple-50/70 shadow-xs ring-2 ring-purple-500/30'
+                          : 'border-slate-200 bg-slate-50/60 hover:bg-slate-100/70 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 font-black text-xs text-slate-900">
+                        <SlidersHorizontal className={`w-4 h-4 ${!formApplyAllVouchers ? 'text-purple-600' : 'text-slate-400'}`} />
+                        <span>Tùy chỉnh bật / tắt từng mã giảm giá cụ thể</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1 pl-6">
+                        Khách chỉ có thể áp dụng các mã được bạn bật công tắc xanh bên dưới.
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Vouchers List / Table */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="text-xs font-bold text-slate-800">
+                        Danh sách mã giảm giá trong cửa hàng ({allStoreVouchers.length} mã):
+                      </div>
+                      {!formApplyAllVouchers && allStoreVouchers.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFormApplicableVoucherIds(allStoreVouchers.map((v) => v.id))}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg cursor-pointer"
+                          >
+                            Bật tất cả
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormApplicableVoucherIds([])}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg cursor-pointer"
+                          >
+                            Tắt tất cả
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {allStoreVouchers.length === 0 ? (
+                      <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-2">
+                        <Ticket className="w-8 h-8 text-slate-300 mx-auto" />
+                        <p className="text-xs font-bold text-slate-600">Cửa hàng hiện chưa tạo mã giảm giá nào.</p>
+                        <p className="text-[11px] text-slate-400">
+                          Bạn có thể vào tab "Mã Giảm Giá" trên menu quản trị để tạo mã ưu đãi trước.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {allStoreVouchers.map((v) => {
+                          const isVoucherEnabledForProduct = formApplyAllVouchers
+                            ? true
+                            : formApplicableVoucherIds.includes(v.id) || formApplicableVoucherIds.includes(v.code.toUpperCase());
+
+                          return (
+                            <div
+                              key={v.id}
+                              onClick={() => {
+                                if (formApplyAllVouchers) {
+                                  // Switch to custom mode and toggle
+                                  setFormApplyAllVouchers(false);
+                                  const currentIds = allStoreVouchers.map((item) => item.id);
+                                  // Remove this one since user wanted to turn it off
+                                  setFormApplicableVoucherIds(currentIds.filter((id) => id !== v.id));
+                                } else {
+                                  // Toggle in custom list
+                                  if (isVoucherEnabledForProduct) {
+                                    setFormApplicableVoucherIds((prev) => prev.filter((id) => id !== v.id && id !== v.code));
+                                  } else {
+                                    setFormApplicableVoucherIds((prev) => [...prev, v.id]);
+                                  }
+                                }
+                              }}
+                              className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                isVoucherEnabledForProduct
+                                  ? 'border-emerald-300 bg-emerald-50/40 hover:bg-emerald-50/70 shadow-2xs'
+                                  : 'border-slate-200 bg-slate-50/80 hover:bg-slate-100/80 opacity-70'
+                              }`}
+                            >
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-black text-xs px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-950 border border-amber-300">
+                                    {v.code}
+                                  </span>
+                                  {v.type === 'freeship' ? (
+                                    <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                                      Freeship
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                      Giảm {v.discountPercent}%
+                                    </span>
+                                  )}
+                                  {v.maxApplicableQuantity && v.maxApplicableQuantity > 0 ? (
+                                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                      Tối đa {v.maxApplicableQuantity} SP
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-[11px] text-slate-500 truncate">
+                                  {v.minOrderValue ? `Đơn từ ${v.minOrderValue.toLocaleString('vi-VN')}đ` : 'Không giới hạn đơn'}
+                                  {v.maxDiscountAmount ? ` • Tối đa ${v.maxDiscountAmount.toLocaleString('vi-VN')}đ` : ''}
+                                </p>
+                              </div>
+
+                              {/* Switch control */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-[10px] font-black ${isVoucherEnabledForProduct ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                  {isVoucherEnabledForProduct ? 'Đang Bật' : 'Đang Tắt'}
+                                </span>
+                                <div
+                                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                                    isVoucherEnabledForProduct ? 'bg-emerald-600' : 'bg-slate-300'
+                                  }`}
+                                >
+                                  <div
+                                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                                      isVoucherEnabledForProduct ? 'translate-x-5' : 'translate-x-0'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Back Helper */}
+                  <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setProductFormTab(isComboMode ? 'combo' : 'basic')}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>← Quay lại bước trước</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-slate-500">
+                      {formApplyAllVouchers
+                        ? 'Đang áp dụng tất cả mã giảm giá'
+                        : `Đang bật ${formApplicableVoucherIds.length} mã giảm giá cho sản phẩm này`}
+                    </span>
                   </div>
                 </div>
               )}
@@ -8356,17 +8594,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                     (sName && s.username.toLowerCase() === sName.toLowerCase())
                                 );
                                 const displayName = matchedSeller ? matchedSeller.name : (sName || 'Website');
-                                const avatarBg = matchedSeller?.avatarColor || '#D97706';
-
                                 return (
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0 shadow-2xs"
-                                      style={{ backgroundColor: avatarBg }}
-                                    >
-                                      {displayName.slice(0, 1).toUpperCase()}
-                                    </div>
-                                    <div className="min-w-0">
+                                  <div className="min-w-0">
                                       <span className="font-bold text-xs text-slate-900 block truncate">
                                         {displayName}
                                       </span>
@@ -8376,7 +8605,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                         </span>
                                       ) : null}
                                     </div>
-                                  </div>
                                 );
                               })()}
                             </td>
@@ -9250,36 +9478,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       )}
 
       {/* ======================================================== */}
-      {/* FLOATING HOVER PREVIEW: TỰ MỞ TO KHI HOVER LÊN ẢNH      */}
+      {/* FLOATING HOVER PREVIEW: CHỈ HIỂN THỊ ẢNH ZOOM TO         */}
       {/* ======================================================== */}
       {hoveredPhotoPreview && (
         <div
-          className="fixed z-[130] pointer-events-none bg-slate-900 text-white p-2.5 rounded-none border-2 border-rose-400 shadow-2xl animate-in fade-in zoom-in-95"
+          className="fixed z-[130] pointer-events-none bg-neutral-950/95 p-2 rounded-2xl border border-neutral-700/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 backdrop-blur-md"
           style={{
-            left: `${Math.max(12, Math.min(hoveredPhotoPreview.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 340))}px`,
-            top: `${Math.max(12, Math.min(hoveredPhotoPreview.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 380))}px`,
-            width: '320px',
+            left: `${Math.max(12, Math.min(hoveredPhotoPreview.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 440))}px`,
+            top: `${Math.max(12, Math.min(hoveredPhotoPreview.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 440))}px`,
             maxWidth: 'calc(100vw - 24px)'
           }}
         >
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-[11px] font-bold text-rose-400">
-            <span className="truncate pr-2">{hoveredPhotoPreview.title}</span>
-            <span className="text-[9px] font-medium bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded-none shrink-0">Tự mở to</span>
-          </div>
-          <div className="mt-2 bg-black/90 rounded-none overflow-hidden flex items-center justify-center p-1 min-h-[220px] max-h-[300px]">
+          <div className="bg-neutral-900 rounded-xl overflow-hidden flex items-center justify-center p-1 min-h-[240px] max-h-[440px] min-w-[240px] max-w-[420px]">
             <img
               src={hoveredPhotoPreview.url}
               alt=""
-              className="max-h-[280px] w-auto max-w-full object-contain rounded-none shadow-sm"
+              className="max-h-[420px] w-auto max-w-full object-contain rounded-lg shadow-md"
             />
-          </div>
-          {hoveredPhotoPreview.note && (
-            <div className="mt-2 text-[11px] text-rose-200 bg-rose-950/80 p-1.5 rounded-none border border-rose-800/60 leading-tight">
-              <span className="font-bold text-rose-300">Yêu cầu in:</span> {hoveredPhotoPreview.note}
-            </div>
-          )}
-          <div className="mt-1.5 text-[9px] text-slate-400 text-center font-medium">
-            💡 Bấm vào ảnh để mở toàn màn hình hoặc tải file
           </div>
         </div>
       )}

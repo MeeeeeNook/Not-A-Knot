@@ -158,6 +158,10 @@ export interface Product {
   soldCount?: number;
   isHidden?: boolean;
   customUrl?: string; // Optional custom redirect link (e.g. Shopee, external landing, affiliate)
+  // Voucher eligibility settings for this product
+  applyAllVouchers?: boolean; // Mặc định true (áp dụng tất cả các mã hợp lệ). Nếu false, chỉ áp dụng các mã trong applicableVoucherIds
+  applicableVoucherIds?: string[]; // Danh sách ID hoặc mã voucher được phép áp dụng cho sản phẩm này
+  disallowedVoucherIds?: string[]; // Danh sách mã voucher bị tắt riêng cho sản phẩm này
   updatedAt?: string;
 }
 
@@ -721,8 +725,15 @@ export interface Voucher {
   endDate?: string; // ISO date string or YYYY-MM-DD
   isActive: boolean;
   usageCount?: number;
+  usageLimit?: number; // Giới hạn tổng số lượt dùng (VD: 10 lượt). Từ lượt thứ 11 sẽ báo lỗi hết lượt
+  // Product scope settings
+  applyToAllProducts?: boolean; // Mặc định true (áp dụng cho tất cả sản phẩm). Nếu false, chỉ áp dụng cho applicableProductIds
+  applicableProductIds?: string[]; // Danh sách ID sản phẩm được phép áp dụng mã này
+  // Quantity limits in a single order
+  maxApplicableQuantity?: number; // Số lượng sản phẩm tối đa được giảm trong 1 đơn hàng (VD: 3 sản phẩm, từ sản phẩm thứ 4 trở đi không giảm)
   encryptedData?: string; // Encrypted / hashed validation integrity payload
   createdAt: string;
   updatedAt?: string;
   createdBy?: string;
+  updatedBy?: string;
 }

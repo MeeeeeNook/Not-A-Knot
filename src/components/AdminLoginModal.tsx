@@ -169,18 +169,24 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           </span>
         </div>
 
-        {/* Footer info & Cancel */}
-        <div className="mt-4 pt-4 border-t border-neutral-800 text-center flex items-center justify-between text-xs text-neutral-400">
-          <button
-            type="button"
-            onClick={onClose}
-            className="hover:text-white transition-colors cursor-pointer"
-          >
-            ← Trở về trang chủ
-          </button>
-          <span className="text-[11px] text-neutral-400 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật đa tầng
-          </span>
+        {/* Footer info & Customer navigation fallback */}
+        <div className="mt-4 pt-3.5 border-t border-neutral-800 space-y-2.5 text-center">
+          <p className="text-xs text-neutral-400 font-normal">
+            Bạn là khách đi lạc?{' '}
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4 transition-colors cursor-pointer ml-1"
+            >
+              Trở về cửa hàng
+            </button>
+          </p>
+          <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-1">
+            <span>© 2026 {brandName}. Toàn bộ quyền được bảo lưu.</span>
+            <span className="flex items-center gap-1 text-neutral-400">
+              <Sparkles className="w-3 h-3 text-amber-500/60" /> Bảo mật đa tầng
+            </span>
+          </div>
         </div>
       </div>
     </div>

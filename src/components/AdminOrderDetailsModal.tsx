@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { StoredOrder } from '../firebase';
 import { formatOrderDateWithoutSeconds, getSourceBadgeConfig, normalizeOrderStatus, getCleanOrderNote } from '../utils/orderFormatters';
-import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb, Camera, Eye, RotateCw } from 'lucide-react';
+import { Printer, Download, Copy, ExternalLink, X, Check, FileText, RotateCcw, CheckCircle2, Mail, Send, RefreshCw, Ticket, Lightbulb, Camera, Eye, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import {
   printOrderSlipDirectly,
@@ -43,7 +43,21 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
   });
   const [emailModalError, setEmailModalError] = useState<string | null>(null);
   const [zoomedPhotoUrl, setZoomedPhotoUrl] = useState<string | null>(null);
+  const [zoomedPhotoList, setZoomedPhotoList] = useState<string[]>([]);
+  const [zoomedPhotoIndex, setZoomedPhotoIndex] = useState<number>(0);
   const [photoRotation, setPhotoRotation] = useState<number>(0);
+  const [hoveredPreviewUrl, setHoveredPreviewUrl] = useState<{ url: string; x: number; y: number } | null>(null);
+
+  React.useEffect(() => {
+    if (!hoveredPreviewUrl) return;
+    const handleDismiss = () => setHoveredPreviewUrl(null);
+    window.addEventListener('scroll', handleDismiss, true);
+    window.addEventListener('keydown', handleDismiss);
+    return () => {
+      window.removeEventListener('scroll', handleDismiss, true);
+      window.removeEventListener('keydown', handleDismiss);
+    };
+  }, [hoveredPreviewUrl]);
 
   const showToast = (msg: string) => {
     setPrintSuccessToast(msg);
@@ -414,15 +428,17 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                   <img
                     src={order.bankReceiptImage}
                     alt="Bill chuyển khoản"
-                    className="w-14 h-14 rounded object-cover border border-slate-300 cursor-pointer"
+                    className="w-14 h-14 rounded object-cover border border-slate-300 cursor-pointer hover:opacity-90 transition-opacity"
                     onClick={() => onZoomReceipt(order.bankReceiptImage!)}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setHoveredPreviewUrl({ url: order.bankReceiptImage!, x: rect.right + 12, y: rect.top - 20 });
+                    }}
+                    onMouseLeave={() => setHoveredPreviewUrl(null)}
                   />
                   <div>
                     <span className="font-bold text-xs text-slate-900 block">
                       Ảnh Bill Chuyển Khoản
-                    </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">
-                      Bấm vào ảnh để phóng to
                     </span>
                   </div>
                 </div>
@@ -430,7 +446,7 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onZoomReceipt(order.bankReceiptImage!)}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                 >
                   Phóng To Bill
                 </button>
@@ -642,6 +658,8 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                                   type="button"
                                   onClick={() => {
                                     setPhotoRotation(0);
+                                    setZoomedPhotoList(itemPhotos);
+                                    setZoomedPhotoIndex(0);
                                     setZoomedPhotoUrl(itemPhotos[0]);
                                   }}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-rose-100/80 text-rose-900 border border-rose-300 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
@@ -682,14 +700,21 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
                                   <div
                                     onClick={() => {
                                       setPhotoRotation(0);
+                                      setZoomedPhotoList(itemPhotos);
+                                      setZoomedPhotoIndex(pIdx);
                                       setZoomedPhotoUrl(pUrl);
                                     }}
+                                    onMouseEnter={(e) => {
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      setHoveredPreviewUrl({ url: pUrl, x: rect.right + 12, y: rect.top - 20 });
+                                    }}
+                                    onMouseLeave={() => setHoveredPreviewUrl(null)}
                                     className="relative w-full aspect-square rounded-lg overflow-hidden cursor-pointer group/img"
                                     title="Bấm để phóng to và xoay ảnh"
                                   >
                                     <img
                                       src={pUrl}
-                                      alt={`Ảnh in #${pIdx + 1}`}
+                                      alt=""
                                       className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
                                     />
                                     <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-black/75 text-white text-[9px] font-mono font-bold z-10">
@@ -1254,7 +1279,42 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
             </div>
 
             {/* Lightbox Image Preview */}
-            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[60vh] overflow-hidden">
+            <div className="relative p-4 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[60vh] overflow-hidden">
+              {zoomedPhotoList && zoomedPhotoList.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextIdx = (zoomedPhotoIndex - 1 + zoomedPhotoList.length) % zoomedPhotoList.length;
+                      setZoomedPhotoIndex(nextIdx);
+                      setZoomedPhotoUrl(zoomedPhotoList[nextIdx]);
+                      setPhotoRotation(0);
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center cursor-pointer transition-colors shadow-md border border-white/20 active:scale-95"
+                    title="Ảnh trước"
+                  >
+                    <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextIdx = (zoomedPhotoIndex + 1) % zoomedPhotoList.length;
+                      setZoomedPhotoIndex(nextIdx);
+                      setZoomedPhotoUrl(zoomedPhotoList[nextIdx]);
+                      setPhotoRotation(0);
+                    }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/75 hover:bg-black text-white flex items-center justify-center cursor-pointer transition-colors shadow-md border border-white/20 active:scale-95"
+                    title="Ảnh tiếp"
+                  >
+                    <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+                  </button>
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 px-3 py-0.5 rounded-full bg-black/80 text-amber-300 text-xs font-mono font-bold border border-white/20 shadow-xs">
+                    Ảnh {zoomedPhotoIndex + 1} / {zoomedPhotoList.length}
+                  </div>
+                </>
+              )}
               <img
                 src={zoomedPhotoUrl}
                 alt="Ảnh in custom phóng to"
@@ -1306,6 +1366,26 @@ export const AdminOrderDetailsModal: React.FC<AdminOrderDetailsModalProps> = ({
         <div className="fixed top-5 right-5 z-[70] bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 text-xs font-semibold backdrop-blur-sm max-w-sm">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span className="leading-snug">{printSuccessToast}</span>
+        </div>
+      )}
+
+      {/* Floating Hover Zoom Image Preview (Chỉ ảnh phóng to, không chữ, không tên đơn) */}
+      {hoveredPreviewUrl && (
+        <div
+          className="fixed z-[130] pointer-events-none bg-neutral-950/95 p-2 rounded-2xl border border-neutral-700/80 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 backdrop-blur-md"
+          style={{
+            left: `${Math.max(12, Math.min(hoveredPreviewUrl.x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 440))}px`,
+            top: `${Math.max(12, Math.min(hoveredPreviewUrl.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 440))}px`,
+            maxWidth: 'calc(100vw - 24px)'
+          }}
+        >
+          <div className="bg-neutral-900 rounded-xl overflow-hidden flex items-center justify-center p-1 min-h-[240px] max-h-[440px] min-w-[240px] max-w-[420px]">
+            <img
+              src={hoveredPreviewUrl.url}
+              alt=""
+              className="max-h-[420px] w-auto max-w-full object-contain rounded-lg shadow-md"
+            />
+          </div>
         </div>
       )}
     </>

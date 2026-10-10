@@ -381,7 +381,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     const sellerUser: SellerUser = {
       id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
-      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (isRoot ? 'Tổng bí thư' : email),
+      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (email.toLowerCase().includes('nhunhuhao') ? 'Hảo Như' : (email.toLowerCase().includes('huy') ? 'Trần Việt Huy' : (email.includes('@') ? email.split('@')[0] : 'Trần Việt Huy'))),
       role: assignedRole,
       isRootAdmin: isRoot,
       isActive: true,
@@ -900,7 +900,7 @@ export const createDefaultSellers = async (): Promise<SellerUser[]> => {
     {
       id: `seller-${ROOT_ADMIN_USERNAME}`,
       username: ROOT_ADMIN_USERNAME,
-      name: 'Tổng bí thư',
+      name: 'Trần Việt Huy',
       isRootAdmin: true,
       role: 'root_admin',
       isActive: true,

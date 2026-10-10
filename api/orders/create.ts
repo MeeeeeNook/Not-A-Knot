@@ -428,6 +428,7 @@ async function incrementVoucherUsageCount(voucherCode: string): Promise<void> {
       const snap = await db.collection('vouchers').where('code', '==', cleanCode).limit(1).get();
       if (!snap.empty) {
         await snap.docs[0].ref.update({
+          usageCount: FieldValue.increment(1),
           usedCount: FieldValue.increment(1),
           updatedAt: new Date().toISOString()
         });
@@ -438,6 +439,7 @@ async function incrementVoucherUsageCount(voucherCode: string): Promise<void> {
       const snap = await getDocs(query(collection(db, 'vouchers'), where('code', '==', cleanCode), limit(1)));
       if (!snap.empty) {
         await updateDoc(snap.docs[0].ref, {
+          usageCount: increment(1),
           usedCount: increment(1),
           updatedAt: new Date().toISOString()
         });
@@ -736,31 +738,41 @@ export default async function handler(req: any, res: any) {
 
       let customPhotoPriceDelta = 0;
       let hasCustomPhoto = false;
-      const rawCustomPhotoUrl = typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim()
-        ? item.customPhotoUrl.trim()
-        : undefined;
+      const rawCustomPhotoUrls: string[] = Array.isArray(item.customPhotoUrls) && item.customPhotoUrls.length > 0
+        ? item.customPhotoUrls.filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+        : (typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim() ? [item.customPhotoUrl.trim()] : []);
+
       const customPhotoNote = typeof item.customPhotoNote === 'string' && item.customPhotoNote.trim()
         ? item.customPhotoNote.trim().slice(0, 300)
         : undefined;
 
-      let customPhotoUrl = rawCustomPhotoUrl;
-      if (rawCustomPhotoUrl) {
+      let customPhotoUrls: string[] = [];
+      let customPhotoUrl: string | undefined = undefined;
+
+      if (rawCustomPhotoUrls.length > 0) {
         hasCustomPhoto = true;
+        const photoPerItemCount = rawCustomPhotoUrls.length;
         if (authoritativeProduct.enableCustomPhoto && typeof authoritativeProduct.customPhotoPriceDelta === 'number') {
-          customPhotoPriceDelta = Math.max(0, Number(authoritativeProduct.customPhotoPriceDelta));
+          customPhotoPriceDelta = Math.max(0, Number(authoritativeProduct.customPhotoPriceDelta) * photoPerItemCount);
         } else if (typeof item.customPhotoPrice === 'number') {
           customPhotoPriceDelta = Math.max(0, Number(item.customPhotoPrice));
         }
 
-        // If photo is still base64 data URL, upload immediately to Firebase Storage or persist to Firestore HTTP URL
-        if (rawCustomPhotoUrl.startsWith('data:image/') || rawCustomPhotoUrl.length > 500) {
-          const photoKey = `${Date.now()}_item_${validatedItemDetails.length + 1}_${Math.random().toString(36).slice(2, 8)}`;
-          customPhotoUrl = await persistCustomPhotoToStorageOrDb(rawCustomPhotoUrl, photoKey, 'order_custom_photos');
-        }
+        // Upload any base64 data URLs to Firebase Storage or persist
+        customPhotoUrls = await Promise.all(
+          rawCustomPhotoUrls.map(async (pUrl, pIdx) => {
+            if (pUrl.startsWith('data:image/') || pUrl.length > 500) {
+              const photoKey = `${Date.now()}_item_${validatedItemDetails.length + 1}_p${pIdx + 1}_${Math.random().toString(36).slice(2, 8)}`;
+              return await persistCustomPhotoToStorageOrDb(pUrl, photoKey, 'order_custom_photos');
+            }
+            return pUrl;
+          })
+        );
+        customPhotoUrl = customPhotoUrls[0];
       }
 
       // Check if custom photo is required
-      if (authoritativeProduct.enableCustomPhoto && authoritativeProduct.customPhotoRequired && !customPhotoUrl) {
+      if (authoritativeProduct.enableCustomPhoto && authoritativeProduct.customPhotoRequired && (!customPhotoUrl || customPhotoUrls.length === 0)) {
         return res.status(400).json({
           success: false,
           error: `Sản phẩm "${authoritativeProduct.name}" bắt buộc tải ảnh in theo yêu cầu.`
@@ -788,6 +800,7 @@ export default async function handler(req: any, res: any) {
         selectedKhoenPrice: khoenPriceDelta > 0 ? khoenPriceDelta : undefined,
         selectedSize: typeof item.selectedSize === 'string' ? item.selectedSize : undefined,
         customPhotoUrl: customPhotoUrl,
+        customPhotoUrls: customPhotoUrls.length > 0 ? customPhotoUrls : undefined,
         customPhotoNote: customPhotoNote,
         customPhotoPrice: customPhotoPriceDelta > 0 ? customPhotoPriceDelta : undefined,
         customNote: typeof item.customNote === 'string' ? item.customNote.slice(0, 300) : undefined
@@ -830,14 +843,14 @@ export default async function handler(req: any, res: any) {
       if (!voucher) {
         return res.status(400).json({
           success: false,
-          error: `Mã giảm giá "${cleanCode}" không tồn tại.`
+          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
         });
       }
 
       if (voucher.isActive === false) {
         return res.status(400).json({
           success: false,
-          error: `Mã giảm giá "${cleanCode}" hiện đã bị vô hiệu hóa.`
+          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
         });
       }
 
@@ -845,7 +858,7 @@ export default async function handler(req: any, res: any) {
       if (voucher.startDate && now < new Date(voucher.startDate)) {
         return res.status(400).json({
           success: false,
-          error: `Mã giảm giá "${cleanCode}" chưa đến thời gian áp dụng.`
+          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
         });
       }
 
@@ -855,7 +868,7 @@ export default async function handler(req: any, res: any) {
         if (now > end) {
           return res.status(400).json({
             success: false,
-            error: `Mã giảm giá "${cleanCode}" đã hết hạn sử dụng.`
+            error: 'Voucher không tồn tại/đã hết lượt sử dụng'
           });
         }
       }
@@ -863,14 +876,15 @@ export default async function handler(req: any, res: any) {
       if (voucher.minOrderValue && calculatedSubtotal < Number(voucher.minOrderValue)) {
         return res.status(400).json({
           success: false,
-          error: `Đơn hàng tối thiểu ${Number(voucher.minOrderValue).toLocaleString('vi-VN')}đ để áp dụng voucher "${cleanCode}".`
+          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
         });
       }
 
-      if (voucher.usageLimit && typeof voucher.usedCount === 'number' && voucher.usedCount >= voucher.usageLimit) {
+      const usedTotal = Math.max(Number(voucher.usageCount) || 0, Number(voucher.usedCount) || 0);
+      if (voucher.usageLimit && Number(voucher.usageLimit) > 0 && usedTotal >= Number(voucher.usageLimit)) {
         return res.status(400).json({
           success: false,
-          error: `Mã giảm giá "${cleanCode}" đã hết lượt sử dụng.`
+          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
         });
       }
 

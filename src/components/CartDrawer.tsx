@@ -48,7 +48,7 @@ import {
 } from '../utils/analytics';
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
-import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
+import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
 import { LoadingImage } from './LoadingImage';
 
 interface CartDrawerProps {
@@ -414,11 +414,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     );
   }, [cartItems]);
 
-  // Validate each slot independently against the original merchandise subtotal.
+  // Validate each slot independently against the original merchandise subtotal and items.
   const discountResult = appliedVoucher
-    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee, cartItems) : null;
   const shippingResult = shippingVoucher
-    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee, cartItems) : null;
   const voucherDiscountAmount = discountResult?.isValid && discountResult.voucher?.type === 'percent'
     ? discountResult.discountAmount : 0;
   const isFreeShippingVoucher = Boolean(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship');
@@ -433,10 +433,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     if (invalidDiscount || invalidShipping) {
       if (invalidDiscount) setAppliedVoucher(null);
       if (invalidShipping) setShippingVoucher(null);
-      setVoucherError('Một mã không còn đủ điều kiện và đã được gỡ. Các mã hợp lệ khác được giữ lại.');
+      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
       setVoucherSuccessMsg(null);
     }
-  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length]);
+  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length, cartItems]);
 
 
   // Track view_cart in GA4 when drawer opens with items
@@ -471,9 +471,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
       return;
     }
-    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee);
+    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee, cartItems);
     if (!res.isValid || !res.voucher) {
-      setVoucherError(res.message || 'Mã voucher không hợp lệ.');
+      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
       return;
     }
     const occupied = res.voucher.type === 'freeship' ? shippingVoucher : appliedVoucher;
@@ -803,6 +803,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
     local.unshift(orderData);
     localStorage.setItem('nak_preorders', JSON.stringify(local));
+
+    if (selectedVouchers.length > 0) {
+      incrementVouchersUsage(selectedVouchers.map((v) => v.code));
+    }
 
     onOrderPlaced(orderData);
     trackGA4Purchase(orderData.id, subtotal, orderData.itemDetails, paymentMethod === 'vietqr' ? 'VietQR_Banking' : 'COD_System');

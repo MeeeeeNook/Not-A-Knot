@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import { AdminTabHeader } from './admin/AdminTabHeader';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
-import { getVouchers, validateVoucherCode } from '../utils/voucherManager';
+import { getVouchers, validateVoucherCode, incrementVouchersUsage } from '../utils/voucherManager';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
 import { ProductCharmSelector } from './ProductCharmSelector';
@@ -408,7 +408,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
   // Re-validate applied voucher when subtotal or shipping fee changes
   useEffect(() => {
     if (appliedVoucher) {
-      const res = validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, baseShippingFee);
+      const res = validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, baseShippingFee, orderItems);
       if (res.isValid) {
         setVoucherDiscountAmount(res.discountAmount);
         setIsFreeShippingVoucher(res.isFreeShipping);
@@ -421,7 +421,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
         setVoucherSuccessMsg(null);
       }
     }
-  }, [subtotal, baseShippingFee, appliedVoucher, availableVouchers]);
+  }, [subtotal, baseShippingFee, appliedVoucher, availableVouchers, orderItems]);
 
   const handleApplyVoucher = (codeToApply?: string) => {
     setVoucherError(null);
@@ -435,7 +435,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
       return;
     }
-    const res = validateVoucherCode(code, availableVouchers, subtotal, baseShippingFee);
+    const res = validateVoucherCode(code, availableVouchers, subtotal, baseShippingFee, orderItems);
     if (!res.isValid || !res.voucher) {
       setVoucherError(res.message || 'Mã voucher không hợp lệ.');
       return;
@@ -690,6 +690,10 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
       const local = JSON.parse(localStorage.getItem('nak_preorders') || '[]');
       local.unshift(newOrderRecord);
       localStorage.setItem('nak_preorders', JSON.stringify(local));
+
+      if (appliedVoucher) {
+        incrementVouchersUsage([appliedVoucher.code]);
+      }
 
       // 2b. Dismiss order notification for manual orders
       try {

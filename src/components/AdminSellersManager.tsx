@@ -1750,15 +1750,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
             
             {/* 1. Modal Header */}
             <div className="p-4 sm:p-6 border-b border-slate-100 flex items-start justify-between gap-3 bg-slate-50/70 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm sm:text-base shrink-0 shadow-xs"
-                  style={{ backgroundColor: selectedSellerForLogs.avatarColor || '#B41C1A' }}
-                >
-                  {selectedSellerForLogs.name.slice(0, 1).toUpperCase()}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
                     <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
                       {selectedSellerForLogs.name}
                     </h3>
@@ -1784,7 +1777,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                     </span>
                   </p>
                 </div>
-              </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
                 <button

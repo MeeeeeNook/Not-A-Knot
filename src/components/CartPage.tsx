@@ -55,7 +55,7 @@ import {
 } from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
-import { getVouchers, validateVoucherCode, Voucher } from '../utils/voucherManager';
+import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
 import { LoadingImage } from './LoadingImage';
 
 interface CartPageProps {
@@ -507,9 +507,9 @@ export const CartPage: React.FC<CartPageProps> = ({
 
   // Validate each slot independently against the original merchandise subtotal.
   const discountResult = appliedVoucher
-    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee, availableCartItems) : null;
   const shippingResult = shippingVoucher
-    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee) : null;
+    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee, availableCartItems) : null;
   const voucherDiscountAmount = discountResult?.isValid && discountResult.voucher?.type === 'percent'
     ? discountResult.discountAmount : 0;
   const isFreeShippingVoucher = Boolean(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship');
@@ -524,10 +524,10 @@ export const CartPage: React.FC<CartPageProps> = ({
     if (invalidDiscount || invalidShipping) {
       if (invalidDiscount) setAppliedVoucher(null);
       if (invalidShipping) setShippingVoucher(null);
-      setVoucherError('Một mã không còn đủ điều kiện và đã được gỡ. Các mã hợp lệ khác được giữ lại.');
+      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
       setVoucherSuccessMsg(null);
     }
-  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length]);
+  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length, availableCartItems]);
 
 
   const handleApplyVoucher = () => {
@@ -542,9 +542,9 @@ export const CartPage: React.FC<CartPageProps> = ({
       setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
       return;
     }
-    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee);
+    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee, availableCartItems);
     if (!res.isValid || !res.voucher) {
-      setVoucherError(res.message || 'Mã voucher không hợp lệ.');
+      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
       return;
     }
     const occupied = res.voucher.type === 'freeship' ? shippingVoucher : appliedVoucher;
@@ -865,6 +865,11 @@ export const CartPage: React.FC<CartPageProps> = ({
       sendOrderConfirmationEmail(confirmedOrder).catch((e) => {
         console.warn('[CartPage] Email notification background notice:', e);
       });
+
+      // Increment voucher usage count
+      if (selectedVouchers.length > 0) {
+        incrementVouchersUsage(selectedVouchers.map((v) => v.code));
+      }
 
       // Retain authoritative state for success view BEFORE clearing cart
       setPlacedOrder(confirmedOrder);

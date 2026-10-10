@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Voucher, VoucherType, StoredOrder } from '../../types';
+import { Voucher, VoucherType, StoredOrder, Product, SellerUser } from '../../types';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
   getVouchers,
@@ -9,6 +9,8 @@ import {
   generateVoucherEncryption
 } from '../../utils/voucherManager';
 import { getOrdersFromFirestore } from '../../firebase';
+import { isRootAdminUser, getAdminSession } from '../../utils/auth';
+import { formatOrderDateWithoutSeconds } from '../../utils/orderFormatters';
 import { AdminTabHeader } from './AdminTabHeader';
 import {
   Ticket,
@@ -33,11 +35,17 @@ import {
   User,
   Phone,
   Clock,
-  Sparkles
+  Sparkles,
+  Package,
+  Layers,
+  HelpCircle
 } from 'lucide-react';
 
 interface AdminVouchersTabProps {
   orders?: StoredOrder[];
+  products?: Product[];
+  currentSeller?: Partial<SellerUser> | null;
+  isRootAdmin?: boolean;
   onInspectOrder?: (order: StoredOrder) => void;
 }
 
@@ -49,9 +57,71 @@ interface VoucherStats {
   orders: StoredOrder[];
 }
 
-export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: propsOrders, onInspectOrder }) => {
+export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
+  orders: propsOrders,
+  products: propsProducts,
+  currentSeller: propsSeller,
+  isRootAdmin: propsIsRoot,
+  onInspectOrder
+}) => {
+  const sessionUser = propsSeller || getAdminSession();
+  const isRoot = Boolean(propsIsRoot ?? isRootAdminUser(sessionUser));
+
+  // Format order date safely to eliminate "Invalid Date"
+  const formatOrderDateSafe = (ord: any): string => {
+    const rawDate = ord.date || ord.createdAt || ord.timestamp;
+    if (rawDate) {
+      const formatted = formatOrderDateWithoutSeconds(rawDate);
+      if (formatted && formatted !== 'N/A' && !formatted.includes('Invalid') && !formatted.includes('NaN')) {
+        return formatted;
+      }
+    }
+
+    // Fallback: extract date from order ID pattern (e.g. NAK-260924-3219 -> 24/09/2026)
+    const ordId = String(ord.id || ord.trackingNumber || '');
+    const match = ordId.match(/NAK-(\d{2})(\d{2})(\d{2})-/i);
+    if (match) {
+      const day = match[3];
+      const month = match[2];
+      const year = `20${match[1]}`;
+      return `${day}/${month}/${year}`;
+    }
+
+    return 'Mới đây';
+  };
+
+  // Format voucher creation date safely (never display Invalid Date or fake fallback)
+  const formatVoucherDateSafe = (rawDate?: string): string => {
+    if (!rawDate) return 'Không có';
+    const formatted = formatOrderDateWithoutSeconds(rawDate);
+    if (formatted && formatted !== 'N/A' && !formatted.includes('Invalid') && !formatted.includes('NaN')) {
+      return formatted;
+    }
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    return 'Không có';
+  };
+
+  // Get authentic human creator name, never showing fake titles (Tổng bí thư, Bộ trưởng, Hệ thống)
+  const getDisplayCreator = (creator?: string, voucherCode?: string): string | null => {
+    if (voucherCode && voucherCode.toUpperCase().includes('HUY')) {
+      return 'Trần Việt Huy';
+    }
+    if (!creator) return null;
+    const trimmed = creator.trim();
+    const fakeTitles = ['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'];
+    if (fakeTitles.includes(trimmed.toLowerCase())) return null;
+    return trimmed;
+  };
+
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [internalOrders, setInternalOrders] = useState<StoredOrder[]>(propsOrders || []);
+  const [availableProducts, setAvailableProducts] = useState<Product[]>(propsProducts || []);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
@@ -73,8 +143,28 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [isActive, setIsActive] = useState<boolean>(true);
+  const [applyToAllProducts, setApplyToAllProducts] = useState<boolean>(true);
+  const [applicableProductIds, setApplicableProductIds] = useState<string[]>([]);
+  const [maxApplicableQuantity, setMaxApplicableQuantity] = useState<number>(0);
+  const [usageLimit, setUsageLimit] = useState<number>(0);
+  const [createdByInput, setCreatedByInput] = useState<string>('');
+  const [productSearchInModal, setProductSearchInModal] = useState<string>('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Load products if not supplied via props
+  useEffect(() => {
+    if (propsProducts && propsProducts.length > 0) {
+      setAvailableProducts(propsProducts);
+    } else {
+      try {
+        const local = JSON.parse(localStorage.getItem('nak_custom_products') || '[]');
+        if (Array.isArray(local) && local.length > 0) {
+          setAvailableProducts(local);
+        }
+      } catch {}
+    }
+  }, [propsProducts]);
 
   // Sync props orders if available or load fallback
   useEffect(() => {
@@ -117,6 +207,36 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
   useEffect(() => {
     loadVouchers();
   }, []);
+
+  // Helper to check if a product is hidden
+  const isProductHidden = (prod: Product) => {
+    if (prod.isHidden === true || String(prod.isHidden) === 'true') return true;
+    try {
+      const localCats = JSON.parse(localStorage.getItem('nak_custom_categories') || '[]');
+      if (Array.isArray(localCats) && prod.category) {
+        const cat = localCats.find((c: any) => c.id === prod.category);
+        if (cat && (cat.isHidden === true || String(cat.isHidden) === 'true')) return true;
+      }
+    } catch {}
+    return false;
+  };
+
+  // Products filtered in modal - sản phẩm bị ẩn đẩy xuống dưới cùng
+  const filteredProductsInModal = useMemo(() => {
+    let list = availableProducts;
+    if (productSearchInModal.trim()) {
+      const q = productSearchInModal.toLowerCase().trim();
+      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => {
+      const aHidden = isProductHidden(a);
+      const bHidden = isProductHidden(b);
+      if (aHidden !== bHidden) {
+        return aHidden ? 1 : -1; // Sản phẩm hiển thị ở trên, sản phẩm bị ẩn đẩy xuống dưới
+      }
+      return 0;
+    });
+  }, [availableProducts, productSearchInModal]);
 
   // Compute usage counts, discounts, and revenue per voucher
   const voucherStatsMap = useMemo(() => {
@@ -233,6 +353,15 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
     nextMonth.setDate(nextMonth.getDate() + 30);
     setEndDate(nextMonth.toISOString().split('T')[0]);
     setIsActive(true);
+    setApplyToAllProducts(true);
+    setApplicableProductIds([]);
+    setMaxApplicableQuantity(0);
+    setUsageLimit(0);
+    const realUserName = sessionUser?.name && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(sessionUser.name.trim().toLowerCase())
+      ? sessionUser.name
+      : '';
+    setCreatedByInput(realUserName);
+    setProductSearchInModal('');
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -247,6 +376,15 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
     setStartDate(v.startDate ? v.startDate.split('T')[0] : '');
     setEndDate(v.endDate ? v.endDate.split('T')[0] : '');
     setIsActive(v.isActive);
+    setApplyToAllProducts(v.applyToAllProducts ?? true);
+    setApplicableProductIds(v.applicableProductIds || []);
+    setMaxApplicableQuantity(v.maxApplicableQuantity || 0);
+    setUsageLimit(v.usageLimit || 0);
+    const existingCreator = v.createdBy && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(v.createdBy.trim().toLowerCase())
+      ? v.createdBy
+      : (v.code.toUpperCase().includes('HUY') ? 'Trần Việt Huy' : '');
+    setCreatedByInput(existingCreator);
+    setProductSearchInModal('');
     setFormError(null);
     setIsModalOpen(true);
   };
@@ -266,9 +404,30 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
       return;
     }
 
+    if (!applyToAllProducts && applicableProductIds.length === 0) {
+      setFormError('Bạn đang chọn "Chỉ áp dụng cho sản phẩm cụ thể", vui lòng tick chọn ít nhất 1 sản phẩm.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const voucherId = editingVoucher ? editingVoucher.id : `VOUCHER_${Date.now()}`;
+      const cleanCreator = createdByInput.trim();
+      const isFakeTitle = ['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(cleanCreator.toLowerCase());
+      let creatorName: string | undefined = undefined;
+      if (cleanCreator && !isFakeTitle) {
+        creatorName = cleanCreator;
+      } else if (cleanCode.includes('HUY')) {
+        creatorName = 'Trần Việt Huy';
+      } else if (editingVoucher?.createdBy && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(editingVoucher.createdBy.trim().toLowerCase())) {
+        creatorName = editingVoucher.createdBy;
+      }
+
+      const createdAtVal = editingVoucher?.createdAt || new Date().toISOString();
+      const realUpdater = sessionUser?.name && !['tổng bí thư', 'bộ trưởng', 'chủ tịch nước', 'quản trị viên', 'hệ thống', 'admin'].includes(sessionUser.name.trim().toLowerCase())
+        ? sessionUser.name
+        : undefined;
+
       const payloadWithoutEncrypt: Omit<Voucher, 'encryptedData'> = {
         id: voucherId,
         code: cleanCode,
@@ -279,8 +438,14 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
         startDate,
         endDate,
         isActive,
-        createdAt: editingVoucher?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        applyToAllProducts,
+        applicableProductIds: applyToAllProducts ? [] : applicableProductIds,
+        maxApplicableQuantity: Number(maxApplicableQuantity) > 0 ? Number(maxApplicableQuantity) : 0,
+        usageLimit: Number(usageLimit) > 0 ? Number(usageLimit) : undefined,
+        createdAt: createdAtVal,
+        createdBy: creatorName,
+        updatedAt: new Date().toISOString(),
+        updatedBy: realUpdater
       };
 
       const encryptedData = await generateVoucherEncryption(payloadWithoutEncrypt);
@@ -584,6 +749,34 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                           Giảm {v.discountPercent}%
                         </span>
                       )}
+
+                      {v.applyToAllProducts === false && v.applicableProductIds && v.applicableProductIds.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-800 text-[11px] font-bold px-2 py-0.5 rounded-md border border-purple-200">
+                          <Layers className="w-3 h-3 text-purple-600" />
+                          Chỉ {v.applicableProductIds.length} SP
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-neutral-100 text-neutral-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
+                          <Package className="w-3 h-3 text-neutral-500" />
+                          Tất cả SP
+                        </span>
+                      )}
+
+                      {v.maxApplicableQuantity && v.maxApplicableQuantity > 0 ? (
+                        <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-800 text-[11px] font-bold px-2 py-0.5 rounded-md border border-blue-200">
+                          Tối đa {v.maxApplicableQuantity} món
+                        </span>
+                      ) : null}
+
+                      {v.usageLimit && v.usageLimit > 0 ? (
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                          stats.usageCount >= v.usageLimit
+                            ? 'bg-rose-50 text-rose-800 border-rose-300 font-black'
+                            : 'bg-amber-50 text-amber-800 border-amber-300'
+                        }`}>
+                          {stats.usageCount >= v.usageLimit ? 'Hết lượt dùng' : `Tối đa ${v.usageLimit} lượt`}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -609,7 +802,16 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                       <ShoppingBag className="w-3.5 h-3.5 text-amber-700" /> Số lượt sử dụng:
                     </span>
                     <span className="font-black text-sm text-neutral-950 font-mono">
-                      {stats.usageCount} <span className="text-xs font-normal text-neutral-500">lượt</span>
+                      {stats.usageCount}
+                      {v.usageLimit && v.usageLimit > 0 ? (
+                        <span className="text-xs font-bold text-neutral-600"> / {v.usageLimit}</span>
+                      ) : null}
+                      <span className="text-xs font-normal text-neutral-500"> lượt</span>
+                      {v.usageLimit && v.usageLimit > 0 && stats.usageCount >= v.usageLimit && (
+                        <span className="text-[10px] text-rose-600 font-bold ml-1.5 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          HẾT LƯỢT
+                        </span>
+                      )}
                       {stats.cancelledCount > 0 && (
                         <span className="text-[10px] text-rose-600 font-normal ml-1">({stats.cancelledCount} hủy)</span>
                       )}
@@ -663,6 +865,22 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                       {v.minOrderValue ? `${v.minOrderValue.toLocaleString('vi-VN')}đ` : '0đ'}
                     </strong>
                   </div>
+
+                  <div className="flex justify-between items-center">
+                    <span>Sản phẩm áp dụng:</span>
+                    <span className="font-bold text-neutral-900">
+                      {v.applyToAllProducts === false && v.applicableProductIds && v.applicableProductIds.length > 0
+                        ? `Chỉ ${v.applicableProductIds.length} sản phẩm chỉ định`
+                        : 'Tất cả sản phẩm'}
+                    </span>
+                  </div>
+
+                  {v.maxApplicableQuantity && v.maxApplicableQuantity > 0 ? (
+                    <div className="flex justify-between items-center text-blue-900 bg-blue-50/80 px-2 py-1 rounded-lg">
+                      <span className="font-bold">Giới hạn số lượng:</span>
+                      <span className="font-mono font-black">Tối đa {v.maxApplicableQuantity} SP/đơn</span>
+                    </div>
+                  ) : null}
 
                   <div className="flex justify-between items-center text-[11px] pt-1 border-t border-neutral-200/60">
                     <span className="flex items-center gap-1 text-neutral-500">
@@ -725,6 +943,29 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                     </button>
                   </div>
                 </div>
+
+                {/* Creator and Created Date: Chỉ hiển thị cho Tổng bí thư */}
+                {isRoot && (
+                  <div className="flex items-center justify-between text-[11px] text-neutral-500 pt-2 border-t border-neutral-100 bg-amber-50/40 -mx-4 -mb-4 px-4 py-2.5 rounded-b-2xl">
+                    <span className="flex items-center gap-1 font-medium truncate">
+                      <User className="w-3 h-3 text-amber-700 shrink-0" />
+                      <span className="text-neutral-500">Tạo bởi:</span>
+                      {getDisplayCreator(v.createdBy, v.code) ? (
+                        <strong className="text-amber-950 font-bold">{getDisplayCreator(v.createdBy, v.code)}</strong>
+                      ) : (
+                        <span className="text-neutral-400 italic font-normal">Không có</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1 font-mono text-[10px] text-neutral-400 shrink-0">
+                      <Clock className="w-3 h-3 text-neutral-400" />
+                      {v.createdAt ? (
+                        <span>{formatVoucherDateSafe(v.createdAt)}</span>
+                      ) : (
+                        <span className="text-neutral-400 italic font-normal">Không có</span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -747,9 +988,20 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                       Lịch Sử Sử Dụng Voucher: <span className="font-mono text-amber-700 font-black">{inspectingVoucherStats.voucher.code}</span>
                     </h3>
                   </div>
-                  <p className="text-xs text-neutral-500 font-medium">
-                    Danh sách {inspectingVoucherStats.stats.orders.length} đơn hàng đã áp dụng mã này
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-neutral-500 font-medium">
+                      Danh sách {inspectingVoucherStats.stats.orders.length} đơn hàng đã áp dụng mã này
+                    </p>
+                    {isRoot && (
+                      <span className="text-[11px] text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-md font-medium border border-amber-200">
+                        👤 Tạo bởi: {getDisplayCreator(inspectingVoucherStats.voucher.createdBy, inspectingVoucherStats.voucher.code) ? (
+                          <strong>{getDisplayCreator(inspectingVoucherStats.voucher.createdBy, inspectingVoucherStats.voucher.code)}</strong>
+                        ) : (
+                          <span className="italic text-neutral-500">Không có</span>
+                        )} ({inspectingVoucherStats.voucher.createdAt ? formatVoucherDateSafe(inspectingVoucherStats.voucher.createdAt) : 'Không có'})
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <button
@@ -766,7 +1018,8 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
               <div>
                 <span className="text-[10px] font-bold text-neutral-500 uppercase block">Số lượt áp dụng</span>
                 <span className="text-base font-black text-neutral-950 font-mono">
-                  {inspectingVoucherStats.stats.usageCount} đơn
+                  {inspectingVoucherStats.stats.usageCount}
+                  {inspectingVoucherStats.voucher.usageLimit ? ` / ${inspectingVoucherStats.voucher.usageLimit}` : ''} đơn
                 </span>
               </div>
               <div>
@@ -808,7 +1061,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                           <span className="font-mono font-bold text-neutral-950 block">{orderId}</span>
                           <span className="text-[10px] text-neutral-400 flex items-center gap-1">
                             <Clock className="w-2.5 h-2.5" />
-                            {ord.date ? new Date(ord.date).toLocaleDateString('vi-VN') : 'Mới đây'}
+                            {formatOrderDateSafe(ord)}
                           </span>
                         </td>
                         <td className="py-2.5 px-3">
@@ -881,8 +1134,8 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
       {/* CREATE / EDIT VOUCHER MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-neutral-200 animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-neutral-200 animate-in fade-in zoom-in duration-150 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 shrink-0">
               <div className="flex items-center gap-2">
                 <Ticket className="w-5 h-5 text-amber-600" />
                 <h3 className="text-base font-black text-neutral-950">
@@ -899,13 +1152,13 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
             </div>
 
             {formError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center gap-2 shrink-0">
                 <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
                 <span>{formError}</span>
               </div>
             )}
 
-            <form onSubmit={handleSave} className="space-y-4 text-xs">
+            <form onSubmit={handleSave} className="space-y-4 text-xs overflow-y-auto pr-1 flex-1">
               {/* Code */}
               <div>
                 <label className="block font-bold text-neutral-950 mb-1">
@@ -995,6 +1248,178 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                 />
               </div>
 
+              {/* Product Scope Selection (Tất cả sản phẩm vs Chỉ sản phẩm được chọn) */}
+              <div className="space-y-2 p-3.5 bg-neutral-50/90 rounded-2xl border border-neutral-200">
+                <div className="flex items-center justify-between">
+                  <label className="block font-black text-neutral-950 text-xs">
+                    Sản phẩm áp dụng mã này:
+                  </label>
+                  <span className="text-[10px] font-bold text-neutral-500">
+                    {applyToAllProducts ? 'Toàn bộ cửa hàng' : `Chỉ ${applicableProductIds.length} SP được chọn`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setApplyToAllProducts(true)}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      applyToAllProducts
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-950 shadow-2xs font-black'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Tất cả sản phẩm</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApplyToAllProducts(false)}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      !applyToAllProducts
+                        ? 'border-purple-500 bg-purple-50 text-purple-950 shadow-2xs font-black'
+                        : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Chỉ sản phẩm đã chọn ({applicableProductIds.length})</span>
+                  </button>
+                </div>
+
+                {!applyToAllProducts && (
+                  <div className="mt-2 space-y-2 pt-2 border-t border-neutral-200/80">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                        <input
+                          type="text"
+                          value={productSearchInModal}
+                          onChange={(e) => setProductSearchInModal(e.target.value)}
+                          placeholder="Tìm sản phẩm áp dụng..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-neutral-200 rounded-lg focus:outline-none focus:border-neutral-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setApplicableProductIds(availableProducts.map((p) => p.id))}
+                        className="text-[11px] font-bold text-neutral-700 hover:text-neutral-950 px-2 py-1.5 bg-white hover:bg-neutral-100 border border-neutral-200 rounded-lg cursor-pointer whitespace-nowrap"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setApplicableProductIds([])}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 px-2 py-1.5 bg-white hover:bg-rose-50 border border-neutral-200 rounded-lg cursor-pointer whitespace-nowrap"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+
+                    <div className="max-h-44 overflow-y-auto space-y-1 pr-1 border border-neutral-200 rounded-xl p-2 bg-white divide-y divide-neutral-100">
+                      {filteredProductsInModal.length === 0 ? (
+                        <p className="text-center py-4 text-neutral-400 text-xs">Không tìm thấy sản phẩm nào</p>
+                      ) : (
+                        filteredProductsInModal.map((prod) => {
+                          const isSelected = applicableProductIds.includes(prod.id);
+                          const isHidden = isProductHidden(prod);
+                          return (
+                            <label
+                              key={prod.id}
+                              className={`flex items-center gap-2.5 p-1.5 rounded-lg cursor-pointer transition-colors ${
+                                isSelected ? 'bg-purple-50/70' : 'hover:bg-neutral-50'
+                              } ${isHidden ? 'opacity-60 bg-neutral-50/60' : ''}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setApplicableProductIds((prev) => [...prev, prod.id]);
+                                  } else {
+                                    setApplicableProductIds((prev) => prev.filter((id) => id !== prod.id));
+                                  }
+                                }}
+                                className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                              />
+                              <img
+                                src={prod.image || '/assets/hero-bg.png'}
+                                alt={prod.name}
+                                className="w-8 h-8 rounded-md object-cover border border-neutral-200 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-bold text-neutral-900 truncate">{prod.name}</p>
+                                  {isHidden && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-neutral-200 text-neutral-600 shrink-0">
+                                      Đã ẩn
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-neutral-500 font-mono">
+                                  {(prod.price || 0).toLocaleString('vi-VN')}đ
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    <p className="text-[11px] font-bold text-purple-900">
+                      ✓ Đã chọn {applicableProductIds.length} / {availableProducts.length} sản phẩm
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity Limit & Total Usage Limit (Compact 2-col layout with small ? help tooltip) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Max Quantity per Order */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <label className="block font-bold text-neutral-950 text-xs">
+                      SP tối đa được giảm / đơn:
+                    </label>
+                    <div className="relative group cursor-help inline-flex items-center">
+                      <HelpCircle className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-700 transition-colors" />
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-52 p-2 bg-neutral-900 text-white text-[11px] font-medium rounded-lg shadow-xl z-50 leading-relaxed text-center">
+                        Số lượng SP tối đa được giảm trong 1 đơn hàng (VD: 3 SP, từ SP thứ 4 tính giá gốc). Để trống hoặc 0 = không giới hạn.
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={maxApplicableQuantity || ''}
+                    onChange={(e) => setMaxApplicableQuantity(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    placeholder="0 = không giới hạn"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-bold text-neutral-950 focus:bg-white focus:border-neutral-950 focus:outline-none"
+                  />
+                </div>
+
+                {/* Total Usage Limit */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <label className="block font-bold text-neutral-950 text-xs">
+                      Giới hạn tổng lượt dùng:
+                    </label>
+                    <div className="relative group cursor-help inline-flex items-center">
+                      <HelpCircle className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-700 transition-colors" />
+                      <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-52 p-2 bg-neutral-900 text-white text-[11px] font-medium rounded-lg shadow-xl z-50 leading-relaxed text-center">
+                        Tổng số lượt sử dụng trên toàn hệ thống (VD: 10 lượt, đơn thứ 11 sẽ báo lỗi). Để trống hoặc 0 = không giới hạn.
+                      </div>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={usageLimit || ''}
+                    onChange={(e) => setUsageLimit(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    placeholder="0 = không giới hạn"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-bold text-neutral-950 focus:bg-white focus:border-neutral-950 focus:outline-none"
+                  />
+                </div>
+              </div>
+
               {/* Start Date & End Date */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1017,6 +1442,23 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
                 </div>
               </div>
 
+              {/* Creator Name (Họ tên người tạo thực tế: Trần Việt Huy, Hảo Như...) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-neutral-950 text-xs">
+                    Người tạo voucher (Họ tên):
+                  </label>
+                  <span className="text-[10px] text-neutral-400">Không bắt buộc</span>
+                </div>
+                <input
+                  type="text"
+                  value={createdByInput}
+                  onChange={(e) => setCreatedByInput(e.target.value)}
+                  placeholder="Ví dụ: Trần Việt Huy, Hảo Như... (Để trống nếu không rõ)"
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-medium text-neutral-950 focus:bg-white focus:border-neutral-950 focus:outline-none"
+                />
+              </div>
+
               {/* Is Active */}
               <div className="flex items-center gap-2 pt-1">
                 <input
@@ -1032,7 +1474,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({ orders: prop
               </div>
 
               {/* Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

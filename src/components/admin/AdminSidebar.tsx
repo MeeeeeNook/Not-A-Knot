@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   ChevronsLeft, ArrowLeft, Wrench, Mail, ShieldAlert, 
   LayoutDashboard, ShoppingBag, PlusCircle, Ticket, Trash2, 
@@ -76,6 +76,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onLogout,
   onOpenSwitchSellerModal
 }) => {
+  const [showLogoutBtn, setShowLogoutBtn] = useState(false);
+  const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false);
+  const userCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userCardRef.current && !userCardRef.current.contains(e.target as Node)) {
+        setShowLogoutBtn(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   const handleItemClick = (tab: AdminTabType) => {
     onSwitchTab(tab);
     if (sidebarOpen) {
@@ -156,30 +170,56 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           </div>
 
-          {/* User Profile Card */}
+          {/* User Profile Card - Morphs into Logout button on Hover (desktop) / Tap (mobile) */}
           {currentSeller && (
-            <div className="p-3 mx-3 mt-3 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent rounded-2xl border border-amber-200/60 flex items-center gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div
-                  className="w-8 h-8 rounded-xl text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs relative"
-                  style={{ backgroundColor: currentSeller.avatarColor || '#d97706' }}
-                >
-                  <span>{currentSeller.name.slice(0, 1).toUpperCase()}</span>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-xs text-slate-900 truncate leading-tight">
+            <div
+              ref={userCardRef}
+              onClick={() => {
+                if (showLogoutBtn) {
+                  setIsConfirmLogoutOpen(true);
+                } else {
+                  setShowLogoutBtn(true);
+                }
+              }}
+              onMouseEnter={() => setShowLogoutBtn(true)}
+              onMouseLeave={() => setShowLogoutBtn(false)}
+              className="relative group mx-3 mt-2.5 rounded-xl border border-amber-200/80 hover:border-rose-400 overflow-hidden cursor-pointer select-none transition-all duration-200 shadow-2xs"
+              title="Rê chuột hoặc chạm vào để Đăng xuất"
+            >
+              {/* 1. Normal State: Clean, compact user information (Single lines, no awkward wraps) */}
+              <div className="px-3 py-2 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent space-y-0.5">
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="font-extrabold text-xs text-slate-900 truncate leading-tight">
                     {currentSeller.name}
-                  </div>
-                  <div className="text-[11px] text-slate-700 truncate leading-tight mt-0.5">
-                    <span className="font-bold text-slate-800">{currentSeller.googleEmail || currentSeller.username}</span>
-                    <span className="mx-1 text-slate-400 font-normal">•</span>
-                    <span className="font-bold text-amber-900">
-                      {currentSeller.isRootAdmin ? 'Tổng bí thư' : (currentSeller.role === 'deputy_admin' ? 'Chủ tịch nước' : 'Bộ trưởng')}
-                    </span>
-                  </div>
+                  </span>
+                  <span className="shrink-0 font-bold text-amber-900 text-[10px] px-1.5 py-0.5 rounded-md bg-amber-100 border border-amber-200/80 leading-none">
+                    {currentSeller.isRootAdmin ? 'Tổng bí thư' : (currentSeller.role === 'deputy_admin' ? 'Chủ tịch nước' : 'Bộ trưởng')}
+                  </span>
+                </div>
+                <div className="text-[11px] font-medium text-slate-600 truncate leading-tight">
+                  {currentSeller.googleEmail || currentSeller.username}
                 </div>
               </div>
+
+              {/* 2. Hover / Tap State: The entire card morphs into the Exit Button */}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsConfirmLogoutOpen(true);
+                  }}
+                  className={`absolute inset-0 z-10 w-full h-full bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs flex items-center justify-center gap-2 rounded-xl shadow-inner transition-all duration-200 cursor-pointer ${
+                    showLogoutBtn
+                      ? 'opacity-100 pointer-events-auto scale-100'
+                      : 'opacity-0 pointer-events-none scale-98 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:scale-100'
+                  }`}
+                  title="Đăng xuất khỏi trang quản trị"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Đăng xuất</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -571,35 +611,75 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </nav>
         </div>
 
-        {/* 3. Bottom Footer Profile & Back to Store Actions */}
+        {/* 3. Bottom Footer Back to Store Action */}
         <div 
-          className="p-3 border-t border-slate-100 bg-slate-50/70 space-y-2 shrink-0"
+          className="p-3 border-t border-slate-100 bg-slate-50/70 shrink-0"
           style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
         >
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onBackToStore}
-              className="flex-1 px-3 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-slate-950 text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-amber-500/40 active:scale-95"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Về shop</span>
-            </button>
-
-            {onLogout && (
-              <button
-                type="button"
-                onClick={onLogout}
-                className="p-2.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1"
-                title="Đăng xuất"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Thoát</span>
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={onBackToStore}
+            className="w-full px-3 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 active:bg-amber-600 text-slate-950 text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-amber-500/40 active:scale-95"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Về shop</span>
+          </button>
         </div>
       </aside>
+
+      {/* Confirmation Screen Trước Khi Đăng Xuất */}
+      {isConfirmLogoutOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200"
+          onClick={() => setIsConfirmLogoutOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200 shadow-xs">
+                <LogOut className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold text-slate-900 leading-tight">
+                  Xác nhận đăng xuất?
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                  Tài khoản: {currentSeller?.name || 'Quản trị viên'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Bạn có chắc chắn muốn kết thúc phiên làm việc quản trị hiện tại không?
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsConfirmLogoutOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer active:scale-95"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConfirmLogoutOpen(false);
+                  onLogout?.();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5 border border-rose-700"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

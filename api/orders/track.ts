@@ -412,16 +412,26 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       : [];
 
     const safeItems = await Promise.all(rawItems.map(async (it: any, itemIdx: number) => {
-      let photoUrl = it?.customPhotoUrl || undefined;
-      if (photoUrl && typeof photoUrl === 'string' && (photoUrl.startsWith('data:image/') || photoUrl.length > 500)) {
-        try {
-          const { persistCustomPhotoToStorageOrDb } = await import('./create.ts');
-          const pKey = `${cleanCode}_item_${itemIdx + 1}`;
-          photoUrl = await persistCustomPhotoToStorageOrDb(photoUrl, pKey, 'order_custom_photos');
-        } catch (convErr) {
-          console.warn('[Track Order] Photo conversion notice:', convErr);
-        }
-      }
+      const rawUrls: string[] = Array.isArray(it?.customPhotoUrls) && it.customPhotoUrls.length > 0
+        ? it.customPhotoUrls.filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+        : (it?.customPhotoUrl ? [it.customPhotoUrl] : []);
+
+      const safePhotoUrls: string[] = await Promise.all(
+        rawUrls.map(async (u: string, pIdx: number) => {
+          if (typeof u === 'string' && (u.startsWith('data:image/') || u.length > 500)) {
+            try {
+              const { persistCustomPhotoToStorageOrDb } = await import('./create.ts');
+              const pKey = `${cleanCode}_item_${itemIdx + 1}_p${pIdx + 1}`;
+              return await persistCustomPhotoToStorageOrDb(u, pKey, 'order_custom_photos');
+            } catch (convErr) {
+              console.warn('[Track Order] Photo conversion notice:', convErr);
+            }
+          }
+          return u;
+        })
+      );
+
+      const photoUrl = safePhotoUrls[0] || it?.customPhotoUrl || undefined;
 
       return {
         productName: String(it?.productName || it?.name || 'Sản phẩm thủ công'),
@@ -436,6 +446,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         selectedOmamoris: Array.isArray(it?.selectedOmamoris) ? it.selectedOmamoris.map((o: any) => ({ name: o?.name || String(o) })) : undefined,
         selectedKhoen: it?.selectedKhoen ? String(it.selectedKhoen) : undefined,
         customPhotoUrl: photoUrl,
+        customPhotoUrls: safePhotoUrls.length > 0 ? safePhotoUrls : undefined,
         customPhotoNote: it?.customPhotoNote || undefined,
         customPhotoPrice: it?.customPhotoPrice ? Number(it.customPhotoPrice) : undefined,
         customNote: it?.customNote ? String(it.customNote) : undefined,

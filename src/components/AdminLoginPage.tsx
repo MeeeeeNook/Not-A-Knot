@@ -100,13 +100,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         </button>
       </div>
 
-      {/* Spacious Card (Not shrunk tight, comfortable width, elegant readable typography) */}
-      <div className="relative z-10 w-full max-w-xl sm:max-w-2xl bg-white rounded-3xl shadow-[0_25px_80px_-15px_rgba(0,0,0,0.8)] border border-neutral-100/90 overflow-hidden my-auto p-8 sm:p-12 md:p-14 animate-scaleUp">
+      {/* Spacious Card (Comfortable responsive padding, no awkward cropping) */}
+      <div className="relative z-10 w-full max-w-xl sm:max-w-2xl bg-white rounded-3xl shadow-[0_25px_80px_-15px_rgba(0,0,0,0.8)] border border-neutral-100/90 overflow-hidden my-auto p-6 sm:p-9 md:p-11 animate-scaleUp">
         {/* Top-Right Close Button (X) */}
         <button
           type="button"
           onClick={onBackToStore}
-          className="absolute top-6 right-6 sm:top-7 sm:right-7 w-10 h-10 rounded-full text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors flex items-center justify-center cursor-pointer active:scale-95"
+          className="absolute top-5 right-5 sm:top-6 sm:right-6 w-10 h-10 rounded-full text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition-colors flex items-center justify-center cursor-pointer active:scale-95"
           title="Đóng / Trở về cửa hàng"
           aria-label="Đóng / Trở về cửa hàng"
         >
@@ -114,18 +114,18 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         </button>
 
         {/* Card Header with clean, readable, non-bold typography */}
-        <div className="mb-7 pr-10">
+        <div className="mb-6 pr-8">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 tracking-tight leading-snug">
             Đăng nhập hệ thống
           </h1>
-          <p className="text-sm sm:text-base text-neutral-500 font-normal mt-2 leading-relaxed">
+          <p className="text-sm sm:text-base text-neutral-500 font-normal mt-1.5 leading-relaxed">
             Vui lòng sử dụng tài khoản Google đã được cấp quyền quản trị để tiếp tục.
           </p>
         </div>
 
         {/* Error Notification Alert */}
         {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 animate-fadeIn">
+          <div className="mb-5 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1 font-normal leading-relaxed">
               {errorMessage}
@@ -142,12 +142,12 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
         )}
 
         {/* Google-Only Login Action Area with gentle, easily readable font weight and comfortable sizing */}
-        <div className="space-y-5">
+        <div className="space-y-4">
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full py-4 px-6 bg-white hover:bg-neutral-50 active:bg-neutral-100 active:scale-[0.99] border border-neutral-300 hover:border-neutral-400 rounded-2xl text-neutral-800 font-medium text-base sm:text-lg shadow-xs flex items-center justify-center gap-3.5 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group"
+            className="w-full py-3.5 sm:py-4 px-6 bg-white hover:bg-neutral-50 active:bg-neutral-100 active:scale-[0.99] border border-neutral-300 hover:border-neutral-400 rounded-2xl text-neutral-800 font-medium text-base sm:text-lg shadow-xs flex items-center justify-center gap-3.5 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group"
           >
             {isLoading ? (
               <>
@@ -204,6 +204,20 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
               Cần trợ giúp?
             </button>
           </div>
+
+          {/* Customer navigation fallback */}
+          <div className="pt-3 pb-1 text-center border-t border-neutral-100">
+            <p className="text-xs sm:text-sm text-neutral-600 font-normal">
+              Bạn là khách đi lạc?{' '}
+              <button
+                type="button"
+                onClick={onBackToStore}
+                className="text-amber-800 hover:text-amber-950 font-semibold underline underline-offset-4 transition-colors cursor-pointer ml-1"
+              >
+                Trở về cửa hàng
+              </button>
+            </p>
+          </div>
         </div>
 
         {/* Security notice */}
@@ -217,7 +231,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
       {/* Subtle Page Footer */}
       <div className="relative z-20 w-full max-w-4xl flex flex-col sm:flex-row items-center justify-between text-[11px] sm:text-xs font-normal text-white/50 pt-4 pb-1 text-center sm:text-left gap-1">
-        <span>© 2025 {brandName} Studio. Toàn bộ quyền được bảo lưu.</span>
+        <span>© 2026 {brandName} Studio. Toàn bộ quyền được bảo lưu.</span>
         <span>Hỗ trợ kỹ thuật: admin@notaknot.id.vn • Trụ sở Hà Nội</span>
       </div>
 

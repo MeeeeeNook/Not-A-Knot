@@ -3588,27 +3588,23 @@ async function loadBackupsFromIDB(): Promise<VersionBackup[]> {
   }
 }
 
-function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000, parentKey?: string): any {
+function deepSanitizeBackup(obj: any, maxDataUriLen: number = 500): any {
   if (obj === null || obj === undefined) return null;
   if (typeof obj === 'string') {
-    // If it's a customer's custom requested photo, strictly preserve it
-    if (parentKey === 'customPhotoUrl') {
-      return obj;
-    }
-    // If it's a base64 image data URI that is heavy, replace with safe fallback asset
-    if (obj.startsWith('data:image/') && obj.length > maxDataUriLen) {
+    // Strip heavy base64 data URIs so document fits strictly within Firestore 1MB limit
+    if ((obj.startsWith('data:image/') || obj.startsWith('data:application/')) && obj.length > maxDataUriLen) {
       return '/assets/no-image.svg';
     }
     return obj;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => deepSanitizeBackup(item, maxDataUriLen, parentKey));
+    return obj.map((item) => deepSanitizeBackup(item, maxDataUriLen));
   }
   if (typeof obj === 'object') {
     const res: Record<string, any> = {};
     for (const [k, v] of Object.entries(obj)) {
       if (v !== undefined) {
-        res[k] = deepSanitizeBackup(v, maxDataUriLen, k);
+        res[k] = deepSanitizeBackup(v, maxDataUriLen);
       }
     }
     return res;
@@ -3616,21 +3612,40 @@ function deepSanitizeBackup(obj: any, maxDataUriLen: number = 2000, parentKey?: 
   return obj;
 }
 
-function sanitizeBackupForFirestore(backup: VersionBackup): any {
+export function sanitizeBackupForFirestore(backup: VersionBackup): any {
   // 1. Clean undefined and non-serializable fields
   let cleaned = cleanFirestoreData(backup);
-  // 2. Strip excessive base64 strings so document fits within Firestore's 1MB limit
-  cleaned = deepSanitizeBackup(cleaned, 1500);
 
+  // 2. Deep sanitize: strip all data URIs larger than 500 chars (custom photos, receipts, banners, etc.)
+  cleaned = deepSanitizeBackup(cleaned, 500);
+
+  // 3. Size check and graduated compression
   try {
     let str = JSON.stringify(cleaned);
-    // If payload is still approaching 600KB, strip all base64 data URIs down
-    if (str.length > 600000) {
-      cleaned = deepSanitizeBackup(cleaned, 200);
-      str = JSON.stringify(cleaned);
-    }
+
+    // If payload is still approaching 600KB, strip all base64 data URIs down to 50 chars
     if (str.length > 600000) {
       cleaned = deepSanitizeBackup(cleaned, 50);
+      str = JSON.stringify(cleaned);
+    }
+
+    // If still large (> 700KB), trim bulky order details
+    if (str.length > 700000 && cleaned.data && Array.isArray(cleaned.data.orders)) {
+      cleaned.data.orders = cleaned.data.orders.slice(0, 50).map((ord: any) => ({
+        ...ord,
+        bankReceiptImage: undefined,
+        itemDetails: Array.isArray(ord.itemDetails) ? ord.itemDetails.map((it: any) => ({
+          ...it,
+          customPhotoUrl: undefined,
+          customPhotoUrls: undefined
+        })) : []
+      }));
+      str = JSON.stringify(cleaned);
+    }
+
+    // If still large (> 800KB), omit orders from backup snapshot (orders already live in /orders collection)
+    if (str.length > 800000 && cleaned.data) {
+      cleaned.data.orders = [];
     }
   } catch {}
 
@@ -3871,8 +3886,33 @@ export const syncLocalBackupsToFirestore = async (): Promise<{ syncedCount: numb
           b.syncedToCloud = true;
           syncedCount++;
         } catch (err) {
-          console.error(`Lỗi đồng bộ bản sao lưu ${b.id}:`, err);
-          errors++;
+          console.warn(`Lỗi đồng bộ bản sao lưu ban đầu ${b.id}, thử nén nâng cao:`, err);
+          try {
+            // Ultra-compressed fallback: keep essential store structure (products, categories, collections, siteContent)
+            const ultraCleaned = cleanFirestoreData({
+              id: b.id,
+              createdAt: b.createdAt,
+              formattedDate: b.formattedDate,
+              createdByName: b.createdByName,
+              backupType: b.backupType,
+              note: b.note,
+              summary: b.summary,
+              data: {
+                products: deepSanitizeBackup(b.data?.products || [], 50),
+                categories: b.data?.categories || [],
+                collections: b.data?.collections || [],
+                siteContent: deepSanitizeBackup(b.data?.siteContent || {}, 50)
+              }
+            });
+            const docRef = doc(db, 'backups', b.id);
+            await setDoc(docRef, ultraCleaned);
+            recordOperation('write', 1, 2000);
+            b.syncedToCloud = true;
+            syncedCount++;
+          } catch (retryErr) {
+            console.error(`Thử lại đồng bộ ${b.id} thất bại:`, retryErr);
+            errors++;
+          }
         }
       }
     }
