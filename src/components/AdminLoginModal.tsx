@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, AlertCircle, Sparkles, Share2 } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import { SellerUser } from '../types';
-import { signInWithGoogle } from '../utils/auth';
+import { signInWithGoogle, signInWithGoogleForAffiliate } from '../utils/auth';
 import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
 import { updateSellerPresence } from '../firebase';
@@ -24,6 +24,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   brandName = 'NOT A KNOT',
   logoUrl
 }) => {
+  const [activeTab, setActiveTab] = useState<'admin' | 'affiliate'>('admin');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [clientGeo, setClientGeo] = useState<GeoLocationInfo | null>(null);
@@ -41,6 +42,20 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
+      if (activeTab === 'affiliate') {
+        // Authenticate via Firebase Google Auth specifically for Affiliate
+        const res = await signInWithGoogleForAffiliate();
+        if (!res.success || !res.user) {
+          setErrorMessage(res.error || 'Đăng nhập Google qua Firebase thất bại.');
+          setIsLoading(false);
+          return;
+        }
+
+        setIsLoading(false);
+        onLoginSuccess(res.user);
+        return;
+      }
+
       const geo = clientGeo || await getClientGeoLocation().catch(() => null);
       if (geo && !clientGeo) {
         setClientGeo(geo);
@@ -92,20 +107,51 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
 
+        {/* Role Tab Switcher */}
+        <div className="relative flex p-1 bg-neutral-950/80 rounded-xl border border-neutral-800 mb-5">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('admin'); setErrorMessage(''); }}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'admin'
+                ? 'bg-neutral-800 text-white shadow-sm'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            Quản Trị & Bán Hàng
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('affiliate'); setErrorMessage(''); }}
+            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'affiliate'
+                ? 'bg-gradient-to-r from-amber-500/20 to-rose-600/20 text-amber-300 border border-amber-500/30 shadow-sm'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Đối Tác Affiliate</span>
+          </button>
+        </div>
+
         {/* Header with Logo */}
         <div className="relative text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-red-600/20 border border-amber-500/30 text-amber-400 mb-3 shadow-inner">
             {logoUrl ? (
               <img src={logoUrl} alt={brandName} className="w-10 h-10 object-contain" />
+            ) : activeTab === 'affiliate' ? (
+              <Share2 className="w-7 h-7 text-amber-400" />
             ) : (
               <ShieldCheck className="w-7 h-7" />
             )}
           </div>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-normal text-white">
-            Cổng Quản Trị & Người Bán
+            {activeTab === 'affiliate' ? 'Cổng Đối Tác Tiếp Thị (Affiliate)' : 'Cổng Quản Trị & Người Bán'}
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1 font-normal">
-            Đăng nhập tài khoản nội bộ {brandName} (Firebase Authentication)
+            {activeTab === 'affiliate'
+              ? 'Đăng nhập Google qua Firebase Authentication để nhận mã giới thiệu và hoa hồng'
+              : `Đăng nhập tài khoản nội bộ ${brandName} (Firebase Authentication)`}
           </p>
         </div>
 
@@ -153,7 +199,9 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               <span>Cơ chế bảo mật Google Firebase Authentication</span>
             </div>
             <p className="text-[11px] text-neutral-400 leading-relaxed font-normal">
-              Hệ thống xác thực tài khoản Google Cloud. Chỉ các tài khoản quản trị viên được ủy quyền mới có thể truy cập hệ thống.
+              {activeTab === 'affiliate'
+                ? 'Hệ thống xác thực trực tiếp qua Firebase Authentication. Tài khoản Google sẽ tự động được cấp mã tiếp thị cá nhân.'
+                : 'Hệ thống xác thực tài khoản Google Cloud. Chỉ các tài khoản quản trị viên được ủy quyền mới có thể truy cập hệ thống.'}
             </p>
           </div>
         </div>

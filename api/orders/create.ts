@@ -380,6 +380,71 @@ async function findExistingOrder(orderId: string): Promise<any | null> {
   return null;
 }
 
+export async function getAuthoritativeAffiliate(affCode: string): Promise<any | null> {
+  if (!affCode || typeof affCode !== 'string') return null;
+  const clean = affCode.toUpperCase().trim();
+  try {
+    if (hasAdminCredentials()) {
+      const col = getAdminDb().collection('sellers');
+      const snap = await col.where('affiliateCode', '==', clean).limit(1).get();
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { id: d.id, ...d.data() };
+      }
+      // Also check if affiliate has username matching code
+      const snapUser = await col.where('username', '==', clean.toLowerCase()).limit(1).get();
+      if (!snapUser.empty) {
+        const d = snapUser.docs[0];
+        const data = d.data();
+        if (data.role === 'affiliate' || data.affiliateCode) {
+          return { id: d.id, ...data };
+        }
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const q = query(collection(db, 'sellers'), where('affiliateCode', '==', clean), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { id: d.id, ...d.data() };
+      }
+    }
+  } catch (err) {
+    console.warn(`[Create Order API] Affiliate lookup error for ${clean}:`, err);
+  }
+  return null;
+}
+
+export async function getAuthoritativeAffiliateConfig(): Promise<{ cookieDurationDays: number; defaultCommissionRate: number }> {
+  try {
+    if (hasAdminCredentials()) {
+      const docSnap = await getAdminDb().collection('system_settings').doc('affiliate_config').get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        return {
+          cookieDurationDays: Number(data?.cookieDurationDays) > 0 ? Number(data?.cookieDurationDays) : 30,
+          defaultCommissionRate: Number(data?.defaultCommissionRate) >= 0 ? Number(data?.defaultCommissionRate) : 10
+        };
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const snap = await getDoc(doc(db, 'system_settings', 'affiliate_config'));
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          cookieDurationDays: Number(data?.cookieDurationDays) > 0 ? Number(data?.cookieDurationDays) : 30,
+          defaultCommissionRate: Number(data?.defaultCommissionRate) >= 0 ? Number(data?.defaultCommissionRate) : 10
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[Create Order API] Error fetching affiliate config:', err);
+  }
+  return { cookieDurationDays: 30, defaultCommissionRate: 10 };
+}
+
 function stripUndefined(obj: any): any {
   if (Array.isArray(obj)) {
     return obj.map(stripUndefined);
@@ -954,6 +1019,62 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // 10.5 Authoritative Affiliate Attribution Tracking
+    let refCodeCandidate = typeof body.affiliateCode === 'string' && body.affiliateCode.trim()
+      ? body.affiliateCode.trim().toUpperCase()
+      : '';
+
+    // If client did not explicitly pass affiliateCode in body, check HTTP cookie
+    if (!refCodeCandidate && req.headers && typeof req.headers.cookie === 'string') {
+      const cookieHeader = req.headers.cookie;
+      const match = cookieHeader.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
+      if (match && match[1]) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(match[1]));
+          if (parsed && typeof parsed.code === 'string') {
+            const expTime = new Date(parsed.expiresAt).getTime();
+            // Cookie expiration check: If customer purchases after cookie has expired, no commission attributed
+            if (!isNaN(expTime) && Date.now() <= expTime) {
+              refCodeCandidate = parsed.code.trim().toUpperCase();
+            }
+          }
+        } catch {
+          // ignore cookie parsing error
+        }
+      }
+    }
+
+    let attributedAffiliateData: {
+      affiliateCode?: string;
+      affiliateId?: string;
+      affiliateName?: string;
+      affiliateCommissionRate?: number;
+      affiliateCommissionAmount?: number;
+      affiliateMerchandiseValue?: number;
+    } | null = null;
+
+    if (refCodeCandidate) {
+      const matchedAff = await getAuthoritativeAffiliate(refCodeCandidate);
+      if (matchedAff && matchedAff.isActive !== false) {
+        // Individual configurable commission rate, fallback to default 10%
+        const rate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
+          ? matchedAff.commissionRate
+          : 10;
+        // Merchandise value = Order merchandise value after discounts (subtotal - discountAmount, strictly excluding shipping fee)
+        const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
+        const commissionAmount = Math.round((merchandiseValue * rate) / 100);
+
+        attributedAffiliateData = {
+          affiliateCode: (matchedAff.affiliateCode || matchedAff.username || refCodeCandidate).toUpperCase().trim(),
+          affiliateId: matchedAff.id,
+          affiliateName: matchedAff.name || matchedAff.username,
+          affiliateCommissionRate: rate,
+          affiliateCommissionAmount: commissionAmount,
+          affiliateMerchandiseValue: merchandiseValue
+        };
+      }
+    }
+
     // 11. Security Hardening on Order Fields (Strict Protection)
     const fullAddress = `${cleanDetail}, ${cleanDistrict}, ${cleanProvince}`;
     const cleanEmail = typeof customerEmail === 'string' && customerEmail.trim()
@@ -1001,6 +1122,7 @@ export default async function handler(req: any, res: any) {
       isManual: isVerifiedStaffOrder && body.isManual ? true : false,
       sellerId: isVerifiedStaffOrder && body.sellerId ? body.sellerId : undefined,
       sellerName: isVerifiedStaffOrder && body.sellerName ? body.sellerName : undefined,
+      ...(attributedAffiliateData || {}),
       date: formatOrderDate(new Date()),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1020,12 +1142,18 @@ export default async function handler(req: any, res: any) {
       }
     }
 
+    // Clear referral cookie upon first order attribution or if cookie was provided
+    if (attributedAffiliateData || (req.headers && req.headers.cookie && req.headers.cookie.includes('nak_affiliate_ref'))) {
+      res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
+    }
+
     return res.status(200).json({
       success: true,
       order: orderRecord,
       orderId: orderId,
       trackingNumber: orderId,
-      totalPrice: authoritativeGrandTotal
+      totalPrice: authoritativeGrandTotal,
+      affiliateAttributed: Boolean(attributedAffiliateData)
     });
   } catch (err: any) {
     console.error('[Create Order API] Internal error:', err?.message || err);

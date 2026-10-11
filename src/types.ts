@@ -251,9 +251,13 @@ export interface SellerUser {
   passwordHash?: string;
   passwordSalt?: string;
   isRootAdmin?: boolean;
-  role: 'root_admin' | 'deputy_admin' | 'member';
+  role: 'root_admin' | 'deputy_admin' | 'member' | 'affiliate';
   isActive: boolean;
   createdAt: string;
+  // Affiliate specific fields
+  affiliateCode?: string; // Unique uppercase affiliate code, e.g. "AN001"
+  commissionRate?: number; // Configurable commission percentage (e.g. 10 for 10%)
+  paymentInfo?: string; // Optional banking note for manual payout
   lastLoginAt?: string;
   lastLoginIp?: string;
   lastLoginCity?: string;
@@ -346,6 +350,20 @@ export interface OrderRecord {
   isDeleted?: boolean;
   deletedAt?: string;
   updatedAt?: string;
+  // Affiliate Attribution Tracking
+  affiliateCode?: string; // Uppercase affiliate code, e.g. "AN001"
+  affiliateId?: string; // Matching affiliate user/seller ID
+  affiliateName?: string; // Affiliate's display name
+  affiliateCommissionRate?: number; // Snapshot of commission percentage at the time of order placement (e.g. 10 for 10%)
+  affiliateCommissionAmount?: number; // Computed commission = merchandiseValueAfterDiscounts * rate / 100
+  affiliateMerchandiseValue?: number; // Merchandise value after discounts (excluding shipping)
+}
+
+export interface AffiliateSystemConfig {
+  cookieDurationDays: number; // Default 30 days
+  defaultCommissionRate: number; // Default 10%
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export type StoredOrder = OrderRecord;

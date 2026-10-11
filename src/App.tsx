@@ -19,6 +19,7 @@ import { CheckCircle2, ShoppingBag, Sparkles, X, AlertCircle } from 'lucide-reac
 import { Lock } from './components/common/LockIcon';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
+import { setAffiliateReferral, fetchAffiliateSystemConfig } from './utils/affiliateManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS, getRootAdminEmails } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
@@ -39,6 +40,7 @@ const AdminLoginPage = React.lazy(() => import('./components/AdminLoginPage').th
 const MaintenanceScreen = React.lazy(() => import('./components/MaintenanceScreen').then((m) => ({ default: m.MaintenanceScreen })));
 const LegalPoliciesModal = React.lazy(() => import('./components/LegalPoliciesModal').then((m) => ({ default: m.LegalPoliciesModal })));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
+const AffiliateDashboard = React.lazy(() => import('./components/AffiliateDashboard').then((m) => ({ default: m.AffiliateDashboard })));
 const NotFoundPage = React.lazy(() => import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const CookieConsentBanner = React.lazy(() => import('./components/CookieConsentBanner').then((m) => ({ default: m.CookieConsentBanner })));
 import {
@@ -141,8 +143,8 @@ const ViewLoadingFallback = () => (
 );
 
 export default function App() {
-  // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page, Custom 404 Page)
-  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart' | 'not-found'>('landing');
+  // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page, Custom 404 Page, Dedicated Affiliate Portal)
+  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart' | 'not-found' | 'affiliate'>('landing');
   const [previousView, setPreviousView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin'>('catalog');
   const [activeCollectionId, setActiveCollectionId] = useState<string>('event_0209');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -482,6 +484,16 @@ export default function App() {
       } catch (e) {}
     }
 
+    // Capture Affiliate Referral link click (?ref=AN001) - Last Click Attribution
+    const refCode = queryParams.get('ref') || searchParams.get('ref');
+    if (refCode) {
+      fetchAffiliateSystemConfig().then((cfg) => {
+        setAffiliateReferral(refCode, cfg.cookieDurationDays);
+      }).catch(() => {
+        setAffiliateReferral(refCode, 30);
+      });
+    }
+
     // 1. Root / Landing
     if (!routePath || routePath === 'home' || routePath === 'landing') {
       const searchCode = queryParams.get('code') || queryParams.get('tracking') || queryParams.get('order');
@@ -576,14 +588,45 @@ export default function App() {
       return;
     }
 
-    if (routePath === 'admin') {
-      setCurrentView('admin');
+    if (routePath === 'affiliate' || routePath === 'affiliates' || routePath === 'tiep-thi' || routePath === 'tiep-thi-lien-ket') {
+      setCurrentView('affiliate');
       const session = getAdminSession();
       if (session && session.username) {
         setCurrentSeller(session as SellerUser);
         verifySessionWithServer().then((verifiedUser) => {
           if (verifiedUser && verifiedUser.username) {
             setCurrentSeller(verifiedUser as SellerUser);
+          }
+        }).catch(() => {});
+      }
+      setIsAdminLoginModalOpen(false);
+      setIsCartOpen(false);
+      return;
+    }
+
+    if (routePath === 'admin') {
+      const session = getAdminSession();
+      // If current user is an affiliate, route them to their dedicated dashboard
+      if (session?.role === 'affiliate') {
+        setCurrentView('affiliate');
+        if (typeof window !== 'undefined' && window.location.pathname !== '/affiliate') {
+          window.history.replaceState(null, '', '/affiliate');
+        }
+        setIsAdminLoginModalOpen(false);
+        setIsCartOpen(false);
+        return;
+      }
+      setCurrentView('admin');
+      if (session && session.username) {
+        setCurrentSeller(session as SellerUser);
+        verifySessionWithServer().then((verifiedUser) => {
+          if (verifiedUser && verifiedUser.username) {
+            if (verifiedUser.role === 'affiliate') {
+              setCurrentView('affiliate');
+              window.history.replaceState(null, '', '/affiliate');
+            } else {
+              setCurrentSeller(verifiedUser as SellerUser);
+            }
           }
         }).catch(() => {});
       }
@@ -817,7 +860,9 @@ export default function App() {
       
       const currentPath = window.location.pathname + (window.location.search || '');
       let pageTitle = 'Trang Chủ - NOT A KNOT';
-      if (currentPath.includes('/admin') || window.location.hash.includes('admin')) {
+      if (currentPath.includes('/affiliate') || window.location.hash.includes('affiliate')) {
+        pageTitle = 'Cổng Tiếp Thị Liên Kết (Affiliate) - NOT A KNOT';
+      } else if (currentPath.includes('/admin') || window.location.hash.includes('admin')) {
         pageTitle = 'Quản Trị Hệ Thống - NOT A KNOT';
       } else if (currentPath.includes('/cart') || currentPath.includes('/checkout')) {
         pageTitle = 'Giỏ Hàng & Thanh Toán';
@@ -1792,9 +1837,15 @@ export default function App() {
   const handleAdminLoginSuccess = (user: SellerUser) => {
     setCurrentSeller(user);
     setIsAdminLoginModalOpen(false);
-    setCurrentView('admin');
-    navigateTo('/admin');
-    showToast(`Xin chào ${user.name} (@${user.username})!`);
+    if (user.role === 'affiliate') {
+      setCurrentView('affiliate');
+      navigateTo('/affiliate');
+      showToast(`Xin chào Đối Tác Affiliate ${user.name}!`);
+    } else {
+      setCurrentView('admin');
+      navigateTo('/admin');
+      showToast(`Xin chào ${user.name} (@${user.username})!`);
+    }
   };
 
   const handleAdminLogout = () => {
@@ -1977,7 +2028,7 @@ export default function App() {
       )}
 
       {/* World-Class Interactive Top Announcement Bar */}
-      {!isMaintenanceActiveForUser && currentView !== 'admin' && currentView !== 'not-found' && (
+      {!isMaintenanceActiveForUser && currentView !== 'admin' && currentView !== 'affiliate' && currentView !== 'not-found' && (
         <TopAnnouncementBar
           siteContent={siteContent}
           onNavigateLanding={handleNavigateLanding}
@@ -1991,7 +2042,7 @@ export default function App() {
       )}
 
       {/* Sleek Minimized Navigation Bar (Hidden in Admin Mode, 404 Page & Maintenance Mode for Users) */}
-      {currentView !== 'admin' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
+      {currentView !== 'admin' && currentView !== 'affiliate' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
         <Navbar
           cartCount={totalCartCount}
           isCartBumping={isCartBumping}
@@ -2200,6 +2251,20 @@ export default function App() {
           )
         )}
 
+        {/* VIEW: Dedicated Standalone Affiliate Dashboard */}
+        {currentView === 'affiliate' && (
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <AffiliateDashboard
+              currentSeller={currentSeller}
+              onLoginSuccess={handleAdminLoginSuccess}
+              onLogout={handleAdminLogout}
+              onNavigateHome={handleNavigateLanding}
+              brandName={siteContent?.brandName}
+              logoUrl={siteContent?.logoUrl}
+            />
+          </React.Suspense>
+        )}
+
         {/* VIEW 7: Dedicated Standalone Product Detail Page */}
         {currentView === 'product-detail' && selectedProduct && (
           <React.Suspense fallback={<ViewLoadingFallback />}>
@@ -2286,8 +2351,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Customer Footer (Rendered across Landing, Collection, Catalog, About, Contact & Order Tracking pages; Hidden on Admin, 404 & Maintenance) */}
-      {currentView !== 'admin' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
+      {/* Customer Footer (Rendered across Landing, Collection, Catalog, About, Contact & Order Tracking pages; Hidden on Admin, Affiliate, 404 & Maintenance) */}
+      {currentView !== 'admin' && currentView !== 'affiliate' && currentView !== 'not-found' && !isMaintenanceActiveForUser && (
         <Footer
           siteContent={siteContent}
           categories={categories}
@@ -2334,7 +2399,7 @@ export default function App() {
       />
 
       {/* Clear Cookie Consent & Privacy Transparency Form (Deferred Script Loading) */}
-      {currentView !== 'admin' && !isMaintenanceActiveForUser && (
+      {currentView !== 'admin' && currentView !== 'affiliate' && !isMaintenanceActiveForUser && (
         <React.Suspense fallback={null}>
           <CookieConsentBanner
             onOpenPolicy={handleOpenPolicy}

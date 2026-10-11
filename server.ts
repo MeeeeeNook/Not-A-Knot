@@ -156,9 +156,11 @@ interface JwtAdminPayload {
   id: string;
   username: string;
   name: string;
-  role: 'root_admin' | 'member';
+  role: 'root_admin' | 'deputy_admin' | 'member' | 'affiliate';
   isRootAdmin: boolean;
   avatarColor?: string;
+  affiliateCode?: string;
+  commissionRate?: number;
   issuedAt: string;
 }
 
@@ -918,6 +920,8 @@ async function startServer() {
         role: isRoot ? 'root_admin' : (authoritativeSeller.role || 'member'),
         isRootAdmin: isRoot,
         avatarColor: authoritativeSeller.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
+        affiliateCode: authoritativeSeller.affiliateCode,
+        commissionRate: authoritativeSeller.commissionRate,
         issuedAt: new Date().toISOString()
       };
 
@@ -964,6 +968,8 @@ async function startServer() {
           role: isRoot ? 'root_admin' : (authSeller.role || 'member'),
           isRootAdmin: isRoot,
           avatarColor: authSeller.avatarColor || decoded.avatarColor,
+          affiliateCode: authSeller.affiliateCode || decoded.affiliateCode,
+          commissionRate: authSeller.commissionRate || decoded.commissionRate,
           issuedAt: new Date().toISOString()
         };
 

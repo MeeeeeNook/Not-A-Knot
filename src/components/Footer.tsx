@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cookie } from 'lucide-react';
+import { Cookie, Share2 } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import { CategoryItem, SiteContentConfig } from '../types';
 import { slugify } from '../utils/slugify';
@@ -392,6 +392,20 @@ export const Footer: React.FC<FooterProps> = ({
               <Cookie className="w-3.5 h-3.5 text-amber-500/80" />
               <span>Cài đặt & Xóa Cookie</span>
             </button>
+
+            <a
+              href="/affiliate"
+              onClick={(e) => {
+                e.preventDefault();
+                window.history.pushState(null, '', '/affiliate');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Cổng đối tác tiếp thị liên kết"
+            >
+              <Share2 className="w-3.5 h-3.5 text-amber-500/80" />
+              <span>Tiếp thị liên kết</span>
+            </a>
 
             <button
               onClick={onOpenAdmin}

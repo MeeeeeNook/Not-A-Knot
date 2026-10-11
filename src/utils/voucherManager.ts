@@ -1,6 +1,6 @@
 import { Voucher } from '../types';
 export type { Voucher };
-import { db } from '../firebase';
+import { db, cleanFirestoreData } from '../firebase';
 import {
   collection,
   doc,
@@ -137,10 +137,27 @@ export async function getVouchers(): Promise<Voucher[]> {
     const colRef = collection(db, VOUCHER_COLLECTION);
     const snap = await getDocs(colRef);
     if (!snap.empty) {
-      let items: Voucher[] = [];
+      let firestoreItems: Voucher[] = [];
       snap.forEach((d) => {
-        items.push(sanitizeVoucherCreator(d.data() as Voucher));
+        firestoreItems.push(sanitizeVoucherCreator(d.data() as Voucher));
       });
+
+      // Merge with any local cache vouchers that might be newer
+      let localItems: Voucher[] = [];
+      try {
+        const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
+        if (local) localItems = (JSON.parse(local) as Voucher[]).map(sanitizeVoucherCreator);
+      } catch {}
+
+      const mergedMap = new Map<string, Voucher>();
+      firestoreItems.forEach((v) => mergedMap.set(v.id, v));
+      localItems.forEach((v) => {
+        if (!mergedMap.has(v.id)) {
+          mergedMap.set(v.id, v);
+        }
+      });
+      const items = Array.from(mergedMap.values());
+
       // Ensure HUYTRAN preset is available if not in Firestore
       if (!items.some((it) => it.code.toUpperCase() === 'HUYTRAN')) {
         const huyPreset = DEFAULT_INITIAL_VOUCHERS.find((p) => p.code === 'HUYTRAN');
@@ -205,44 +222,61 @@ export async function saveVoucher(voucher: Voucher): Promise<void> {
     updatedAt: new Date().toISOString()
   };
 
+  // 1. Immediately store in local cache so UI updates instantly
+  try {
+    const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
+    let current: Voucher[] = local ? JSON.parse(local) : [];
+    const existingIdx = current.findIndex(
+      (v) => v.id === secureVoucher.id || v.code.toUpperCase() === secureVoucher.code.toUpperCase()
+    );
+    if (existingIdx >= 0) {
+      current[existingIdx] = secureVoucher;
+    } else {
+      current = [secureVoucher, ...current];
+    }
+    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(current));
+  } catch {}
+
+  // 2. Prepare clean, sanitized payload for Firestore without undefined values
+  const rawPayload: Record<string, any> = {
+    ...secureVoucher,
+    applicableProductIds: secureVoucher.applicableProductIds || []
+  };
+  if (!rawPayload.usageLimit || Number(rawPayload.usageLimit) <= 0) {
+    delete rawPayload.usageLimit;
+  }
+  const cleanPayload = cleanFirestoreData(rawPayload);
+
+  // 3. Save to Firestore with merge
   try {
     const docRef = doc(db, VOUCHER_COLLECTION, secureVoucher.id);
-    await setDoc(docRef, secureVoucher, { merge: true });
-  } catch (err) {
-    console.warn('Lưu voucher lên Firestore bị lỗi, lưu tạm cục bộ:', err);
+    await setDoc(docRef, cleanPayload, { merge: true });
+  } catch (err: any) {
+    console.warn('Lưu voucher lên Firestore bị lỗi, đã lưu cục bộ an toàn:', err);
   }
-
-  // Update local cache
-  try {
-    const current = await getVouchers();
-    const existingIdx = current.findIndex((v) => v.id === secureVoucher.id);
-    let nextList: Voucher[];
-    if (existingIdx >= 0) {
-      nextList = [...current];
-      nextList[existingIdx] = secureVoucher;
-    } else {
-      nextList = [secureVoucher, ...current];
-    }
-    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(nextList));
-  } catch {}
 }
 
 /**
  * Delete a voucher
  */
 export async function deleteVoucher(voucherId: string): Promise<void> {
+  // 1. Remove from local cache immediately
+  try {
+    const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
+    if (local) {
+      const current = JSON.parse(local) as Voucher[];
+      const nextList = current.filter((v) => v.id !== voucherId);
+      localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(nextList));
+    }
+  } catch {}
+
+  // 2. Delete from Firestore
   try {
     const docRef = doc(db, VOUCHER_COLLECTION, voucherId);
     await deleteDoc(docRef);
   } catch (err) {
     console.warn('Xóa voucher trên Firestore bị lỗi:', err);
   }
-
-  try {
-    const current = await getVouchers();
-    const nextList = current.filter((v) => v.id !== voucherId);
-    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(nextList));
-  } catch {}
 }
 
 export interface VoucherValidationResult {

@@ -13,6 +13,7 @@ export type AdminTabType =
   | 'orders'
   | 'manual_order'
   | 'vouchers'
+  | 'affiliates'
   | 'trash'
   | 'banners'
   | 'sellers'
@@ -304,6 +305,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <div className="flex items-center gap-2.5">
                   <Ticket className={`w-4 h-4 ${activeTab === 'vouchers' ? 'text-slate-950' : 'text-slate-500'}`} />
                   <span>Mã giảm giá</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleItemClick('affiliates')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-98 ${
+                  activeTab === 'affiliates'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Share2 className={`w-4 h-4 ${activeTab === 'affiliates' ? 'text-slate-950' : 'text-slate-500'}`} />
+                  <span>Tiếp thị liên kết</span>
                 </div>
               </button>
 

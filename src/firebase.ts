@@ -883,6 +883,13 @@ export interface StoredOrder {
   isDeleted?: boolean;
   deletedAt?: string;
   updatedAt?: string;
+  // Affiliate Attribution Tracking
+  affiliateCode?: string;
+  affiliateId?: string;
+  affiliateName?: string;
+  affiliateCommissionRate?: number;
+  affiliateCommissionAmount?: number;
+  affiliateMerchandiseValue?: number;
 }
 
 // In-memory cache for ultra-fast reads

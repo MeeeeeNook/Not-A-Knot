@@ -56,6 +56,7 @@ import {
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
+import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode } from '../utils/affiliateManager';
 import { LoadingImage } from './LoadingImage';
 
 interface CartPageProps {
@@ -802,6 +803,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       };
     });
 
+    const activeRef = getActiveAffiliateReferral();
+
     const orderData: StoredOrder = {
       id: trackingCode,
       trackingNumber: trackingCode,
@@ -829,7 +832,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       type: 'standard_order' as const,
       status: 'Chờ xác nhận' as const,
       paymentMethod: 'cod' as const,
-      paymentStatus: 'unpaid' as const
+      paymentStatus: 'unpaid' as const,
+      affiliateCode: activeRef?.code ? activeRef.code.toUpperCase().trim() : undefined
     };
 
     setSubmissionStep('syncing');
@@ -875,6 +879,22 @@ export const CartPage: React.FC<CartPageProps> = ({
       // 2. Fallback to direct saveOrderToFirestore if server was unreachable
       if (!confirmedOrder) {
         try {
+          if (activeRef?.code && !orderData.affiliateCommissionAmount) {
+            try {
+              const affUser = await fetchAffiliateByCode(activeRef.code);
+              if (affUser && affUser.isActive !== false) {
+                const rate = typeof affUser.commissionRate === 'number' ? affUser.commissionRate : 10;
+                const merchVal = Math.max(0, currentOrderTotal - effectiveShippingFee);
+                const comm = Math.round((merchVal * rate) / 100);
+                orderData.affiliateCode = (affUser.affiliateCode || affUser.username || activeRef.code).toUpperCase().trim();
+                orderData.affiliateId = affUser.id;
+                orderData.affiliateName = affUser.name;
+                orderData.affiliateCommissionRate = rate;
+                orderData.affiliateCommissionAmount = comm;
+                orderData.affiliateMerchandiseValue = merchVal;
+              }
+            } catch {}
+          }
           await saveOrderToFirestore(orderData);
           confirmedOrder = orderData;
         } catch (directErr: any) {
@@ -886,6 +906,9 @@ export const CartPage: React.FC<CartPageProps> = ({
       }
 
       setSubmissionStep('confirmed');
+
+      // Clear referral cookie upon first order placement (used up)
+      clearAffiliateCookie();
 
       // Dispatch order confirmation email asynchronously using verified order
       sendOrderConfirmationEmail(confirmedOrder).catch((e) => {

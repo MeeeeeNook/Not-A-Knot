@@ -27,6 +27,7 @@ import { AdminProductKhoenSection } from './admin/AdminProductKhoenSection';
 import { AdminProductCustomPhotoSection } from './admin/AdminProductCustomPhotoSection';
 import { AdminProductComboSection } from './admin/AdminProductComboSection';
 import { AdminVouchersTab } from './admin/AdminVouchersTab';
+import { AdminAffiliatesTab } from './admin/AdminAffiliatesTab';
 import { getVouchers, Voucher } from '../utils/voucherManager';
 import { AdminMaintenanceTab } from './admin/AdminMaintenanceTab';
 import { AdminEmailSettingsPage } from './admin/AdminEmailSettingsPage';
@@ -132,6 +133,7 @@ export type AdminTabType =
   | 'orders'
   | 'manual_order'
   | 'vouchers'
+  | 'affiliates'
   | 'trash'
   | 'banners'
   | 'sellers'
@@ -3602,6 +3604,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             currentSeller={currentSeller}
             isRootAdmin={isRootAdmin}
             onInspectOrder={(ord) => setInspectingOrder(ord as any)}
+          />
+        )}
+
+        {/* ======================================================== */}
+        {/* TAB: TIẾP THỊ LIÊN KẾT (AFFILIATES) */}
+        {/* ======================================================== */}
+        {activeTab === 'affiliates' && (
+          <AdminAffiliatesTab
+            sellers={sellers}
+            orders={orders as any}
+            onUpdateSellers={handleUpdateSellers}
+            currentAdmin={currentSeller}
+            isRootAdmin={isRootAdmin}
           />
         )}
 

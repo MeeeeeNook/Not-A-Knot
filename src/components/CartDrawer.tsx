@@ -49,6 +49,7 @@ import {
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
+import { getActiveAffiliateReferral, clearAffiliateCookie } from '../utils/affiliateManager';
 import { LoadingImage } from './LoadingImage';
 
 interface CartDrawerProps {
@@ -768,7 +769,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       type: 'standard_order' as const,
       status: 'Chờ xác nhận' as const,
       paymentMethod: 'cod' as const,
-      paymentStatus: 'unpaid' as const
+      paymentStatus: 'unpaid' as const,
+      affiliateCode: getActiveAffiliateReferral()?.code?.toUpperCase().trim() || undefined
     };
   };
 
@@ -819,6 +821,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       sendOrderConfirmationEmail(orderData).catch((e) => {
         console.warn('[CartDrawer] Email notification background notice:', e);
       });
+      // Clear referral cookie upon first order placement
+      clearAffiliateCookie();
     } catch (err: any) {
       console.error('Lỗi khi lưu đơn hàng lên Firebase:', err);
       alert(`Không thể kết nối máy chủ để lưu đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);

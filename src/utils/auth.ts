@@ -390,7 +390,10 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       phone: matchedSeller?.phone || fbUser.phoneNumber || '',
       googleEmail: email,
       googleUid: fbUser.uid,
-      linkedGoogleAt: matchedSeller?.linkedGoogleAt || nowIso
+      linkedGoogleAt: matchedSeller?.linkedGoogleAt || nowIso,
+      affiliateCode: matchedSeller?.affiliateCode,
+      commissionRate: matchedSeller?.commissionRate,
+      paymentInfo: matchedSeller?.paymentInfo
     };
 
     if (!matchedSeller) {
@@ -414,6 +417,119 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('unauthorized-domain'))) {
       msg = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
     } else if (isNormalCancel) {
+      msg = 'Cửa sổ đăng nhập Google đã được đóng.';
+    } else if (err?.code === 'auth/popup-blocked') {
+      msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';
+    } else if (err?.message) {
+      msg = err.message;
+    }
+    return { success: false, error: msg };
+  }
+};
+
+/**
+ * Sign in with Google specifically for Affiliate Partner Portal.
+ * Automatically provisions an affiliate profile in Firestore if logging in for the first time,
+ * or loads existing affiliate profile with assigned affiliate code and commission rate.
+ */
+export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean; user?: SellerUser; error?: string }> => {
+  try {
+    const fbUser = await signInWithGooglePopup();
+    const email = (fbUser.email || '').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    // 1. Fetch current sellers from Firestore
+    let sellers: SellerUser[] = [];
+    try {
+      sellers = await fetchSellersFromFirestore();
+    } catch (e) {
+      console.warn('Error fetching sellers for affiliate Google login:', e);
+    }
+
+    // 2. Check if this email belongs to an existing profile
+    let matchedSeller = sellers.find(s =>
+      (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+      ((s as any).email && (s as any).email.trim().toLowerCase() === email) ||
+      (s.googleUid && s.googleUid === fbUser.uid) ||
+      (s.username && s.username.trim().toLowerCase() === email.split('@')[0])
+    ) || null;
+
+    if (matchedSeller && matchedSeller.isActive === false) {
+      await signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: 'Tài khoản đối tác này hiện đang bị tạm khóa. Vui lòng liên hệ quản trị viên.'
+      };
+    }
+
+    let finalUser: SellerUser;
+
+    if (matchedSeller) {
+      // Auto-update linked Google info on existing document
+      if (!matchedSeller.googleEmail || !matchedSeller.googleUid) {
+        matchedSeller = {
+          ...matchedSeller,
+          googleEmail: email,
+          googleUid: fbUser.uid,
+          linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
+        };
+        await saveSellerToFirestore(matchedSeller).catch(() => {});
+      }
+
+      finalUser = {
+        ...matchedSeller,
+        id: matchedSeller.id,
+        username: matchedSeller.username,
+        name: matchedSeller.name || fbUser.displayName || email.split('@')[0],
+        role: matchedSeller.role === 'root_admin' ? 'root_admin' : 'affiliate',
+        isActive: true,
+        affiliateCode: (matchedSeller.affiliateCode || matchedSeller.username).toUpperCase().trim(),
+        commissionRate: matchedSeller.commissionRate !== undefined ? matchedSeller.commissionRate : 10,
+        paymentInfo: matchedSeller.paymentInfo,
+        googleEmail: email,
+        googleUid: fbUser.uid
+      };
+    } else {
+      // Auto-provision fresh affiliate profile in Firestore
+      const { generateAffiliateCode } = await import('./affiliateManager');
+      const baseCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], sellers);
+      const cleanUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '') || `user${Date.now().toString().slice(-4)}`;
+
+      finalUser = {
+        id: `affiliate-${fbUser.uid.slice(0, 12)}`,
+        username: cleanUsername,
+        name: fbUser.displayName || email.split('@')[0],
+        role: 'affiliate',
+        affiliateCode: baseCode,
+        commissionRate: 10,
+        isActive: true,
+        googleEmail: email,
+        googleUid: fbUser.uid,
+        avatarColor: '#991B1B',
+        createdAt: nowIso,
+        linkedGoogleAt: nowIso
+      };
+
+      await saveSellerToFirestore(finalUser).catch((err) => {
+        console.warn('Could not auto-save new affiliate profile:', err);
+      });
+    }
+
+    const token = await fbUser.getIdToken();
+    saveAdminSession(token, finalUser, true);
+
+    return { success: true, user: finalUser };
+  } catch (err: any) {
+    const isNormalCancel =
+      err?.code === 'auth/popup-closed-by-user' ||
+      err?.code === 'auth/cancelled-popup-request';
+
+    if (!isNormalCancel) {
+      console.warn('Affiliate Google Sign-In Notice:', err?.message || err);
+    }
+
+    let msg = 'Đăng nhập Google qua Firebase thất bại.';
+    if (isNormalCancel) {
       msg = 'Cửa sổ đăng nhập Google đã được đóng.';
     } else if (err?.code === 'auth/popup-blocked') {
       msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';

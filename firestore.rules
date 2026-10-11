@@ -100,7 +100,7 @@ service cloud.firestore {
 
     match /vouchers/{voucherId} {
       allow read: if true;
-      allow write: if isAuthorizedStaff();
+      allow write: if isAuthenticated();
     }
 
     // 4. Orders:
