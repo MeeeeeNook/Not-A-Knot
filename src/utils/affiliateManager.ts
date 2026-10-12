@@ -75,6 +75,84 @@ export function clearAffiliateCookie(): void {
   document.cookie = `${AFFILIATE_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
 }
 
+export interface AffiliateClickRecord {
+  id?: string;
+  code: string;
+  clickedAt: string;
+  timestamp: number;
+  date: string;
+}
+
+/**
+ * Record an affiliate referral click in Firestore and local storage.
+ */
+export async function recordAffiliateClick(code: string): Promise<void> {
+  const cleanCode = (code || '').trim().toUpperCase();
+  if (!cleanCode) return;
+
+  const now = new Date();
+  const record: AffiliateClickRecord = {
+    code: cleanCode,
+    clickedAt: now.toISOString(),
+    timestamp: now.getTime(),
+    date: now.toISOString().slice(0, 10)
+  };
+
+  // Cache locally
+  try {
+    const key = `nak_aff_clicks_${cleanCode}`;
+    const raw = localStorage.getItem(key);
+    const existing: AffiliateClickRecord[] = raw ? JSON.parse(raw) : [];
+    existing.unshift(record);
+    localStorage.setItem(key, JSON.stringify(existing.slice(0, 500)));
+  } catch {}
+
+  // Save to Firestore
+  try {
+    const clickId = `clk_${cleanCode}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const clickDocRef = doc(db, 'affiliate_clicks', clickId);
+    await setDoc(clickDocRef, { ...record, id: clickId });
+  } catch (err) {
+    // silently catch network/offline error
+  }
+}
+
+/**
+ * Fetch click records for an affiliate code.
+ */
+export async function fetchAffiliateClicks(code: string): Promise<AffiliateClickRecord[]> {
+  const cleanCode = (code || '').trim().toUpperCase();
+  if (!cleanCode) return [];
+
+  let firestoreClicks: AffiliateClickRecord[] = [];
+  try {
+    const colRef = collection(db, 'affiliate_clicks');
+    const q = query(colRef, where('code', '==', cleanCode), limit(500));
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      firestoreClicks.push({ id: d.id, ...d.data() } as AffiliateClickRecord);
+    });
+  } catch (err) {
+    // fallback
+  }
+
+  // Merge with local clicks
+  let localClicks: AffiliateClickRecord[] = [];
+  try {
+    const raw = localStorage.getItem(`nak_aff_clicks_${cleanCode}`);
+    if (raw) localClicks = JSON.parse(raw);
+  } catch {}
+
+  const map = new Map<string, AffiliateClickRecord>();
+  firestoreClicks.forEach((c) => map.set(c.id || `${c.timestamp}`, c));
+  localClicks.forEach((c) => {
+    const k = c.id || `${c.timestamp}`;
+    if (!map.has(k)) map.set(k, c);
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+}
+
 /**
  * Synchronously or asynchronously fetch system affiliate configuration.
  */

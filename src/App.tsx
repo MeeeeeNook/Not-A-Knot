@@ -19,7 +19,7 @@ import { CheckCircle2, ShoppingBag, Sparkles, X, AlertCircle } from 'lucide-reac
 import { Lock } from './components/common/LockIcon';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
-import { setAffiliateReferral, fetchAffiliateSystemConfig } from './utils/affiliateManager';
+import { setAffiliateReferral, fetchAffiliateSystemConfig, recordAffiliateClick } from './utils/affiliateManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS, getRootAdminEmails } from './utils/auth';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
@@ -588,17 +588,38 @@ export default function App() {
       return;
     }
 
-    if (routePath === 'affiliate' || routePath === 'affiliates' || routePath === 'tiep-thi' || routePath === 'tiep-thi-lien-ket') {
-      setCurrentView('affiliate');
+    if (
+      routePath === 'affiliate' ||
+      routePath === 'affiliates' ||
+      routePath === 'affiliate/guide' ||
+      routePath === 'affiliate/orders' ||
+      routePath === 'tiep-thi' ||
+      routePath === 'tiep-thi-lien-ket'
+    ) {
       const session = getAdminSession();
       if (session && session.username) {
+        if (session.role !== 'affiliate') {
+          setCurrentSeller(session as SellerUser);
+          setCurrentView('admin');
+          window.history.replaceState(null, '', '/admin');
+          setIsAdminLoginModalOpen(false);
+          setIsCartOpen(false);
+          return;
+        }
         setCurrentSeller(session as SellerUser);
         verifySessionWithServer().then((verifiedUser) => {
           if (verifiedUser && verifiedUser.username) {
-            setCurrentSeller(verifiedUser as SellerUser);
+            if (verifiedUser.role !== 'affiliate') {
+              setCurrentSeller(verifiedUser as SellerUser);
+              setCurrentView('admin');
+              window.history.replaceState(null, '', '/admin');
+            } else {
+              setCurrentSeller(verifiedUser as SellerUser);
+            }
           }
         }).catch(() => {});
       }
+      setCurrentView('affiliate');
       setIsAdminLoginModalOpen(false);
       setIsCartOpen(false);
       return;
@@ -776,7 +797,39 @@ export default function App() {
           }
         }
 
-        // ZERO-TRUST ACCESS CONTROL: Purge and reject any unauthorized Google accounts
+        // ZERO-TRUST ACCESS CONTROL: Only allow root admin, authorized seller emails, or registered affiliates
+        if (!isRoot && !isAuthorizedEmail && (!matchedSeller || matchedSeller.isActive === false)) {
+          // If user previously signed in as an affiliate or has an active affiliate session, auto-provision affiliate profile
+          const activeSession = getAdminSession();
+          if (activeSession?.role === 'affiliate') {
+            try {
+              const { generateAffiliateCode } = await import('./utils/affiliateManager');
+              const sellersList = await fetchSellersFromFirestore().catch(() => []);
+              const baseCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], sellersList);
+              const cleanUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '') || `user${Date.now().toString().slice(-4)}`;
+              const nowIso = new Date().toISOString();
+              const autoAffiliate: SellerUser = {
+                id: `affiliate-${fbUser.uid.slice(0, 12)}`,
+                username: cleanUsername,
+                name: fbUser.displayName || email.split('@')[0],
+                role: 'affiliate',
+                affiliateCode: baseCode,
+                commissionRate: 10,
+                isActive: true,
+                googleEmail: email,
+                googleUid: fbUser.uid,
+                avatarColor: '#991B1B',
+                createdAt: nowIso,
+                linkedGoogleAt: nowIso
+              };
+              await saveSellerToFirestore(autoAffiliate).catch(() => {});
+              matchedSeller = autoAffiliate;
+            } catch (affiliateErr) {
+              console.warn('Auto-provisioning affiliate error:', affiliateErr);
+            }
+          }
+        }
+
         if (!isRoot && !isAuthorizedEmail && (!matchedSeller || matchedSeller.isActive === false)) {
           try {
             const geo = await getClientGeoLocation().catch(() => null);
@@ -806,10 +859,13 @@ export default function App() {
           isRootAdmin: isRoot,
           isActive: true,
           createdAt: matchedSeller?.createdAt || new Date().toISOString(),
-          avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
+          avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : (assignedRole === 'affiliate' ? '#991B1B' : '#2563EB'))),
           phone: matchedSeller?.phone || fbUser.phoneNumber || '',
           googleEmail: email,
-          googleUid: fbUser.uid
+          googleUid: fbUser.uid,
+          affiliateCode: matchedSeller?.affiliateCode,
+          commissionRate: matchedSeller?.commissionRate,
+          paymentInfo: matchedSeller?.paymentInfo
         };
         setCurrentSeller(userPayload);
       } else {
@@ -1829,6 +1885,12 @@ export default function App() {
     if (session && session.username) {
       setCurrentSeller(session as SellerUser);
     }
+    if (session?.role === 'affiliate') {
+      setCurrentView('affiliate');
+      navigateTo('/affiliate');
+      setIsAdminLoginModalOpen(false);
+      return;
+    }
     setCurrentView('admin');
     navigateTo('/admin');
     setIsAdminLoginModalOpen(false);
@@ -1844,7 +1906,7 @@ export default function App() {
     } else {
       setCurrentView('admin');
       navigateTo('/admin');
-      showToast(`Xin chào ${user.name} (@${user.username})!`);
+      showToast(`Xin chào ${user.name}!`);
     }
   };
 

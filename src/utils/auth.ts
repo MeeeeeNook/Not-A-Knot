@@ -319,9 +319,10 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
 
     // 3. Check if this email belongs to an existing seller profile in Firestore
     let matchedSeller: SellerUser | null = null;
+    let fetchedSellersList: SellerUser[] = [];
     try {
-      const sellers = await fetchSellersFromFirestore();
-      matchedSeller = sellers.find(s =>
+      fetchedSellersList = await fetchSellersFromFirestore();
+      matchedSeller = fetchedSellersList.find(s =>
         (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
         (s.phone && s.phone.trim().toLowerCase() === email) ||
         (s.username && s.username.trim().toLowerCase() === email) ||
@@ -331,44 +332,39 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       console.warn('Error fetching sellers during Google login check:', fetchErr);
     }
 
-    // 4. ZERO-TRUST BLOCK: If not root admin AND not authorized by Root Admin AND not an active seller -> REJECT!
-    const isAuthorized = isRoot || Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
-    if (!isAuthorized) {
-      // Record unauthorized login attempt with IP, physical location, and device
-      try {
-        const geo = await getClientGeoLocation().catch(() => null);
-        const dev = getClientDeviceInfo();
-        const physicalLoc = geo ? `${geo.city || geo.region || ''}${geo.city && geo.country ? ', ' : ''}${geo.country || 'Vietnam'}` : 'Không xác định';
-        await recordUnauthorizedLoginAttempt({
-          email,
-          name: fbUser.displayName || '',
-          ip: geo?.ip || 'Unknown',
-          location: physicalLoc,
-          device: `${dev.browser} trên ${dev.os}`,
-          reason: 'Tài khoản Google chưa được Tổng bí thư cấp quyền'
-        });
-      } catch (logErr) {
-        console.warn('Could not record unauthorized attempt:', logErr);
-      }
+    // 4. Role detection: Root Admin > Authorized Staff > Existing Seller / Affiliate > Auto-provision new Affiliate
+    const isAuthorizedStaff = isRoot || Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.role !== 'affiliate' && matchedSeller?.isActive !== false);
 
-      // Purge the unapproved Google session from Firebase immediately
-      await signOutFirebaseAuth().catch(() => {});
-      return {
-        success: false,
-        error: 'Tài khoản Google này không có quyền truy cập hệ thống quản trị.'
-      };
+    let assignedRole: SellerUser['role'] = 'affiliate';
+    if (isRoot) {
+      assignedRole = 'root_admin';
+    } else if (matchedAuthEmail) {
+      assignedRole = matchedAuthEmail.role || 'member';
+    } else if (matchedSeller) {
+      assignedRole = matchedSeller.role || 'member';
+    } else {
+      // New user logging in: Auto-provision as an Affiliate partner
+      assignedRole = 'affiliate';
     }
 
     const nowIso = new Date().toISOString();
-    const assignedRole = isRoot ? 'root_admin' : (matchedAuthEmail?.role || matchedSeller?.role || 'member');
+
+    // Generate or retrieve affiliate code if user is an affiliate
+    let resolvedAffiliateCode = matchedSeller?.affiliateCode;
+    if (assignedRole === 'affiliate' && !resolvedAffiliateCode) {
+      const { generateAffiliateCode } = await import('./affiliateManager');
+      resolvedAffiliateCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], fetchedSellersList);
+    }
 
     // Auto-link Google email and UID to the seller in Firestore if not yet set
     if (matchedSeller && (!matchedSeller.googleEmail || matchedSeller.googleEmail !== email || !matchedSeller.googleUid)) {
       try {
         const updatedSeller: SellerUser = {
           ...matchedSeller,
+          role: assignedRole,
           googleEmail: email,
           googleUid: fbUser.uid,
+          affiliateCode: resolvedAffiliateCode || matchedSeller.affiliateCode,
           linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
         };
         await saveSellerToFirestore(updatedSeller);
@@ -379,20 +375,20 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     }
 
     const sellerUser: SellerUser = {
-      id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
+      id: matchedSeller?.id || `${assignedRole === 'affiliate' ? 'affiliate' : 'seller'}-${fbUser.uid.slice(0, 12)}`,
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
       name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (email.toLowerCase().includes('nhunhuhao') ? 'Hảo Như' : (email.toLowerCase().includes('huy') ? 'Trần Việt Huy' : (email.includes('@') ? email.split('@')[0] : 'Trần Việt Huy'))),
       role: assignedRole,
       isRootAdmin: isRoot,
-      isActive: true,
+      isActive: matchedSeller ? matchedSeller.isActive !== false : true,
       createdAt: matchedSeller?.createdAt || nowIso,
-      avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : '#2563EB')),
+      avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : (assignedRole === 'affiliate' ? '#991B1B' : '#2563EB'))),
       phone: matchedSeller?.phone || fbUser.phoneNumber || '',
       googleEmail: email,
       googleUid: fbUser.uid,
       linkedGoogleAt: matchedSeller?.linkedGoogleAt || nowIso,
-      affiliateCode: matchedSeller?.affiliateCode,
-      commissionRate: matchedSeller?.commissionRate,
+      affiliateCode: resolvedAffiliateCode,
+      commissionRate: matchedSeller?.commissionRate !== undefined ? matchedSeller.commissionRate : (assignedRole === 'affiliate' ? 10 : undefined),
       paymentInfo: matchedSeller?.paymentInfo
     };
 

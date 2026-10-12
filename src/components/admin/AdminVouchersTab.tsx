@@ -129,6 +129,7 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
   const [inspectingVoucherStats, setInspectingVoucherStats] = useState<{ voucher: Voucher; stats: VoucherStats } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Verification status map: voucherId -> boolean
   const [integrityMap, setIntegrityMap] = useState<Record<string, boolean>>({});
@@ -437,7 +438,18 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
       };
 
       await saveVoucher(finalVoucher);
+      setVouchers((prev) => {
+        const idx = prev.findIndex((v) => v.id === finalVoucher.id || v.code.toUpperCase() === finalVoucher.code.toUpperCase());
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = finalVoucher;
+          return next;
+        }
+        return [finalVoucher, ...prev];
+      });
       setIsModalOpen(false);
+      setToastMessage(`Đã lưu mã giảm giá "${cleanCode}" thành công!`);
+      setTimeout(() => setToastMessage(null), 3500);
       await loadVouchers();
     } catch (err) {
       console.error('Lỗi khi lưu voucher:', err);
@@ -451,6 +463,9 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     try {
       const updated = { ...v, isActive: !v.isActive };
       await saveVoucher(updated);
+      setVouchers((prev) => prev.map((item) => (item.id === v.id ? updated : item)));
+      setToastMessage(updated.isActive ? `Đã kích hoạt mã "${v.code}".` : `Đã tạm dừng mã "${v.code}".`);
+      setTimeout(() => setToastMessage(null), 3000);
       await loadVouchers();
     } catch (err) {
       alert('Không thể cập nhật trạng thái mã.');
@@ -461,6 +476,9 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
     if (!window.confirm('Bạn có chắc chắn muốn xóa mã giảm giá này?')) return;
     try {
       await deleteVoucher(voucherId);
+      setVouchers((prev) => prev.filter((item) => item.id !== voucherId));
+      setToastMessage('Đã xóa mã giảm giá thành công.');
+      setTimeout(() => setToastMessage(null), 3000);
       await loadVouchers();
     } catch (err) {
       alert('Không thể xóa mã giảm giá.');
@@ -545,6 +563,23 @@ export const AdminVouchersTab: React.FC<AdminVouchersTabProps> = ({
           </>
         }
       />
+
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="text-emerald-700 hover:text-emerald-950 p-1 rounded-lg cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* KPI Overview Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

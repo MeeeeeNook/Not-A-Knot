@@ -1764,9 +1764,11 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
                         Người bán
                       </span>
                     )}
-                    <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800">
-                      @{selectedSellerForLogs.username}
-                    </span>
+                    {selectedSellerForLogs.googleEmail && (
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800">
+                        {selectedSellerForLogs.googleEmail}
+                      </span>
+                    )}
                   </div>
                   <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
                     <span>Lịch sử phiên IP đăng nhập trang quản trị</span>

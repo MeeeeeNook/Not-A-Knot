@@ -8712,7 +8712,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                       </span>
                                       {matchedSeller ? (
                                         <span className="text-[10px] text-slate-400 block font-mono">
-                                          @{matchedSeller.username}
+                                          {matchedSeller.googleEmail || matchedSeller.name}
                                         </span>
                                       ) : null}
                                     </div>

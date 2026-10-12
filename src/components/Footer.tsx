@@ -263,6 +263,19 @@ export const Footer: React.FC<FooterProps> = ({
                   Minh bạch dự án (ĐH KTQD)
                 </a>
               </li>
+              <li>
+                <a
+                  href="/affiliate"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.location.href = '/affiliate';
+                  }}
+                  className="hover:text-rose-400 transition-colors inline-flex items-center gap-1.5 text-rose-300/90 font-medium"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Cổng Tiếp thị liên kết (Affiliate)</span>
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -392,20 +405,6 @@ export const Footer: React.FC<FooterProps> = ({
               <Cookie className="w-3.5 h-3.5 text-amber-500/80" />
               <span>Cài đặt & Xóa Cookie</span>
             </button>
-
-            <a
-              href="/affiliate"
-              onClick={(e) => {
-                e.preventDefault();
-                window.history.pushState(null, '', '/affiliate');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }}
-              className="text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Cổng đối tác tiếp thị liên kết"
-            >
-              <Share2 className="w-3.5 h-3.5 text-amber-500/80" />
-              <span>Tiếp thị liên kết</span>
-            </a>
 
             <button
               onClick={onOpenAdmin}

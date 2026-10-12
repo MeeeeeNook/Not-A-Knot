@@ -99,8 +99,7 @@ service cloud.firestore {
     }
 
     match /vouchers/{voucherId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow read, write: if true;
     }
 
     // 4. Orders:
@@ -161,6 +160,12 @@ service cloud.firestore {
 
     // 13. Customer uploaded custom photos
     match /uploaded_custom_photos/{photoId} {
+      allow create, read: if true;
+      allow update, delete: if isAuthorizedStaff();
+    }
+
+    // 14. Affiliate link click tracking
+    match /affiliate_clicks/{clickId} {
       allow create, read: if true;
       allow update, delete: if isAuthorizedStaff();
     }

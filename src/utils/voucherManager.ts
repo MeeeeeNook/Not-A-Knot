@@ -133,80 +133,88 @@ const sanitizeVoucherCreator = (v: Voucher): Voucher => {
  * Fetch all vouchers (with local cache fallback and defaults)
  */
 export async function getVouchers(): Promise<Voucher[]> {
+  let firestoreItems: Voucher[] = [];
+
+  // 1. Fetch from Firestore client SDK
   try {
     const colRef = collection(db, VOUCHER_COLLECTION);
     const snap = await getDocs(colRef);
     if (!snap.empty) {
-      let firestoreItems: Voucher[] = [];
       snap.forEach((d) => {
         firestoreItems.push(sanitizeVoucherCreator(d.data() as Voucher));
       });
-
-      // Merge with any local cache vouchers that might be newer
-      let localItems: Voucher[] = [];
-      try {
-        const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
-        if (local) localItems = (JSON.parse(local) as Voucher[]).map(sanitizeVoucherCreator);
-      } catch {}
-
-      const mergedMap = new Map<string, Voucher>();
-      firestoreItems.forEach((v) => mergedMap.set(v.id, v));
-      localItems.forEach((v) => {
-        if (!mergedMap.has(v.id)) {
-          mergedMap.set(v.id, v);
-        }
-      });
-      const items = Array.from(mergedMap.values());
-
-      // Ensure HUYTRAN preset is available if not in Firestore
-      if (!items.some((it) => it.code.toUpperCase() === 'HUYTRAN')) {
-        const huyPreset = DEFAULT_INITIAL_VOUCHERS.find((p) => p.code === 'HUYTRAN');
-        if (huyPreset) {
-          const enc = await generateVoucherEncryption(huyPreset);
-          items.unshift({ ...huyPreset, encryptedData: enc });
-        }
-      }
-      localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(items));
-      return items;
     }
   } catch (err) {
-    console.warn('Lấy voucher từ Firestore không thành công, sử dụng bộ nhớ cục bộ:', err);
+    console.warn('Lấy voucher từ Firestore client không thành công, thử server API:', err);
   }
 
-  // Fallback to localStorage
-  try {
-    const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
-    if (local) {
-      let parsed = (JSON.parse(local) as Voucher[]).map(sanitizeVoucherCreator);
-      if (!parsed.some((it) => it.code.toUpperCase() === 'HUYTRAN')) {
-        const huyPreset = DEFAULT_INITIAL_VOUCHERS.find((p) => p.code === 'HUYTRAN');
-        if (huyPreset) {
-          const enc = await generateVoucherEncryption(huyPreset);
-          parsed.unshift({ ...huyPreset, encryptedData: enc });
+  // 2. Fallback to server endpoint if client Firestore was empty or failed
+  if (firestoreItems.length === 0) {
+    try {
+      const res = await fetch('/api/vouchers');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.vouchers)) {
+          firestoreItems = data.vouchers.map(sanitizeVoucherCreator);
         }
       }
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(parsed));
-        return parsed;
-      }
-    }
+    } catch {}
+  }
+
+  // 3. Load local cache
+  let localItems: Voucher[] = [];
+  try {
+    const local = localStorage.getItem(VOUCHER_STORAGE_KEY);
+    if (local) localItems = (JSON.parse(local) as Voucher[]).map(sanitizeVoucherCreator);
   } catch {}
 
-  // Generate initial presets with signed encryption
-  const seeded: Voucher[] = [];
-  for (const raw of DEFAULT_INITIAL_VOUCHERS) {
-    const encrypted = await generateVoucherEncryption(raw);
-    seeded.push({
-      ...raw,
-      encryptedData: encrypted
-    });
+  // 4. Smart merge: key by voucher code (uppercase) so duplicates are resolved
+  const mergedMap = new Map<string, Voucher>();
+
+  firestoreItems.forEach((v) => {
+    const key = v.code.toUpperCase().trim();
+    mergedMap.set(key, v);
+  });
+
+  localItems.forEach((v) => {
+    const key = v.code.toUpperCase().trim();
+    const existing = mergedMap.get(key);
+    if (!existing) {
+      mergedMap.set(key, v);
+    } else {
+      const existingTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+      const localTime = v.updatedAt ? new Date(v.updatedAt).getTime() : 0;
+      // If local item is newer, preserve local version!
+      if (localTime >= existingTime) {
+        mergedMap.set(key, v);
+      }
+    }
+  });
+
+  let items = Array.from(mergedMap.values());
+
+  // 5. Ensure HUYTRAN preset is available if not in Firestore
+  if (!items.some((it) => it.code.toUpperCase() === 'HUYTRAN')) {
+    const huyPreset = DEFAULT_INITIAL_VOUCHERS.find((p) => p.code === 'HUYTRAN');
+    if (huyPreset) {
+      const enc = await generateVoucherEncryption(huyPreset);
+      items.unshift({ ...huyPreset, encryptedData: enc });
+    }
+  }
+
+  // 6. If completely empty, seed default vouchers
+  if (items.length === 0) {
+    for (const raw of DEFAULT_INITIAL_VOUCHERS) {
+      const encrypted = await generateVoucherEncryption(raw);
+      items.push({ ...raw, encryptedData: encrypted });
+    }
   }
 
   try {
-    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(seeded));
+    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(items));
   } catch {}
 
-  return seeded;
+  return items;
 }
 
 /**
@@ -247,13 +255,22 @@ export async function saveVoucher(voucher: Voucher): Promise<void> {
   }
   const cleanPayload = cleanFirestoreData(rawPayload);
 
-  // 3. Save to Firestore with merge
+  // 3. Save to Firestore client SDK
   try {
     const docRef = doc(db, VOUCHER_COLLECTION, secureVoucher.id);
     await setDoc(docRef, cleanPayload, { merge: true });
   } catch (err: any) {
-    console.warn('Lưu voucher lên Firestore bị lỗi, đã lưu cục bộ an toàn:', err);
+    console.warn('Lưu voucher lên Firestore bị lỗi, thử server fallback:', err);
   }
+
+  // 4. Save to Server endpoint as reliable fallback
+  try {
+    await fetch('/api/vouchers/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cleanPayload)
+    });
+  } catch {}
 }
 
 /**
@@ -270,13 +287,22 @@ export async function deleteVoucher(voucherId: string): Promise<void> {
     }
   } catch {}
 
-  // 2. Delete from Firestore
+  // 2. Delete from Firestore client SDK
   try {
     const docRef = doc(db, VOUCHER_COLLECTION, voucherId);
     await deleteDoc(docRef);
   } catch (err) {
     console.warn('Xóa voucher trên Firestore bị lỗi:', err);
   }
+
+  // 3. Delete from Server endpoint
+  try {
+    await fetch('/api/vouchers/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: voucherId })
+    });
+  } catch {}
 }
 
 export interface VoucherValidationResult {

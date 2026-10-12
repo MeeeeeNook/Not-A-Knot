@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { 
   ShoppingBag, ChevronDown, ChevronRight, ArrowRight, ShieldCheck, 
-  Package, Home, Compass, Info, Phone, Search, X 
+  Package, Home, Compass, Info, Phone, Search, X, Share2 
 } from 'lucide-react';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../types';
@@ -312,18 +312,31 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action Icons: Admin (if logged in) + Cart Button + Animated 3-Line Menu */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Admin Header Button - ONLY shown when admin is logged in */}
+            {/* Admin / Affiliate Header Button - ONLY shown when logged in */}
             {isAdminLoggedIn && onOpenAdmin && (
-              <button
-                id="nav-admin-header-btn"
-                onClick={onOpenAdmin}
-                className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
-                title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
-              >
-                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
-                <span className="hidden sm:inline">Quản Trị</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
-              </button>
+              currentSeller?.role === 'affiliate' ? (
+                <button
+                  id="nav-admin-header-btn"
+                  onClick={onOpenAdmin}
+                  className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
+                  title={`Affiliate hub (${currentSeller?.name || 'Affiliate'})`}
+                >
+                  <Share2 className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform shrink-0" />
+                  <span className="hidden sm:inline">Affiliate hub</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
+                </button>
+              ) : (
+                <button
+                  id="nav-admin-header-btn"
+                  onClick={onOpenAdmin}
+                  className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
+                  title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
+                >
+                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+                  <span className="hidden sm:inline">Quản Trị</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
+                </button>
+              )
             )}
 
             {/* Cart Button */}
@@ -570,24 +583,42 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
-          {/* Admin Mobile Link (Only for logged in Admin) */}
+          {/* Admin / Affiliate Mobile Link */}
           {isAdminLoggedIn && onOpenAdmin && (
             <div className="pt-2 border-t border-neutral-800">
-              <button
-                onClick={() => handleNavClick(onOpenAdmin)}
-                className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-all active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-2.5">
-                  <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
-                  <div>
-                    <div className="text-xs font-black">Trang Quản Trị Hệ Thống</div>
-                    <div className="text-[10px] text-amber-400/80 font-normal">Tài khoản: {currentSeller?.name || 'Admin'}</div>
+              {currentSeller?.role === 'affiliate' ? (
+                <button
+                  onClick={() => handleNavClick(onOpenAdmin)}
+                  className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-rose-300 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 cursor-pointer transition-all active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Share2 className="w-5 h-5 text-rose-400 shrink-0" />
+                    <div>
+                      <div className="text-xs font-black">Affiliate hub</div>
+                      <div className="text-[10px] text-rose-400/80 font-normal">Tài khoản: {currentSeller?.name || 'Affiliate'}</div>
+                    </div>
                   </div>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold uppercase tracking-wider">
-                  Vào Quản Trị
-                </span>
-              </button>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-400/20 text-rose-300 font-bold uppercase tracking-wider">
+                    Vào Affiliate hub
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleNavClick(onOpenAdmin)}
+                  className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-all active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <div className="text-xs font-black">Trang Quản Trị Hệ Thống</div>
+                      <div className="text-[10px] text-amber-400/80 font-normal">Tài khoản: {currentSeller?.name || 'Admin'}</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold uppercase tracking-wider">
+                    Vào Quản Trị
+                  </span>
+                </button>
+              )}
             </div>
           )}
         </div>

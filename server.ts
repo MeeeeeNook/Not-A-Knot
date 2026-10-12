@@ -12,7 +12,7 @@ import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, setLogLevel } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, collection, query, where, getDocs, limit, setDoc, deleteDoc, setLogLevel } from 'firebase/firestore';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
 import trackOrderHandler from './api/orders/track.ts';
@@ -840,6 +840,53 @@ async function startServer() {
   // ----------------------------------------------------
   app.all('/api/orders/create', (req: Request, res: Response) => {
     createOrderHandler(req, res);
+  });
+
+  // ----------------------------------------------------
+  // AUTHORITATIVE VOUCHER PERSISTENCE API
+  // ----------------------------------------------------
+  app.get('/api/vouchers', async (_req: Request, res: Response) => {
+    try {
+      const snap = await getDocs(collection(firestoreDb, 'vouchers'));
+      const vouchers = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      return res.json({ success: true, count: vouchers.length, vouchers });
+    } catch (err: any) {
+      console.warn('[API Vouchers Read Notice]:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Lỗi truy vấn voucher' });
+    }
+  });
+
+  app.post('/api/vouchers/save', async (req: Request, res: Response) => {
+    try {
+      const voucher = req.body;
+      if (!voucher || !voucher.code || !voucher.id) {
+        return res.status(400).json({ success: false, error: 'Thiếu mã hoặc ID voucher' });
+      }
+      const cleanPayload = {
+        ...voucher,
+        code: String(voucher.code).toUpperCase().trim(),
+        updatedAt: voucher.updatedAt || new Date().toISOString()
+      };
+      await setDoc(doc(firestoreDb, 'vouchers', voucher.id), cleanPayload, { merge: true });
+      return res.json({ success: true, voucher: cleanPayload });
+    } catch (err: any) {
+      console.warn('[API Vouchers Save Error]:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Lỗi lưu voucher' });
+    }
+  });
+
+  app.post('/api/vouchers/delete', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.body;
+      if (!id) {
+        return res.status(400).json({ success: false, error: 'Thiếu ID voucher' });
+      }
+      await deleteDoc(doc(firestoreDb, 'vouchers', id));
+      return res.json({ success: true, id });
+    } catch (err: any) {
+      console.warn('[API Vouchers Delete Error]:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Lỗi xóa voucher' });
+    }
   });
 
   // ----------------------------------------------------

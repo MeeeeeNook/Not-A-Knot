@@ -16,7 +16,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   brandName = 'Not A Knot',
   logoUrl = '/assets/logo.png'
 }) => {
-  const [activeTab, setActiveTab] = useState<'admin' | 'affiliate'>('admin');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -28,30 +27,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     setErrorMessage('');
 
     try {
-      if (activeTab === 'affiliate') {
-        const res = await signInWithGoogleForAffiliate();
-        if (res.success && res.user) {
-          onLoginSuccess(res.user);
-        } else {
-          setErrorMessage(res.error || 'Đăng nhập Google qua Firebase cho đối tác thất bại.');
-        }
-        return;
-      }
-
       const res = await signInWithGoogle();
       if (res.success && res.user) {
         onLoginSuccess(res.user as SellerUser);
       } else {
-        // Sanitize error message to never expose internal sensitive details
         let userSafeError = res.error || 'Đăng nhập không thành công. Vui lòng thử lại sau.';
         if (userSafeError.includes('đã được đóng') || userSafeError.includes('cancelled-popup-request')) {
           userSafeError = '';
-        } else if (
-          userSafeError.includes('Tổng bí thư') ||
-          userSafeError.includes('authorized_sellers') ||
-          userSafeError.includes('@gmail.com')
-        ) {
-          userSafeError = 'Tài khoản Google này chưa được cấp quyền truy cập hệ thống quản trị.';
         }
         setErrorMessage(userSafeError);
       }
@@ -124,42 +106,13 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
           <X className="w-5 h-5" />
         </button>
 
-        {/* Role Tab Switcher */}
-        <div className="flex p-1 bg-neutral-100 rounded-2xl mb-6 max-w-sm">
-          <button
-            type="button"
-            onClick={() => { setActiveTab('admin'); setErrorMessage(''); }}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-              activeTab === 'admin'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-800'
-            }`}
-          >
-            Quản Trị Viên
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('affiliate'); setErrorMessage(''); }}
-            className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'affiliate'
-                ? 'bg-rose-50 text-rose-800 border border-rose-200/60 shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-800'
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5 text-rose-700" />
-            <span>Đối Tác Affiliate</span>
-          </button>
-        </div>
-
         {/* Card Header with clean, readable, non-bold typography */}
         <div className="mb-6 pr-8">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold text-neutral-900 tracking-tight leading-snug">
-            {activeTab === 'affiliate' ? 'Cổng Đối Tác Tiếp Thị' : 'Đăng nhập hệ thống'}
+            Đăng nhập hệ thống
           </h1>
           <p className="text-sm sm:text-base text-neutral-500 font-normal mt-1.5 leading-relaxed">
-            {activeTab === 'affiliate'
-              ? 'Đăng nhập bằng tài khoản Google qua Firebase Authentication để truy cập thống kê hoa hồng và link giới thiệu.'
-              : 'Vui lòng sử dụng tài khoản Google đã được cấp quyền quản trị để tiếp tục.'}
+            Hệ thống tự động nhận diện và chuyển hướng tài khoản Quản trị viên và Đối tác Affiliate.
           </p>
         </div>
 
