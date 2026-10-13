@@ -1,3 +1,5 @@
+import { saveProductVoucherLimit } from '../utils/productVoucherPolicy';
+import { getProductPercentVoucherLimit } from '../utils/voucherCalculation';
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Menu, Eye, EyeOff, Edit3, Trash2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, SlidersHorizontal, ArrowLeft, RefreshCw, Plus, Search, Filter, CloudUpload, Phone, MapPin, LayoutDashboard, ShoppingBag, Package, Mail, Send, CheckCircle2, Smartphone, Table as TableIcon, RotateCcw, RotateCw, ExternalLink, Database, Server, HardDrive, Activity, ArrowUpRight, BarChart3, Sparkles, Upload, Download, GripVertical, ArrowUp, ArrowDown, Copy, Calendar, X, ShieldAlert, Layers, Users, Check, ArrowRight, CheckSquare, Truck, User, Ticket, FileSpreadsheet, Lightbulb, Globe, Zap, Camera, Image as ImageIcon } from 'lucide-react';
@@ -605,6 +607,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [formComboItems, setFormComboItems] = useState<ComboItemConfig[]>([]);
   const [productFormTab, setProductFormTab] = useState<'basic' | 'customizations' | 'combo' | 'vouchers'>('basic');
   const [allStoreVouchers, setAllStoreVouchers] = useState<Voucher[]>([]);
+  const [formMaxPercentVouchers, setFormMaxPercentVouchers] = useState('1');
   const [formApplyAllVouchers, setFormApplyAllVouchers] = useState<boolean>(true);
   const [formApplicableVoucherIds, setFormApplicableVoucherIds] = useState<string[]>([]);
   const [draggedCharmIndex, setDraggedCharmIndex] = useState<number | null>(null);
@@ -1398,6 +1401,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setIsComboMode(false);
     setFormIsCombo(false);
     setFormName('');
+    setFormMaxPercentVouchers('1');
     setFormPriceInput('150000');
     setFormOriginalPriceInput('220000');
     setFormCategory(localCategories[0]?.id || 'event_0209');
@@ -1457,6 +1461,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setIsComboMode(true);
     setFormIsCombo(true);
     setFormName('');
+    setFormMaxPercentVouchers('1');
     setFormPriceInput('250000');
     setFormOriginalPriceInput('320000');
     setFormCategory(localCategories[0]?.id || 'event_0209');
@@ -1582,6 +1587,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setFormComboItems(prod.comboItems || []);
     setFormEnableSizeSelection(false);
     // Voucher eligibility loading
+    setFormMaxPercentVouchers(String(getProductPercentVoucherLimit(prod)));
     setFormApplyAllVouchers(prod.applyAllVouchers !== false);
     setFormApplicableVoucherIds(prod.applicableVoucherIds || []);
     getVouchers().then(setAllStoreVouchers).catch(() => {});
@@ -1842,6 +1848,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Save product (Add or Edit) - FIXED VALIDATION
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRootAdmin && (!formMaxPercentVouchers.trim() || !Number.isSafeInteger(Number(formMaxPercentVouchers)) || Number(formMaxPercentVouchers) < 0)) {
+      showAdminToast('Giới hạn mã giảm % phải là số nguyên không âm (0 = tắt).');
+      return;
+    }
+
     if (!formName.trim()) {
       alert('Vui lòng nhập tên sản phẩm.');
       return;
@@ -1940,6 +1951,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         updatedAt: new Date().toISOString()
       };
 
+      if (isRootAdmin) {
+        try { await saveProductVoucherLimit(updatedItem.id, Number(formMaxPercentVouchers)); }
+        catch (error) { showAdminToast('Không thể lưu giới hạn voucher. Kiểm tra quyền Tổng Bí Thư và thử lại.'); return; }
+      }
       const updatedList = products.map((p) => (p.id === editingProduct.id ? updatedItem : p));
       pushHistoryAction(`Cập nhật sản phẩm "${updatedItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
@@ -2038,6 +2053,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         updatedAt: new Date().toISOString()
       };
 
+      if (isRootAdmin) {
+        try { await saveProductVoucherLimit(newItem.id, Number(formMaxPercentVouchers)); }
+        catch (error) { showAdminToast('Không thể lưu giới hạn voucher. Kiểm tra quyền Tổng Bí Thư và thử lại.'); return; }
+      }
       const updatedList = [newItem, ...products];
       pushHistoryAction(`Thêm sản phẩm mới "${newItem.name}"`, 'products', products, updatedList);
       onUpdateProducts(updatedList);
@@ -5931,6 +5950,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               {/* TAB 3: CẤU HÌNH MÃ GIẢM GIÁ ÁP DỤNG CHO SẢN PHẨM NÀY */}
               {productFormTab === 'vouchers' && (
                 <div className="space-y-5 bg-white p-5 rounded-2xl border border-slate-200">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-slate-900">Số mã giảm % tối đa cho mỗi sản phẩm</h4>
+                    <p className="text-xs text-slate-600">Mặc định 1 mã giảm % + tối đa 1 mã freeship. Các mã % giảm lần lượt trên tiền sản phẩm còn lại.</p>
+                    <label htmlFor="product-percent-voucher-limit" className="block text-xs font-semibold text-slate-700">Giới hạn mã giảm % (0 = tắt hoàn toàn)</label>
+                    <input id="product-percent-voucher-limit" type="number" min="0" step="1" value={formMaxPercentVouchers} disabled={!isRootAdmin} onChange={(e) => setFormMaxPercentVouchers(e.target.value)} className="w-full sm:w-48 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100" />
+                    <p className="text-xs text-slate-500">{isRootAdmin ? 'Chỉ Tổng Bí Thư được thay đổi giới hạn này. Tắt giảm % không tắt mã freeship hợp lệ.' : 'Bạn có thể xem giới hạn; chỉ Tổng Bí Thư được thay đổi.'}</p>
+                    {isRootAdmin && <div className="flex flex-wrap gap-2">{[0, 1, 2, 3].map((limit) => <button key={limit} type="button" onClick={() => setFormMaxPercentVouchers(String(limit))} className={`rounded-lg border px-3 py-1.5 text-xs ${formMaxPercentVouchers === String(limit) ? 'border-amber-400 bg-amber-100 font-bold' : 'border-slate-200 bg-white'}`}>{limit === 0 ? 'Tắt giảm %' : `${limit} mã`}</button>)}</div>}
+                  </div>
                   {/* Header info */}
                   <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40 rounded-2xl border border-amber-200">
                     <div className="p-2.5 bg-amber-100 rounded-xl text-amber-900 shrink-0">

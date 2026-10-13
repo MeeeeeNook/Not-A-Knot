@@ -1,3 +1,4 @@
+import { useVoucherSelection } from '../hooks/useVoucherSelection';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CartItem, SiteContentConfig, StoredOrder, SellerUser } from '../types';
@@ -48,7 +49,7 @@ import {
 } from '../utils/analytics';
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
-import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
+import { getVouchers, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
 import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode, calculateDetailedAffiliateCommission, recordOrderOnAffiliateCookie } from '../utils/affiliateManager';
 import { getAdminSession } from '../utils/auth';
 import { LoadingImage } from './LoadingImage';
@@ -398,11 +399,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   // Voucher states
-  const [voucherInput, setVoucherInput] = useState('');
-  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
-  const [shippingVoucher, setShippingVoucher] = useState<Voucher | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
-  const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
   const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
 
   useEffect(() => {
@@ -440,37 +436,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     );
   }, [cartItems]);
 
-  // Validate each slot independently against the original merchandise subtotal and items.
-  const discountResult = appliedVoucher
-    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee, cartItems) : null;
-  const shippingResult = shippingVoucher
-    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee, cartItems) : null;
-  const voucherDiscountAmount = discountResult?.isValid && discountResult.voucher?.type === 'percent'
-    ? discountResult.discountAmount : 0;
-  const isFreeShippingVoucher = Boolean(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship');
-  const selectedVouchers = [
-    ...(discountResult?.isValid && discountResult.voucher?.type === 'percent' ? [discountResult.voucher] : []),
-    ...(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship' ? [shippingResult.voucher] : [])
-  ];
-
-  useEffect(() => {
-    const invalidDiscount = appliedVoucher && (!discountResult?.isValid || discountResult.voucher?.type !== 'percent');
-    const invalidShipping = shippingVoucher && (!shippingResult?.isValid || shippingResult.voucher?.type !== 'freeship');
-    if (invalidDiscount || invalidShipping) {
-      if (invalidDiscount) setAppliedVoucher(null);
-      if (invalidShipping) setShippingVoucher(null);
-      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
-      setVoucherSuccessMsg(null);
-    }
-  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length, cartItems]);
-
-
-  // Track view_cart in GA4 when drawer opens with items
-  useEffect(() => {
-    if (isOpen && cartItems.length > 0) {
-      trackGA4ViewCart(cartItems, subtotal);
-    }
-  }, [isOpen]);
+  const { voucherInput, setVoucherInput, voucherError, setVoucherError, voucherSuccessMsg, selectedVouchers, voucherDiscountAmount, isFreeShippingVoucher, handleApplyVoucher, handleRemoveVoucher, getDiscountForVoucher } = useVoucherSelection(cartItems, subtotal, shippingFee, availableVouchers);
 
   const handleRemoveItem = (index: number) => {
     const itemToRemove = cartItems[index];
@@ -483,45 +449,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       );
     }
     onRemoveItem(index);
-  };
-
-  const handleApplyVoucher = () => {
-    setVoucherError(null);
-    setVoucherSuccessMsg(null);
-    const code = voucherInput.trim().toUpperCase();
-    if (!code) {
-      setVoucherError('Vui lòng nhập mã voucher.');
-      return;
-    }
-    if (code === 'GIAM100K') {
-      setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
-      return;
-    }
-    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee, cartItems);
-    if (!res.isValid || !res.voucher) {
-      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
-      return;
-    }
-    const occupied = res.voucher.type === 'freeship' ? shippingVoucher : appliedVoucher;
-    if (occupied) {
-      setVoucherError(occupied.code.toUpperCase() === code
-        ? 'Mã này đã được áp dụng.'
-        : 'Chỉ được dùng 1 mã giảm giá và 1 mã freeship. Hãy gỡ mã cùng loại trước.');
-      return;
-    }
-    if (res.voucher.type === 'freeship') setShippingVoucher(res.voucher);
-    else setAppliedVoucher(res.voucher);
-    setVoucherInput('');
-    setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
-    trackGA4ApplyCoupon(res.voucher.code, res.discountAmount);
-  };
-
-  const handleRemoveVoucher = (type: Voucher['type']) => {
-    if (type === 'freeship') setShippingVoucher(null);
-    else setAppliedVoucher(null);
-    setVoucherInput('');
-    setVoucherError(null);
-    setVoucherSuccessMsg(null);
   };
 
   const effectiveShippingFee = isFreeShippingVoucher ? 0 : shippingFee;
@@ -871,7 +798,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       });
       // Lifecycle cookie management based on affiliate's configured maxOrdersPerCookieSession
       if (orderData.affiliateCode) {
-        recordOrderOnAffiliateCookie(matchedAffUser?.maxOrdersPerCookieSession);
+        recordOrderOnAffiliateCookie(matchedAffUser?.maxOrdersPerCookieSession, orderData.id);
       }
     } catch (err: any) {
       console.error('Lỗi khi lưu đơn hàng lên Firebase:', err);
@@ -1621,12 +1548,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     </div>
 
                     {selectedVouchers.map((voucher) => (
-                      <div key={voucher.type} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
+                      <div key={voucher.code} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
                         <span className="font-mono font-bold text-xs break-all">{voucher.code}</span>
                         <span className="text-xs text-emerald-700">
-                          {voucher.type === 'freeship' ? 'Miễn phí vận chuyển' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
+                          {voucher.type === 'freeship' ? 'Miễn phí vận chuyển' : `-${getDiscountForVoucher(voucher.code).toLocaleString('vi-VN')}đ`}
                         </span>
-                        <button type="button" onClick={() => handleRemoveVoucher(voucher.type)}
+                        <button type="button" onClick={() => handleRemoveVoucher(voucher.code)}
                           aria-label={`Gỡ mã ${voucher.code}`} className="text-xs text-rose-600 px-2 py-1">Xóa</button>
                       </div>
                     ))}
@@ -1677,7 +1604,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div className="flex justify-between items-center text-emerald-700 font-medium">
                         <span className="flex items-center gap-1.5">
                           <Tag className="w-3.5 h-3.5 text-emerald-600" />
-                          Giảm giá Voucher ({appliedVoucher?.code}):
+                          Giảm giá Voucher ({selectedVouchers.filter((v) => v.type === 'percent').map((v) => v.code).join(' + ')}):
                         </span>
                         <span className="font-bold font-mono">
                           -{voucherDiscountAmount.toLocaleString('vi-VN')}đ

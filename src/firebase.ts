@@ -1285,6 +1285,9 @@ export const fetchProductsFromFirestore = async (forceRefresh = false): Promise<
         rating: typeof data.rating === 'number' ? data.rating : undefined,
         reviewsCount: typeof data.reviewsCount === 'number' ? data.reviewsCount : 0,
         isHidden: data.isHidden === true || String(data.isHidden) === 'true',
+        applyAllVouchers: data.applyAllVouchers !== false,
+        applicableVoucherIds: Array.isArray(data.applicableVoucherIds) ? data.applicableVoucherIds : [],
+        disallowedVoucherIds: Array.isArray(data.disallowedVoucherIds) ? data.disallowedVoucherIds : [],
         updatedAt: data.updatedAt || undefined
       } as Product);
       recordOperation('read');
@@ -1368,6 +1371,9 @@ export const subscribeToProductsFromFirestore = (
             rating: typeof data.rating === 'number' ? data.rating : undefined,
             reviewsCount: typeof data.reviewsCount === 'number' ? data.reviewsCount : 0,
             isHidden: data.isHidden === true || String(data.isHidden) === 'true',
+        applyAllVouchers: data.applyAllVouchers !== false,
+        applicableVoucherIds: Array.isArray(data.applicableVoucherIds) ? data.applicableVoucherIds : [],
+        disallowedVoucherIds: Array.isArray(data.disallowedVoucherIds) ? data.disallowedVoucherIds : [],
             updatedAt: data.updatedAt || undefined
           } as Product);
         });
@@ -1767,6 +1773,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
 
   // If client is not an authenticated staff member, route order creation via server endpoint with graceful direct Firestore fallback
   if (!auth.currentUser) {
+    let serverRejected = false;
     try {
       const { submitOrderToServer } = await import('./utils/orderService');
       const result = await submitOrderToServer({
@@ -1775,7 +1782,13 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
       }, {
         expectedTotal: order.totalPrice || order.totalAmount
       });
+      if (!result.success || !result.order) {
+        serverRejected = true;
+        throw new Error(result.error || 'Vui lòng xác nhận lại giá trước khi đặt đơn.');
+      }
       if (result.success && result.order) {
+        for (const field of ['affiliateCode', 'affiliateId', 'affiliateName', 'affiliateCommissionRate', 'affiliateCommissionAmount', 'affiliateMerchandiseValue']) delete (order as any)[field];
+        Object.assign(order, result.order);
         try {
           const existingStr = localStorage.getItem('nak_preorders');
           const existingList: StoredOrder[] = existingStr ? JSON.parse(existingStr) : [];
@@ -1798,6 +1811,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
         return;
       }
     } catch (serverErr) {
+      if (serverRejected) throw serverErr;
       console.warn('[saveOrderToFirestore] Server submission notice, falling back to direct Firestore write:', serverErr);
     }
   }

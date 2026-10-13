@@ -1,5 +1,6 @@
 import { StoredOrder } from '../firebase';
 import { auth, dispatchSafeEvent } from '../firebase';
+import { getActiveAffiliateReferral, recordOrderOnAffiliateCookie } from './affiliateCookie';
 
 export interface CreateOrderResult {
   success: boolean;
@@ -16,6 +17,7 @@ export interface CreateOrderResult {
   };
   error?: string;
   isDuplicate?: boolean;
+  affiliatePolicy?: { code: string; maxOrders: number };
 }
 
 const getBackendUrl = (): string => {
@@ -23,9 +25,6 @@ const getBackendUrl = (): string => {
   const customUrl = meta && meta.env ? meta.env.VITE_BACKEND_URL : undefined;
   if (customUrl && typeof customUrl === 'string' && customUrl.trim()) {
     return customUrl.trim().replace(/\/+$/, '');
-  }
-  if (typeof window !== 'undefined' && window.location.hostname === 'notaknot.id.vn') {
-    return 'https://www.notaknot.id.vn';
   }
   return '';
 };
@@ -136,12 +135,17 @@ export async function submitOrderToServer(
     // ignore storage quota errors
   }
 
+  if (!data.isDuplicate && data.affiliateAttributed && data.affiliatePolicy && getActiveAffiliateReferral()?.code === data.affiliatePolicy.code) {
+    recordOrderOnAffiliateCookie(data.affiliatePolicy.maxOrders, confirmedOrder.id);
+  }
+
   // Broadcast custom event
   dispatchSafeEvent('nak_order_created', confirmedOrder);
 
   return {
     success: true,
     order: confirmedOrder,
-    isDuplicate: data.isDuplicate
+    isDuplicate: data.isDuplicate,
+    affiliatePolicy: data.affiliatePolicy
   };
 }

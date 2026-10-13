@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, AlertCircle, Sparkles, Share2 } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import { SellerUser } from '../types';
-import { signInWithGoogle, signInWithGoogleForAffiliate } from '../utils/auth';
+import { signInWithGoogle, getGoogleLoginError } from '../utils/auth';
 import { getClientGeoLocation, getClientDeviceInfo, GeoLocationInfo } from '../utils/ipGeo';
 import { logAdminLogin } from '../utils/logger';
 import { updateSellerPresence } from '../firebase';
@@ -37,6 +37,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   if (!isOpen) return null;
 
   const handleGoogleLogin = async () => {
+    if (isLoading) return;
     setErrorMessage('');
     setIsLoading(true);
 
@@ -74,7 +75,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       setIsLoading(false);
       onLoginSuccess(authenticatedUser);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Có lỗi xảy ra khi xác thực Google. Vui lòng thử lại.');
+      setErrorMessage(getGoogleLoginError(err));
       setIsLoading(false);
     }
   };

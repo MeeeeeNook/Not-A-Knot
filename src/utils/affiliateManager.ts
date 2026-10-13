@@ -1,136 +1,11 @@
 import { AffiliateSystemConfig, SellerUser, StoredOrder } from '../types';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, query, where, limit } from 'firebase/firestore';
 
-export const AFFILIATE_COOKIE_NAME = 'nak_affiliate_ref';
+export { AFFILIATE_COOKIE_NAME, getActiveAffiliateReferral, setAffiliateReferral, clearAffiliateCookie, recordOrderOnAffiliateCookie } from './affiliateCookie';
+export type { StoredAffiliateCookie } from './affiliateCookie';
 export const AFFILIATE_SETTINGS_DOC = 'affiliate_config';
-export const DEFAULT_AFFILIATE_CONFIG: AffiliateSystemConfig = {
-  cookieDurationDays: 30,
-  defaultCommissionRate: 10
-};
-
-export interface StoredAffiliateCookie {
-  code: string;
-  clickedAt: string; // ISO string
-  expiresAt: string; // ISO string
-  maxOrders?: number; // 1 = first order only (default), 2, 3... or 0 for unlimited
-  orderCount?: number; // Number of orders already placed in this cookie session
-}
-
-/**
- * Read the active affiliate referral from cookies.
- * Automatically checks for expiration.
- */
-export function getActiveAffiliateReferral(): StoredAffiliateCookie | null {
-  if (typeof document === 'undefined') return null;
-  try {
-    const match = document.cookie.match(new RegExp('(^| )' + AFFILIATE_COOKIE_NAME + '=([^;]+)'));
-    if (!match || !match[2]) return null;
-
-    const raw = decodeURIComponent(match[2]);
-    const parsed: StoredAffiliateCookie = JSON.parse(raw);
-    if (!parsed || !parsed.code || !parsed.expiresAt) return null;
-
-    const expiresMs = new Date(parsed.expiresAt).getTime();
-    if (isNaN(expiresMs) || Date.now() > expiresMs) {
-      // Expired: clear cookie
-      clearAffiliateCookie();
-      return null;
-    }
-
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Set or update the affiliate referral cookie with configured duration and max orders (Last-Click Priority).
- * @param code Unique affiliate referral code
- * @param durationDays Number of days the cookie is active
- * @param maxOrders Max orders allowed for this cookie session: 1 = first order only (default), 2, 3... or 0 for unlimited.
- */
-export function setAffiliateReferral(code: string, durationDays: number = 30, maxOrders: number = 1): void {
-  if (typeof document === 'undefined') return;
-  const cleanCode = (code || '').trim().toUpperCase();
-  if (!cleanCode) return;
-
-  const validDays = Number.isFinite(durationDays) && durationDays > 0 ? durationDays : 30;
-  const now = new Date();
-  const expiresDate = new Date(now.getTime() + validDays * 24 * 60 * 60 * 1000);
-
-  const cookiePayload: StoredAffiliateCookie = {
-    code: cleanCode,
-    clickedAt: now.toISOString(),
-    expiresAt: expiresDate.toISOString(),
-    maxOrders: typeof maxOrders === 'number' ? maxOrders : 1,
-    orderCount: 0
-  };
-
-  const serialized = encodeURIComponent(JSON.stringify(cookiePayload));
-  const maxAgeSec = Math.floor(validDays * 24 * 60 * 60);
-
-  // Set with SameSite=Lax and max-age so it persists across refreshes and pages
-  document.cookie = `${AFFILIATE_COOKIE_NAME}=${serialized}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
-}
-
-/**
- * Clear the affiliate referral cookie.
- */
-export function clearAffiliateCookie(): void {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${AFFILIATE_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
-}
-
-/**
- * Record an order placed under this cookie session.
- * Depending on maxOrders:
- * - maxOrders === 0 (unlimited): never clears cookie, increments orderCount.
- * - maxOrders > 1: increments orderCount, clears only when orderCount reaches maxOrders.
- * - maxOrders === 1 (default): clears cookie after first order.
- */
-export function recordOrderOnAffiliateCookie(overrideMaxOrders?: number): { shouldClear: boolean; orderCount: number } {
-  const active = getActiveAffiliateReferral();
-  if (!active) {
-    return { shouldClear: true, orderCount: 0 };
-  }
-
-  const effectiveMax = overrideMaxOrders !== undefined
-    ? overrideMaxOrders
-    : (active.maxOrders !== undefined ? active.maxOrders : 1);
-
-  const newOrderCount = (active.orderCount || 0) + 1;
-
-  // Case 1: Unlimited orders during cookie period
-  if (effectiveMax === 0) {
-    active.orderCount = newOrderCount;
-    if (typeof document !== 'undefined') {
-      const remainingMs = new Date(active.expiresAt).getTime() - Date.now();
-      const maxAgeSec = Math.max(1, Math.floor(remainingMs / 1000));
-      const serialized = encodeURIComponent(JSON.stringify(active));
-      document.cookie = `${AFFILIATE_COOKIE_NAME}=${serialized}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
-    }
-    return { shouldClear: false, orderCount: newOrderCount };
-  }
-
-  // Case 2: Configured multiple orders (e.g. 2, 3, 5...)
-  if (effectiveMax > 1) {
-    if (newOrderCount < effectiveMax) {
-      active.orderCount = newOrderCount;
-      if (typeof document !== 'undefined') {
-        const remainingMs = new Date(active.expiresAt).getTime() - Date.now();
-        const maxAgeSec = Math.max(1, Math.floor(remainingMs / 1000));
-        const serialized = encodeURIComponent(JSON.stringify(active));
-        document.cookie = `${AFFILIATE_COOKIE_NAME}=${serialized}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
-      }
-      return { shouldClear: false, orderCount: newOrderCount };
-    }
-  }
-
-  // Case 3: Reached quota or standard 1-order only: Clear cookie
-  clearAffiliateCookie();
-  return { shouldClear: true, orderCount: newOrderCount };
-}
+export const DEFAULT_AFFILIATE_CONFIG: AffiliateSystemConfig = { cookieDurationDays: 30, defaultCommissionRate: 10 };
 
 export interface AffiliateClickRecord {
   id?: string;
@@ -293,30 +168,29 @@ export async function fetchAffiliateByCode(code: string): Promise<SellerUser | n
   const clean = (code || '').trim().toUpperCase();
   if (!clean) return null;
 
+  // Public shoppers cannot read private seller documents. The server returns only
+  // referral/commission settings, keeping Google email and payment data private.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(`/api/affiliate?code=${encodeURIComponent(clean)}`, { signal: controller.signal });
+    if (response.ok) {
+      const result = await response.json();
+      return result.affiliate || null;
+    }
+  } catch {} finally { clearTimeout(timer); }
+  if (!auth.currentUser) return null;
+  // Signed-in admin fallback for local/offline previews; never enumerate accounts.
   try {
     const colRef = collection(db, 'sellers');
-    // First query by affiliateCode
-    const q = query(colRef, where('affiliateCode', '==', clean), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const data = snap.docs[0].data() as SellerUser;
-      return { id: snap.docs[0].id, ...data };
-    }
-
-    // Fallback: search in sellers collection
-    const allSnap = await getDocs(colRef);
-    for (const d of allSnap.docs) {
-      const data = d.data() as SellerUser;
-      if (
-        (data.affiliateCode && data.affiliateCode.toUpperCase().trim() === clean) ||
-        (data.role === 'affiliate' && data.username && data.username.toUpperCase().trim() === clean)
-      ) {
-        return { id: d.id, ...data };
+    for (const [field, value] of [['affiliateCode', clean], ['username', clean.toLowerCase()]]) {
+      const snap = await getDocs(query(colRef, where(field, '==', value), limit(1)));
+      if (!snap.empty) {
+        const data = snap.docs[0].data() as SellerUser;
+        if (data.isActive !== false && (data.role === 'affiliate' || data.affiliateCode)) return { ...data, id: snap.docs[0].id };
       }
     }
-  } catch (err) {
-    console.warn('[Affiliate] Error looking up affiliate by code:', err);
-  }
+  } catch {}
 
   return null;
 }

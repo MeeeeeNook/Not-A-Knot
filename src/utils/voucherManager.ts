@@ -1,4 +1,7 @@
 import { Voucher } from '../types';
+import { calculateVoucherStack, INVALID_VOUCHER_MESSAGE, type VoucherCartItemContext, type VoucherValidationResult } from './voucherCalculation';
+export { calculateVoucherStack, isProductEligibleForVoucher } from './voucherCalculation';
+export type { VoucherCartItemContext, VoucherValidationResult } from './voucherCalculation';
 export type { Voucher };
 import { db, cleanFirestoreData } from '../firebase';
 import {
@@ -305,16 +308,6 @@ export async function deleteVoucher(voucherId: string): Promise<void> {
   } catch {}
 }
 
-export interface VoucherValidationResult {
-  isValid: boolean;
-  voucher?: Voucher;
-  discountAmount: number;
-  isFreeShipping: boolean;
-  message?: string;
-  eligibleItemCount?: number;
-  discountedItemCount?: number;
-}
-
 /**
  * Calculate total usage count for a voucher from cache and stored orders
  */
@@ -386,239 +379,12 @@ export async function incrementVouchersUsage(voucherCodes: string[]): Promise<vo
   }
 }
 
-export interface VoucherCartItemContext {
-  product: {
-    id: string;
-    name: string;
-    price: number;
-    applyAllVouchers?: boolean;
-    applicableVoucherIds?: string[];
-    disallowedVoucherIds?: string[];
-    [key: string]: any;
-  };
-  quantity: number;
-  selectedCharmPrice?: number;
-  selectedOmamoriPrice?: number;
-  selectedKhoenPrice?: number;
-  customPhotoPrice?: number;
-  [key: string]: any;
-}
-
-/**
- * Check if a specific product is eligible for a given voucher
- */
-export function isProductEligibleForVoucher(
-  product: VoucherCartItemContext['product'],
-  voucher: Voucher
-): boolean {
-  if (!product || !voucher) return false;
-
-  const cleanVoucherCode = voucher.code.toUpperCase().trim();
-
-  // 1. Kiểm tra cấu hình từ phía Voucher (Nếu voucher chỉ áp dụng cho một số sản phẩm)
-  if (voucher.applyToAllProducts === false || (voucher.applicableProductIds && voucher.applicableProductIds.length > 0)) {
-    const allowedProducts = voucher.applicableProductIds || [];
-    if (!allowedProducts.includes(product.id)) {
-      return false;
-    }
-  }
-
-  // 2. Kiểm tra cấu hình từ phía Sản Phẩm (Nếu sản phẩm chỉ cho phép một số mã giảm giá)
-  if (product.applyAllVouchers === false) {
-    const allowedVouchers = (product.applicableVoucherIds || []).map((v) => String(v).toUpperCase().trim());
-    const isAllowed = allowedVouchers.includes(voucher.id.toUpperCase().trim()) || allowedVouchers.includes(cleanVoucherCode);
-    if (!isAllowed) {
-      return false;
-    }
-  }
-
-  // 3. Kiểm tra danh sách voucher bị vô hiệu hóa riêng cho sản phẩm này (nếu có)
-  if (product.disallowedVoucherIds && product.disallowedVoucherIds.length > 0) {
-    const disallowedVouchers = product.disallowedVoucherIds.map((v) => String(v).toUpperCase().trim());
-    if (disallowedVouchers.includes(voucher.id.toUpperCase().trim()) || disallowedVouchers.includes(cleanVoucherCode)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Validate a voucher code against order context (subtotal, shippingFee, and optional cartItems)
- */
-export function validateVoucherCode(
-  code: string,
-  vouchers: Voucher[],
-  subtotal: number,
-  shippingFee: number = 0,
-  cartItems?: VoucherCartItemContext[]
-): VoucherValidationResult {
+/** Validate a single code using the same product policy as multi-code checkout. */
+export function validateVoucherCode(code: string, vouchers: Voucher[], subtotal: number, shippingFee = 0, cartItems?: VoucherCartItemContext[]): VoucherValidationResult {
   const cleanCode = code.toUpperCase().trim();
-  if (!cleanCode) {
-    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Vui lòng nhập mã voucher.' };
-  }
-
-  if (cleanCode === 'GIAM100K') {
-    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Đây chỉ là ví dụ thôi hahahahaha' };
-  }
-
+  if (!cleanCode) return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Vui lòng nhập mã voucher.' };
+  if (cleanCode === 'GIAM100K') return { isValid: false, discountAmount: 0, isFreeShipping: false, message: 'Đây chỉ là ví dụ thôi hahahahaha' };
   const voucher = vouchers.find((v) => v.code.toUpperCase().trim() === cleanCode);
-  if (!voucher) {
-    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-  }
-
-  if (!voucher.isActive) {
-    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-  }
-
-  // Kiểm tra giới hạn số lượt dùng (Toàn hệ thống)
-  const currentUses = getVoucherUsedCount(voucher);
-  if (voucher.usageLimit && voucher.usageLimit > 0 && currentUses >= voucher.usageLimit) {
-    return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-  }
-
-  const now = new Date();
-  if (voucher.startDate) {
-    const start = new Date(voucher.startDate);
-    // Compare at beginning of start day
-    start.setHours(0, 0, 0, 0);
-    if (now < start) {
-      return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-    }
-  }
-
-  if (voucher.endDate) {
-    const end = new Date(voucher.endDate);
-    // End date valid until end of day 23:59:59
-    end.setHours(23, 59, 59, 999);
-    if (now > end) {
-      return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-    }
-  }
-
-  if (voucher.minOrderValue && voucher.minOrderValue > 0) {
-    if (subtotal < voucher.minOrderValue) {
-      return {
-        isValid: false,
-        discountAmount: 0,
-        isFreeShipping: false,
-        message: VOUCHER_CLIENT_ERROR_MESSAGE
-      };
-    }
-  }
-
-  // Filter items in cart that are eligible for this voucher
-  const hasCartItems = Boolean(cartItems && cartItems.length > 0);
-  const eligibleItems = hasCartItems
-    ? (cartItems || []).filter((item) => isProductEligibleForVoucher(item.product, voucher))
-    : [];
-
-  // If cart is provided but has zero eligible products
-  if (hasCartItems && eligibleItems.length === 0) {
-    return {
-      isValid: false,
-      voucher,
-      discountAmount: 0,
-      isFreeShipping: false,
-      message: VOUCHER_CLIENT_ERROR_MESSAGE
-    };
-  }
-
-  if (voucher.type === 'freeship') {
-    // Freeship voucher covers the full shipping fee
-    return {
-      isValid: true,
-      voucher,
-      discountAmount: 0,
-      isFreeShipping: true,
-      message: 'Áp dụng miễn phí vận chuyển thành công!'
-    };
-  }
-
-  if (voucher.type === 'percent') {
-    const percent = voucher.discountPercent || 0;
-    if (percent <= 0) {
-      return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
-    }
-
-    let calculatedDiscount = 0;
-    let discountedItemCount = 0;
-    const maxQty = voucher.maxApplicableQuantity && voucher.maxApplicableQuantity > 0
-      ? Number(voucher.maxApplicableQuantity)
-      : 0;
-
-    if (hasCartItems) {
-      // Calculate unit price helper
-      const getItemUnitPrice = (item: VoucherCartItemContext) => {
-        return (
-          Number(item.product.price) +
-          (Number(item.selectedCharmPrice) || 0) +
-          (Number(item.selectedOmamoriPrice) || 0) +
-          (Number(item.selectedKhoenPrice) || 0) +
-          (Number(item.customPhotoPrice) || 0)
-        );
-      };
-
-      if (maxQty > 0) {
-        // Có giới hạn số lượng sản phẩm được giảm:
-        // Sắp xếp các sản phẩm đủ điều kiện theo đơn giá giảm dần để khách hàng được hưởng ưu đãi tốt nhất
-        const sortedEligible = [...eligibleItems].sort((a, b) => getItemUnitPrice(b) - getItemUnitPrice(a));
-        let remainingQuota = maxQty;
-        let discountableSubtotal = 0;
-
-        for (const item of sortedEligible) {
-          if (remainingQuota <= 0) break;
-          const unitPrice = getItemUnitPrice(item);
-          const qtyToDiscount = Math.min(item.quantity, remainingQuota);
-          discountableSubtotal += unitPrice * qtyToDiscount;
-          discountedItemCount += qtyToDiscount;
-          remainingQuota -= qtyToDiscount;
-        }
-
-        calculatedDiscount = Math.round((discountableSubtotal * percent) / 100);
-      } else {
-        // Không giới hạn số lượng: áp dụng cho tất cả sản phẩm đủ điều kiện
-        let discountableSubtotal = 0;
-        for (const item of eligibleItems) {
-          const unitPrice = getItemUnitPrice(item);
-          discountableSubtotal += unitPrice * item.quantity;
-          discountedItemCount += item.quantity;
-        }
-        calculatedDiscount = Math.round((discountableSubtotal * percent) / 100);
-      }
-    } else {
-      // Fallback khi không truyền cartItems (tính trên subtotal)
-      calculatedDiscount = Math.round((subtotal * percent) / 100);
-    }
-
-    if (voucher.maxDiscountAmount && voucher.maxDiscountAmount > 0) {
-      calculatedDiscount = Math.min(calculatedDiscount, voucher.maxDiscountAmount);
-    }
-    calculatedDiscount = Math.min(calculatedDiscount, subtotal);
-
-    // Xây dựng thông báo trực quan rõ ràng
-    let successMessage = `Giảm ${percent}% (-${calculatedDiscount.toLocaleString('vi-VN')}đ)`;
-    if (hasCartItems && maxQty > 0) {
-      const totalEligibleUnits = eligibleItems.reduce((acc, it) => acc + it.quantity, 0);
-      if (totalEligibleUnits > maxQty) {
-        successMessage = `Giảm ${percent}% cho ${discountedItemCount} sản phẩm (tối đa ${maxQty} SP / đơn) (-${calculatedDiscount.toLocaleString('vi-VN')}đ)`;
-      } else {
-        successMessage = `Giảm ${percent}% cho ${discountedItemCount} sản phẩm áp dụng (-${calculatedDiscount.toLocaleString('vi-VN')}đ)`;
-      }
-    } else if (hasCartItems && (voucher.applyToAllProducts === false || eligibleItems.length < (cartItems?.length || 0))) {
-      successMessage = `Giảm ${percent}% cho các sản phẩm áp dụng (-${calculatedDiscount.toLocaleString('vi-VN')}đ)`;
-    }
-
-    return {
-      isValid: true,
-      voucher,
-      discountAmount: calculatedDiscount,
-      isFreeShipping: false,
-      message: successMessage,
-      eligibleItemCount: eligibleItems.length,
-      discountedItemCount
-    };
-  }
-
-  return { isValid: false, discountAmount: 0, isFreeShipping: false, message: VOUCHER_CLIENT_ERROR_MESSAGE };
+  if (!voucher) return { isValid: false, discountAmount: 0, isFreeShipping: false, message: INVALID_VOUCHER_MESSAGE };
+  return calculateVoucherStack([{ ...voucher, usageCount: getVoucherUsedCount(voucher) }], subtotal, shippingFee, cartItems).results[0];
 }

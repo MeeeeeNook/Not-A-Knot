@@ -1,3 +1,4 @@
+import { resolveGoogleAccess, GOOGLE_ACCESS_DENIED, withDeadline } from './googleAccess';
 import { SellerUser, AuthorizedSellerItem } from '../types';
 import { safeTimeoutSignal } from './timeoutSignal';
 import { getAuth, signInAnonymously } from 'firebase/auth';
@@ -305,6 +306,26 @@ export const loginWithServer = async (
  * Strictly blocks any Google account that is not verified in the admin whitelist or Firestore sellers.
  * Other users must be in sellers list (created/linked by root admin).
  */
+const recentGoogleRejections = new Map<string, number>();
+export function rejectGoogleAccess(user: { uid: string; email?: string | null; displayName?: string | null }, error = GOOGLE_ACCESS_DENIED, logAttempt = true) {
+  clearAdminSession();
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('nak_auth_error', { detail: error }));
+  const now = Date.now();
+  if (logAttempt && now - (recentGoogleRejections.get(user.uid) || 0) > 3000) {
+    recentGoogleRejections.set(user.uid, now);
+    const device = getClientDeviceInfo();
+    void recordUnauthorizedLoginAttempt({ email: (user.email || '').trim().toLowerCase(), name: user.displayName || '', ip: 'Unknown', location: 'Vietnam', device: `${device.browser} trên ${device.os}`, reason: error }).catch(() => {});
+  }
+  void signOutFirebaseAuth().catch(() => {});
+}
+
+export function getGoogleLoginError(error: { code?: string; message?: string }) {
+  if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') return 'Bạn đã đóng cửa sổ Google. Đăng nhập chưa hoàn tất; hãy bấm đăng nhập để thử lại.';
+  if (error?.code === 'auth/popup-blocked') return 'Trình duyệt đã chặn cửa sổ Google. Vui lòng cho phép popup để đăng nhập.';
+  if (error?.code === 'auth/unauthorized-domain' || error?.message?.includes('unauthorized-domain')) return 'Đăng nhập Google chưa được cấu hình cho tên miền này. Vui lòng liên hệ quản trị viên.';
+  return 'Đăng nhập Google không thành công. Vui lòng thử lại.';
+}
+
 export const signInWithGoogle = async (): Promise<{ success: boolean; user?: SellerUser; error?: string }> => {
   try {
     const fbUser = await signInWithGooglePopup();
@@ -313,102 +334,13 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     // 1. Check if the user is in the authorized Root Admin whitelist
     const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
 
-    let isAuthorized = isRoot;
-    let matchedAuthEmail: AuthorizedSellerItem | null = null;
-    let matchedSeller: SellerUser | null = null;
-
-    if (!isRoot) {
-      // Fast check with authoritative server in ~30ms to prevent endless spinner on unauthorized accounts
-      try {
-        const resp = await fetch('/api/auth/verify-google-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-          signal: safeTimeoutSignal(2500)
-        });
-        if (resp.ok) {
-          const checkData = await resp.json();
-          if (checkData.isAuthorized) {
-            isAuthorized = true;
-            if (checkData.seller) matchedSeller = checkData.seller;
-            if (checkData.role) matchedAuthEmail = { email, role: checkData.role, isActive: true, addedBy: 'admin', createdAt: '' };
-          } else {
-            // AUTHORITATIVE REJECTION FROM SERVER: User is NOT authorized
-            // Asynchronously log unauthorized attempt in background without blocking user UI
-            void (async () => {
-              try {
-                const dev = getClientDeviceInfo();
-                await recordUnauthorizedLoginAttempt({
-                  email,
-                  name: fbUser.displayName || '',
-                  ip: 'Unknown',
-                  location: 'Vietnam',
-                  device: `${dev.browser} trên ${dev.os}`,
-                  reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
-                });
-              } catch {}
-            })();
-
-            // Instant fire-and-forget background sign out
-            signOutFirebaseAuth().catch(() => {});
-
-            return {
-              success: false,
-              error: 'Tài khoản không tồn tại trong hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.'
-            };
-          }
-        }
-      } catch {
-        // Fallback to client query if server endpoint unreachable
-      }
-
-      // If server check wasn't conclusive, fallback to client Firestore query
-      if (!isAuthorized) {
-        try {
-          const authorizedList = await fetchAuthorizedSellersFromFirestore();
-          matchedAuthEmail = authorizedList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
-        } catch (authFetchErr) {
-          console.warn('Error checking authorized_sellers list:', authFetchErr);
-        }
-
-        try {
-          const fetchedSellersList = await fetchSellersFromFirestore();
-          matchedSeller = fetchedSellersList.find(s =>
-            (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-            (s.phone && s.phone.trim().toLowerCase() === email) ||
-            (s.username && s.username.trim().toLowerCase() === email) ||
-            ((s as any).email && (s as any).email.trim().toLowerCase() === email)
-          ) || null;
-        } catch (fetchErr) {
-          console.warn('Error fetching sellers during Google login check:', fetchErr);
-        }
-
-        isAuthorized = Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
-      }
+    const access = await resolveGoogleAccess(email, fbUser.uid, isRoot);
+    if (!access.isAuthorized) {
+      rejectGoogleAccess(fbUser, access.error, access.conclusive);
+      return { success: false, error: access.error || GOOGLE_ACCESS_DENIED };
     }
-
-    if (!isAuthorized) {
-      // Asynchronously log unauthorized attempt in background without blocking user UI
-      void (async () => {
-        try {
-          const dev = getClientDeviceInfo();
-          await recordUnauthorizedLoginAttempt({
-            email,
-            name: fbUser.displayName || '',
-            ip: 'Unknown',
-            location: 'Vietnam',
-            device: `${dev.browser} trên ${dev.os}`,
-            reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Admin cấp quyền)'
-          });
-        } catch {}
-      })();
-
-      signOutFirebaseAuth().catch(() => {});
-      return {
-        success: false,
-        error: 'Tài khoản không tồn tại trong hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.'
-      };
-    }
+    const matchedAuthEmail = access.role ? { role: access.role } : null;
+    let matchedSeller = access.seller || null;
 
     let assignedRole: SellerUser['role'] = 'member';
     if (isRoot) {
@@ -439,7 +371,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
           affiliateCode: resolvedAffiliateCode || matchedSeller.affiliateCode,
           linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
         };
-        await saveSellerToFirestore(updatedSeller);
+        void saveSellerToFirestore(updatedSeller).catch(() => {});
         matchedSeller = updatedSeller;
       } catch (linkErr) {
         console.warn('Could not auto-update linked Google email on seller document:', linkErr);
@@ -451,7 +383,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     const sellerUser: SellerUser = {
       id: matchedSeller?.id || `${assignedRole === 'affiliate' ? 'affiliate' : 'seller'}-${fbUser.uid.slice(0, 12)}`,
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
-      name: matchedSeller?.name || matchedAuthEmail?.name || defaultDisplayName,
+      name: matchedSeller?.name || defaultDisplayName,
       role: assignedRole,
       isRootAdmin: isRoot,
       isActive: matchedSeller ? matchedSeller.isActive !== false : true,
@@ -463,14 +395,20 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       linkedGoogleAt: matchedSeller?.linkedGoogleAt || nowIso,
       affiliateCode: resolvedAffiliateCode,
       commissionRate: matchedSeller?.commissionRate !== undefined ? matchedSeller.commissionRate : (assignedRole === 'affiliate' ? 10 : undefined),
-      paymentInfo: matchedSeller?.paymentInfo
+      paymentInfo: matchedSeller?.paymentInfo,
+      cookieDurationDays: matchedSeller?.cookieDurationDays,
+      maxOrdersPerCookieSession: matchedSeller?.maxOrdersPerCookieSession,
+      commissionModel: matchedSeller?.commissionModel,
+      productCommissions: matchedSeller?.productCommissions,
+      tieredCommissions: matchedSeller?.tieredCommissions
     };
 
     if (matchedSeller) {
-      await saveSellerToFirestore(sellerUser).catch(() => {});
+      void saveSellerToFirestore(sellerUser).catch(() => {});
     }
 
-    const token = await fbUser.getIdToken();
+    const token = await withDeadline(fbUser.getIdToken(), 2500, '');
+    if (!token) return { success: false, error: 'Không thể hoàn tất phiên đăng nhập. Vui lòng thử lại.' };
     saveAdminSession(token, sellerUser, true);
 
     return { success: true, user: sellerUser };
@@ -483,17 +421,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       console.warn('Google Sign-In Notice:', err?.message || err);
     }
 
-    let msg = 'Đăng nhập Google qua Firebase thất bại.';
-    if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('unauthorized-domain'))) {
-      msg = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
-    } else if (isNormalCancel) {
-      msg = 'Cửa sổ đăng nhập Google đã được đóng.';
-    } else if (err?.code === 'auth/popup-blocked') {
-      msg = 'Trình duyệt đã chặn popup. Vui lòng cho phép popup để đăng nhập bằng Google.';
-    } else if (err?.message) {
-      msg = err.message;
-    }
-    return { success: false, error: msg };
+    return { success: false, error: getGoogleLoginError(err) };
   }
 };
 
@@ -512,87 +440,13 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
     let matchedSeller: SellerUser | null = null;
     let isValidAffiliate = isRoot;
 
-    if (!isRoot) {
-      // 1. Fast check with server in ~30ms
-      try {
-        const resp = await fetch('/api/auth/verify-google-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-          signal: safeTimeoutSignal(2500)
-        });
-        if (resp.ok) {
-          const checkData = await resp.json();
-          if (checkData.isAuthorized && (checkData.seller?.role === 'affiliate' || checkData.seller?.affiliateCode || checkData.isRoot)) {
-            isValidAffiliate = true;
-            if (checkData.seller) matchedSeller = checkData.seller;
-          } else if (checkData.isAuthorized === false) {
-            // Fast authoritative rejection
-            void (async () => {
-              try {
-                const dev = getClientDeviceInfo();
-                await recordUnauthorizedLoginAttempt({
-                  email,
-                  name: fbUser.displayName || '',
-                  ip: 'Unknown',
-                  location: 'Vietnam',
-                  device: `${dev.browser} trên ${dev.os}`,
-                  reason: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate'
-                });
-              } catch {}
-            })();
-
-            signOutFirebaseAuth().catch(() => {});
-            return {
-              success: false,
-              error: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate. Vui lòng liên hệ Admin để được cấp quyền.'
-            };
-          }
-        }
-      } catch {}
-
-      // Fallback: check Firestore sellers
-      if (!isValidAffiliate) {
-        let sellers: SellerUser[] = [];
-        try {
-          sellers = await fetchSellersFromFirestore();
-        } catch (e) {
-          console.warn('Error fetching sellers for affiliate Google login:', e);
-        }
-
-        matchedSeller = sellers.find(s =>
-          (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-          ((s as any).email && (s as any).email.trim().toLowerCase() === email) ||
-          (s.googleUid && s.googleUid === fbUser.uid) ||
-          (s.username && s.username.trim().toLowerCase() === email.split('@')[0])
-        ) || null;
-
-        isValidAffiliate = Boolean(matchedSeller) &&
-          matchedSeller?.isActive !== false &&
-          (matchedSeller?.role === 'affiliate' || Boolean(matchedSeller?.affiliateCode));
-      }
-    }
-
+    const access = await resolveGoogleAccess(email, fbUser.uid, isRoot);
+    matchedSeller = access.seller || null;
+    isValidAffiliate = access.isAuthorized && (isRoot || access.role === 'affiliate' || Boolean(matchedSeller?.affiliateCode));
     if (!isValidAffiliate) {
-      void (async () => {
-        try {
-          const dev = getClientDeviceInfo();
-          await recordUnauthorizedLoginAttempt({
-            email,
-            name: fbUser.displayName || '',
-            ip: 'Unknown',
-            location: 'Vietnam',
-            device: `${dev.browser} trên ${dev.os}`,
-            reason: 'Tài khoản không tồn tại trong danh sách Affiliate (chưa được Admin thêm)'
-          });
-        } catch {}
-      })();
-
-      signOutFirebaseAuth().catch(() => {});
-      return {
-        success: false,
-        error: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate. Vui lòng liên hệ Admin để được cấp quyền.'
-      };
+      const error = access.error || 'Tài khoản chưa được cấp quyền đối tác Affiliate.';
+      rejectGoogleAccess(fbUser, error, access.conclusive);
+      return { success: false, error };
     }
 
     let finalUser: SellerUser;
