@@ -819,16 +819,12 @@ export const CartPage: React.FC<CartPageProps> = ({
 
         if (result.success && result.order) {
           confirmedOrder = result.order;
-        } else if (!result.serverUnavailable) {
-          setSubmissionStep('error');
-          setSubmissionError(result.error || 'Chưa thể ghi nhận đơn hàng. Vui lòng thử lại.');
-          return;
         }
       } catch (serverErr) {
         console.warn('[CartPage] Server submit notice, trying fallback save:', serverErr);
       }
 
-      // 2. Fallback to direct saveOrderToFirestore if server was unreachable
+      // 2. Preserve the original direct-save fallback when the API cannot accept the order.
       if (!confirmedOrder) {
         try {
           if (!isAdminPlacingOrder && activeRef?.code && !orderData.affiliateCommissionAmount) {
