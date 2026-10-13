@@ -831,7 +831,7 @@ export const recordOperation = (type: 'read' | 'write' | 'delete', count = 1, de
 // Order Entity & Interfaces
 // ----------------------------------------------------
 export interface StoredOrder {
-  id: string;
+  id?: string;
   orderCode?: string;
   date?: string;
   createdAt?: string;
@@ -861,7 +861,7 @@ export interface StoredOrder {
   source?: 'website' | 'facebook' | 'shopee' | 'tiktok' | 'offline' | 'instagram' | 'zalo' | 'hotline' | 'other' | 'mạng xã hội' | 'trực tiếp';
   type: 'preorder_0209' | 'standard_order' | 'manual_order';
   isManual?: boolean;
-  status: string;
+  status?: string;
   paymentMethod?: 'bank_transfer' | 'cod' | 'cash' | 'other';
   paymentStatus?: 'paid' | 'unpaid' | 'partial';
   bankReceiptImage?: string;
@@ -890,6 +890,7 @@ export interface StoredOrder {
   affiliateCommissionRate?: number;
   affiliateCommissionAmount?: number;
   affiliateMerchandiseValue?: number;
+  isAdminPlacingOrder?: boolean;
 }
 
 // In-memory cache for ultra-fast reads
