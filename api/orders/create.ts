@@ -16,6 +16,7 @@ import {
   updateDoc,
   increment
 } from 'firebase/firestore';
+import { calculateVoucherStack, getProductPercentVoucherLimit, type VoucherCartItemContext } from '../../src/utils/voucherCalculation.ts';
 import { PRODUCTS } from '../../src/data/products.ts';
 import { DEFAULT_INITIAL_VOUCHERS } from '../../src/utils/voucherManager.ts';
 import { calculateShippingFee, VIETNAM_PROVINCES } from '../../src/data/vietnamLocations.ts';
@@ -244,14 +245,14 @@ export async function getAuthoritativeProduct(productId: string): Promise<any | 
   try {
     if (hasAdminCredentials()) {
       const snap = await getAdminDb().collection('products').doc(cleanId).get();
-      if (snap.exists) return snap.data();
+      if (snap.exists) return { ...snap.data(), id: snap.id || cleanId };
     }
     const { db } = getClientInstances();
     const snap = await Promise.race([
       getDoc(doc(db, 'products', cleanId)),
       new Promise<any>((res) => setTimeout(() => res(null), 1500))
     ]);
-    if (snap && typeof snap.exists === 'function' && snap.exists()) return snap.data();
+    if (snap && typeof snap.exists === 'function' && snap.exists()) return { ...snap.data(), id: snap.id || cleanId };
   } catch (err) {
     console.warn(`[Create Order API] Firestore read notice for product ${cleanId}:`, err);
   }
@@ -360,12 +361,12 @@ export async function getAuthoritativeVoucher(code: string): Promise<any | null>
     if (hasAdminCredentials()) {
       const col = getAdminDb().collection('vouchers');
       const snap = await col.where('code', '==', cleanCode).limit(1).get();
-      if (!snap.empty) return snap.docs[0].data();
+      if (!snap.empty) return { ...snap.docs[0].data(), id: snap.docs[0].id };
     }
     const { db } = getClientInstances();
     const q = query(collection(db, 'vouchers'), where('code', '==', cleanCode), limit(1));
     const snap = await getDocs(q);
-    if (!snap.empty) return snap.docs[0].data();
+    if (!snap.empty) return { ...snap.docs[0].data(), id: snap.docs[0].id };
   } catch (err) {
     console.warn(`[Create Order API] Firestore read notice for voucher ${cleanCode}:`, err);
   }
@@ -375,6 +376,22 @@ export async function getAuthoritativeVoucher(code: string): Promise<any | null>
   if (found) return found;
 
   return null;
+}
+
+// Read the existing root-only settings document. Product/client fields cannot raise this limit.
+async function getAuthoritativeProductVoucherLimits(): Promise<Record<string, number>> {
+  let timer: ReturnType<typeof setTimeout>;
+  const read = async () => {
+    if (hasAdminCredentials()) {
+      const snapshot = await getAdminDb().collection('system_settings').doc('product_voucher_limits').get();
+      return snapshot.exists ? snapshot.data()?.limits || {} : {};
+    }
+    const { db } = getClientInstances();
+    const snapshot = await getDoc(doc(db, 'system_settings', 'product_voucher_limits'));
+    return snapshot.exists() ? snapshot.data().limits || {} : {};
+  };
+  try { return await Promise.race([read(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Không thể xác minh chính sách voucher. Vui lòng thử lại.')), 3500); })]); }
+  finally { clearTimeout(timer!); }
 }
 
 async function findExistingOrder(orderId: string): Promise<any | null> {
@@ -701,6 +718,7 @@ export default async function handler(req: any, res: any) {
     // 6. Server-Side Authoritative Pricing Calculation
     let calculatedSubtotal = 0;
     const validatedItemDetails: any[] = [];
+    const voucherCartItems: VoucherCartItemContext[] = [];
     const itemsSummaryList: string[] = [];
 
     for (let i = 0; i < rawItemsList.length; i++) {
@@ -743,6 +761,7 @@ export default async function handler(req: any, res: any) {
           authoritativeBasePrice = fallbackPrice;
           authoritativeProductName = item.productName || item.name || 'Sản phẩm thủ công';
           authoritativeCategory = item.category || 'bracelets';
+          authoritativeProduct = { id: prodId, name: authoritativeProductName, price: authoritativeBasePrice, category: authoritativeCategory };
         } else {
           return res.status(400).json({
             success: false,
@@ -865,6 +884,7 @@ export default async function handler(req: any, res: any) {
       const authoritativeUnitPrice = authoritativeBasePrice + charmPriceDelta + omamoriPriceDelta + khoenPriceDelta + customPhotoPriceDelta;
       const itemTotalPrice = authoritativeUnitPrice * rawQuantity;
       calculatedSubtotal += itemTotalPrice;
+      voucherCartItems.push({ product: { ...authoritativeProduct, price: authoritativeUnitPrice }, quantity: rawQuantity });
 
       // Build safe validated item representation
       validatedItemDetails.push({
@@ -907,86 +927,28 @@ export default async function handler(req: any, res: any) {
     const shippingInfo = calculateShippingFee(cleanProvince, cleanDistrict);
     let authoritativeShippingFee = shippingInfo.fee;
 
-    // 8. Authoritative Voucher Validation & Discount
-    let authoritativeDiscountAmount = 0;
-    const appliedVouchers: any[] = [];
-    const rawCodesToTest: string[] = [];
-
-    if (Array.isArray(voucherCodes)) {
-      rawCodesToTest.push(...voucherCodes.map(String));
-    } else if (typeof voucherCode === 'string') {
-      rawCodesToTest.push(...voucherCode.split('+').map((s) => s.trim()));
-    }
-
+    // 8. Recalculate vouchers with trusted product policy and the same engine as checkout.
+    const rawCodesToTest = Array.isArray(voucherCodes) ? voucherCodes.map(String) : typeof voucherCode === 'string' ? voucherCode.split('+') : [];
+    const requestedVouchers: any[] = [];
     for (const rawCode of rawCodesToTest) {
       const cleanCode = rawCode.trim().toUpperCase();
       if (!cleanCode) continue;
-
       const voucher = await getAuthoritativeVoucher(cleanCode);
-      if (!voucher) {
-        return res.status(400).json({
-          success: false,
-          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-        });
-      }
-
-      if (voucher.isActive === false) {
-        return res.status(400).json({
-          success: false,
-          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-        });
-      }
-
-      const now = new Date();
-      if (voucher.startDate && now < new Date(voucher.startDate)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-        });
-      }
-
-      if (voucher.endDate) {
-        const end = new Date(voucher.endDate);
-        end.setHours(23, 59, 59, 999);
-        if (now > end) {
-          return res.status(400).json({
-            success: false,
-            error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-          });
-        }
-      }
-
-      if (voucher.minOrderValue && calculatedSubtotal < Number(voucher.minOrderValue)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-        });
-      }
-
-      const usedTotal = Math.max(Number(voucher.usageCount) || 0, Number(voucher.usedCount) || 0);
-      if (voucher.usageLimit && Number(voucher.usageLimit) > 0 && usedTotal >= Number(voucher.usageLimit)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Voucher không tồn tại/đã hết lượt sử dụng'
-        });
-      }
-
-      if (voucher.type === 'freeship') {
-        authoritativeShippingFee = 0;
-        appliedVouchers.push(voucher);
-      } else if (voucher.type === 'percent') {
-        const percent = Number(voucher.discountPercent) || 0;
-        let disc = Math.round((calculatedSubtotal * percent) / 100);
-        if (voucher.maxDiscountAmount && Number(voucher.maxDiscountAmount) > 0) {
-          disc = Math.min(disc, Number(voucher.maxDiscountAmount));
-        }
-        disc = Math.min(disc, calculatedSubtotal);
-        authoritativeDiscountAmount += disc;
-        appliedVouchers.push(voucher);
-      }
+      if (!voucher) return res.status(400).json({ success: false, error: 'Voucher không tồn tại/đã hết lượt sử dụng' });
+      requestedVouchers.push({ ...voucher, code: cleanCode });
     }
-
-    const authoritativeGrandTotal = Math.max(0, calculatedSubtotal + authoritativeShippingFee - authoritativeDiscountAmount);
+    const productVoucherLimits = requestedVouchers.some((voucher) => voucher.type === 'percent') ? await getAuthoritativeProductVoucherLimits() : {};
+    const trustedVoucherItems = voucherCartItems.map((item) => ({ ...item, product: {
+      ...item.product,
+      maxPercentVouchers: getProductPercentVoucherLimit({ maxPercentVouchers: Object.prototype.hasOwnProperty.call(productVoucherLimits, item.product.id) ? productVoucherLimits[item.product.id] : undefined })
+    } }));
+    const voucherStack = calculateVoucherStack(requestedVouchers, calculatedSubtotal, authoritativeShippingFee, trustedVoucherItems);
+    const invalidVoucher = voucherStack.results.find((result) => !result.isValid);
+    if (invalidVoucher) return res.status(400).json({ success: false, error: invalidVoucher.message });
+    const authoritativeDiscountAmount = voucherStack.discountAmount;
+    const appliedVouchers = voucherStack.appliedVouchers;
+    authoritativeShippingFee = voucherStack.shippingFee;
+    const authoritativeGrandTotal = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount) + authoritativeShippingFee;
 
     // 9. Price Drift Detection & Confirmation Flow
     if (expectedTotal !== undefined && expectedTotal !== null) {
@@ -1072,6 +1034,13 @@ export default async function handler(req: any, res: any) {
     } | null = null;
 
     let affiliateMaxOrdersPerSession = 1;
+    let affiliatePolicy: { code: string; maxOrders: number } | undefined;
+    let sessionOrderCount = 0;
+    try {
+      const match = req.headers.cookie?.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
+      const session = match ? JSON.parse(decodeURIComponent(match[1])) : null;
+      if (session?.code?.toUpperCase() === refCodeCandidate && Date.parse(session.expiresAt) > Date.now()) sessionOrderCount = Math.max(0, Number(session.orderCount) || 0);
+    } catch {}
 
     // If order is placed by verified staff/admin, strictly DO NOT attribute any affiliate commission (admin tự đặt đơn)
     if (isVerifiedStaffOrder) {
@@ -1082,6 +1051,8 @@ export default async function handler(req: any, res: any) {
         affiliateMaxOrdersPerSession = typeof matchedAff.maxOrdersPerCookieSession === 'number'
           ? matchedAff.maxOrdersPerCookieSession
           : 1;
+        affiliatePolicy = { code: refCodeCandidate, maxOrders: affiliateMaxOrdersPerSession };
+        if (affiliateMaxOrdersPerSession === 0 || sessionOrderCount < affiliateMaxOrdersPerSession) {
         const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
         const baseRate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
           ? matchedAff.commissionRate
@@ -1145,6 +1116,7 @@ export default async function handler(req: any, res: any) {
           affiliateCommissionAmount: commissionAmount,
           affiliateMerchandiseValue: merchandiseValue
         };
+        }
       }
     }
 
@@ -1214,34 +1186,8 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // Cookie Lifecycle: Manage referral cookie persistence according to affiliate's max orders configuration
-    if (!isVerifiedStaffOrder && attributedAffiliateData) {
-      // Use the authoritative profile, not the order attribution payload (which has no maxOrders).
-      // Checkout records the successful order on the surviving cookie client-side.
-      const maxOrders = affiliateMaxOrdersPerSession;
-
-      if (maxOrders === 0) {
-        // Unlimited orders: Keep cookie alive!
-      } else if (maxOrders > 1) {
-        // Configured count: check if quota exceeded
-        let currentCount = 0;
-        if (req.headers && req.headers.cookie) {
-          const m = req.headers.cookie.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
-          if (m && m[1]) {
-            try {
-              const parsed = JSON.parse(decodeURIComponent(m[1]));
-              currentCount = Number(parsed.orderCount) || 0;
-            } catch {}
-          }
-        }
-        if (currentCount + 1 >= maxOrders) {
-          res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
-        }
-      } else {
-        // Standard single first-order: clear cookie
-        res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
-      }
-    }
+    // Checkout updates the browser's per-affiliate history once using the verified
+    // policy and order ID. Keep exhausted sessions until the original expiry.
 
     return res.status(200).json({
       success: true,
@@ -1249,7 +1195,8 @@ export default async function handler(req: any, res: any) {
       orderId: orderId,
       trackingNumber: orderId,
       totalPrice: authoritativeGrandTotal,
-      affiliateAttributed: Boolean(attributedAffiliateData)
+      affiliateAttributed: Boolean(attributedAffiliateData),
+      affiliatePolicy
     });
   } catch (err: any) {
     console.error('[Create Order API] Internal error:', err?.message || err);

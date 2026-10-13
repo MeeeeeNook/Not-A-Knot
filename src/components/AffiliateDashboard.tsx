@@ -151,7 +151,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   const cookieDays = affiliateUser?.cookieDurationDays || systemConfig.cookieDurationDays || 30;
   const commissionRate = affiliateUser?.commissionRate ?? systemConfig.defaultCommissionRate;
   const maxOrders = affiliateUser?.maxOrdersPerCookieSession ?? 1;
-  const orderLimitLabel = maxOrders === 0 ? 'Không giới hạn trong thời hạn cookie' : maxOrders === 1 ? '1 đơn đầu tiên' : `Tối đa ${maxOrders} đơn mỗi lượt giới thiệu`;
+  const orderLimitLabel = maxOrders === 0 ? 'Không giới hạn trong thời hạn cookie' : maxOrders === 1 ? '1 đơn đầu tiên' : `Tối đa ${maxOrders} đơn trong thời hạn cookie`;
   const commissionModelLabel = affiliateUser?.commissionModel === 'by_product' ? 'Theo từng sản phẩm' : affiliateUser?.commissionModel === 'tiered' ? 'Theo giá trị từng đơn' : 'Tỷ lệ cố định';
 
   // Compute custom destination URL

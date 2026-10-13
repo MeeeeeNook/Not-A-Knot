@@ -35,7 +35,7 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
             ['Thời hạn ghi nhận', `${days} ngày`],
-            ['Số đơn mỗi lượt giới thiệu', limitLabel],
+            ['Số đơn trong thời hạn cookie', limitLabel],
             ['Cách tính hoa hồng', modelLabel],
             ['Tỷ lệ cơ bản', `${rate}%`]
           ].map(([label, value]) => (
@@ -63,15 +63,15 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
 
       <section className={card}>
         <h3 className="text-base font-bold text-neutral-900">2. Đơn hàng được ghi nhận cho ai?</h3>
-        <p><strong>Ưu tiên lượt nhấp cuối (Last-click):</strong> nếu khách mở link của nhiều đối tác, mã trong link được mở gần nhất sẽ thay thế mã trước đó. Một lượt mở link giới thiệu mới cũng bắt đầu lại thời hạn và số đơn của lượt giới thiệu đó.</p>
+        <p><strong>Ưu tiên lượt nhấp cuối (Last-click):</strong> nếu khách mở link của nhiều đối tác, mã trong link được mở gần nhất sẽ thay thế mã trước đó. Thời hạn và số đơn được lưu riêng cho từng đối tác, tính từ lần mở link đầu tiên. Bấm lại cùng link khi thời hạn đó còn hiệu lực không reset bộ đếm hoặc kéo dài thời hạn.</p>
         <p><strong>Thời hạn của bạn: {days} ngày.</strong> Cookie lưu mã giới thiệu trong trình duyệt khách đã mở link. Khách quay lại bằng cùng trình duyệt vẫn có thể được ghi nhận khi cookie còn hạn và còn lượt đơn. Đổi thiết bị, đổi trình duyệt hoặc xóa/chặn cookie có thể làm mất thông tin giới thiệu.</p>
         <div className="rounded-xl bg-neutral-50 border border-neutral-200 p-4">
           <p className="font-semibold text-neutral-900">Số đơn áp dụng: {limitLabel}</p>
           <p className="mt-1">{maxOrders === 0
-            ? 'Sau mỗi lần đặt đơn, cookie tiếp tục được giữ đến khi hết hạn hoặc có lượt mở link giới thiệu mới.'
+            ? 'Các đơn tiếp tục được ghi nhận đến ngày hết hạn tính từ lần mở link đầu tiên. Bấm lại cùng link không đổi ngày hết hạn.'
             : maxOrders === 1
-              ? 'Sau khi đơn đầu tiên được đặt thành công, lượt giới thiệu này kết thúc và cookie được xóa. Khách cần mở lại link để bắt đầu lượt giới thiệu mới.'
-              : `Mỗi lần đặt đơn thành công sử dụng một lượt. Cookie được giữ đến khi đủ ${maxOrders} đơn hoặc hết hạn; đặt thêm đơn không tự kéo dài thời hạn.`}</p>
+              ? 'Chỉ đơn đầu tiên được ghi nhận trong thời hạn này. Bấm lại cùng link vẫn không được ghi nhận thêm; phải hết thời hạn cũ mới bắt đầu kỳ mới.'
+              : `Mỗi lần đặt đơn thành công sử dụng một lượt. Khi đủ ${maxOrders} đơn thì ngừng ghi nhận, dù khách bấm lại cùng link; đặt thêm đơn không tự kéo dài thời hạn.`}</p>
         </div>
         <p>Số lượt đơn được tính khi đặt hàng thành công, không phải khi giao hàng. Hủy đơn sau đó không tự khôi phục lượt đã dùng. Đơn do nhân sự đặt qua luồng quản trị không được ghi nhận hoa hồng tiếp thị.</p>
       </section>

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ArrowLeft, AlertCircle, HelpCircle, Lock, Share2 } from 'lucide-react';
 import { SellerUser } from '../types';
-import { signInWithGoogle, signInWithGoogleForAffiliate } from '../utils/auth';
+import { signInWithGoogle, getGoogleLoginError } from '../utils/auth';
 
 interface AdminLoginPageProps {
   onLoginSuccess: (user: SellerUser) => void;
@@ -21,6 +21,12 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   const [rememberMe, setRememberMe] = useState(true);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
+  useEffect(() => {
+    const report = (event: Event) => { setErrorMessage(String((event as CustomEvent).detail || 'Đăng nhập không thành công.')); setIsLoading(false); };
+    window.addEventListener('nak_auth_error', report);
+    return () => window.removeEventListener('nak_auth_error', report);
+  }, []);
+
   const handleGoogleSignIn = async () => {
     if (isLoading) return;
     setIsLoading(true);
@@ -31,31 +37,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
       if (res.success && res.user) {
         onLoginSuccess(res.user as SellerUser);
       } else {
-        let userSafeError = res.error || 'Đăng nhập không thành công. Vui lòng thử lại sau.';
-        if (userSafeError.includes('đã được đóng') || userSafeError.includes('cancelled-popup-request')) {
-          userSafeError = '';
-        }
-        setErrorMessage(userSafeError);
+        setErrorMessage(res.error || 'Đăng nhập không thành công. Vui lòng thử lại.');
       }
     } catch (err: any) {
-      const isNormalCancel =
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.code === 'auth/cancelled-popup-request';
-
-      if (!isNormalCancel) {
-        console.warn('Google Sign-In Notice:', err?.message || err);
-      }
-
-      let userSafeError = '';
-      if (!isNormalCancel) {
-        userSafeError = 'Đăng nhập không thành công. Vui lòng thử lại sau.';
-        if (err?.code === 'auth/popup-blocked') {
-          userSafeError = 'Trình duyệt đã chặn popup. Vui lòng cho phép mở cửa sổ đăng nhập.';
-        } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
-          userSafeError = 'Đăng nhập không thành công trên tên miền này. Vui lòng liên hệ quản trị viên.';
-        }
-      }
-      setErrorMessage(userSafeError);
+      setErrorMessage(getGoogleLoginError(err));
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +103,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
         {/* Error Notification Alert */}
         {errorMessage && (
-          <div className="mb-5 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 animate-fadeIn">
+          <div role="alert" className="mb-5 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-start gap-3 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1 font-normal leading-relaxed">
               {errorMessage}

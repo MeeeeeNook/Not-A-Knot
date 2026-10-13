@@ -160,6 +160,7 @@ export interface Product {
   soldCount?: number;
   isHidden?: boolean;
   customUrl?: string; // Optional custom redirect link (e.g. Shopee, external landing, affiliate)
+  maxPercentVouchers?: number; // Maximum percentage codes per unit: absent = 1, 0 = disabled. Root admin controls this.
   // Voucher eligibility settings for this product
   applyAllVouchers?: boolean; // Mặc định true (áp dụng tất cả các mã hợp lệ). Nếu false, chỉ áp dụng các mã trong applicableVoucherIds
   applicableVoucherIds?: string[]; // Danh sách ID hoặc mã voucher được phép áp dụng cho sản phẩm này

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ChevronsLeft, ArrowLeft, Wrench, Mail, ShieldAlert, 
   LayoutDashboard, ShoppingBag, PlusCircle, Ticket, Trash2, 
@@ -77,19 +77,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onLogout,
   onOpenSwitchSellerModal
 }) => {
-  const [showLogoutBtn, setShowLogoutBtn] = useState(false);
   const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState(false);
-  const userCardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (userCardRef.current && !userCardRef.current.contains(e.target as Node)) {
-        setShowLogoutBtn(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
 
   const handleItemClick = (tab: AdminTabType) => {
     onSwitchTab(tab);
@@ -171,56 +159,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           </div>
 
-          {/* User Profile Card - Morphs into Logout button on Hover (desktop) / Tap (mobile) */}
+          {/* Compact identity and an always-visible logout action. */}
           {currentSeller && (
-            <div
-              ref={userCardRef}
-              onClick={() => {
-                if (showLogoutBtn) {
-                  setIsConfirmLogoutOpen(true);
-                } else {
-                  setShowLogoutBtn(true);
-                }
-              }}
-              onMouseEnter={() => setShowLogoutBtn(true)}
-              onMouseLeave={() => setShowLogoutBtn(false)}
-              className="relative group mx-3 mt-2.5 rounded-xl border border-amber-200/80 hover:border-rose-400 overflow-hidden cursor-pointer select-none transition-all duration-200 shadow-2xs"
-              title="Rê chuột hoặc chạm vào để Đăng xuất"
-            >
-              {/* 1. Normal State: Clean, compact user information (Single lines, no awkward wraps) */}
-              <div className="px-3 py-2 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent space-y-0.5">
-                <div className="flex items-center justify-between gap-2 min-w-0">
-                  <span className="font-extrabold text-xs text-slate-900 truncate leading-tight">
-                    {currentSeller.name}
-                  </span>
-                  <span className="shrink-0 font-bold text-amber-900 text-[10px] px-1.5 py-0.5 rounded-md bg-amber-100 border border-amber-200/80 leading-none">
-                    {currentSeller.isRootAdmin ? 'Tổng bí thư' : (currentSeller.role === 'deputy_admin' ? 'Chủ tịch nước' : 'Bộ trưởng')}
-                  </span>
-                </div>
-                <div className="text-[11px] font-medium text-slate-600 truncate leading-tight">
-                  {currentSeller.googleEmail || currentSeller.username}
-                </div>
+            <div className="mx-3 mt-2.5 flex items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-extrabold text-slate-900" title={currentSeller.name}>{currentSeller.name}</p>
+                <p className="truncate text-[11px] text-slate-600" title={currentSeller.googleEmail || currentSeller.username}>{currentSeller.googleEmail || currentSeller.username}</p>
               </div>
-
-              {/* 2. Hover / Tap State: The entire card morphs into the Exit Button */}
-              {onLogout && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsConfirmLogoutOpen(true);
-                  }}
-                  className={`absolute inset-0 z-10 w-full h-full bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-extrabold text-xs flex items-center justify-center gap-2 rounded-xl shadow-inner transition-all duration-200 cursor-pointer ${
-                    showLogoutBtn
-                      ? 'opacity-100 pointer-events-auto scale-100'
-                      : 'opacity-0 pointer-events-none scale-98 group-hover:opacity-100 group-hover:pointer-events-auto group-hover:scale-100'
-                  }`}
-                  title="Đăng xuất khỏi trang quản trị"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Đăng xuất</span>
-                </button>
-              )}
+              {onLogout && <button type="button" onClick={() => setIsConfirmLogoutOpen(true)} title="Đăng xuất" aria-label="Đăng xuất khỏi trang quản trị" className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600"><LogOut className="h-3.5 w-3.5" /></button>}
             </div>
           )}
 

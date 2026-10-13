@@ -1,3 +1,6 @@
+import { resolveGoogleAccess } from './utils/googleAccess';
+import { rejectGoogleAccess } from './utils/auth';
+import { subscribeToProductVoucherLimits, type ProductVoucherLimits } from './utils/productVoucherPolicy';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { TopAnnouncementBar } from './components/TopAnnouncementBar';
@@ -189,7 +192,7 @@ export default function App() {
   });
 
   // Products state with fallback to local/hardcoded
-  const [products, setProducts] = useState<Product[]>(() => {
+  const [rawProducts, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem('nak_custom_products');
       if (saved) {
@@ -205,6 +208,12 @@ export default function App() {
   });
 
   const [isProductsLoading, setIsProductsLoading] = useState(true);
+
+  const [productVoucherLimits, setProductVoucherLimits] = useState<ProductVoucherLimits>({});
+  useEffect(() => subscribeToProductVoucherLimits(setProductVoucherLimits), []);
+  const products = useMemo(() => rawProducts.map((product) => ({
+    ...product, maxPercentVouchers: productVoucherLimits[product.id] ?? 1
+  })), [rawProducts, productVoucherLimits]);
 
   const productsRef = useRef<Product[]>(products);
   useEffect(() => {
@@ -397,6 +406,19 @@ export default function App() {
   }, [cartItems]);
 
   // Modal visibility states
+  useEffect(() => {
+    setCartItems((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const limit = productVoucherLimits[item.product.id] ?? 1;
+        if (item.product.maxPercentVouchers === limit) return item;
+        changed = true;
+        return { ...item, product: { ...item.product, maxPercentVouchers: limit } };
+      });
+      return changed ? next : prev;
+    });
+  }, [productVoucherLimits]);
+
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Flying product to cart animation states
@@ -488,16 +510,12 @@ export default function App() {
     // Capture Affiliate Referral link click (?ref=AN001) - Last Click Attribution
     const refCode = queryParams.get('ref') || searchParams.get('ref');
     if (refCode) {
-      import('./utils/affiliateManager').then(({ fetchAffiliateByCode, fetchAffiliateSystemConfig, setAffiliateReferral, recordAffiliateClick }) => {
-        Promise.all([
-          fetchAffiliateByCode(refCode).catch(() => null),
-          fetchAffiliateSystemConfig().catch(() => null)
-        ]).then(([affUser, cfg]) => {
-          const duration = affUser?.cookieDurationDays || cfg?.cookieDurationDays || 30;
-          const maxOrders = affUser?.maxOrdersPerCookieSession !== undefined ? affUser.maxOrdersPerCookieSession : 1;
-          setAffiliateReferral(refCode, duration, maxOrders);
-          recordAffiliateClick(refCode).catch(() => {});
-        });
+      import('./utils/affiliateManager').then(({ fetchAffiliateByCode, setAffiliateReferral, recordAffiliateClick }) => {
+        fetchAffiliateByCode(refCode).then((affUser) => {
+          if (!affUser || affUser.isActive === false) return;
+          setAffiliateReferral(refCode, affUser.cookieDurationDays || 30, affUser.maxOrdersPerCookieSession ?? 1);
+          void recordAffiliateClick(refCode).catch(() => {});
+        }).catch(() => {});
       });
     }
 
@@ -795,80 +813,15 @@ export default function App() {
 
         const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
         
-        let isAuthorized = isRoot;
-        let matchedAuthEmail: AuthorizedSellerItem | null = null;
-        let matchedSeller: SellerUser | null = null;
-
-        if (!isRoot) {
-          // Fast server verification in ~30ms to prevent lag on unauthorized attempts
-          try {
-            const resp = await fetch('/api/auth/verify-google-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email }),
-              signal: safeTimeoutSignal(2500)
-            });
-            if (resp.ok) {
-              const checkData = await resp.json();
-              if (checkData.isAuthorized) {
-                isAuthorized = true;
-                if (checkData.seller) matchedSeller = checkData.seller;
-                if (checkData.role) matchedAuthEmail = { email, role: checkData.role, isActive: true, addedBy: 'admin', createdAt: '' };
-              } else {
-                // Instantly record and sign out without delay
-                void recordUnauthorizedLoginAttempt({
-                  email,
-                  name: fbUser.displayName || '',
-                  ip: 'Unknown',
-                  location: 'Vietnam',
-                  device: `${getClientDeviceInfo().browser} trên ${getClientDeviceInfo().os}`,
-                  reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
-                }).catch(() => {});
-
-                signOutFirebaseAuth().catch(() => {});
-                setCurrentSeller(null);
-                clearAdminSession();
-                return;
-              }
-            }
-          } catch {}
-
-          if (!isAuthorized) {
-            try {
-              const authList = await fetchAuthorizedSellersFromFirestore();
-              matchedAuthEmail = authList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
-            } catch {}
-
-            try {
-              const sellers = await fetchSellersFromFirestore();
-              matchedSeller = sellers.find(s =>
-                (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-                (s.phone && s.phone.trim().toLowerCase() === email) ||
-                (s.username && s.username.trim().toLowerCase() === email) ||
-                ((s as any).email && (s as any).email.trim().toLowerCase() === email)
-              ) || null;
-            } catch {}
-
-            isAuthorized = Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
-          }
-        }
-
-        // ZERO-TRUST ACCESS CONTROL: Only allow root admin, authorized seller emails, or registered affiliates added by Admin
-        if (!isAuthorized) {
-          void recordUnauthorizedLoginAttempt({
-            email,
-            name: fbUser.displayName || '',
-            ip: 'Unknown',
-            location: 'Vietnam',
-            device: `${getClientDeviceInfo().browser} trên ${getClientDeviceInfo().os}`,
-            reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
-          }).catch(() => {});
-
-          signOutFirebaseAuth().catch(() => {});
+        const access = await resolveGoogleAccess(email, fbUser.uid, isRoot);
+        if (auth.currentUser?.uid !== fbUser.uid) return;
+        if (!access.isAuthorized) {
           setCurrentSeller(null);
-          clearAdminSession();
+          rejectGoogleAccess(fbUser, access.error, access.conclusive);
           return;
         }
+        const matchedSeller = access.seller;
+        const matchedAuthEmail = access.role ? { role: access.role } : null;
 
         const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || matchedAuthEmail?.role || 'member');
         const userPayload: SellerUser = {

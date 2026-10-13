@@ -17,6 +17,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import { buildOrderConfirmationEmail } from './src/email/orderConfirmationEmail.ts';
 import trackOrderHandler from './api/orders/track.ts';
 import createOrderHandler from './api/orders/create.ts';
+import affiliateHandler from './api/affiliate.ts';
 
 // Suppress internal Firestore gRPC idle stream cancellation messages in Node server process
 try {
@@ -838,6 +839,8 @@ async function startServer() {
   // ----------------------------------------------------
   // SECURE AUTHORITATIVE ORDER CREATION API
   // ----------------------------------------------------
+  app.get('/api/affiliate', (req: Request, res: Response) => { void affiliateHandler(req, res); });
+
   app.all('/api/orders/create', (req: Request, res: Response) => {
     createOrderHandler(req, res);
   });

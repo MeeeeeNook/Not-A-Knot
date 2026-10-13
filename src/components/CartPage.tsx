@@ -1,3 +1,4 @@
+import { useVoucherSelection } from '../hooks/useVoucherSelection';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -55,7 +56,7 @@ import {
 } from '../utils/analytics';
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
-import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
+import { getVouchers, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
 import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode, calculateDetailedAffiliateCommission, recordOrderOnAffiliateCookie } from '../utils/affiliateManager';
 import { getAdminSession } from '../utils/auth';
 import { LoadingImage } from './LoadingImage';
@@ -497,11 +498,6 @@ export const CartPage: React.FC<CartPageProps> = ({
   const hotline = siteContent?.phone || '079 655 5636';
 
   // Voucher states
-  const [voucherInput, setVoucherInput] = useState('');
-  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
-  const [shippingVoucher, setShippingVoucher] = useState<Voucher | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
-  const [voucherSuccessMsg, setVoucherSuccessMsg] = useState<string | null>(null);
   const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
 
   useEffect(() => {
@@ -531,69 +527,7 @@ export const CartPage: React.FC<CartPageProps> = ({
     );
   }, [availableCartItems]);
 
-  // Validate each slot independently against the original merchandise subtotal.
-  const discountResult = appliedVoucher
-    ? validateVoucherCode(appliedVoucher.code, availableVouchers, subtotal, shippingFee, availableCartItems) : null;
-  const shippingResult = shippingVoucher
-    ? validateVoucherCode(shippingVoucher.code, availableVouchers, subtotal, shippingFee, availableCartItems) : null;
-  const voucherDiscountAmount = discountResult?.isValid && discountResult.voucher?.type === 'percent'
-    ? discountResult.discountAmount : 0;
-  const isFreeShippingVoucher = Boolean(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship');
-  const selectedVouchers = [
-    ...(discountResult?.isValid && discountResult.voucher?.type === 'percent' ? [discountResult.voucher] : []),
-    ...(shippingResult?.isValid && shippingResult.voucher?.type === 'freeship' ? [shippingResult.voucher] : [])
-  ];
-
-  useEffect(() => {
-    const invalidDiscount = appliedVoucher && (!discountResult?.isValid || discountResult.voucher?.type !== 'percent');
-    const invalidShipping = shippingVoucher && (!shippingResult?.isValid || shippingResult.voucher?.type !== 'freeship');
-    if (invalidDiscount || invalidShipping) {
-      if (invalidDiscount) setAppliedVoucher(null);
-      if (invalidShipping) setShippingVoucher(null);
-      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
-      setVoucherSuccessMsg(null);
-    }
-  }, [subtotal, shippingFee, appliedVoucher?.code, shippingVoucher?.code, availableVouchers.length, availableCartItems]);
-
-
-  const handleApplyVoucher = () => {
-    setVoucherError(null);
-    setVoucherSuccessMsg(null);
-    const code = voucherInput.trim().toUpperCase();
-    if (!code) {
-      setVoucherError('Vui lòng nhập mã voucher.');
-      return;
-    }
-    if (code === 'GIAM100K') {
-      setVoucherError('Đây chỉ là ví dụ thôi hahahahaha');
-      return;
-    }
-    const res = validateVoucherCode(code, availableVouchers, subtotal, shippingFee, availableCartItems);
-    if (!res.isValid || !res.voucher) {
-      setVoucherError('Voucher không tồn tại/đã hết lượt sử dụng');
-      return;
-    }
-    const occupied = res.voucher.type === 'freeship' ? shippingVoucher : appliedVoucher;
-    if (occupied) {
-      setVoucherError(occupied.code.toUpperCase() === code
-        ? 'Mã này đã được áp dụng.'
-        : 'Chỉ được dùng 1 mã giảm giá và 1 mã freeship. Hãy gỡ mã cùng loại trước.');
-      return;
-    }
-    if (res.voucher.type === 'freeship') setShippingVoucher(res.voucher);
-    else setAppliedVoucher(res.voucher);
-    setVoucherInput('');
-    setVoucherSuccessMsg(res.message || 'Áp dụng voucher thành công!');
-    trackGA4ApplyCoupon(res.voucher.code, res.discountAmount);
-  };
-
-  const handleRemoveVoucher = (type: Voucher['type']) => {
-    if (type === 'freeship') setShippingVoucher(null);
-    else setAppliedVoucher(null);
-    setVoucherInput('');
-    setVoucherError(null);
-    setVoucherSuccessMsg(null);
-  };
+  const { voucherInput, setVoucherInput, voucherError, setVoucherError, voucherSuccessMsg, selectedVouchers, voucherDiscountAmount, isFreeShippingVoucher, handleApplyVoucher, handleRemoveVoucher, getDiscountForVoucher } = useVoucherSelection(availableCartItems, subtotal, shippingFee, availableVouchers);
 
   const effectiveShippingFee = isFreeShippingVoucher ? 0 : shippingFee;
   const discountedSubtotal = Math.max(0, subtotal - voucherDiscountAmount);
@@ -885,6 +819,10 @@ export const CartPage: React.FC<CartPageProps> = ({
 
         if (result.success && result.order) {
           confirmedOrder = result.order;
+        } else {
+          setSubmissionStep('error');
+          setSubmissionError(result.error || 'Chưa thể ghi nhận đơn hàng. Vui lòng thử lại.');
+          return;
         }
       } catch (serverErr) {
         console.warn('[CartPage] Server submit notice, trying fallback save:', serverErr);
@@ -928,11 +866,11 @@ export const CartPage: React.FC<CartPageProps> = ({
       setSubmissionStep('confirmed');
 
       // Cookie lifecycle management based on affiliate's configured maxOrdersPerCookieSession
-      if (!isAdminPlacingOrder && activeRef?.code) {
+      if (!isAdminPlacingOrder && activeRef?.code && confirmedOrder.affiliateCode) {
         fetchAffiliateByCode(activeRef.code).then((aff) => {
-          recordOrderOnAffiliateCookie(aff?.maxOrdersPerCookieSession);
+          recordOrderOnAffiliateCookie(aff?.maxOrdersPerCookieSession, confirmedOrder?.id);
         }).catch(() => {
-          recordOrderOnAffiliateCookie();
+          recordOrderOnAffiliateCookie(undefined, confirmedOrder?.id);
         });
       }
 
@@ -1546,12 +1484,12 @@ export const CartPage: React.FC<CartPageProps> = ({
                         </div>
 
                     {selectedVouchers.map((voucher) => (
-                      <div key={voucher.type} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
+                      <div key={voucher.code} className="flex items-center justify-between gap-2 bg-amber-50 p-2.5 rounded-xl border border-amber-300">
                         <span className="font-mono font-bold text-xs break-all">{voucher.code}</span>
                         <span className="text-xs text-emerald-700">
-                          {voucher.type === 'freeship' ? 'Miễn phí vận chuyển' : `-${voucherDiscountAmount.toLocaleString('vi-VN')}đ`}
+                          {voucher.type === 'freeship' ? 'Miễn phí vận chuyển' : `-${getDiscountForVoucher(voucher.code).toLocaleString('vi-VN')}đ`}
                         </span>
-                        <button type="button" onClick={() => handleRemoveVoucher(voucher.type)}
+                        <button type="button" onClick={() => handleRemoveVoucher(voucher.code)}
                           aria-label={`Gỡ mã ${voucher.code}`} className="text-xs text-rose-600 px-2 py-1">Xóa</button>
                       </div>
                     ))}
