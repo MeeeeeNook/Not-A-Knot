@@ -8,6 +8,7 @@ import { LazyProductImage } from './LazyProductImage';
 import { IMAGE_SIZES_PRESETS } from '../utils/imageUtils';
 import { trackGA4Search } from '../utils/analytics';
 import { useDebounce } from '../hooks/useDebounce';
+import { getStorefrontCategoryOptions, isProductMatchingCategory as matchesCategory } from '../utils/storefrontCatalog';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -55,66 +56,13 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     );
   }, [categories]);
 
-  // Helper to check if a product matches a category or collection
-  const isProductMatchingCategory = (p: Product, targetCatId: string) => {
-    if (targetCatId === 'all') return true;
-    if (p.category === targetCatId) return true;
-    const col = collections.find(c => c.id === targetCatId || c.categoryKey === targetCatId);
-    if (col && (p.category === col.categoryKey || p.category === col.id)) return true;
-    return false;
-  };
+  const isProductMatchingCategory = (product: Product, categoryId: string) =>
+    matchesCategory(product, categoryId, collections);
 
-  const categoryOptions = useMemo(() => {
-    const allOpt: CategoryItem = { id: 'all', label: 'Tất cả sản phẩm', badge: 'All' };
-    const catMap = new Map<string, CategoryItem>();
-
-    // 1. Add from collections (source of truth for store BSTs)
-    collections.forEach((col) => {
-      if (col.isHidden) return;
-      const key = col.categoryKey || col.id;
-      catMap.set(key, {
-        id: key,
-        label: (col.title || col.tag || key).replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim(),
-        description: col.subtitle || col.description || '',
-        highlightColor: col.themeColor || '#B41C1A',
-        badge: col.badge || undefined,
-        bannerImage: col.productPageBanner || col.bannerImage || col.bgImage,
-        isEvent: col.themeStyle === 'event0209'
-      });
-    });
-
-    // 2. Add or merge explicit categories from categories prop
-    categories.forEach((cat) => {
-      if (cat.isHidden) return;
-      if (catMap.has(cat.id)) {
-        const existing = catMap.get(cat.id)!;
-        catMap.set(cat.id, {
-          ...existing,
-          ...cat,
-          label: cat.label || existing.label
-        });
-      } else {
-        const count = products.filter(p => !p.isHidden && p.category === cat.id).length;
-        const isLegacyDummy = ['charm_bracelet', 'everyday', 'keychains', 'lanyards'].includes(cat.id);
-        if (!isLegacyDummy || count > 0) {
-          catMap.set(cat.id, cat);
-        }
-      }
-    });
-
-    // 3. Dynamically discover any category key from products that might not be in the list
-    products.forEach((p) => {
-      if (!p.isHidden && p.category && !hiddenCategoryIds.has(p.category) && !catMap.has(p.category)) {
-        catMap.set(p.category, {
-          id: p.category,
-          label: p.category.replace(/^BST\s+/i, '').replace(/^Bộ sưu tập\s+/i, '').trim() || 'Vòng Tay Handmade',
-          highlightColor: '#475569'
-        });
-      }
-    });
-
-    return [allOpt, ...Array.from(catMap.values())];
-  }, [categories, collections, products, hiddenCategoryIds]);
+  const categoryOptions = useMemo(
+    () => getStorefrontCategoryOptions(products, categories, collections),
+    [products, categories, collections]
+  );
 
   // Fallback to 'all' if active selectedCategory is hidden
   useEffect(() => {

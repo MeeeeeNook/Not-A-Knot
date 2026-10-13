@@ -2347,6 +2347,10 @@ export default function App() {
           (currentSeller && auth.currentUser) ? (
             <React.Suspense fallback={<ViewLoadingFallback />}>
               <AffiliateDashboard
+                products={visibleProducts}
+                categories={categories}
+                collections={collections}
+                isCatalogLoading={isProductsLoading}
                 currentSeller={currentSeller}
                 onLoginSuccess={handleAdminLoginSuccess}
                 onLogout={handleAdminLogout}

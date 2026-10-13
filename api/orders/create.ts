@@ -1071,12 +1071,17 @@ export default async function handler(req: any, res: any) {
       affiliateMerchandiseValue?: number;
     } | null = null;
 
+    let affiliateMaxOrdersPerSession = 1;
+
     // If order is placed by verified staff/admin, strictly DO NOT attribute any affiliate commission (admin tự đặt đơn)
     if (isVerifiedStaffOrder) {
       attributedAffiliateData = null;
     } else if (refCodeCandidate) {
       const matchedAff = await getAuthoritativeAffiliate(refCodeCandidate);
       if (matchedAff && matchedAff.isActive !== false) {
+        affiliateMaxOrdersPerSession = typeof matchedAff.maxOrdersPerCookieSession === 'number'
+          ? matchedAff.maxOrdersPerCookieSession
+          : 1;
         const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
         const baseRate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
           ? matchedAff.commissionRate
@@ -1211,9 +1216,9 @@ export default async function handler(req: any, res: any) {
 
     // Cookie Lifecycle: Manage referral cookie persistence according to affiliate's max orders configuration
     if (!isVerifiedStaffOrder && attributedAffiliateData) {
-      const maxOrders = typeof (attributedAffiliateData as any).maxOrders === 'number'
-        ? (attributedAffiliateData as any).maxOrders
-        : 1;
+      // Use the authoritative profile, not the order attribution payload (which has no maxOrders).
+      // Checkout records the successful order on the surviving cookie client-side.
+      const maxOrders = affiliateMaxOrdersPerSession;
 
       if (maxOrders === 0) {
         // Unlimited orders: Keep cookie alive!
