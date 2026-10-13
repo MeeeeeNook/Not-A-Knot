@@ -18,6 +18,8 @@ test('deployable API wrappers and CommonJS bundles start in Node without a TypeS
     fs.cpSync('server/compiled', path.join(output, 'server/compiled'), { recursive: true });
     const script = `
       import assert from 'node:assert/strict';
+      import { createRequire } from 'node:module';
+      import { generateKeyPairSync, sign, verify } from 'node:crypto';
       import affiliate from './api/affiliate.js';
       import createOrder from './api/orders/create.js';
       const response = { code: 0, setHeader() {}, status(code) { this.code = code; return this; }, json() { return this; } };
@@ -25,9 +27,21 @@ test('deployable API wrappers and CommonJS bundles start in Node without a TypeS
       assert.equal(response.code, 400);
       await createOrder({ method: 'GET' }, response);
       assert.equal(response.code, 405);
+      const require = createRequire(import.meta.url);
+      const adminRequire = createRequire(require.resolve('firebase-admin/auth'));
+      const jwksRequire = createRequire(adminRequire.resolve('jwks-rsa'));
+      const { retrieveSigningKeys } = jwksRequire('./utils');
+      const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'regression', alg: 'RS256', use: 'sig' };
+      const keys = await retrieveSigningKeys([jwk]);
+      assert.equal(keys.length, 1);
+      const payload = Buffer.from('jwks compatibility regression');
+      const signature = sign('RSA-SHA256', payload, privateKey);
+      assert.equal(verify('RSA-SHA256', payload, keys[0].getPublicKey(), signature), true);
+      assert.equal(verify('RSA-SHA256', Buffer.from('tampered'), keys[0].getPublicKey(), signature), false);
       console.log('compiled API startup passed');
     `;
-    const result = execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: output, timeout: 5000, encoding: 'utf8' });
+    const result = execFileSync(process.execPath, ['--no-experimental-require-module', '--input-type=module', '-e', script], { cwd: output, timeout: 5000, encoding: 'utf8' });
     assert.match(result, /compiled API startup passed/);
   } finally { fs.rmSync(output, { recursive: true, force: true }); }
 });
