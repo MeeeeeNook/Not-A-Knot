@@ -16,11 +16,11 @@ import {
   updateDoc,
   increment
 } from 'firebase/firestore';
-import { calculateVoucherStack, getProductPercentVoucherLimit, type VoucherCartItemContext } from '../../src/utils/voucherCalculation.ts';
-import { PRODUCTS } from '../../src/data/products.ts';
-import { DEFAULT_INITIAL_VOUCHERS } from '../../src/data/vouchers.ts';
-import { calculateShippingFee, VIETNAM_PROVINCES } from '../../src/data/vietnamLocations.ts';
-import { normalizeVietnamesePhone, isValidVietnamesePhone } from './track.ts';
+import { calculateVoucherStack, getProductPercentVoucherLimit, type VoucherCartItemContext } from '../../src/utils/voucherCalculation.js';
+import { PRODUCTS } from '../../src/data/products.js';
+import { DEFAULT_INITIAL_VOUCHERS } from '../../src/data/vouchers.js';
+import { calculateShippingFee, VIETNAM_PROVINCES } from '../../src/data/vietnamLocations.js';
+import { normalizeVietnamesePhone, isValidVietnamesePhone } from './track.js';
 
 type App = any;
 

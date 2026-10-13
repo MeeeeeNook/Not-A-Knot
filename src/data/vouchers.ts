@@ -1,4 +1,4 @@
-import type { Voucher } from '../types.ts';
+import type { Voucher } from '../types.js';
 
 export const DEFAULT_INITIAL_VOUCHERS: Omit<Voucher, 'encryptedData'>[] = [
   {

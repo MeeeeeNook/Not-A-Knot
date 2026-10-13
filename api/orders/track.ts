@@ -3,7 +3,7 @@ import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore as getClientFirestore, doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { recentOrdersCache } from './create.ts';
+import { recentOrdersCache } from './create.js';
 
 type App = any;
 type ApiRequest = any;
@@ -420,7 +420,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         rawUrls.map(async (u: string, pIdx: number) => {
           if (typeof u === 'string' && (u.startsWith('data:image/') || u.length > 500)) {
             try {
-              const { persistCustomPhotoToStorageOrDb } = await import('./create.ts');
+              const { persistCustomPhotoToStorageOrDb } = await import('./create.js');
               const pKey = `${cleanCode}_item_${itemIdx + 1}_p${pIdx + 1}`;
               return await persistCustomPhotoToStorageOrDb(u, pKey, 'order_custom_photos');
             } catch (convErr) {

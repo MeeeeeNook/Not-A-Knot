@@ -1,4 +1,4 @@
-import { getAuthoritativeAffiliate, getAuthoritativeAffiliateConfig } from './orders/create.ts';
+import { getAuthoritativeAffiliate, getAuthoritativeAffiliateConfig } from './orders/create.js';
 
 // Public referral lookup: deliberately excludes emails, credentials and payment details.
 export default async function handler(req: any, res: any) {
