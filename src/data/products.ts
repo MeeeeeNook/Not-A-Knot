@@ -1,4 +1,4 @@
-import { Product, BannerItem } from '../types';
+import type { Product, BannerItem } from '../types.ts';
 
 export const HERO_BANNERS: BannerItem[] = [
   {
