@@ -1,4 +1,4 @@
-import type { Voucher } from '../types';
+import type { Voucher } from '../types.js';
 
 export interface VoucherProductContext {
   id: string; name: string; price: number;
