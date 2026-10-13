@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookOpen, ChevronRight } from 'lucide-react';
 import type { AffiliateSystemConfig, Product, SellerUser } from '../types';
+import { getAffiliateCommissionDisplay } from '../utils/affiliateCommissionDisplay';
 
 interface AffiliateGuideProps {
   affiliate: SellerUser | null;
@@ -17,6 +18,7 @@ const card = 'bg-white rounded-2xl border border-neutral-200/80 shadow-2xs p-5 s
 export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpenSettings, onOpenOrders }: AffiliateGuideProps) {
   const days = affiliate?.cookieDurationDays || config.cookieDurationDays || 30;
   const rate = affiliate?.commissionRate ?? config.defaultCommissionRate;
+  const commissionDisplay = getAffiliateCommissionDisplay(affiliate, config.defaultCommissionRate);
   const maxOrders = affiliate?.maxOrdersPerCookieSession ?? 1;
   const model = affiliate?.commissionModel || 'standard';
   const modelLabel = model === 'by_product' ? 'Theo từng sản phẩm' : model === 'tiered' ? 'Theo giá trị từng đơn' : 'Tỷ lệ cố định';
@@ -37,7 +39,7 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
             ['Thời hạn ghi nhận', `${days} ngày`],
             ['Số đơn trong thời hạn cookie', limitLabel],
             ['Cách tính hoa hồng', modelLabel],
-            ['Tỷ lệ cơ bản', `${rate}%`]
+            [commissionDisplay.label, commissionDisplay.value]
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl bg-rose-50/60 border border-rose-100 p-4">
               <dt className="text-xs text-neutral-500">{label}</dt>
@@ -83,9 +85,9 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
         </div>
         <p>Cơ chế đang áp dụng cho bạn: <strong>{modelLabel}</strong>. Số tiền được làm tròn đến đồng và lưu trên đơn tại thời điểm đặt hàng. Thay đổi cấu hình sau đó không tự tính lại hoa hồng đã lưu.</p>
         <div className="space-y-3">
-          <p><strong>Tỷ lệ cố định:</strong> giá trị tính hoa hồng × tỷ lệ cơ bản. Ví dụ minh họa với tỷ lệ cơ bản hiện tại: tiền sản phẩm 200.000đ, giảm giá 20.000đ → 180.000đ × {rate}% = <strong>{money(Math.round(180000 * rate / 100))}</strong>. Phí giao hàng không làm tăng số này.</p>
-          <p><strong>Theo từng sản phẩm:</strong> mỗi sản phẩm dùng tỷ lệ riêng nếu có; sản phẩm chưa có tỷ lệ riêng dùng tỷ lệ cơ bản. Giảm giá đơn được phân bổ theo tỷ trọng tiền sản phẩm, sau đó tính và làm tròn hoa hồng từng dòng rồi cộng lại.</p>
-          <p><strong>Theo giá trị từng đơn:</strong> hệ thống chọn bậc từ giá trị sản phẩm sau giảm giá của chính đơn đó và áp dụng tỷ lệ của bậc cho toàn bộ giá trị tính hoa hồng. Đây không phải bậc doanh thu cộng dồn theo tháng, cũng không phải cách tính lũy tiến từng phần.</p>
+          {model === 'standard' && <p><strong>Tỷ lệ cố định:</strong> giá trị tính hoa hồng × tỷ lệ cố định. Ví dụ với cấu hình hiện tại: tiền sản phẩm 200.000đ, giảm giá 20.000đ → 180.000đ × {rate}% = <strong>{money(Math.round(180000 * rate / 100))}</strong>. Phí giao hàng không làm tăng số này.</p>}
+          {model === 'by_product' && <p><strong>Theo từng sản phẩm:</strong> mỗi sản phẩm dùng tỷ lệ riêng nếu có; sản phẩm chưa có tỷ lệ riêng dùng tỷ lệ mặc định {rate}%. Giảm giá đơn được phân bổ theo tỷ trọng tiền sản phẩm, sau đó tính và làm tròn hoa hồng từng dòng rồi cộng lại.</p>}
+          {model === 'tiered' && <p><strong>Theo giá trị từng đơn:</strong> hệ thống chọn bậc từ giá trị sản phẩm sau giảm giá của chính đơn đó và áp dụng tỷ lệ của bậc cho toàn bộ giá trị tính hoa hồng. Đây không phải bậc doanh thu cộng dồn theo tháng, cũng không phải cách tính lũy tiến từng phần.</p>}
         </div>
         {model === 'by_product' && productRates.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-neutral-200">

@@ -16,6 +16,7 @@ import {
 import { fetchOrdersFromFirestore, saveSellerToFirestore } from '../firebase';
 import { getStorefrontCategoryOptions, getVisibleCollections, isProductMatchingCategory } from '../utils/storefrontCatalog';
 import { AffiliateGuide } from './AffiliateGuide';
+import { getAffiliateCommissionDisplay } from '../utils/affiliateCommissionDisplay';
 import { AffiliateOrdersPage, OrdersDateRangePreset } from './AffiliateOrdersPage';
 
 export interface AffiliateDashboardProps {
@@ -150,6 +151,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   const activeProductCategory = categoryOptions.some((c) => c.id === productCategoryTab) ? productCategoryTab : 'all';
   const cookieDays = affiliateUser?.cookieDurationDays || systemConfig.cookieDurationDays || 30;
   const commissionRate = affiliateUser?.commissionRate ?? systemConfig.defaultCommissionRate;
+  const commissionDisplay = getAffiliateCommissionDisplay(affiliateUser, systemConfig.defaultCommissionRate);
   const maxOrders = affiliateUser?.maxOrdersPerCookieSession ?? 1;
   const orderLimitLabel = maxOrders === 0 ? 'Không giới hạn trong thời hạn cookie' : maxOrders === 1 ? '1 đơn đầu tiên' : `Tối đa ${maxOrders} đơn trong thời hạn cookie`;
   const commissionModelLabel = affiliateUser?.commissionModel === 'by_product' ? 'Theo từng sản phẩm' : affiliateUser?.commissionModel === 'tiered' ? 'Theo giá trị từng đơn' : 'Tỷ lệ cố định';
@@ -603,7 +605,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   };
 
   const maxChartRevenue = useMemo(() => {
-    const max = Math.max(...chartData.map((d) => d.revenue), 100000);
+    const max = Math.max(...chartData.flatMap((d) => [d.revenue, d.commission]), 0);
     return max;
   }, [chartData]);
 
@@ -835,7 +837,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
           </div>
 
           <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed max-w-3xl">
-            Chia sẻ liên kết giới thiệu độc quyền của bạn với <strong className="text-rose-700 font-semibold">tỷ lệ cơ bản {commissionRate}%</strong> trên giá trị sản phẩm sau giảm giá (không tính phí vận chuyển) theo cơ chế {commissionModelLabel.toLowerCase()}. Số đơn ghi nhận: {orderLimitLabel.toLowerCase()}.
+            Chia sẻ liên kết giới thiệu độc quyền của bạn để nhận <strong className="text-rose-700 font-semibold">{commissionDisplay.description}</strong> trên giá trị sản phẩm sau giảm giá (không tính phí vận chuyển). Số đơn ghi nhận: {orderLimitLabel.toLowerCase()}.
           </p>
 
           <div className="pt-2">
@@ -896,7 +898,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
               <span className="text-neutral-300">&bull;</span>
               <span>Ghi nhận: <strong className="text-neutral-800 font-medium">Last-Click</strong></span>
               <span className="text-neutral-300">&bull;</span>
-              <span>Tỷ lệ cơ bản: <strong className="text-rose-700 font-semibold">{commissionRate}%</strong></span>
+              <span>{commissionDisplay.label}: <strong className="text-rose-700 font-semibold">{commissionDisplay.value}</strong></span>
             </div>
           </div>
         </div>
@@ -1052,8 +1054,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
             <div className="space-y-2 pt-2">
               <div className="h-52 w-full flex items-end gap-1.5 sm:gap-3 px-2 pt-6 pb-2 border-b border-neutral-100">
                 {chartData.map((d, idx) => {
-                  const revHeight = maxChartRevenue > 0 ? Math.min(100, Math.max(8, Math.round((d.revenue / maxChartRevenue) * 100))) : 8;
-                  const commHeight = maxChartRevenue > 0 ? Math.min(100, Math.max(4, Math.round((d.commission / maxChartRevenue) * 100))) : 4;
+                  const revHeight = maxChartRevenue > 0 ? Math.min(100, Math.max(0, (d.revenue / maxChartRevenue) * 100)) : 0;
+                  const commHeight = maxChartRevenue > 0 ? Math.min(100, Math.max(0, (d.commission / maxChartRevenue) * 100)) : 0;
                   return (
                     <div key={idx} className="flex-1 h-full flex flex-col justify-end items-center group relative">
                       <div className="absolute -top-14 bg-neutral-900 text-white text-[10px] rounded-lg py-1 px-2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap shadow-md">
@@ -1524,10 +1526,10 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
             </div>
 
             <div className="p-3.5 rounded-2xl bg-neutral-50/80 border border-neutral-200/70">
-              <span className="text-[11px] text-neutral-500 block">Tỷ lệ cơ bản</span>
+              <span className="text-[11px] text-neutral-500 block">{commissionDisplay.label}</span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="font-mono font-bold text-neutral-900 text-sm">{commissionRate}%</span>
-                <span title="Tỷ lệ cơ bản; xem Hướng dẫn để biết cách tính theo sản phẩm hoặc giá trị đơn" className="cursor-help">
+                <span className="font-mono font-bold text-neutral-900 text-sm">{commissionDisplay.value}</span>
+                <span title={commissionDisplay.tooltip} className="cursor-help">
                   <Lock className="w-3 h-3 text-neutral-400" />
                 </span>
               </div>
@@ -2204,9 +2206,9 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
-                  <span className="text-[11px] text-neutral-500 block">Tỷ lệ hoa hồng cơ bản</span>
+                  <span className="text-[11px] text-neutral-500 block">{commissionDisplay.label}</span>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="font-mono font-bold text-neutral-900 text-sm">{commissionRate}%</span>
+                    <span className="font-mono font-bold text-neutral-900 text-sm">{commissionDisplay.value}</span>
                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200 text-neutral-700 font-medium">
                       {affiliateUser?.commissionModel === 'by_product' ? 'Có SP riêng' : (affiliateUser?.commissionModel === 'tiered' ? 'Theo giá trị đơn' : 'Cố định')}
                     </span>
