@@ -1782,7 +1782,7 @@ export const saveOrderToFirestore = async (order: StoredOrder): Promise<void> =>
       }, {
         expectedTotal: order.totalPrice || order.totalAmount
       });
-      if (!result.success || !result.order) {
+      if ((!result.success || !result.order) && !result.serverUnavailable) {
         serverRejected = true;
         throw new Error(result.error || 'Vui lòng xác nhận lại giá trước khi đặt đơn.');
       }

@@ -819,7 +819,7 @@ export const CartPage: React.FC<CartPageProps> = ({
 
         if (result.success && result.order) {
           confirmedOrder = result.order;
-        } else {
+        } else if (!result.serverUnavailable) {
           setSubmissionStep('error');
           setSubmissionError(result.error || 'Chưa thể ghi nhận đơn hàng. Vui lòng thử lại.');
           return;

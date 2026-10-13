@@ -17,6 +17,7 @@ export interface CreateOrderResult {
   };
   error?: string;
   isDuplicate?: boolean;
+  serverUnavailable?: boolean;
   affiliatePolicy?: { code: string; maxOrders: number };
 }
 
@@ -89,7 +90,8 @@ export async function submitOrderToServer(
     }
     return {
       success: false,
-      error: `Máy chủ phản hồi không đúng định dạng (${response.status}). Vui lòng thử lại.`
+      error: `Máy chủ phản hồi không đúng định dạng (${response.status}). Vui lòng thử lại.`,
+      serverUnavailable: response.status >= 500 && rawText.includes('FUNCTION_INVOCATION_FAILED')
     };
   }
 
