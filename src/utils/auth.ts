@@ -74,6 +74,11 @@ export const hashUsername = async (username: string): Promise<string> => {
   return Math.abs(hash).toString(16).padStart(32, '0');
 };
 
+export const isRootAdmin = (emailOrUsername: string): boolean => {
+  const clean = (emailOrUsername || '').trim().toLowerCase();
+  return clean === ROOT_ADMIN_USERNAME || AUTHORIZED_ROOT_ADMIN_EMAILS.includes(clean);
+};
+
 export const isRootAdminUsername = (username: string): boolean => {
   const clean = (username || '').trim().toLowerCase();
   return clean === ROOT_ADMIN_USERNAME || AUTHORIZED_ROOT_ADMIN_EMAILS.includes(clean);
@@ -308,43 +313,110 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     // 1. Check if the user is in the authorized Root Admin whitelist
     const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
 
-    // 2. Check if this email is in the authorized sellers collection granted by Root Admin
+    let isAuthorized = isRoot;
     let matchedAuthEmail: AuthorizedSellerItem | null = null;
-    try {
-      const authorizedList = await fetchAuthorizedSellersFromFirestore();
-      matchedAuthEmail = authorizedList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
-    } catch (authFetchErr) {
-      console.warn('Error checking authorized_sellers list:', authFetchErr);
-    }
-
-    // 3. Check if this email belongs to an existing seller profile in Firestore
     let matchedSeller: SellerUser | null = null;
-    let fetchedSellersList: SellerUser[] = [];
-    try {
-      fetchedSellersList = await fetchSellersFromFirestore();
-      matchedSeller = fetchedSellersList.find(s =>
-        (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-        (s.phone && s.phone.trim().toLowerCase() === email) ||
-        (s.username && s.username.trim().toLowerCase() === email) ||
-        ((s as any).email && (s as any).email.trim().toLowerCase() === email)
-      ) || null;
-    } catch (fetchErr) {
-      console.warn('Error fetching sellers during Google login check:', fetchErr);
+
+    if (!isRoot) {
+      // Fast check with authoritative server in ~30ms to prevent endless spinner on unauthorized accounts
+      try {
+        const resp = await fetch('/api/auth/verify-google-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+          signal: safeTimeoutSignal(2500)
+        });
+        if (resp.ok) {
+          const checkData = await resp.json();
+          if (checkData.isAuthorized) {
+            isAuthorized = true;
+            if (checkData.seller) matchedSeller = checkData.seller;
+            if (checkData.role) matchedAuthEmail = { email, role: checkData.role, isActive: true, addedBy: 'admin', createdAt: '' };
+          } else {
+            // AUTHORITATIVE REJECTION FROM SERVER: User is NOT authorized
+            // Asynchronously log unauthorized attempt in background without blocking user UI
+            void (async () => {
+              try {
+                const dev = getClientDeviceInfo();
+                await recordUnauthorizedLoginAttempt({
+                  email,
+                  name: fbUser.displayName || '',
+                  ip: 'Unknown',
+                  location: 'Vietnam',
+                  device: `${dev.browser} trên ${dev.os}`,
+                  reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
+                });
+              } catch {}
+            })();
+
+            // Instant fire-and-forget background sign out
+            signOutFirebaseAuth().catch(() => {});
+
+            return {
+              success: false,
+              error: 'Tài khoản không tồn tại trong hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.'
+            };
+          }
+        }
+      } catch {
+        // Fallback to client query if server endpoint unreachable
+      }
+
+      // If server check wasn't conclusive, fallback to client Firestore query
+      if (!isAuthorized) {
+        try {
+          const authorizedList = await fetchAuthorizedSellersFromFirestore();
+          matchedAuthEmail = authorizedList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
+        } catch (authFetchErr) {
+          console.warn('Error checking authorized_sellers list:', authFetchErr);
+        }
+
+        try {
+          const fetchedSellersList = await fetchSellersFromFirestore();
+          matchedSeller = fetchedSellersList.find(s =>
+            (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+            (s.phone && s.phone.trim().toLowerCase() === email) ||
+            (s.username && s.username.trim().toLowerCase() === email) ||
+            ((s as any).email && (s as any).email.trim().toLowerCase() === email)
+          ) || null;
+        } catch (fetchErr) {
+          console.warn('Error fetching sellers during Google login check:', fetchErr);
+        }
+
+        isAuthorized = Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
+      }
     }
 
-    // 4. Role detection: Root Admin > Authorized Staff > Existing Seller / Affiliate > Auto-provision new Affiliate
-    const isAuthorizedStaff = isRoot || Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.role !== 'affiliate' && matchedSeller?.isActive !== false);
+    if (!isAuthorized) {
+      // Asynchronously log unauthorized attempt in background without blocking user UI
+      void (async () => {
+        try {
+          const dev = getClientDeviceInfo();
+          await recordUnauthorizedLoginAttempt({
+            email,
+            name: fbUser.displayName || '',
+            ip: 'Unknown',
+            location: 'Vietnam',
+            device: `${dev.browser} trên ${dev.os}`,
+            reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Admin cấp quyền)'
+          });
+        } catch {}
+      })();
 
-    let assignedRole: SellerUser['role'] = 'affiliate';
+      signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: 'Tài khoản không tồn tại trong hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.'
+      };
+    }
+
+    let assignedRole: SellerUser['role'] = 'member';
     if (isRoot) {
       assignedRole = 'root_admin';
     } else if (matchedAuthEmail) {
       assignedRole = matchedAuthEmail.role || 'member';
     } else if (matchedSeller) {
       assignedRole = matchedSeller.role || 'member';
-    } else {
-      // New user logging in: Auto-provision as an Affiliate partner
-      assignedRole = 'affiliate';
     }
 
     const nowIso = new Date().toISOString();
@@ -352,8 +424,8 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
     // Generate or retrieve affiliate code if user is an affiliate
     let resolvedAffiliateCode = matchedSeller?.affiliateCode;
     if (assignedRole === 'affiliate' && !resolvedAffiliateCode) {
-      const { generateAffiliateCode } = await import('./affiliateManager');
-      resolvedAffiliateCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], fetchedSellersList);
+      const googleUsername = email.split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '');
+      resolvedAffiliateCode = googleUsername || 'AFFILIATE';
     }
 
     // Auto-link Google email and UID to the seller in Firestore if not yet set
@@ -374,10 +446,12 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       }
     }
 
+    const defaultDisplayName = fbUser.displayName || (email.includes('@') ? email.split('@')[0] : email);
+
     const sellerUser: SellerUser = {
       id: matchedSeller?.id || `${assignedRole === 'affiliate' ? 'affiliate' : 'seller'}-${fbUser.uid.slice(0, 12)}`,
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
-      name: matchedSeller?.name || matchedAuthEmail?.name || fbUser.displayName || (email.toLowerCase().includes('nhunhuhao') ? 'Hảo Như' : (email.toLowerCase().includes('huy') ? 'Trần Việt Huy' : (email.includes('@') ? email.split('@')[0] : 'Trần Việt Huy'))),
+      name: matchedSeller?.name || matchedAuthEmail?.name || defaultDisplayName,
       role: assignedRole,
       isRootAdmin: isRoot,
       isActive: matchedSeller ? matchedSeller.isActive !== false : true,
@@ -392,7 +466,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       paymentInfo: matchedSeller?.paymentInfo
     };
 
-    if (!matchedSeller) {
+    if (matchedSeller) {
       await saveSellerToFirestore(sellerUser).catch(() => {});
     }
 
@@ -434,27 +508,90 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
     const email = (fbUser.email || '').trim().toLowerCase();
     const nowIso = new Date().toISOString();
 
-    // 1. Fetch current sellers from Firestore
-    let sellers: SellerUser[] = [];
-    try {
-      sellers = await fetchSellersFromFirestore();
-    } catch (e) {
-      console.warn('Error fetching sellers for affiliate Google login:', e);
+    const isRoot = isRootAdmin(email);
+    let matchedSeller: SellerUser | null = null;
+    let isValidAffiliate = isRoot;
+
+    if (!isRoot) {
+      // 1. Fast check with server in ~30ms
+      try {
+        const resp = await fetch('/api/auth/verify-google-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+          signal: safeTimeoutSignal(2500)
+        });
+        if (resp.ok) {
+          const checkData = await resp.json();
+          if (checkData.isAuthorized && (checkData.seller?.role === 'affiliate' || checkData.seller?.affiliateCode || checkData.isRoot)) {
+            isValidAffiliate = true;
+            if (checkData.seller) matchedSeller = checkData.seller;
+          } else if (checkData.isAuthorized === false) {
+            // Fast authoritative rejection
+            void (async () => {
+              try {
+                const dev = getClientDeviceInfo();
+                await recordUnauthorizedLoginAttempt({
+                  email,
+                  name: fbUser.displayName || '',
+                  ip: 'Unknown',
+                  location: 'Vietnam',
+                  device: `${dev.browser} trên ${dev.os}`,
+                  reason: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate'
+                });
+              } catch {}
+            })();
+
+            signOutFirebaseAuth().catch(() => {});
+            return {
+              success: false,
+              error: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate. Vui lòng liên hệ Admin để được cấp quyền.'
+            };
+          }
+        }
+      } catch {}
+
+      // Fallback: check Firestore sellers
+      if (!isValidAffiliate) {
+        let sellers: SellerUser[] = [];
+        try {
+          sellers = await fetchSellersFromFirestore();
+        } catch (e) {
+          console.warn('Error fetching sellers for affiliate Google login:', e);
+        }
+
+        matchedSeller = sellers.find(s =>
+          (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+          ((s as any).email && (s as any).email.trim().toLowerCase() === email) ||
+          (s.googleUid && s.googleUid === fbUser.uid) ||
+          (s.username && s.username.trim().toLowerCase() === email.split('@')[0])
+        ) || null;
+
+        isValidAffiliate = Boolean(matchedSeller) &&
+          matchedSeller?.isActive !== false &&
+          (matchedSeller?.role === 'affiliate' || Boolean(matchedSeller?.affiliateCode));
+      }
     }
 
-    // 2. Check if this email belongs to an existing profile
-    let matchedSeller = sellers.find(s =>
-      (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-      ((s as any).email && (s as any).email.trim().toLowerCase() === email) ||
-      (s.googleUid && s.googleUid === fbUser.uid) ||
-      (s.username && s.username.trim().toLowerCase() === email.split('@')[0])
-    ) || null;
+    if (!isValidAffiliate) {
+      void (async () => {
+        try {
+          const dev = getClientDeviceInfo();
+          await recordUnauthorizedLoginAttempt({
+            email,
+            name: fbUser.displayName || '',
+            ip: 'Unknown',
+            location: 'Vietnam',
+            device: `${dev.browser} trên ${dev.os}`,
+            reason: 'Tài khoản không tồn tại trong danh sách Affiliate (chưa được Admin thêm)'
+          });
+        } catch {}
+      })();
 
-    if (matchedSeller && matchedSeller.isActive === false) {
-      await signOutFirebaseAuth().catch(() => {});
+      signOutFirebaseAuth().catch(() => {});
       return {
         success: false,
-        error: 'Tài khoản đối tác này hiện đang bị tạm khóa. Vui lòng liên hệ quản trị viên.'
+        error: 'Tài khoản không tồn tại trong danh sách Đối tác Affiliate. Vui lòng liên hệ Admin để được cấp quyền.'
       };
     }
 
@@ -472,43 +609,39 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
         await saveSellerToFirestore(matchedSeller).catch(() => {});
       }
 
+      const defaultGoogleName = fbUser.displayName || (email.includes('@') ? email.split('@')[0] : email);
+      const defaultGoogleCode = (email.split('@')[0] || 'AFFILIATE').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
       finalUser = {
         ...matchedSeller,
         id: matchedSeller.id,
         username: matchedSeller.username,
-        name: matchedSeller.name || fbUser.displayName || email.split('@')[0],
+        name: matchedSeller.name || defaultGoogleName,
         role: matchedSeller.role === 'root_admin' ? 'root_admin' : 'affiliate',
         isActive: true,
-        affiliateCode: (matchedSeller.affiliateCode || matchedSeller.username).toUpperCase().trim(),
+        affiliateCode: (matchedSeller.affiliateCode || defaultGoogleCode).toUpperCase().trim(),
         commissionRate: matchedSeller.commissionRate !== undefined ? matchedSeller.commissionRate : 10,
         paymentInfo: matchedSeller.paymentInfo,
         googleEmail: email,
         googleUid: fbUser.uid
       };
     } else {
-      // Auto-provision fresh affiliate profile in Firestore
-      const { generateAffiliateCode } = await import('./affiliateManager');
-      const baseCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], sellers);
-      const cleanUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '') || `user${Date.now().toString().slice(-4)}`;
-
+      // Root Admin logging into Affiliate Portal for supervision
+      const adminCode = (email.split('@')[0] || 'ADMIN').toUpperCase().replace(/[^A-Z0-9]/g, '');
       finalUser = {
-        id: `affiliate-${fbUser.uid.slice(0, 12)}`,
-        username: cleanUsername,
-        name: fbUser.displayName || email.split('@')[0],
-        role: 'affiliate',
-        affiliateCode: baseCode,
+        id: `root-admin-${fbUser.uid.slice(0, 10)}`,
+        username: email.split('@')[0],
+        name: fbUser.displayName || 'Quản trị viên',
+        role: 'root_admin',
+        affiliateCode: adminCode,
         commissionRate: 10,
         isActive: true,
         googleEmail: email,
         googleUid: fbUser.uid,
-        avatarColor: '#991B1B',
+        avatarColor: '#B41C1A',
         createdAt: nowIso,
         linkedGoogleAt: nowIso
       };
-
-      await saveSellerToFirestore(finalUser).catch((err) => {
-        console.warn('Could not auto-save new affiliate profile:', err);
-      });
     }
 
     const token = await fbUser.getIdToken();

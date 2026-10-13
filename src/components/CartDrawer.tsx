@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CartItem, SiteContentConfig } from '../types';
+import { CartItem, SiteContentConfig, StoredOrder, SellerUser } from '../types';
 import { 
   X, 
   Trash2, 
@@ -49,7 +49,8 @@ import {
 import { generateTrackingNumber } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
-import { getActiveAffiliateReferral, clearAffiliateCookie } from '../utils/affiliateManager';
+import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode, calculateDetailedAffiliateCommission, recordOrderOnAffiliateCookie } from '../utils/affiliateManager';
+import { getAdminSession } from '../utils/auth';
 import { LoadingImage } from './LoadingImage';
 
 interface CartDrawerProps {
@@ -770,7 +771,30 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       status: 'Chờ xác nhận' as const,
       paymentMethod: 'cod' as const,
       paymentStatus: 'unpaid' as const,
-      affiliateCode: getActiveAffiliateReferral()?.code?.toUpperCase().trim() || undefined
+      isAdminPlacingOrder: (() => {
+        const adminSession = getAdminSession();
+        return Boolean(
+          adminSession && (
+            adminSession.role === 'root_admin' ||
+            adminSession.role === 'deputy_admin' ||
+            adminSession.role === 'member' ||
+            adminSession.isRootAdmin
+          )
+        );
+      })(),
+      affiliateCode: (() => {
+        const adminSession = getAdminSession();
+        const isAdmin = Boolean(
+          adminSession && (
+            adminSession.role === 'root_admin' ||
+            adminSession.role === 'deputy_admin' ||
+            adminSession.role === 'member' ||
+            adminSession.isRootAdmin
+          )
+        );
+        if (isAdmin) return undefined;
+        return getActiveAffiliateReferral()?.code?.toUpperCase().trim() || undefined;
+      })()
     };
   };
 
@@ -800,7 +824,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     if (cartItems.length === 0) return;
 
     setIsSubmitting(true);
-    const orderData = createOrderPayload('system');
+    const orderData: StoredOrder = createOrderPayload('system');
 
     // 0. Upload any customer-uploaded custom print photos directly to Firebase Storage first
     try {
@@ -815,14 +839,40 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       console.warn('Storage upload custom photo fallback in CartDrawer:', uploadErr);
     }
 
+    // 0.5 If not admin and affiliateCode exists, calculate detailed commission
+    let matchedAffUser: SellerUser | null = null;
+    if (orderData.affiliateCode) {
+      try {
+        matchedAffUser = await fetchAffiliateByCode(orderData.affiliateCode);
+        if (matchedAffUser && matchedAffUser.isActive !== false) {
+          const detailedComm = calculateDetailedAffiliateCommission(
+            matchedAffUser,
+            orderData.itemDetails || [],
+            subtotal,
+            0,
+            10
+          );
+          orderData.affiliateId = matchedAffUser.id;
+          orderData.affiliateName = matchedAffUser.name;
+          orderData.affiliateCommissionRate = detailedComm.effectiveRate;
+          orderData.affiliateCommissionAmount = detailedComm.commissionAmount;
+          orderData.affiliateMerchandiseValue = detailedComm.merchandiseValue;
+        }
+      } catch (affErr) {
+        console.warn('Affiliate calculation notice in CartDrawer:', affErr);
+      }
+    }
+
     try {
       await saveOrderToFirestore(orderData);
       // Asynchronously trigger order confirmation email
       sendOrderConfirmationEmail(orderData).catch((e) => {
         console.warn('[CartDrawer] Email notification background notice:', e);
       });
-      // Clear referral cookie upon first order placement
-      clearAffiliateCookie();
+      // Lifecycle cookie management based on affiliate's configured maxOrdersPerCookieSession
+      if (orderData.affiliateCode) {
+        recordOrderOnAffiliateCookie(matchedAffUser?.maxOrdersPerCookieSession);
+      }
     } catch (err: any) {
       console.error('Lỗi khi lưu đơn hàng lên Firebase:', err);
       alert(`Không thể kết nối máy chủ để lưu đơn hàng: ${err?.message || 'Lỗi mạng'}. Quý khách vui lòng thử lại!`);

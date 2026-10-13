@@ -13,6 +13,8 @@ export interface StoredAffiliateCookie {
   code: string;
   clickedAt: string; // ISO string
   expiresAt: string; // ISO string
+  maxOrders?: number; // 1 = first order only (default), 2, 3... or 0 for unlimited
+  orderCount?: number; // Number of orders already placed in this cookie session
 }
 
 /**
@@ -43,9 +45,12 @@ export function getActiveAffiliateReferral(): StoredAffiliateCookie | null {
 }
 
 /**
- * Set or update the affiliate referral cookie with configured duration (Last-Click Priority).
+ * Set or update the affiliate referral cookie with configured duration and max orders (Last-Click Priority).
+ * @param code Unique affiliate referral code
+ * @param durationDays Number of days the cookie is active
+ * @param maxOrders Max orders allowed for this cookie session: 1 = first order only (default), 2, 3... or 0 for unlimited.
  */
-export function setAffiliateReferral(code: string, durationDays: number = 30): void {
+export function setAffiliateReferral(code: string, durationDays: number = 30, maxOrders: number = 1): void {
   if (typeof document === 'undefined') return;
   const cleanCode = (code || '').trim().toUpperCase();
   if (!cleanCode) return;
@@ -57,7 +62,9 @@ export function setAffiliateReferral(code: string, durationDays: number = 30): v
   const cookiePayload: StoredAffiliateCookie = {
     code: cleanCode,
     clickedAt: now.toISOString(),
-    expiresAt: expiresDate.toISOString()
+    expiresAt: expiresDate.toISOString(),
+    maxOrders: typeof maxOrders === 'number' ? maxOrders : 1,
+    orderCount: 0
   };
 
   const serialized = encodeURIComponent(JSON.stringify(cookiePayload));
@@ -68,11 +75,61 @@ export function setAffiliateReferral(code: string, durationDays: number = 30): v
 }
 
 /**
- * Clear the affiliate referral cookie (e.g. after first order placed or on expiry).
+ * Clear the affiliate referral cookie.
  */
 export function clearAffiliateCookie(): void {
   if (typeof document === 'undefined') return;
   document.cookie = `${AFFILIATE_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+}
+
+/**
+ * Record an order placed under this cookie session.
+ * Depending on maxOrders:
+ * - maxOrders === 0 (unlimited): never clears cookie, increments orderCount.
+ * - maxOrders > 1: increments orderCount, clears only when orderCount reaches maxOrders.
+ * - maxOrders === 1 (default): clears cookie after first order.
+ */
+export function recordOrderOnAffiliateCookie(overrideMaxOrders?: number): { shouldClear: boolean; orderCount: number } {
+  const active = getActiveAffiliateReferral();
+  if (!active) {
+    return { shouldClear: true, orderCount: 0 };
+  }
+
+  const effectiveMax = overrideMaxOrders !== undefined
+    ? overrideMaxOrders
+    : (active.maxOrders !== undefined ? active.maxOrders : 1);
+
+  const newOrderCount = (active.orderCount || 0) + 1;
+
+  // Case 1: Unlimited orders during cookie period
+  if (effectiveMax === 0) {
+    active.orderCount = newOrderCount;
+    if (typeof document !== 'undefined') {
+      const remainingMs = new Date(active.expiresAt).getTime() - Date.now();
+      const maxAgeSec = Math.max(1, Math.floor(remainingMs / 1000));
+      const serialized = encodeURIComponent(JSON.stringify(active));
+      document.cookie = `${AFFILIATE_COOKIE_NAME}=${serialized}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
+    }
+    return { shouldClear: false, orderCount: newOrderCount };
+  }
+
+  // Case 2: Configured multiple orders (e.g. 2, 3, 5...)
+  if (effectiveMax > 1) {
+    if (newOrderCount < effectiveMax) {
+      active.orderCount = newOrderCount;
+      if (typeof document !== 'undefined') {
+        const remainingMs = new Date(active.expiresAt).getTime() - Date.now();
+        const maxAgeSec = Math.max(1, Math.floor(remainingMs / 1000));
+        const serialized = encodeURIComponent(JSON.stringify(active));
+        document.cookie = `${AFFILIATE_COOKIE_NAME}=${serialized}; path=/; max-age=${maxAgeSec}; SameSite=Lax`;
+      }
+      return { shouldClear: false, orderCount: newOrderCount };
+    }
+  }
+
+  // Case 3: Reached quota or standard 1-order only: Clear cookie
+  clearAffiliateCookie();
+  return { shouldClear: true, orderCount: newOrderCount };
 }
 
 export interface AffiliateClickRecord {
@@ -335,6 +392,142 @@ export function calculateAffiliateStats(affiliate: SellerUser, orders: StoredOrd
       const tB = new Date(b.createdAt || b.date || 0).getTime();
       return tB - tA;
     })
+  };
+}
+
+export interface DetailedCommissionResult {
+  merchandiseValue: number;
+  commissionAmount: number;
+  effectiveRate: number;
+  commissionModel: 'standard' | 'by_product' | 'tiered';
+  tierApplied?: { minAmount: number; maxAmount?: number; rate: number };
+  itemsBreakdown?: Array<{
+    productId: string;
+    productName?: string;
+    rate: number;
+    amount: number;
+    merchandiseValue: number;
+  }>;
+}
+
+/**
+ * Calculate detailed affiliate commission with support for:
+ * - Product-specific commission overrides (by_product)
+ * - Order merchandise revenue tiers (tiered)
+ * - Standard fixed commission rate (standard)
+ */
+export function calculateDetailedAffiliateCommission(
+  affiliate: SellerUser,
+  items: Array<{ productId: string; name?: string; productName?: string; price: number; quantity: number }> = [],
+  subtotal: number = 0,
+  discountAmount: number = 0,
+  fallbackRate: number = 10
+): DetailedCommissionResult {
+  const merchandiseValue = Math.max(0, subtotal - discountAmount);
+  const baseRate = typeof affiliate.commissionRate === 'number' && affiliate.commissionRate >= 0
+    ? affiliate.commissionRate
+    : fallbackRate;
+
+  // 1. Model: By Product (Từng sản phẩm có % hoa hồng riêng)
+  if (
+    affiliate.commissionModel === 'by_product' &&
+    Array.isArray(affiliate.productCommissions) &&
+    affiliate.productCommissions.length > 0 &&
+    items.length > 0
+  ) {
+    const rawSubtotal = subtotal > 0 ? subtotal : items.reduce((sum, it) => sum + ((it.price || 0) * (it.quantity || 1)), 0);
+    const discountRatio = rawSubtotal > 0 ? Math.min(1, discountAmount / rawSubtotal) : 0;
+
+    let totalCommission = 0;
+    const itemsBreakdown: Array<{
+      productId: string;
+      productName?: string;
+      rate: number;
+      amount: number;
+      merchandiseValue: number;
+    }> = [];
+
+    items.forEach((it) => {
+      const itemRawTotal = (it.price || 0) * (it.quantity || 1);
+      const itemMerchandise = Math.max(0, Math.round(itemRawTotal * (1 - discountRatio)));
+
+      const override = affiliate.productCommissions?.find((p) => p.productId === it.productId);
+      const rate = override && typeof override.rate === 'number' && override.rate >= 0
+        ? override.rate
+        : baseRate;
+
+      const comm = Math.round((itemMerchandise * rate) / 100);
+      totalCommission += comm;
+
+      itemsBreakdown.push({
+        productId: it.productId,
+        productName: it.productName || it.name,
+        rate,
+        amount: comm,
+        merchandiseValue: itemMerchandise
+      });
+    });
+
+    const effectiveRate = merchandiseValue > 0
+      ? Math.round((totalCommission / merchandiseValue) * 1000) / 10
+      : baseRate;
+
+    return {
+      merchandiseValue,
+      commissionAmount: totalCommission,
+      effectiveRate,
+      commissionModel: 'by_product',
+      itemsBreakdown
+    };
+  }
+
+  // 2. Model: Tiered (Theo từng mức giá trị đơn hàng / doanh thu)
+  if (
+    affiliate.commissionModel === 'tiered' &&
+    Array.isArray(affiliate.tieredCommissions) &&
+    affiliate.tieredCommissions.length > 0
+  ) {
+    // Sort tiers by minAmount ascending
+    const sortedTiers = [...affiliate.tieredCommissions].sort((a, b) => a.minAmount - b.minAmount);
+    let matchedTier = sortedTiers[0];
+
+    for (const t of sortedTiers) {
+      const min = Number(t.minAmount) || 0;
+      const max = Number(t.maxAmount) || 0;
+      if (merchandiseValue >= min) {
+        if (max === 0 || merchandiseValue < max) {
+          matchedTier = t;
+          break;
+        } else if (max > 0 && merchandiseValue >= max) {
+          matchedTier = t;
+        }
+      }
+    }
+
+    const rate = matchedTier && typeof matchedTier.rate === 'number' && matchedTier.rate >= 0
+      ? matchedTier.rate
+      : baseRate;
+
+    const commissionAmount = Math.round((merchandiseValue * rate) / 100);
+
+    return {
+      merchandiseValue,
+      commissionAmount,
+      effectiveRate: rate,
+      commissionModel: 'tiered',
+      tierApplied: matchedTier
+    };
+  }
+
+  // 3. Standard Model (Cố định cơ bản)
+  const rate = baseRate;
+  const commissionAmount = Math.round((merchandiseValue * rate) / 100);
+
+  return {
+    merchandiseValue,
+    commissionAmount,
+    effectiveRate: rate,
+    commissionModel: 'standard'
   };
 }
 

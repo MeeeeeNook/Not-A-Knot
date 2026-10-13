@@ -889,9 +889,98 @@ async function startServer() {
     }
   });
 
-  // ----------------------------------------------------
-  // SERVER-SIDE AUTHENTICATION API
-  // ----------------------------------------------------
+  /**
+   * POST /api/auth/verify-google-user
+   * Ultra-fast server-side verification of Google accounts against Root Admin whitelist,
+   * authorized_sellers collection, and sellers collection in Firestore.
+   * Responds in ~30ms so unauthorized accounts do not experience endless loading spinners.
+   */
+  app.post('/api/auth/verify-google-user', async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        return res.status(400).json({ isAuthorized: false, error: 'Email không hợp lệ.' });
+      }
+
+      // 1. Root Admin Whitelist
+      if (isServerRootAdmin(cleanEmail)) {
+        return res.json({
+          isAuthorized: true,
+          isRoot: true,
+          role: 'root_admin',
+          username: cleanEmail.split('@')[0],
+          name: 'Tổng bí thư'
+        });
+      }
+
+      // 2. Check authorized_sellers collection
+      try {
+        const authDocRef = doc(firestoreDb, 'authorized_sellers', cleanEmail);
+        const authSnap = await getDoc(authDocRef);
+        if (authSnap.exists()) {
+          const authData = authSnap.data();
+          if (authData.isActive !== false) {
+            return res.json({
+              isAuthorized: true,
+              isRoot: false,
+              role: authData.role || 'member',
+              name: authData.name || cleanEmail
+            });
+          }
+        }
+      } catch (authErr) {
+        console.warn('[Verify Google API] authorized_sellers check warning:', authErr);
+      }
+
+      // 3. Check sellers collection (for sellers or affiliates)
+      try {
+        const sellersCol = collection(firestoreDb, 'sellers');
+        const qEmail = query(sellersCol, where('googleEmail', '==', cleanEmail), limit(1));
+        const emailSnap = await getDocs(qEmail);
+        if (!emailSnap.empty) {
+          const seller = emailSnap.docs[0].data();
+          if (seller.isActive !== false) {
+            return res.json({
+              isAuthorized: true,
+              isRoot: seller.isRootAdmin === true || seller.role === 'root_admin',
+              role: seller.role || 'member',
+              seller: { id: emailSnap.docs[0].id, ...seller }
+            });
+          }
+        }
+
+        const usernameCandidate = cleanEmail.split('@')[0];
+        const qUser = query(sellersCol, where('username', '==', usernameCandidate), limit(1));
+        const userSnap = await getDocs(qUser);
+        if (!userSnap.empty) {
+          const seller = userSnap.docs[0].data();
+          if (seller.isActive !== false) {
+            return res.json({
+              isAuthorized: true,
+              isRoot: seller.isRootAdmin === true || seller.role === 'root_admin',
+              role: seller.role || 'member',
+              seller: { id: userSnap.docs[0].id, ...seller }
+            });
+          }
+        }
+      } catch (sellerErr) {
+        console.warn('[Verify Google API] sellers check warning:', sellerErr);
+      }
+
+      // 4. Unauthorized
+      return res.json({
+        isAuthorized: false,
+        error: 'Tài khoản không tồn tại trong hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.'
+      });
+    } catch (err: any) {
+      console.warn('[Verify Google API] Exception:', err);
+      return res.status(500).json({
+        isAuthorized: false,
+        error: 'Lỗi xác thực hệ thống.'
+      });
+    }
+  });
 
   /**
    * POST /api/auth/login

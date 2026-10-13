@@ -14,13 +14,14 @@ import { PRODUCTS } from './data/products';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import { COLLECTIONS_DATA } from './data/collections';
 import { DEFAULT_SITE_CONTENT } from './data/siteContent';
-import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig, ComboItemSelection } from './types';
+import { Product, CartItem, CategoryItem, CollectionInfo, SiteContentConfig, SellerUser, AuthorizedSellerItem, ProductCharmOption, ProductOmamoriOption, MaintenanceConfig, ComboItemSelection } from './types';
 import { CheckCircle2, ShoppingBag, Sparkles, X, AlertCircle } from 'lucide-react';
 import { Lock } from './components/common/LockIcon';
 import type { PolicyTab } from './components/LegalPoliciesModal';
 import { getInitialMaintenanceConfig, saveMaintenanceConfig, subscribeToMaintenanceConfig } from './utils/maintenanceManager';
 import { setAffiliateReferral, fetchAffiliateSystemConfig, recordAffiliateClick } from './utils/affiliateManager';
 import { getAdminSession, clearAdminSession, createDefaultSellers, deduplicateSellers, verifySessionWithServer, isRootAdminUser, isRootAdminUsername, AUTHORIZED_ROOT_ADMIN_EMAILS, getRootAdminEmails } from './utils/auth';
+import { safeTimeoutSignal } from './utils/timeoutSignal';
 import { initDevToolsProtection } from './utils/securityGuard';
 import { initGlobalErrorLogging, logClientError } from './utils/logger';
 import { useAdminPresence } from './hooks/useAdminPresence';
@@ -487,10 +488,16 @@ export default function App() {
     // Capture Affiliate Referral link click (?ref=AN001) - Last Click Attribution
     const refCode = queryParams.get('ref') || searchParams.get('ref');
     if (refCode) {
-      fetchAffiliateSystemConfig().then((cfg) => {
-        setAffiliateReferral(refCode, cfg.cookieDurationDays);
-      }).catch(() => {
-        setAffiliateReferral(refCode, 30);
+      import('./utils/affiliateManager').then(({ fetchAffiliateByCode, fetchAffiliateSystemConfig, setAffiliateReferral, recordAffiliateClick }) => {
+        Promise.all([
+          fetchAffiliateByCode(refCode).catch(() => null),
+          fetchAffiliateSystemConfig().catch(() => null)
+        ]).then(([affUser, cfg]) => {
+          const duration = affUser?.cookieDurationDays || cfg?.cookieDurationDays || 30;
+          const maxOrders = affUser?.maxOrdersPerCookieSession !== undefined ? affUser.maxOrdersPerCookieSession : 1;
+          setAffiliateReferral(refCode, duration, maxOrders);
+          recordAffiliateClick(refCode).catch(() => {});
+        });
       });
     }
 
@@ -773,84 +780,97 @@ export default function App() {
     // Subscribe to Firebase Authentication state for real-time authentication sync
     const unsubscribeAuth = subscribeToFirebaseAuthState(async (fbUser) => {
       if (fbUser) {
+        // If Firebase user is anonymous, it's used for public operations (Storage / Tracking).
+        // DO NOT treat as an unauthorized intruder, DO NOT wipe existing admin session!
+        if (fbUser.isAnonymous) {
+          const activeLocal = getAdminSession();
+          if (activeLocal && activeLocal.username) {
+            setCurrentSeller(activeLocal as SellerUser);
+          }
+          return;
+        }
+
         const email = (fbUser.email || '').trim().toLowerCase();
+        if (!email) return;
+
         const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(email) || isRootAdminUsername(email);
         
-        let isAuthorizedEmail = false;
-        try {
-          const authList = await fetchAuthorizedSellersFromFirestore();
-          isAuthorizedEmail = authList.some(a => a.email.trim().toLowerCase() === email && a.isActive !== false);
-        } catch {}
-
+        let isAuthorized = isRoot;
+        let matchedAuthEmail: AuthorizedSellerItem | null = null;
         let matchedSeller: SellerUser | null = null;
-        if (!isRoot && email) {
-          try {
-            const sellers = await fetchSellersFromFirestore();
-            matchedSeller = sellers.find(s =>
-              (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
-              (s.phone && s.phone.trim().toLowerCase() === email) ||
-              (s.username && s.username.trim().toLowerCase() === email) ||
-              ((s as any).email && (s as any).email.trim().toLowerCase() === email)
-            ) || null;
-          } catch {
-            // ignore
-          }
-        }
 
-        // ZERO-TRUST ACCESS CONTROL: Only allow root admin, authorized seller emails, or registered affiliates
-        if (!isRoot && !isAuthorizedEmail && (!matchedSeller || matchedSeller.isActive === false)) {
-          // If user previously signed in as an affiliate or has an active affiliate session, auto-provision affiliate profile
-          const activeSession = getAdminSession();
-          if (activeSession?.role === 'affiliate') {
-            try {
-              const { generateAffiliateCode } = await import('./utils/affiliateManager');
-              const sellersList = await fetchSellersFromFirestore().catch(() => []);
-              const baseCode = generateAffiliateCode(fbUser.displayName || email.split('@')[0], sellersList);
-              const cleanUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '') || `user${Date.now().toString().slice(-4)}`;
-              const nowIso = new Date().toISOString();
-              const autoAffiliate: SellerUser = {
-                id: `affiliate-${fbUser.uid.slice(0, 12)}`,
-                username: cleanUsername,
-                name: fbUser.displayName || email.split('@')[0],
-                role: 'affiliate',
-                affiliateCode: baseCode,
-                commissionRate: 10,
-                isActive: true,
-                googleEmail: email,
-                googleUid: fbUser.uid,
-                avatarColor: '#991B1B',
-                createdAt: nowIso,
-                linkedGoogleAt: nowIso
-              };
-              await saveSellerToFirestore(autoAffiliate).catch(() => {});
-              matchedSeller = autoAffiliate;
-            } catch (affiliateErr) {
-              console.warn('Auto-provisioning affiliate error:', affiliateErr);
-            }
-          }
-        }
-
-        if (!isRoot && !isAuthorizedEmail && (!matchedSeller || matchedSeller.isActive === false)) {
+        if (!isRoot) {
+          // Fast server verification in ~30ms to prevent lag on unauthorized attempts
           try {
-            const geo = await getClientGeoLocation().catch(() => null);
-            const dev = getClientDeviceInfo();
-            const physicalLoc = geo ? `${geo.city || geo.region || ''}${geo.city && geo.country ? ', ' : ''}${geo.country || 'Vietnam'}` : 'Không xác định';
-            await recordUnauthorizedLoginAttempt({
-              email,
-              name: fbUser.displayName || '',
-              ip: geo?.ip || 'Unknown',
-              location: physicalLoc,
-              device: `${dev.browser} trên ${dev.os}`,
-              reason: 'Tài khoản Google chưa được Tổng bí thư phê duyệt'
+            const resp = await fetch('/api/auth/verify-google-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+              signal: safeTimeoutSignal(2500)
             });
+            if (resp.ok) {
+              const checkData = await resp.json();
+              if (checkData.isAuthorized) {
+                isAuthorized = true;
+                if (checkData.seller) matchedSeller = checkData.seller;
+                if (checkData.role) matchedAuthEmail = { email, role: checkData.role, isActive: true, addedBy: 'admin', createdAt: '' };
+              } else {
+                // Instantly record and sign out without delay
+                void recordUnauthorizedLoginAttempt({
+                  email,
+                  name: fbUser.displayName || '',
+                  ip: 'Unknown',
+                  location: 'Vietnam',
+                  device: `${getClientDeviceInfo().browser} trên ${getClientDeviceInfo().os}`,
+                  reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
+                }).catch(() => {});
+
+                signOutFirebaseAuth().catch(() => {});
+                setCurrentSeller(null);
+                clearAdminSession();
+                return;
+              }
+            }
           } catch {}
-          await signOutFirebaseAuth().catch(() => {});
+
+          if (!isAuthorized) {
+            try {
+              const authList = await fetchAuthorizedSellersFromFirestore();
+              matchedAuthEmail = authList.find(a => a.email.trim().toLowerCase() === email && a.isActive !== false) || null;
+            } catch {}
+
+            try {
+              const sellers = await fetchSellersFromFirestore();
+              matchedSeller = sellers.find(s =>
+                (s.googleEmail && s.googleEmail.trim().toLowerCase() === email) ||
+                (s.phone && s.phone.trim().toLowerCase() === email) ||
+                (s.username && s.username.trim().toLowerCase() === email) ||
+                ((s as any).email && (s as any).email.trim().toLowerCase() === email)
+              ) || null;
+            } catch {}
+
+            isAuthorized = Boolean(matchedAuthEmail) || (Boolean(matchedSeller) && matchedSeller?.isActive !== false);
+          }
+        }
+
+        // ZERO-TRUST ACCESS CONTROL: Only allow root admin, authorized seller emails, or registered affiliates added by Admin
+        if (!isAuthorized) {
+          void recordUnauthorizedLoginAttempt({
+            email,
+            name: fbUser.displayName || '',
+            ip: 'Unknown',
+            location: 'Vietnam',
+            device: `${getClientDeviceInfo().browser} trên ${getClientDeviceInfo().os}`,
+            reason: 'Tài khoản không tồn tại trên hệ thống (chưa được Quản trị viên cấp quyền)'
+          }).catch(() => {});
+
+          signOutFirebaseAuth().catch(() => {});
           setCurrentSeller(null);
           clearAdminSession();
           return;
         }
 
-        const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || 'member');
+        const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || matchedAuthEmail?.role || 'member');
         const userPayload: SellerUser = {
           id: matchedSeller?.id || `seller-${fbUser.uid.slice(0, 12)}`,
           username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : (fbUser.displayName || 'admin')),
@@ -865,13 +885,22 @@ export default function App() {
           googleUid: fbUser.uid,
           affiliateCode: matchedSeller?.affiliateCode,
           commissionRate: matchedSeller?.commissionRate,
-          paymentInfo: matchedSeller?.paymentInfo
+          paymentInfo: matchedSeller?.paymentInfo,
+          cookieDurationDays: matchedSeller?.cookieDurationDays,
+          maxOrdersPerCookieSession: matchedSeller?.maxOrdersPerCookieSession,
+          commissionModel: matchedSeller?.commissionModel,
+          productCommissions: matchedSeller?.productCommissions,
+          tieredCommissions: matchedSeller?.tieredCommissions
         };
         setCurrentSeller(userPayload);
       } else {
-        // If not logged into Firebase Auth, clear seller state so legacy/unauthenticated sessions cannot view admin
-        setCurrentSeller(null);
-        clearAdminSession();
+        // If not logged into Firebase Auth, check if there is an active valid local session from backend JWT
+        const activeLocal = getAdminSession();
+        if (activeLocal && activeLocal.username) {
+          setCurrentSeller(activeLocal as SellerUser);
+        } else {
+          setCurrentSeller(null);
+        }
       }
     });
 
@@ -1902,7 +1931,7 @@ export default function App() {
     if (user.role === 'affiliate') {
       setCurrentView('affiliate');
       navigateTo('/affiliate');
-      showToast(`Xin chào Đối Tác Affiliate ${user.name}!`);
+      showToast(`Xin chào ${user.name}!`);
     } else {
       setCurrentView('admin');
       navigateTo('/admin');
@@ -2313,18 +2342,31 @@ export default function App() {
           )
         )}
 
-        {/* VIEW: Dedicated Standalone Affiliate Dashboard */}
+        {/* VIEW: Dedicated Standalone Affiliate Dashboard with Strict Auth Gate */}
         {currentView === 'affiliate' && (
-          <React.Suspense fallback={<ViewLoadingFallback />}>
-            <AffiliateDashboard
-              currentSeller={currentSeller}
-              onLoginSuccess={handleAdminLoginSuccess}
-              onLogout={handleAdminLogout}
-              onNavigateHome={handleNavigateLanding}
-              brandName={siteContent?.brandName}
-              logoUrl={siteContent?.logoUrl}
-            />
-          </React.Suspense>
+          (currentSeller && auth.currentUser) ? (
+            <React.Suspense fallback={<ViewLoadingFallback />}>
+              <AffiliateDashboard
+                currentSeller={currentSeller}
+                onLoginSuccess={handleAdminLoginSuccess}
+                onLogout={handleAdminLogout}
+                onNavigateHome={handleNavigateLanding}
+                brandName={siteContent?.brandName}
+                logoUrl={siteContent?.logoUrl}
+              />
+            </React.Suspense>
+          ) : (
+            <React.Suspense fallback={<ViewLoadingFallback />}>
+              <AdminLoginPage
+                brandName={siteContent?.brandName}
+                logoUrl={siteContent?.logoUrl}
+                onBackToStore={handleNavigateLanding}
+                onLoginSuccess={(user) => {
+                  handleAdminLoginSuccess(user);
+                }}
+              />
+            </React.Suspense>
+          )
         )}
 
         {/* VIEW 7: Dedicated Standalone Product Detail Page */}
@@ -2426,6 +2468,10 @@ export default function App() {
           onOpenContact={handleOpenContact}
           onOpenOrderTracker={() => handleOpenOrderTracker()}
           onOpenPolicy={handleOpenPolicy}
+          onOpenAffiliate={() => {
+            setCurrentView('affiliate');
+            navigateTo('/affiliate');
+          }}
         />
       )}
 

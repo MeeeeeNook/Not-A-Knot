@@ -47,10 +47,17 @@ export async function submitOrderToServer(
   };
 
   try {
-    if (auth.currentUser) {
+    if (auth.currentUser && !auth.currentUser.isAnonymous) {
       const idToken = await auth.currentUser.getIdToken();
       if (idToken) {
         headers['Authorization'] = `Bearer ${idToken}`;
+      }
+    }
+    if (!headers['Authorization']) {
+      const { getAdminToken } = await import('./auth');
+      const adminToken = getAdminToken();
+      if (adminToken) {
+        headers['Authorization'] = `Bearer ${adminToken}`;
       }
     }
   } catch {

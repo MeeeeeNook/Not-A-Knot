@@ -239,6 +239,18 @@ export interface OrderItemDetail {
   selectedComboItems?: ComboItemSelection[]; // Detail customizations for each item in the combo
 }
 
+export interface ProductCommissionOverride {
+  productId: string;
+  productName?: string;
+  rate: number; // Commission percentage (e.g. 15 for 15%)
+}
+
+export interface RevenueTierCommission {
+  minAmount: number; // Minimum order value in VNĐ
+  maxAmount?: number; // Maximum order value in VNĐ (undefined or 0 for infinity)
+  rate: number; // Commission percentage (e.g. 12 for 12%)
+}
+
 export interface SellerUser {
   id: string;
   username: string;
@@ -256,8 +268,13 @@ export interface SellerUser {
   createdAt: string;
   // Affiliate specific fields
   affiliateCode?: string; // Unique uppercase affiliate code, e.g. "AN001"
-  commissionRate?: number; // Configurable commission percentage (e.g. 10 for 10%)
+  commissionRate?: number; // Configurable base commission percentage (e.g. 10 for 10%)
   paymentInfo?: string; // Optional banking note for manual payout
+  cookieDurationDays?: number; // Custom cookie duration for this affiliate in days (e.g. 30, 60, 90). Falls back to system config if undefined.
+  maxOrdersPerCookieSession?: number; // Max orders per cookie session: 1 = first order only (default), 2, 3... or 0 for unlimited.
+  commissionModel?: 'standard' | 'by_product' | 'tiered'; // Advanced commission calculation mode
+  productCommissions?: ProductCommissionOverride[]; // Product-specific commission percentages
+  tieredCommissions?: RevenueTierCommission[]; // Order revenue tier-based commission percentages
   lastLoginAt?: string;
   lastLoginIp?: string;
   lastLoginCity?: string;
@@ -357,6 +374,7 @@ export interface OrderRecord {
   affiliateCommissionRate?: number; // Snapshot of commission percentage at the time of order placement (e.g. 10 for 10%)
   affiliateCommissionAmount?: number; // Computed commission = merchandiseValueAfterDiscounts * rate / 100
   affiliateMerchandiseValue?: number; // Merchandise value after discounts (excluding shipping)
+  isAdminPlacingOrder?: boolean; // Flag indicating if an authenticated admin/staff placed this order
 }
 
 export interface AffiliateSystemConfig {

@@ -16,12 +16,14 @@ interface FooterProps {
   onOpenContact?: () => void;
   onOpenOrderTracker?: () => void;
   onOpenPolicy?: (tab?: 'privacy' | 'terms' | 'returns' | 'shipping_payment' | 'transparency') => void;
+  onOpenAffiliate?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   siteContent,
   categories = [],
   onOpenAdmin,
+  onOpenAffiliate,
   onSelectCollection,
   onSelectCategory,
   onOpenAllCatalog,
@@ -268,7 +270,11 @@ export const Footer: React.FC<FooterProps> = ({
                   href="/affiliate"
                   onClick={(e) => {
                     e.preventDefault();
-                    window.location.href = '/affiliate';
+                    if (onOpenAffiliate) {
+                      onOpenAffiliate();
+                    } else {
+                      window.location.href = '/affiliate';
+                    }
                   }}
                   className="hover:text-rose-400 transition-colors inline-flex items-center gap-1.5 text-rose-300/90 font-medium"
                 >

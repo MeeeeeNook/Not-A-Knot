@@ -112,7 +112,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
             Đăng nhập hệ thống
           </h1>
           <p className="text-sm sm:text-base text-neutral-500 font-normal mt-1.5 leading-relaxed">
-            Hệ thống tự động nhận diện và chuyển hướng tài khoản Quản trị viên và Đối tác Affiliate.
+            Hệ thống quản lý dành cho người bán/affiliate
           </p>
         </div>
 

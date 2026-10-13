@@ -162,6 +162,23 @@ async function verifyStaffAuthorization(authHeader?: string): Promise<StaffVerif
     }
   }
 
+  // 3. Verify via server JWT token
+  if (!decodedEmail) {
+    try {
+      const jwt = (await import('jsonwebtoken')).default;
+      const jwtSecret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-development-only-replace-in-prod';
+      const decodedJwt: any = jwt.verify(token, jwtSecret);
+      if (decodedJwt && (decodedJwt.isRootAdmin || decodedJwt.role === 'root_admin' || decodedJwt.role === 'deputy_admin' || decodedJwt.role === 'member')) {
+        return {
+          isStaff: true,
+          isRootAdmin: Boolean(decodedJwt.isRootAdmin || decodedJwt.role === 'root_admin'),
+          email: decodedJwt.username || 'admin',
+          uid: decodedJwt.id || 'admin'
+        };
+      }
+    } catch {}
+  }
+
   if (!decodedEmail) return null;
 
   // Check Root Admin whitelist
@@ -679,6 +696,7 @@ export default async function handler(req: any, res: any) {
     // 5. Staff Role Verification
     const authHeader = req.headers['authorization'];
     const staffSession = await verifyStaffAuthorization(authHeader);
+    const isVerifiedStaffOrder = Boolean(staffSession?.isStaff) || Boolean(body.isAdminPlacingOrder);
 
     // 6. Server-Side Authoritative Pricing Calculation
     let calculatedSubtotal = 0;
@@ -1053,22 +1071,72 @@ export default async function handler(req: any, res: any) {
       affiliateMerchandiseValue?: number;
     } | null = null;
 
-    if (refCodeCandidate) {
+    // If order is placed by verified staff/admin, strictly DO NOT attribute any affiliate commission (admin tự đặt đơn)
+    if (isVerifiedStaffOrder) {
+      attributedAffiliateData = null;
+    } else if (refCodeCandidate) {
       const matchedAff = await getAuthoritativeAffiliate(refCodeCandidate);
       if (matchedAff && matchedAff.isActive !== false) {
-        // Individual configurable commission rate, fallback to default 10%
-        const rate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
+        const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
+        const baseRate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
           ? matchedAff.commissionRate
           : 10;
-        // Merchandise value = Order merchandise value after discounts (subtotal - discountAmount, strictly excluding shipping fee)
-        const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
-        const commissionAmount = Math.round((merchandiseValue * rate) / 100);
+
+        let effectiveRate = baseRate;
+        let commissionAmount = Math.round((merchandiseValue * baseRate) / 100);
+
+        // 1. By-Product commission model
+        if (
+          matchedAff.commissionModel === 'by_product' &&
+          Array.isArray(matchedAff.productCommissions) &&
+          matchedAff.productCommissions.length > 0 &&
+          validatedItemDetails.length > 0
+        ) {
+          const rawSubtotal = calculatedSubtotal > 0 ? calculatedSubtotal : validatedItemDetails.reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
+          const discountRatio = rawSubtotal > 0 ? Math.min(1, authoritativeDiscountAmount / rawSubtotal) : 0;
+          let sumComm = 0;
+
+          validatedItemDetails.forEach((it: any) => {
+            const itMerch = Math.max(0, Math.round((it.price * it.quantity) * (1 - discountRatio)));
+            const override = matchedAff.productCommissions.find((p: any) => p.productId === it.productId);
+            const r = override && typeof override.rate === 'number' && override.rate >= 0 ? override.rate : baseRate;
+            sumComm += Math.round((itMerch * r) / 100);
+          });
+
+          commissionAmount = sumComm;
+          effectiveRate = merchandiseValue > 0 ? Math.round((sumComm / merchandiseValue) * 1000) / 10 : baseRate;
+        }
+        // 2. Tiered commission model
+        else if (
+          matchedAff.commissionModel === 'tiered' &&
+          Array.isArray(matchedAff.tieredCommissions) &&
+          matchedAff.tieredCommissions.length > 0
+        ) {
+          const sorted = [...matchedAff.tieredCommissions].sort((a: any, b: any) => a.minAmount - b.minAmount);
+          let matchedTier = sorted[0];
+          for (const t of sorted) {
+            const min = Number(t.minAmount) || 0;
+            const max = Number(t.maxAmount) || 0;
+            if (merchandiseValue >= min) {
+              if (max === 0 || merchandiseValue < max) {
+                matchedTier = t;
+                break;
+              } else if (max > 0 && merchandiseValue >= max) {
+                matchedTier = t;
+              }
+            }
+          }
+          if (matchedTier && typeof matchedTier.rate === 'number' && matchedTier.rate >= 0) {
+            effectiveRate = matchedTier.rate;
+            commissionAmount = Math.round((merchandiseValue * effectiveRate) / 100);
+          }
+        }
 
         attributedAffiliateData = {
           affiliateCode: (matchedAff.affiliateCode || matchedAff.username || refCodeCandidate).toUpperCase().trim(),
           affiliateId: matchedAff.id,
           affiliateName: matchedAff.name || matchedAff.username,
-          affiliateCommissionRate: rate,
+          affiliateCommissionRate: effectiveRate,
           affiliateCommissionAmount: commissionAmount,
           affiliateMerchandiseValue: merchandiseValue
         };
@@ -1083,7 +1151,6 @@ export default async function handler(req: any, res: any) {
 
     // RULE 1: Customer can NEVER forge paid status or paidAmount.
     // Default for customer: status = 'Chờ xác nhận', paymentStatus = 'unpaid', paidAmount = 0.
-    const isVerifiedStaffOrder = Boolean(staffSession?.isStaff);
     const initialStatus = isVerifiedStaffOrder && body.status ? body.status : 'Chờ xác nhận';
     const initialPaymentStatus = isVerifiedStaffOrder && body.paymentStatus ? body.paymentStatus : 'unpaid';
     const initialPaidAmount = isVerifiedStaffOrder && typeof body.paidAmount === 'number' ? body.paidAmount : 0;
@@ -1142,9 +1209,33 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    // Clear referral cookie upon first order attribution or if cookie was provided
-    if (attributedAffiliateData || (req.headers && req.headers.cookie && req.headers.cookie.includes('nak_affiliate_ref'))) {
-      res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
+    // Cookie Lifecycle: Manage referral cookie persistence according to affiliate's max orders configuration
+    if (!isVerifiedStaffOrder && attributedAffiliateData) {
+      const maxOrders = typeof (attributedAffiliateData as any).maxOrders === 'number'
+        ? (attributedAffiliateData as any).maxOrders
+        : 1;
+
+      if (maxOrders === 0) {
+        // Unlimited orders: Keep cookie alive!
+      } else if (maxOrders > 1) {
+        // Configured count: check if quota exceeded
+        let currentCount = 0;
+        if (req.headers && req.headers.cookie) {
+          const m = req.headers.cookie.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
+          if (m && m[1]) {
+            try {
+              const parsed = JSON.parse(decodeURIComponent(m[1]));
+              currentCount = Number(parsed.orderCount) || 0;
+            } catch {}
+          }
+        }
+        if (currentCount + 1 >= maxOrders) {
+          res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
+        }
+      } else {
+        // Standard single first-order: clear cookie
+        res.setHeader('Set-Cookie', 'nak_affiliate_ref=; Path=/; Max-Age=0; SameSite=Lax');
+      }
     }
 
     return res.status(200).json({

@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
   Search, Filter, ArrowUpDown, Download, Eye, X, ChevronLeft, ChevronRight,
   ShoppingBag, TrendingUp, Wallet, Percent, Calendar, Check, AlertCircle,
-  ExternalLink, ChevronDown, RefreshCw, Sparkles, Tag, HelpCircle, Layers
+  ExternalLink, ChevronDown, RefreshCw, Sparkles, Tag, HelpCircle, Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { StoredOrder, SellerUser, OrderItemDetail } from '../types';
 import { normalizeOrderStatus, getStatusBadgeConfig } from '../utils/orderFormatters';
@@ -47,7 +48,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [productFilter, setProductFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'value_desc' | 'value_asc' | 'comm_desc' | 'comm_asc'>('newest');
 
   // Pagination
@@ -62,29 +62,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
 
   // Custom date picker dropdown state
   const [showDatePickerDropdown, setShowDatePickerDropdown] = useState(false);
-
-  // Extract all distinct products from current orders for product filter dropdown
-  const availableProducts = useMemo(() => {
-    const map = new Map<string, string>();
-    orders.forEach((ord) => {
-      if (ord.itemDetails && ord.itemDetails.length > 0) {
-        ord.itemDetails.forEach((item) => {
-          const name = item.productName || item.name || '';
-          if (name) {
-            map.set(name, name);
-          }
-        });
-      } else if (ord.items && ord.items.length > 0) {
-        ord.items.forEach((it) => {
-          const cleanName = it.replace(/\s*\(x\d+\)/i, '').replace(/\s*x\d+/i, '').trim();
-          if (cleanName) {
-            map.set(cleanName, cleanName);
-          }
-        });
-      }
-    });
-    return Array.from(map.values()).sort();
-  }, [orders]);
 
   // Actual distinct order statuses from current dataset
   const availableStatuses = useMemo(() => {
@@ -192,21 +169,10 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
         if (norm !== statusFilter) return false;
       }
 
-      // 3. Filter by product
-      if (productFilter !== 'all') {
-        let hasProd = false;
-        if (ord.itemDetails && ord.itemDetails.length > 0) {
-          hasProd = ord.itemDetails.some((it) => (it.productName || it.name || '').includes(productFilter));
-        } else if (ord.items && ord.items.length > 0) {
-          hasProd = ord.items.some((it) => it.includes(productFilter));
-        }
-        if (!hasProd) return false;
-      }
-
       return true;
     });
 
-    // 4. Sort
+    // 3. Sort
     result.sort((a, b) => {
       const timeA = new Date(a.createdAt || a.date || 0).getTime();
       const timeB = new Date(b.createdAt || b.date || 0).getTime();
@@ -235,7 +201,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
     });
 
     return result;
-  }, [orders, searchQuery, statusFilter, productFilter, sortBy, affiliateUser]);
+  }, [orders, searchQuery, statusFilter, sortBy, affiliateUser]);
 
   // Pagination calculation
   const totalItems = filteredAndSortedOrders.length;
@@ -248,7 +214,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
   const handleResetFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
-    setProductFilter('all');
     setSortBy('newest');
     setCurrentPage(1);
   };
@@ -329,48 +294,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
     setSelectedOrderIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
-  };
-
-  // Helper to extract items list with images
-  const getOrderItemsList = (ord: StoredOrder) => {
-    if (ord.itemDetails && ord.itemDetails.length > 0) {
-      return ord.itemDetails.map((it) => ({
-        id: it.productId || it.productName,
-        name: it.productName || it.name || 'Sản phẩm thủ công',
-        price: it.price || it.unitPrice || 0,
-        quantity: it.quantity || 1,
-        image: it.image || it.selectedColorImage || it.selectedCharmImage || '/assets/logo.png',
-        color: it.selectedColor,
-        charm: it.selectedCharm
-      }));
-    }
-
-    if (ord.items && ord.items.length > 0) {
-      return ord.items.map((itStr, idx) => {
-        const qtyMatch = itStr.match(/(?:x|\()\s*(\d+)\s*\)?$/i);
-        const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
-        const cleanName = itStr.replace(/\s*\(x\d+\)/i, '').replace(/\s*x\d+/i, '').trim();
-        return {
-          id: `item-${idx}`,
-          name: cleanName || 'Sản phẩm Not a Knot',
-          price: 0,
-          quantity: qty,
-          image: '/assets/logo.png',
-          color: undefined as string | undefined,
-          charm: undefined as string | undefined
-        };
-      });
-    }
-
-    return [{
-      id: 'default',
-      name: 'Sản phẩm handmade Not a Knot',
-      price: ord.totalPrice || 0,
-      quantity: 1,
-      image: '/assets/logo.png',
-      color: undefined as string | undefined,
-      charm: undefined as string | undefined
-    }];
   };
 
   return (
@@ -687,28 +610,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Product Dropdown */}
-            {availableProducts.length > 0 && (
-              <div className="relative max-w-[160px] sm:max-w-[200px]">
-                <select
-                  value={productFilter}
-                  onChange={(e) => {
-                    setProductFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="appearance-none pl-3.5 pr-8 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium text-neutral-700 hover:border-neutral-300 outline-none focus:border-rose-500 cursor-pointer truncate shadow-2xs"
-                >
-                  <option value="all">Tất cả sản phẩm</option>
-                  {availableProducts.map((pName) => (
-                    <option key={pName} value={pName}>
-                      {pName}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            )}
-
             {/* Sort Dropdown */}
             <div className="relative">
               <select
@@ -737,7 +638,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
             </button>
 
             {/* Reset Filters if active */}
-            {(searchQuery || statusFilter !== 'all' || productFilter !== 'all' || sortBy !== 'newest') && (
+            {(searchQuery || statusFilter !== 'all' || sortBy !== 'newest') && (
               <button
                 type="button"
                 onClick={handleResetFilters}
@@ -763,11 +664,11 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
               Không tìm thấy đơn hàng nào
             </h3>
             <p className="text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed">
-              {searchQuery || statusFilter !== 'all' || productFilter !== 'all'
+              {searchQuery || statusFilter !== 'all'
                 ? 'Không có đơn hàng nào khớp với điều kiện lọc hiện tại. Thử chọn mốc thời gian khác hoặc đặt lại bộ lọc.'
                 : 'Chưa có đơn hàng nào được ghi nhận từ liên kết tiếp thị của bạn.'}
             </p>
-            {(searchQuery || statusFilter !== 'all' || productFilter !== 'all') && (
+            {(searchQuery || statusFilter !== 'all') && (
               <button
                 type="button"
                 onClick={handleResetFilters}
@@ -795,7 +696,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                     </th>
                     <th className="py-3.5 px-4">Mã đơn hàng</th>
                     <th className="py-3.5 px-4">Ngày đặt</th>
-                    <th className="py-3.5 px-4">Sản phẩm</th>
                     <th className="py-3.5 px-4 text-right">
                       <span className="inline-flex items-center gap-1">
                         <span>Giá trị tính HH</span>
@@ -825,7 +725,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                       : Math.round((merchVal * commRate) / 100);
 
                     const badgeConfig = getStatusBadgeConfig(ord.status);
-                    const items = getOrderItemsList(ord);
                     const isSelected = selectedOrderIds.includes(ord.id);
                     const isCurrentDetail = selectedOrder?.id === ord.id;
 
@@ -883,28 +782,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                           ) : (
                             ord.date || '—'
                           )}
-                        </td>
-
-                        {/* Purchased Products Thumbnails (Visual Reference) */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-1.5">
-                            {items.slice(0, 2).map((it, idx) => (
-                              <img
-                                key={idx}
-                                src={it.image}
-                                alt={it.name}
-                                className="w-8 h-8 rounded-lg object-cover border border-neutral-200 bg-neutral-100 shrink-0"
-                                onError={(e) => {
-                                  (e.target as any).src = '/assets/logo.png';
-                                }}
-                              />
-                            ))}
-                            {items.length > 2 && (
-                              <span className="w-7 h-7 rounded-lg bg-neutral-100 text-neutral-600 text-[10px] font-bold flex items-center justify-center shrink-0 border border-neutral-200">
-                                +{items.length - 2}
-                              </span>
-                            )}
-                          </div>
                         </td>
 
                         {/* Merchandise Value */}
@@ -966,7 +843,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                   : Math.round((merchVal * commRate) / 100);
 
                 const badgeConfig = getStatusBadgeConfig(ord.status);
-                const items = getOrderItemsList(ord);
 
                 return (
                   <div
@@ -993,19 +869,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                           minute: '2-digit'
                         }) : ord.date}
                       </span>
-                      <div className="flex items-center gap-1">
-                        {items.slice(0, 3).map((it, idx) => (
-                          <img
-                            key={idx}
-                            src={it.image}
-                            alt={it.name}
-                            className="w-6 h-6 rounded-md object-cover border border-neutral-200"
-                            onError={(e) => {
-                              (e.target as any).src = '/assets/logo.png';
-                            }}
-                          />
-                        ))}
-                      </div>
+                      <span className="text-[11px] text-neutral-400">Xem chi tiết &rarr;</span>
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-neutral-100 text-xs">
@@ -1197,43 +1061,15 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                 </div>
               </div>
 
-              {/* Products List (Transparent details) */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3">
-                  Sản phẩm ({getOrderItemsList(selectedOrder).length})
-                </h4>
-
-                <div className="space-y-3">
-                  {getOrderItemsList(selectedOrder).map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-neutral-100 bg-white">
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-12 h-12 rounded-xl object-cover border border-neutral-200 bg-neutral-100 shrink-0"
-                        onError={(e) => {
-                          (e.target as any).src = '/assets/logo.png';
-                        }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-neutral-900 truncate">
-                          {item.name}
-                        </div>
-                        <div className="text-[11px] text-neutral-500 mt-0.5">
-                          {item.quantity} × {item.price ? `${item.price.toLocaleString('vi-VN')}đ` : 'Sản phẩm theo bộ'}
-                        </div>
-                        {(item.color || item.charm) && (
-                          <div className="text-[10px] text-neutral-400 mt-0.5">
-                            {item.color && <span>Màu: {item.color} </span>}
-                            {item.charm && <span>• Charm: {item.charm}</span>}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right font-mono font-semibold text-neutral-800">
-                        {item.price ? `${(item.price * item.quantity).toLocaleString('vi-VN')}đ` : '—'}
-                      </div>
-                    </div>
-                  ))}
+              {/* Privacy Protection Notice (Customer name, phone, and order items hidden) */}
+              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80 space-y-2">
+                <div className="flex items-center gap-2 text-neutral-900 font-semibold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Bảo mật danh tính & thành phần đơn hàng</span>
                 </div>
+                <p className="text-[11px] text-neutral-500 leading-relaxed font-normal">
+                  Theo cam kết bảo mật quyền riêng tư của Not a Knot, thông tin cá nhân khách hàng (họ tên, số điện thoại, địa chỉ nhận hàng) và thành phần chi tiết từng sản phẩm được ẩn tuyệt đối. Đối tác được đối soát và hưởng hoa hồng minh bạch qua Mã đơn hàng và Giá trị đơn hàng ghi nhận.
+                </p>
               </div>
 
               {/* Transparent Financial & Commission Breakdown */}

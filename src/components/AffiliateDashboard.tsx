@@ -1,13 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, ShoppingBag, BarChart3, Link2, BookOpen, Settings,
   Copy, Check, QrCode, ExternalLink, ArrowUpRight, ArrowDownRight,
   TrendingUp, Wallet, MousePointerClick, Calendar, ArrowLeft, LogOut,
   Search, ShieldCheck, ChevronRight, X, AlertCircle, RefreshCw,
-  Sparkles, CheckCircle2, Clock, Truck, XCircle, HelpCircle
+  Sparkles, CheckCircle2, Clock, Truck, XCircle, HelpCircle,
+  Share2, Send, Smartphone, MessageSquare, Download, Lightbulb,
+  Layers, Lock, Tag, Globe, Edit3, Save
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { SellerUser, StoredOrder, AffiliateSystemConfig } from '../types';
+import { SellerUser, StoredOrder, AffiliateSystemConfig, Product } from '../types';
 import {
   calculateAffiliateStats,
   getAffiliateReferralUrl,
@@ -16,7 +18,10 @@ import {
   DEFAULT_AFFILIATE_CONFIG,
   AffiliateClickRecord
 } from '../utils/affiliateManager';
-import { fetchOrdersFromFirestore } from '../firebase';
+import { fetchOrdersFromFirestore, saveSellerToFirestore } from '../firebase';
+import { PRODUCTS } from '../data/products';
+import { DEFAULT_CATEGORIES } from '../data/categories';
+import { COLLECTIONS_DATA } from '../data/collections';
 import { AffiliateOrdersPage, OrdersDateRangePreset } from './AffiliateOrdersPage';
 
 export interface AffiliateDashboardProps {
@@ -89,6 +94,168 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     return getAffiliateReferralUrl(affiliateCode);
   }, [affiliateCode]);
 
+  // Toast notification for link copying and actions
+  const [linksToast, setLinksToast] = useState<string | null>(null);
+  const showLinksToast = (msg: string) => {
+    setLinksToast(msg);
+    setTimeout(() => setLinksToast(null), 3000);
+  };
+
+  // Custom affiliate link generator states
+  const [destType, setDestType] = useState<'home' | 'catalog' | 'category' | 'collection' | 'custom'>('home');
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>('bracelets');
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('event_0209');
+  const [customPathInput, setCustomPathInput] = useState<string>('');
+  const [copiedCustomLink, setCopiedCustomLink] = useState<boolean>(false);
+
+  // Product link generator states
+  const [productSearch, setProductSearch] = useState<string>('');
+  const [productCategoryTab, setProductCategoryTab] = useState<string>('all');
+  const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
+
+  // Dedicated QR Code Tool state
+  const [qrMode, setQrMode] = useState<'home' | 'product'>('home');
+  const [qrSelectedProduct, setQrSelectedProduct] = useState<Product | null>(() => PRODUCTS[0] || null);
+  const [dedicatedQrDataUrl, setDedicatedQrDataUrl] = useState<string>('');
+  const [copiedDedicatedQrLink, setCopiedDedicatedQrLink] = useState<boolean>(false);
+  const qrSectionRef = useRef<HTMLDivElement | null>(null);
+  const templateSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Marketing content template states
+  const [activeTemplateTab, setActiveTemplateTab] = useState<'social' | 'chat' | 'review' | 'gift' | 'video'>('social');
+  const [templateProduct, setTemplateProduct] = useState<Product | null>(() => PRODUCTS[0] || null);
+  const [customTemplateText, setCustomTemplateText] = useState<string>('');
+  const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
+
+  // Profile Settings state (affiliate can edit name, phone, paymentInfo; affiliateCode and commissionRate are read-only)
+  const [profileName, setProfileName] = useState<string>(() => affiliateUser?.name || '');
+  const [profilePhone, setProfilePhone] = useState<string>(() => affiliateUser?.phone || '');
+  const [profilePaymentInfo, setProfilePaymentInfo] = useState<string>(() => affiliateUser?.paymentInfo || '');
+  const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
+
+  // Build full origin
+  const siteOrigin = useMemo(() => {
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      return window.location.origin;
+    }
+    return 'https://notaknot.id.vn';
+  }, []);
+
+  // Compute custom destination URL
+  const customGeneratedUrl = useMemo(() => {
+    if (destType === 'home') {
+      return `${siteOrigin}/?ref=${affiliateCode}`;
+    }
+    if (destType === 'catalog') {
+      return `${siteOrigin}/?page=catalog&ref=${affiliateCode}`;
+    }
+    if (destType === 'category') {
+      return `${siteOrigin}/?page=catalog&category=${encodeURIComponent(selectedCategoryKey)}&ref=${affiliateCode}`;
+    }
+    if (destType === 'collection') {
+      return `${siteOrigin}/?collection=${encodeURIComponent(selectedCollectionId)}&ref=${affiliateCode}`;
+    }
+    if (destType === 'custom') {
+      let p = customPathInput.trim();
+      if (!p) return `${siteOrigin}/?ref=${affiliateCode}`;
+      if (!p.startsWith('/')) p = `/${p}`;
+      const sep = p.includes('?') ? '&' : '?';
+      return `${siteOrigin}${p}${sep}ref=${affiliateCode}`;
+    }
+    return `${siteOrigin}/?ref=${affiliateCode}`;
+  }, [destType, selectedCategoryKey, selectedCollectionId, customPathInput, siteOrigin, affiliateCode]);
+
+  // Helper: get product affiliate URL
+  const getProductAffiliateUrl = (productId: string) => {
+    return `${siteOrigin}/?product=${encodeURIComponent(productId)}&ref=${affiliateCode}`;
+  };
+
+  // QR Code active target URL
+  const activeQrTargetUrl = useMemo(() => {
+    if (qrMode === 'product' && qrSelectedProduct) {
+      return getProductAffiliateUrl(qrSelectedProduct.id);
+    }
+    return referralUrl;
+  }, [qrMode, qrSelectedProduct, referralUrl, siteOrigin, affiliateCode]);
+
+  // Generate high-res QR for active QR tool
+  useEffect(() => {
+    if (activeQrTargetUrl) {
+      QRCode.toDataURL(activeQrTargetUrl, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#1c1917',
+          light: '#ffffff'
+        }
+      })
+        .then(setDedicatedQrDataUrl)
+        .catch((e) => console.warn('QR Code generation error:', e));
+    }
+  }, [activeQrTargetUrl]);
+
+  // Keep profile form synced if currentSeller changes
+  useEffect(() => {
+    if (affiliateUser) {
+      setProfileName(affiliateUser.name || '');
+      setProfilePhone(affiliateUser.phone || '');
+      setProfilePaymentInfo(affiliateUser.paymentInfo || '');
+    }
+  }, [affiliateUser]);
+
+  // Dynamic template content generator
+  useEffect(() => {
+    const prodName = templateProduct?.name || 'Vòng tay handmade Not a Knot';
+    const prodPrice = templateProduct?.price ? `${templateProduct.price.toLocaleString('vi-VN')}đ` : 'giá sinh viên';
+    const link = templateProduct ? getProductAffiliateUrl(templateProduct.id) : referralUrl;
+
+    if (activeTemplateTab === 'social') {
+      setCustomTemplateText(
+`✨ Chiếc phụ kiện handmade chân ái dành cho các bạn mê đồ thủ công tinh tế đây rồi!
+
+Mấy bữa nay đeo em "${prodName}" của Not a Knot mà ai cũng hỏi mua ở đâu vì các đường đan tay siêu chắc, tỉ mỉ mà phối đồ đi học, đi làm xinh xỉu luôn. Giá chỉ từ ${prodPrice}.
+
+👉 Xem chi tiết và đặt hàng trực tiếp tại đây nha:
+${link}
+
+(Được chọn phối màu dây và charm riêng theo sở thích nữa nè!) 💖`
+      );
+    } else if (activeTemplateTab === 'chat') {
+      setCustomTemplateText(
+`Chào bạn nè! Mình gửi bạn link mẫu "${prodName}" của Not a Knot mà mình vừa kể hôm trước nhé:
+${link}
+Đang có nhiều màu dây với charm xinh lắm, bạn bấm vào xem thử nha!`
+      );
+    } else if (activeTemplateTab === 'review') {
+      setCustomTemplateText(
+`[Góc Review Chân Thực] 🧵
+Trải nghiệm thực tế em "${prodName}" từ Not a Knot:
+- Chất liệu: Dây đan cao cấp chống nước, không xù lông hay phai màu.
+- Thiết kế: Đan tay 100%, nút thắt đều tăm tắp, phối charm rất sang.
+- Mức giá: ${prodPrice} — cực kỳ hợp lý cho một món đồ thủ công mang nhiều tâm huyết.
+
+Bạn nào thích phong cách nhẹ nhàng, tinh tế thì ghé link này tham khảo nhé:
+${link}`
+      );
+    } else if (activeTemplateTab === 'gift') {
+      setCustomTemplateText(
+`🎁 Gợi ý món quà kỷ niệm ý nghĩa cho bạn thân / người thương!
+Nếu bạn đang đau đầu tìm một món quà vừa độc đáo, vừa chứa đựng sự chân thành thì đừng bỏ qua "${prodName}". Mỗi chiếc vòng/móc khóa đều được làm thủ công tỉ mỉ kèm hộp quà và thiệp viết lời chúc xinh xắn.
+
+Xem ngay bộ sưu tập quà tặng tại:
+${link}`
+      );
+    } else if (activeTemplateTab === 'video') {
+      setCustomTemplateText(
+`[Gợi ý Caption / Script Video Ngắn] 🎬
+Hôm nay unbox cùng mình chiếc "${prodName}" siêu hot của Not a Knot nha! Nhìn tận mắt mới thấy nghệ nhân đan khéo thực sự, charm bóng loáng không tì vết. Link mua mình ghim ngay dưới bio trang cá nhân / comment này nhé! 👇
+Link: ${link}
+#notaknot #handmade #vongtayhandmade #phukienthoitrang #diy`
+      );
+    }
+  }, [activeTemplateTab, templateProduct, referralUrl, siteOrigin, affiliateCode]);
+
   // Load config & clicks & orders
   useEffect(() => {
     let isMounted = true;
@@ -139,9 +306,35 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     }
   }, [referralUrl]);
 
-  // Active orders list (from props or Firestore)
+  // Active orders list (from props or Firestore) with zero-trust customer privacy sanitization
   const activeOrdersList = useMemo(() => {
-    return orders && orders.length > 0 ? orders : fetchedOrders;
+    const rawList = orders && orders.length > 0 ? orders : fetchedOrders;
+    // Strictly sanitize orders: customer name, customer phone, address, and items composition are omitted
+    return rawList.map((ord) => ({
+      id: ord.id,
+      date: ord.date,
+      createdAt: ord.createdAt,
+      status: ord.status,
+      affiliateCode: ord.affiliateCode,
+      affiliateCommissionRate: ord.affiliateCommissionRate,
+      affiliateCommissionAmount: ord.affiliateCommissionAmount,
+      affiliateMerchandiseValue: ord.affiliateMerchandiseValue,
+      subtotal: ord.subtotal,
+      totalPrice: ord.totalPrice,
+      discountAmount: ord.discountAmount,
+      shippingFee: ord.shippingFee,
+      isDeleted: ord.isDeleted,
+      // Strip confidential customer and product composition details
+      customerName: undefined,
+      customerPhone: undefined,
+      phone: undefined,
+      address: undefined,
+      customerAddress: undefined,
+      shippingAddress: undefined,
+      note: undefined,
+      items: [],
+      itemDetails: []
+    } as unknown as StoredOrder));
   }, [orders, fetchedOrders]);
 
   // Base attributed orders for this affiliate (removes deleted/cancelled orders)
@@ -664,7 +857,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                 <span>Chương trình Tiếp thị liên kết chính thức</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-                Xin chào, {affiliateUser?.name || 'Đối tác'}!
+                Xin chào, {affiliateUser?.name || affiliateUser?.username || 'bạn'}!
               </h2>
             </div>
 
@@ -1205,100 +1398,1180 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     );
   };
 
-  // Render Links & Tools Section
+  // ----------------------------------------------------
+  // RENDER: REDESIGNED "LINK & CÔNG CỤ" MARKETING TOOLKIT
+  // ----------------------------------------------------
   const renderLinksSection = () => {
-    return (
-      <div className="space-y-6 max-w-4xl">
-        <div className="bg-white rounded-2xl border border-neutral-200/80 shadow-2xs p-6 space-y-4">
-          <h2 className="text-base font-semibold text-neutral-900 tracking-tight">
-            Liên kết giới thiệu & Mã QR cá nhân
-          </h2>
-          <p className="text-xs text-neutral-600">
-            Sử dụng liên kết này để đặt trên tiểu sử mạng xã hội (Bio TikTok, Instagram, Threads, Facebook) hoặc gửi trực tiếp cho bạn bè.
-          </p>
+    const commissionRate = affiliateUser?.commissionRate !== undefined
+      ? affiliateUser.commissionRate
+      : systemConfig.defaultCommissionRate;
+    const cookieDays = systemConfig.cookieDurationDays || 30;
 
-          <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/70 space-y-3">
-            <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
-              Liên kết gốc
+    // Filtered products for Product Link Generator
+    const filteredCatalogProducts = PRODUCTS.filter((p) => {
+      // 1. Search filter
+      if (productSearch.trim()) {
+        const q = productSearch.toLowerCase().trim();
+        const matchName = (p.name || '').toLowerCase().includes(q);
+        const matchId = (p.id || '').toLowerCase().includes(q);
+        if (!matchName && !matchId) return false;
+      }
+      // 2. Category tab
+      if (productCategoryTab !== 'all') {
+        if (productCategoryTab === 'bracelets') {
+          return p.category === 'bracelets' || p.category === 'charm_bracelet';
+        }
+        if (productCategoryTab === 'event') {
+          return p.isEvent0209 || p.isEvent2010 || p.category.includes('event');
+        }
+        return p.category === productCategoryTab;
+      }
+      return true;
+    });
+
+    // Quick sharing handlers
+    const handleShareFacebook = () => {
+      const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(referralUrl)}`;
+      window.open(shareUrl, '_blank', 'width=600,height=500,scrollbars=yes,resizable=yes');
+    };
+
+    const handleShareMessenger = () => {
+      // Direct Facebook send dialog or prompt copy
+      const messengerUrl = `https://www.facebook.com/dialog/send?link=${encodeURIComponent(referralUrl)}&app_id=291494419107518&redirect_uri=${encodeURIComponent(referralUrl)}`;
+      try {
+        window.open(messengerUrl, '_blank', 'width=600,height=500');
+      } catch {
+        handleCopyLink();
+        showLinksToast('Đã sao chép liên kết để gửi qua Messenger!');
+      }
+    };
+
+    const handleShareZalo = () => {
+      const zaloUrl = `https://zalo.me/share?url=${encodeURIComponent(referralUrl)}`;
+      window.open(zaloUrl, '_blank', 'width=600,height=500');
+      showLinksToast('Đang mở Zalo chia sẻ liên kết...');
+    };
+
+    const handleShareWhatsApp = () => {
+      const text = `Khám phá các mẫu phụ kiện thủ công Not a Knot cực xinh: ${referralUrl}`;
+      const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
+    };
+
+    const handleShareNative = async () => {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({
+            title: `Not a Knot - Phụ kiện handmade thủ công`,
+            text: `Khám phá bộ sưu tập vòng tay & phụ kiện handmade tinh xảo của Not a Knot:`,
+            url: referralUrl
+          });
+          showLinksToast('Đã chia sẻ thành công!');
+        } catch {
+          // Fallback to copy link
+          handleCopyLink();
+        }
+      } else {
+        handleCopyLink();
+        showLinksToast('Thiết bị không hỗ trợ chia sẻ gốc, đã sao chép liên kết vào clipboard!');
+      }
+    };
+
+    const handleCopyCustomLink = async () => {
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(customGeneratedUrl);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = customGeneratedUrl;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopiedCustomLink(true);
+        showLinksToast('Đã sao chép liên kết tùy chỉnh!');
+        setTimeout(() => setCopiedCustomLink(false), 2500);
+      } catch {
+        showLinksToast(`Liên kết: ${customGeneratedUrl}`);
+      }
+    };
+
+    const handleCopyProductLink = async (prod: Product) => {
+      const url = getProductAffiliateUrl(prod.id);
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = url;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopiedProductId(prod.id);
+        showLinksToast(`Đã sao chép link sản phẩm "${prod.name}"!`);
+        setTimeout(() => setCopiedProductId(null), 2500);
+      } catch {
+        showLinksToast(`Liên kết: ${url}`);
+      }
+    };
+
+    const handleSelectProductForQr = (prod: Product) => {
+      setQrMode('product');
+      setQrSelectedProduct(prod);
+      if (qrSectionRef.current) {
+        qrSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      showLinksToast(`Đã tải sản phẩm "${prod.name}" vào công cụ tạo mã QR!`);
+    };
+
+    const handleSelectProductForTemplate = (prod: Product) => {
+      setTemplateProduct(prod);
+      if (templateSectionRef.current) {
+        templateSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      showLinksToast(`Đã áp dụng sản phẩm "${prod.name}" vào mẫu nội dung!`);
+    };
+
+    const handleCopyTemplateText = async () => {
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(customTemplateText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = customTemplateText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopiedTemplate(true);
+        showLinksToast('Đã sao chép mẫu nội dung tiếp thị!');
+        setTimeout(() => setCopiedTemplate(false), 2500);
+      } catch {
+        showLinksToast('Đã chọn nội dung mẫu để sao chép.');
+      }
+    };
+
+    const handleCopyDedicatedQrLink = async () => {
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(activeQrTargetUrl);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = activeQrTargetUrl;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        setCopiedDedicatedQrLink(true);
+        showLinksToast('Đã sao chép liên kết mã QR!');
+        setTimeout(() => setCopiedDedicatedQrLink(false), 2500);
+      } catch {
+        showLinksToast(`Liên kết: ${activeQrTargetUrl}`);
+      }
+    };
+
+    return (
+      <div className="space-y-8 max-w-5xl">
+        {/* Toast Feedback Notification */}
+        {linksToast && (
+          <div className="fixed bottom-6 right-6 z-50 bg-neutral-900 text-white text-xs sm:text-sm px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-fadeIn border border-neutral-700/80">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{linksToast}</span>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* 1. MAIN AFFILIATE LINK HERO CARD */}
+        {/* ---------------------------------------------------- */}
+        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 relative overflow-hidden space-y-6">
+          <div className="absolute top-0 right-0 w-80 h-80 bg-rose-50/60 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative space-y-2">
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 tracking-wide uppercase">
+              <Sparkles className="w-4 h-4" />
+              <span>Liên kết tiếp thị chính thức</span>
             </div>
-            <div className="flex items-center gap-2 font-mono text-xs sm:text-sm text-neutral-900 break-all">
-              <Link2 className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{referralUrl}</span>
+            <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
+              Liên kết giới thiệu & Công cụ tiếp thị
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-500 max-w-2xl leading-relaxed">
+              Sử dụng liên kết này để chia sẻ trên tiểu sử mạng xã hội, tin nhắn hoặc bài viết review. Bất kỳ khách hàng nào nhấn vào liên kết sẽ được ghi nhận cookie đối tác trong vòng {cookieDays} ngày.
+            </p>
+          </div>
+
+          {/* URL Box & Actions */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-neutral-50/90 border border-neutral-200/80 space-y-3">
+            <div className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+              Liên kết giới thiệu của bạn (Cố định mã đối tác)
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
-              >
-                {copiedLink ? 'Đã sao chép!' : 'Sao chép liên kết'}
-              </button>
-              {qrDataUrl && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-2.5 sm:p-3 rounded-xl border border-neutral-200/90 shadow-2xs">
+              <div className="flex items-center gap-2.5 font-mono text-xs sm:text-sm text-neutral-900 break-all px-2 min-w-0">
+                <Link2 className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="truncate">{referralUrl}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowQrModal(true)}
-                  className="px-4 py-2 border border-neutral-200 bg-white hover:bg-neutral-100 text-neutral-800 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                  onClick={handleCopyLink}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                 >
-                  Xem mã QR
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      <span>Đã sao chép</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Sao chép</span>
+                    </>
+                  )}
                 </button>
-              )}
+                <a
+                  href={referralUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 border border-neutral-200 hover:bg-neutral-50 text-neutral-700 rounded-xl transition-colors cursor-pointer"
+                  title="Mở thử liên kết trên tab mới"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (qrSectionRef.current) {
+                      qrSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                      setShowQrModal(true);
+                    }
+                  }}
+                  className="p-2 border border-neutral-200 hover:bg-neutral-50 text-neutral-700 rounded-xl transition-colors cursor-pointer"
+                  title="Xem mã QR"
+                >
+                  <QrCode className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
-          {qrDataUrl && (
-            <div className="flex items-center gap-6 p-4 rounded-xl border border-neutral-100 bg-white">
-              <img src={qrDataUrl} alt="Mã QR Affiliate" className="w-28 h-28 rounded-lg border border-neutral-200 shadow-2xs shrink-0" />
-              <div className="space-y-1 text-xs">
-                <span className="font-semibold text-neutral-900 block">Mã QR Tiếp thị</span>
-                <p className="text-neutral-500 text-[11px] leading-relaxed">
-                  Quét mã QR bằng camera điện thoại để truy cập ngay vào cửa hàng kèm cookie tiếp thị {affiliateCode}.
+          {/* System Attributes Pill Badges */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div className="p-3.5 rounded-2xl bg-neutral-50/80 border border-neutral-200/70">
+              <span className="text-[11px] text-neutral-500 block">Mã đối tác cá nhân</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono font-bold text-rose-700 text-sm">{affiliateCode}</span>
+                <span title="Mã tiếp thị do quản trị viên quản lý, cố định cho từng đối tác" className="cursor-help">
+                  <Lock className="w-3 h-3 text-neutral-400" />
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-neutral-50/80 border border-neutral-200/70">
+              <span className="text-[11px] text-neutral-500 block">Tỷ lệ hoa hồng</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono font-bold text-neutral-900 text-sm">{commissionRate}%</span>
+                <span title="Tỷ lệ hoa hồng được áp dụng cho mọi đơn hàng hợp lệ của bạn" className="cursor-help">
+                  <Lock className="w-3 h-3 text-neutral-400" />
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-neutral-50/80 border border-neutral-200/70">
+              <span className="text-[11px] text-neutral-500 block">Thời hạn Cookie</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono font-bold text-neutral-900 text-sm">{cookieDays} ngày</span>
+                <Clock className="w-3 h-3 text-neutral-400" />
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-200/70 flex flex-col justify-center">
+              <span className="text-[11px] text-rose-800 font-medium block">Quy chế tiếp thị</span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('guide')}
+                className="text-left text-xs text-rose-700 hover:text-rose-900 font-bold hover:underline underline-offset-4 mt-0.5 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Xem quy chế chi tiết</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-neutral-400 leading-relaxed italic">
+            * Lưu ý: Mã đối tác và tỷ lệ hoa hồng được phân quyền bởi Quản trị viên để đảm bảo tính khách quan và đối soát tài chính minh bạch.
+          </p>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 2. QUICK SHARING TOOLS ("Công cụ chia sẻ nhanh") */}
+        {/* ---------------------------------------------------- */}
+        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-rose-600" />
+                <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                  Công cụ chia sẻ nhanh
+                </h3>
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">
+                Gửi liên kết tiếp thị đến bạn bè và cộng đồng qua các kênh mạng xã hội chỉ với một chạm.
+              </p>
+            </div>
+          </div>
+
+          {/* Social Buttons Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Facebook */}
+            <button
+              type="button"
+              onClick={handleShareFacebook}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-blue-300 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">Facebook</span>
+            </button>
+
+            {/* Messenger */}
+            <button
+              type="button"
+              onClick={handleShareMessenger}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-blue-300 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">Messenger</span>
+            </button>
+
+            {/* Zalo */}
+            <button
+              type="button"
+              onClick={handleShareZalo}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-blue-300 hover:bg-blue-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center font-bold text-xs shadow-xs group-hover:scale-105 transition-transform">
+                Zalo
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">Zalo Chat</span>
+            </button>
+
+            {/* WhatsApp */}
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-emerald-300 hover:bg-emerald-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <Send className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">WhatsApp</span>
+            </button>
+
+            {/* Device Native Share */}
+            <button
+              type="button"
+              onClick={handleShareNative}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-purple-300 hover:bg-purple-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">Thiết bị</span>
+            </button>
+
+            {/* Copy Link */}
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="p-3.5 rounded-2xl border border-neutral-200 hover:border-rose-300 hover:bg-rose-50/50 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                <Copy className="w-4 h-4" />
+              </div>
+              <span className="text-xs font-semibold text-neutral-800">Sao chép link</span>
+            </button>
+          </div>
+
+          {/* Social Bio Practical Helper Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div className="p-4 rounded-2xl bg-neutral-50/80 border border-neutral-200/70 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900">
+                  <span>Tiểu sử Instagram (Bio Link)</span>
+                </div>
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Đặt link vào phần "Trang web" ở hồ sơ cá nhân để người theo dõi ấn vào mua sắm.
                 </p>
-                <a
-                  href={qrDataUrl}
-                  download={`qrcode-affiliate-${affiliateCode}.png`}
-                  className="inline-block text-rose-700 hover:text-rose-800 font-medium pt-1"
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-3 py-1.5 bg-white border border-neutral-200 hover:border-neutral-300 rounded-xl text-xs font-medium text-neutral-800 shrink-0 cursor-pointer shadow-2xs"
+              >
+                Sao chép URL Bio
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-neutral-50/80 border border-neutral-200/70 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-neutral-900">
+                  <span>Tiểu sử TikTok (Bio Link)</span>
+                </div>
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Dán liên kết vào Bio hoặc ghim link dưới video review đồ thủ công.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-3 py-1.5 bg-white border border-neutral-200 hover:border-neutral-300 rounded-xl text-xs font-medium text-neutral-800 shrink-0 cursor-pointer shadow-2xs"
+              >
+                Sao chép URL Bio
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 3. CUSTOM AFFILIATE LINK GENERATOR */}
+        {/* ---------------------------------------------------- */}
+        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-rose-600" />
+              <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                Tạo liên kết tiếp thị tùy chỉnh
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">
+              Dẫn khách hàng trực tiếp đến đúng trang sản phẩm, danh mục hoặc bộ sưu tập mà bạn muốn giới thiệu.
+            </p>
+          </div>
+
+          {/* Destination Selector Tabs */}
+          <div className="space-y-4">
+            <label className="block text-xs font-bold text-neutral-700">
+              Chọn điểm đến trên cửa hàng:
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+              {[
+                { id: 'home', label: 'Trang chủ' },
+                { id: 'catalog', label: 'Tất cả sản phẩm' },
+                { id: 'category', label: 'Theo danh mục' },
+                { id: 'collection', label: 'Bộ sưu tập' },
+                { id: 'custom', label: 'Đường dẫn tùy chọn' }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setDestType(tab.id as any)}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-center ${
+                    destType === tab.id
+                      ? 'bg-rose-50 border-rose-300 text-rose-800 shadow-2xs'
+                      : 'bg-neutral-50/70 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                  }`}
                 >
-                  Tải ảnh mã QR &darr;
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Dynamic Dropdown when Category selected */}
+            {destType === 'category' && (
+              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80 space-y-2 animate-fadeIn">
+                <label className="block text-xs font-bold text-neutral-700">
+                  Chọn danh mục mong muốn:
+                </label>
+                <select
+                  value={selectedCategoryKey}
+                  onChange={(e) => setSelectedCategoryKey(e.target.value)}
+                  className="w-full sm:w-80 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white text-xs text-neutral-800 outline-none focus:border-rose-500 font-medium"
+                >
+                  {DEFAULT_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.label} ({cat.description || cat.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Dynamic Dropdown when Collection selected */}
+            {destType === 'collection' && (
+              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80 space-y-2 animate-fadeIn">
+                <label className="block text-xs font-bold text-neutral-700">
+                  Chọn bộ sưu tập chủ đề:
+                </label>
+                <select
+                  value={selectedCollectionId}
+                  onChange={(e) => setSelectedCollectionId(e.target.value)}
+                  className="w-full sm:w-80 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white text-xs text-neutral-800 outline-none focus:border-rose-500 font-medium"
+                >
+                  {COLLECTIONS_DATA.map((col) => (
+                    <option key={col.id} value={col.id}>
+                      {col.title} ({col.tag || col.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Custom Path Input */}
+            {destType === 'custom' && (
+              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80 space-y-2 animate-fadeIn">
+                <label className="block text-xs font-bold text-neutral-700">
+                  Nhập đường dẫn trang web:
+                </label>
+                <input
+                  type="text"
+                  value={customPathInput}
+                  onChange={(e) => setCustomPathInput(e.target.value)}
+                  placeholder="VD: /about hoặc /contact"
+                  className="w-full sm:w-96 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white text-xs text-neutral-800 outline-none focus:border-rose-500 font-mono"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Generated URL Box */}
+          <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/90 space-y-2">
+            <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block">
+              Liên kết tùy chỉnh đã tạo (tự động gắn ?ref={affiliateCode}):
+            </span>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-neutral-200 shadow-2xs">
+              <span className="font-mono text-xs sm:text-sm text-neutral-900 break-all truncate">
+                {customGeneratedUrl}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCopyCustomLink}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {copiedCustomLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      <span>Đã chép</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Sao chép link</span>
+                    </>
+                  )}
+                </button>
+                <a
+                  href={customGeneratedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 border border-neutral-200 hover:bg-neutral-50 rounded-xl text-neutral-700 transition-colors cursor-pointer"
+                  title="Mở thử liên kết trên tab mới"
+                >
+                  <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 4. PRODUCT LINK GENERATOR ("Tạo link cho từng sản phẩm") */}
+        {/* ---------------------------------------------------- */}
+        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-rose-600" />
+                <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                  Tạo liên kết cho từng sản phẩm
+                </h3>
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">
+                Lựa chọn sản phẩm cụ thể để lấy link tiếp thị trực tiếp, xem mức hoa hồng ước tính nhận được cho mỗi đơn hàng.
+              </p>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input
+                type="text"
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                placeholder="Tìm sản phẩm theo tên..."
+                className="w-full pl-8 pr-3 py-2 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-800 outline-none focus:border-rose-500 focus:bg-white transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            {[
+              { id: 'all', label: 'Tất cả sản phẩm' },
+              { id: 'bracelets', label: 'Vòng tay handmade' },
+              { id: 'event', label: 'BST Sự kiện & Quà tặng' }
+            ].map((catTab) => (
+              <button
+                key={catTab.id}
+                type="button"
+                onClick={() => setProductCategoryTab(catTab.id)}
+                className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  productCategoryTab === catTab.id
+                    ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
+                    : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                }`}
+              >
+                {catTab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Products Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredCatalogProducts.map((prod) => {
+              const estimatedComm = Math.round((prod.price * commissionRate) / 100);
+              const isCopied = copiedProductId === prod.id;
+
+              return (
+                <div
+                  key={prod.id}
+                  className="bg-white rounded-2xl border border-neutral-200/80 p-4 space-y-3 hover:border-neutral-300 hover:shadow-xs transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-neutral-100 border border-neutral-100">
+                      <img
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        onError={(e) => {
+                          (e.target as any).src = '/assets/logo.png';
+                        }}
+                      />
+                      {prod.discountBadge && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-600 text-white">
+                          {prod.discountBadge}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-neutral-900 text-xs sm:text-sm line-clamp-2 leading-snug">
+                        {prod.name}
+                      </h4>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="font-mono font-bold text-neutral-900 text-xs sm:text-sm">
+                          {prod.price.toLocaleString('vi-VN')}đ
+                        </span>
+                        <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                          +{estimatedComm.toLocaleString('vi-VN')}đ ({commissionRate}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Product Link Action Buttons */}
+                  <div className="space-y-1.5 pt-2 border-t border-neutral-100">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyProductLink(prod)}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        isCopied
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-rose-600 hover:bg-rose-700 text-white shadow-2xs active:scale-95'
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Đã sao chép link</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Sao chép link sản phẩm</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectProductForQr(prod)}
+                        className="flex-1 py-1.5 px-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 text-[11px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1"
+                        title="Tạo mã QR riêng cho sản phẩm này"
+                      >
+                        <QrCode className="w-3 h-3 text-neutral-500" />
+                        <span>Tạo mã QR</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectProductForTemplate(prod)}
+                        className="flex-1 py-1.5 px-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 text-[11px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1"
+                        title="Sử dụng sản phẩm này cho mẫu bài viết gợi ý"
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-500" />
+                        <span>Mẫu bài đăng</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 5. QR CODE GENERATOR ("Mã QR Tiếp thị") */}
+        {/* ---------------------------------------------------- */}
+        <div
+          ref={qrSectionRef}
+          id="qr-generator-section"
+          className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6"
+        >
+          <div>
+            <div className="flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-rose-600" />
+              <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                Tạo mã QR tiếp thị
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">
+              Quét mã QR bằng camera điện thoại để truy cập ngay vào cửa hàng hoặc sản phẩm kèm cookie tiếp thị {affiliateCode}.
+            </p>
+          </div>
+
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setQrMode('home')}
+              className={`py-2 px-3.5 rounded-xl border font-semibold transition-colors cursor-pointer ${
+                qrMode === 'home'
+                  ? 'bg-rose-50 border-rose-300 text-rose-800'
+                  : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+              }`}
+            >
+              Mã QR Trang chủ chung
+            </button>
+            <button
+              type="button"
+              onClick={() => setQrMode('product')}
+              className={`py-2 px-3.5 rounded-xl border font-semibold transition-colors cursor-pointer ${
+                qrMode === 'product'
+                  ? 'bg-rose-50 border-rose-300 text-rose-800'
+                  : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+              }`}
+            >
+              Mã QR Sản phẩm: {qrSelectedProduct?.name ? qrSelectedProduct.name.slice(0, 24) + '...' : 'Chọn sản phẩm'}
+            </button>
+          </div>
+
+          {/* QR Display Card */}
+          <div className="p-6 rounded-2xl bg-neutral-50 border border-neutral-200/90 flex flex-col md:flex-row items-center gap-8">
+            <div className="p-3 bg-white rounded-2xl border border-neutral-200 shadow-xs shrink-0">
+              {dedicatedQrDataUrl ? (
+                <img
+                  src={dedicatedQrDataUrl}
+                  alt="Mã QR Tiếp thị Not a Knot"
+                  className="w-48 h-48 rounded-xl object-contain"
+                />
+              ) : (
+                <div className="w-48 h-48 rounded-xl bg-neutral-100 animate-pulse flex items-center justify-center text-xs text-neutral-400">
+                  Đang nạp mã QR...
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4 flex-1 text-center md:text-left">
+              <div>
+                <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider block">
+                  Đích đến của mã QR
+                </span>
+                <h4 className="text-sm sm:text-base font-bold text-neutral-900 mt-0.5">
+                  {qrMode === 'home' ? 'Trang chủ Not a Knot' : (qrSelectedProduct?.name || 'Sản phẩm đã chọn')}
+                </h4>
+                <div className="font-mono text-xs text-neutral-600 break-all mt-1 bg-white p-2 rounded-lg border border-neutral-200">
+                  {activeQrTargetUrl}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 justify-center md:justify-start">
+                {dedicatedQrDataUrl && (
+                  <a
+                    href={dedicatedQrDataUrl}
+                    download={`qrcode-notaknot-${affiliateCode}${qrMode === 'product' ? '-product' : ''}.png`}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Tải ảnh mã QR (PNG)</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCopyDedicatedQrLink}
+                  className="px-4 py-2 bg-white border border-neutral-200 hover:bg-neutral-100 text-neutral-800 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {copiedDedicatedQrLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Đã sao chép link</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Sao chép link mã QR</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 6. MARKETING CONTENT TEMPLATES ("Mẫu nội dung gợi ý") */}
+        {/* ---------------------------------------------------- */}
+        <div
+          ref={templateSectionRef}
+          id="marketing-templates-section"
+          className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6"
+        >
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-rose-600" />
+              <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                Mẫu nội dung gợi ý (Sẵn sàng tùy chỉnh & sao chép)
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500 mt-1">
+              Các mẫu bài đăng, tin nhắn và kịch bản video bằng tiếng Việt tự nhiên, tự động đính kèm liên kết tiếp thị cá nhân của bạn.
+            </p>
+          </div>
+
+          {/* Template Format Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            {[
+              { id: 'social', label: '1. Bài đăng MXH (Facebook / Threads)' },
+              { id: 'chat', label: '2. Tin nhắn ngắn (Messenger / Zalo)' },
+              { id: 'review', label: '3. Caption Review chi tiết' },
+              { id: 'gift', label: '4. Gợi ý Quà tặng ý nghĩa' },
+              { id: 'video', label: '5. Kịch bản video ngắn (TikTok/Reels)' }
+            ].map((tmpl) => (
+              <button
+                key={tmpl.id}
+                type="button"
+                onClick={() => setActiveTemplateTab(tmpl.id as any)}
+                className={`py-2 px-3 rounded-xl border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                  activeTemplateTab === tmpl.id
+                    ? 'bg-rose-50 border-rose-300 text-rose-800 shadow-2xs'
+                    : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
+                }`}
+              >
+                {tmpl.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Product plugged indicator */}
+          <div className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200/70 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-500">Sản phẩm đang áp dụng:</span>
+              <span className="font-semibold text-neutral-900 truncate">
+                {templateProduct?.name || 'Tất cả sản phẩm Not a Knot'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const nextIdx = (PRODUCTS.indexOf(templateProduct as any) + 1) % PRODUCTS.length;
+                setTemplateProduct(PRODUCTS[nextIdx] || PRODUCTS[0]);
+              }}
+              className="text-rose-700 hover:text-rose-800 font-semibold hover:underline underline-offset-4 cursor-pointer whitespace-nowrap"
+            >
+              Đổi sản phẩm khác &rarr;
+            </button>
+          </div>
+
+          {/* Interactive Editable Textarea */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs text-neutral-500">
+              <span>Bạn có thể chỉnh sửa thêm bớt câu từ trước khi bấm sao chép:</span>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                {customTemplateText.length} ký tự
+              </span>
+            </div>
+            <textarea
+              rows={8}
+              value={customTemplateText}
+              onChange={(e) => setCustomTemplateText(e.target.value)}
+              className="w-full p-4 rounded-2xl border border-neutral-200 bg-neutral-50/60 focus:bg-white text-xs sm:text-sm text-neutral-900 leading-relaxed outline-none focus:border-rose-500 shadow-inner font-sans transition-colors resize-y"
+            />
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleCopyTemplateText}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
+              >
+                {copiedTemplate ? (
+                  <>
+                    <Check className="w-4 h-4 text-white" />
+                    <span>Đã sao chép nội dung</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    <span>Sao chép nội dung</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------- */}
+        {/* 7. HELPFUL SHARING TIPS ("Bí quyết tiếp thị hiệu quả") */}
+        {/* ---------------------------------------------------- */}
+        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-5">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+            <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+              Bí quyết tiếp thị hiệu quả dành cho đối tác
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
+              <span className="font-bold text-neutral-900 block">1. Chọn sản phẩm đúng gu</span>
+              <p className="text-neutral-500 leading-relaxed text-[11px]">
+                Chọn các mẫu vòng tay, móc khóa phù hợp nhất với phong cách và đối tượng người theo dõi của bạn để tăng tỷ lệ click tự nhiên.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
+              <span className="font-bold text-neutral-900 block">2. Hình ảnh & Trải nghiệm thực tế</span>
+              <p className="text-neutral-500 leading-relaxed text-[11px]">
+                Người xem luôn tin tưởng các video trên tay, đeo thử và cảm nhận độ chắc chắn của dây đan thủ công hơn là hình ảnh quảng cáo chung chung.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
+              <span className="font-bold text-neutral-900 block">3. Đặt liên kết ở vị trí dễ thấy</span>
+              <p className="text-neutral-500 leading-relaxed text-[11px]">
+                Đặt link ở phần Bio TikTok / Instagram và đính kèm lời nhắn nhắc nhở người xem bấm vào để nhận ưu đãi từ cửa hàng.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
+              <span className="font-bold text-neutral-900 block">4. Nêu bật giá trị thủ công</span>
+              <p className="text-neutral-500 leading-relaxed text-[11px]">
+                Kể về sự tỉ mỉ của các nút đan tay, độ bền chống nước và ý nghĩa gắn kết của Not a Knot để tạo cảm xúc chân thành.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5 md:col-span-2">
+              <span className="font-bold text-neutral-900 block">5. Nắm rõ quy chế đối soát</span>
+              <p className="text-neutral-500 leading-relaxed text-[11px]">
+                Hoa hồng được tính cho đơn đầu tiên hợp lệ theo cơ chế Last-Click. Bạn có thể xem toàn bộ bảng đối soát và thời hạn thanh toán tại trang Hướng dẫn.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('guide')}
+                className="text-rose-700 hover:text-rose-800 font-bold hover:underline underline-offset-4 pt-1 inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Xem tài liệu hướng dẫn tiếp thị đầy đủ &rarr;</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
-  // Render Settings Section
+  // ----------------------------------------------------
+  // RENDER: EDITABLE SETTINGS SECTION
+  // ----------------------------------------------------
   const renderSettingsSection = () => {
+    const handleSaveProfile = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!affiliateUser) return;
+      setIsSavingProfile(true);
+      setProfileSuccessMsg(null);
+
+      try {
+        const updatedUser: SellerUser = {
+          ...affiliateUser,
+          name: profileName.trim() || affiliateUser.name,
+          phone: profilePhone.trim() || affiliateUser.phone,
+          paymentInfo: profilePaymentInfo.trim() || affiliateUser.paymentInfo
+        };
+
+        await saveSellerToFirestore(updatedUser);
+        setProfileSuccessMsg('Đã lưu thông tin tài khoản thành công!');
+        setTimeout(() => setProfileSuccessMsg(null), 3000);
+      } catch (err: any) {
+        alert(err?.message || 'Có lỗi khi lưu thông tin tài khoản.');
+      } finally {
+        setIsSavingProfile(false);
+      }
+    };
+
     return (
       <div className="space-y-6 max-w-4xl">
-        <div className="bg-white rounded-2xl border border-neutral-200/80 shadow-2xs p-6 space-y-4">
-          <h2 className="text-base font-semibold text-neutral-900 tracking-tight">
-            Thông tin tài khoản đối tác
-          </h2>
-          <div className="divide-y divide-neutral-100 text-xs">
-            <div className="py-3 flex justify-between items-center">
-              <span className="text-neutral-500">Họ và tên:</span>
-              <span className="font-semibold text-neutral-900">{affiliateUser?.name}</span>
+        <form onSubmit={handleSaveProfile} className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
+                Cài đặt tài khoản đối tác
+              </h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Chỉnh sửa tên hiển thị, số điện thoại và thông tin nhận chuyển khoản hoa hồng.
+              </p>
             </div>
-            <div className="py-3 flex justify-between items-center">
-              <span className="text-neutral-500">Mã tiếp thị (Referral Code):</span>
-              <span className="font-mono font-semibold text-rose-700">{affiliateCode}</span>
+
+            <button
+              type="submit"
+              disabled={isSavingProfile}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingProfile ? 'Đang lưu...' : 'Lưu thay đổi'}</span>
+            </button>
+          </div>
+
+          {profileSuccessMsg && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{profileSuccessMsg}</span>
             </div>
-            <div className="py-3 flex justify-between items-center">
-              <span className="text-neutral-500">Tỷ lệ hoa hồng cá nhân:</span>
-              <span className="font-semibold text-neutral-900">{affiliateUser?.commissionRate || systemConfig.defaultCommissionRate}%</span>
+          )}
+
+          <div className="space-y-4 text-xs">
+            {/* Editable Name */}
+            <div>
+              <label className="block font-bold text-neutral-800 mb-1">
+                Họ và tên đối tác (Có thể chỉnh sửa) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                placeholder="Nhập họ và tên hiển thị..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-900 focus:bg-white focus:border-rose-500 outline-none transition-colors"
+              />
             </div>
-            <div className="py-3 flex justify-between items-center">
-              <span className="text-neutral-500">Email Google liên kết:</span>
-              <span className="font-mono text-neutral-800">{affiliateUser?.googleEmail || (affiliateUser as any)?.email || 'Chưa liên kết'}</span>
+
+            {/* Editable Phone */}
+            <div>
+              <label className="block font-bold text-neutral-800 mb-1">
+                Số điện thoại liên hệ
+              </label>
+              <input
+                type="text"
+                value={profilePhone}
+                onChange={(e) => setProfilePhone(e.target.value)}
+                placeholder="Nhập số điện thoại..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-900 focus:bg-white focus:border-rose-500 outline-none transition-colors"
+              />
             </div>
-            <div className="py-3 flex justify-between items-center">
-              <span className="text-neutral-500">Cơ chế xác thực:</span>
-              <span className="text-emerald-700 font-medium">Google Firebase Auth</span>
+
+            {/* Editable Payment Info */}
+            <div>
+              <label className="block font-bold text-neutral-800 mb-1">
+                Thông tin nhận hoa hồng (STK, Tên ngân hàng, Chủ tài khoản)
+              </label>
+              <textarea
+                rows={3}
+                value={profilePaymentInfo}
+                onChange={(e) => setProfilePaymentInfo(e.target.value)}
+                placeholder="VD: MB Bank - STK: 0987654321 - Chủ TK: NGUYEN HOANG AN"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-900 focus:bg-white focus:border-rose-500 outline-none transition-colors"
+              />
+            </div>
+
+            {/* Read-only system values */}
+            <div className="pt-4 border-t border-neutral-100 space-y-3">
+              <h3 className="font-bold text-neutral-900 text-xs uppercase tracking-wider text-neutral-400">
+                Thông số hệ thống (Quản lý bởi Admin)
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Mã tiếp thị (Referral Code)</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-mono font-bold text-rose-700 text-sm">{affiliateCode}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200 text-neutral-700 font-medium">Cố định</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Tỷ lệ hoa hồng cơ bản</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-mono font-bold text-neutral-900 text-sm">{affiliateUser?.commissionRate || systemConfig.defaultCommissionRate}%</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200 text-neutral-700 font-medium">
+                      {affiliateUser?.commissionModel === 'by_product' ? 'Có SP riêng' : (affiliateUser?.commissionModel === 'tiered' ? 'Theo bậc DT' : 'Cố định')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Email Google liên kết</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-mono font-medium text-neutral-800 text-xs truncate">
+                      {affiliateUser?.googleEmail || (affiliateUser as any)?.email || 'Chưa liên kết'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Thời hạn lưu Cookie</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-mono font-bold text-neutral-900 text-sm">
+                      {affiliateUser?.cookieDurationDays ? `${affiliateUser.cookieDurationDays} ngày` : `${systemConfig.cookieDurationDays || 30} ngày (chuẩn)`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Số đơn ghi nhận / Session</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-mono font-bold text-neutral-900 text-sm">
+                      {affiliateUser?.maxOrdersPerCookieSession === 0
+                        ? 'Không giới hạn đơn'
+                        : (affiliateUser?.maxOrdersPerCookieSession && affiliateUser.maxOrdersPerCookieSession > 1
+                          ? `Tối đa ${affiliateUser.maxOrdersPerCookieSession} đơn`
+                          : '1 đơn đầu tiên')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
+                  <span className="text-[11px] text-neutral-500 block">Cơ chế tính hoa hồng</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="font-bold text-neutral-900 text-xs truncate">
+                      {affiliateUser?.commissionModel === 'by_product'
+                        ? `Theo SP (${affiliateUser.productCommissions?.length || 0} SP riêng)`
+                        : (affiliateUser?.commissionModel === 'tiered'
+                          ? `Bậc doanh thu (${affiliateUser.tieredCommissions?.length || 0} mức)`
+                          : 'Cố định theo đơn')}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </form>
       </div>
     );
   };

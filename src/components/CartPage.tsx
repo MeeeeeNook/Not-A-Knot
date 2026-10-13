@@ -56,7 +56,8 @@ import {
 import { generateTrackingNumber, removeVietnameseTones } from '../utils/orderFormatters';
 import { VIETNAM_PROVINCES, getDistrictsByProvince, calculateShippingFee } from '../data/vietnamLocations';
 import { getVouchers, validateVoucherCode, incrementVouchersUsage, Voucher } from '../utils/voucherManager';
-import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode } from '../utils/affiliateManager';
+import { getActiveAffiliateReferral, clearAffiliateCookie, fetchAffiliateByCode, calculateDetailedAffiliateCommission, recordOrderOnAffiliateCookie } from '../utils/affiliateManager';
+import { getAdminSession } from '../utils/auth';
 import { LoadingImage } from './LoadingImage';
 
 interface CartPageProps {
@@ -805,6 +806,18 @@ export const CartPage: React.FC<CartPageProps> = ({
 
     const activeRef = getActiveAffiliateReferral();
 
+    // Check if the current user is an Admin/Staff placing their own order:
+    // If Admin is logged in, DO NOT attribute any affiliate commission even if an affiliate cookie exists
+    const currentAdminSession = getAdminSession();
+    const isAdminPlacingOrder = Boolean(
+      currentAdminSession && (
+        currentAdminSession.role === 'root_admin' ||
+        currentAdminSession.role === 'deputy_admin' ||
+        currentAdminSession.role === 'member' ||
+        currentAdminSession.isRootAdmin
+      )
+    );
+
     const orderData: StoredOrder = {
       id: trackingCode,
       trackingNumber: trackingCode,
@@ -833,7 +846,8 @@ export const CartPage: React.FC<CartPageProps> = ({
       status: 'Chờ xác nhận' as const,
       paymentMethod: 'cod' as const,
       paymentStatus: 'unpaid' as const,
-      affiliateCode: activeRef?.code ? activeRef.code.toUpperCase().trim() : undefined
+      affiliateCode: (!isAdminPlacingOrder && activeRef?.code) ? activeRef.code.toUpperCase().trim() : undefined,
+      isAdminPlacingOrder
     };
 
     setSubmissionStep('syncing');
@@ -879,19 +893,25 @@ export const CartPage: React.FC<CartPageProps> = ({
       // 2. Fallback to direct saveOrderToFirestore if server was unreachable
       if (!confirmedOrder) {
         try {
-          if (activeRef?.code && !orderData.affiliateCommissionAmount) {
+          if (!isAdminPlacingOrder && activeRef?.code && !orderData.affiliateCommissionAmount) {
             try {
               const affUser = await fetchAffiliateByCode(activeRef.code);
               if (affUser && affUser.isActive !== false) {
-                const rate = typeof affUser.commissionRate === 'number' ? affUser.commissionRate : 10;
-                const merchVal = Math.max(0, currentOrderTotal - effectiveShippingFee);
-                const comm = Math.round((merchVal * rate) / 100);
+                const subtotal = Math.max(0, currentOrderTotal - effectiveShippingFee);
+                const detailedComm = calculateDetailedAffiliateCommission(
+                  affUser,
+                  itemDetails.map(it => ({ productId: it.productId, price: it.price, quantity: it.quantity, name: it.productName })),
+                  subtotal,
+                  0,
+                  10
+                );
+
                 orderData.affiliateCode = (affUser.affiliateCode || affUser.username || activeRef.code).toUpperCase().trim();
                 orderData.affiliateId = affUser.id;
                 orderData.affiliateName = affUser.name;
-                orderData.affiliateCommissionRate = rate;
-                orderData.affiliateCommissionAmount = comm;
-                orderData.affiliateMerchandiseValue = merchVal;
+                orderData.affiliateCommissionRate = detailedComm.effectiveRate;
+                orderData.affiliateCommissionAmount = detailedComm.commissionAmount;
+                orderData.affiliateMerchandiseValue = detailedComm.merchandiseValue;
               }
             } catch {}
           }
@@ -907,8 +927,14 @@ export const CartPage: React.FC<CartPageProps> = ({
 
       setSubmissionStep('confirmed');
 
-      // Clear referral cookie upon first order placement (used up)
-      clearAffiliateCookie();
+      // Cookie lifecycle management based on affiliate's configured maxOrdersPerCookieSession
+      if (!isAdminPlacingOrder && activeRef?.code) {
+        fetchAffiliateByCode(activeRef.code).then((aff) => {
+          recordOrderOnAffiliateCookie(aff?.maxOrdersPerCookieSession);
+        }).catch(() => {
+          recordOrderOnAffiliateCookie();
+        });
+      }
 
       // Dispatch order confirmation email asynchronously using verified order
       sendOrderConfirmationEmail(confirmedOrder).catch((e) => {

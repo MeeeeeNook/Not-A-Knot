@@ -41,14 +41,9 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const geo = clientGeo || await getClientGeoLocation().catch(() => null);
-      if (geo && !clientGeo) {
-        setClientGeo(geo);
-      }
-
       const res = await signInWithGoogle();
       if (!res.success || !res.user) {
-        setErrorMessage(res.error || 'Đăng nhập Google qua Firebase thất bại.');
+        setErrorMessage(res.error || 'Tài khoản không tồn tại trên hệ thống. Vui lòng liên hệ Quản trị viên để được cấp quyền truy cập.');
         setIsLoading(false);
         return;
       }
@@ -56,7 +51,9 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
       const authenticatedUser: SellerUser = res.user;
       const devInfo = getClientDeviceInfo();
       const nowIso = new Date().toISOString();
+      const geo = clientGeo;
 
+      // Log in background
       logAdminLogin({
         username: authenticatedUser.username,
         name: authenticatedUser.name,
@@ -105,7 +102,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             Đăng nhập hệ thống
           </h2>
           <p className="text-xs sm:text-sm text-neutral-400 mt-1.5 font-normal leading-relaxed">
-            Hệ thống tự động nhận diện tài khoản Quản trị viên và Đối tác Affiliate
+            Hệ thống quản lý dành cho người bán/affiliate
           </p>
         </div>
 
@@ -153,7 +150,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               <span>Cơ chế bảo mật Google Firebase Authentication</span>
             </div>
             <p className="text-[11px] text-neutral-400 leading-relaxed font-normal">
-              Hệ thống xác thực trực tiếp qua Google Firebase Authentication. Tài khoản sẽ tự động được nhận diện vai trò (Quản trị viên hoặc Đối tác Tiếp thị liên kết).
+              Hệ thống xác thực trực tiếp qua Google Firebase Authentication. Chỉ những tài khoản đã được quản trị viên cấp quyền mới có thể truy cập.
             </p>
           </div>
         </div>
