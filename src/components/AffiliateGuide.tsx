@@ -114,9 +114,9 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
         <h3 className="text-base font-bold text-neutral-900">4. Theo dõi đơn và đối soát</h3>
         <ul className="list-disc pl-5 space-y-2">
           <li><strong>Tổng quan / Thống kê:</strong> theo dõi lượt nhấp, số đơn, giá trị sản phẩm và hoa hồng theo khoảng thời gian đã chọn.</li>
-          <li><strong>Đơn hàng:</strong> tra mã đơn, xem trạng thái, giá trị ghi nhận và hoa hồng. Thông tin cá nhân khách hàng được ẩn.</li>
+          <li><strong>Đơn hàng:</strong> tra mã đơn, xem trạng thái, giá trị ghi nhận và hoa hồng. Bấm <strong>Cập nhật</strong> để tải đơn mới mà không cần tải lại trang. Thông tin cá nhân khách hàng được ẩn.</li>
           <li>Đơn bị hủy hoặc xóa bị loại khỏi tổng hoa hồng. Hoa hồng đang hiển thị không đồng nghĩa với tiền đã được chuyển cho bạn.</li>
-          <li><strong>Sổ hoa hồng</strong> hiển thị tổng ghi nhận, số admin đã đánh dấu trả và số còn có thể nhận. Chọn <strong>Xem đơn đã trả hoa hồng</strong> để xem mã đơn, số tiền và ngày trả. Admin chỉ đánh dấu sau khi chuyển khoản; nếu đánh dấu nhầm có thể bỏ tích.</li>
+          <li><strong>Thống kê → Sổ hoa hồng</strong> hiển thị tổng ghi nhận, số admin đã đánh dấu trả và số còn có thể nhận. Chọn <strong>Xem đơn đã trả hoa hồng</strong> để xem mã đơn, số tiền và ngày trả. Admin chỉ đánh dấu sau khi chuyển khoản; nếu đánh dấu nhầm có thể bỏ tích.</li>
           <li>Trong <strong>Cài đặt → Thông tin thanh toán</strong>, chọn số tiền không vượt quá hoa hồng đang có hoặc chọn <strong>Tất cả</strong> rồi tạo QR gửi admin. Tạo QR không tự chuyển tiền, không đánh dấu đơn đã trả và không tự trừ số dư.</li>
         </ul>
         <button type="button" onClick={onOpenOrders} className="inline-flex items-center gap-1 font-semibold text-rose-700 text-xs">Xem đơn hàng của bạn <ChevronRight className="h-4 w-4" /></button>

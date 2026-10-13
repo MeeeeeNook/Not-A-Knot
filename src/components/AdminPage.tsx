@@ -7067,11 +7067,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {activeTab === 'sellers' && (
           isRootAdmin ? (
             <AdminSellersManager
+              products={products}
+              categories={localCategories}
+              collections={localCollections}
               sellers={sellers}
               orders={activeOrders}
+              affiliateOrders={orders as any}
               currentAdmin={currentSeller || (sellers[0] || null)}
               onUpdateSellers={handleUpdateSellers}
               onUpdateCurrentAdmin={onUpdateCurrentSeller}
+              onUpdateOrders={updated => setOrders(updated as any)}
             />
           ) : null
         )}
