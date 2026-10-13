@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Search, Filter, ArrowUpDown, Download, Eye, X, ChevronLeft, ChevronRight,
+  Search, Filter, ArrowUpDown, Eye, X, ChevronLeft, ChevronRight,
   ShoppingBag, TrendingUp, Wallet, Percent, Calendar, Check, AlertCircle,
   ExternalLink, ChevronDown, RefreshCw, Sparkles, Tag, HelpCircle, Layers,
   ShieldCheck
@@ -29,6 +29,8 @@ interface AffiliateOrdersPageProps {
     prevEnd: number;
   };
   allBaseOrders: StoredOrder[];
+  onRefresh?: () => Promise<void>;
+  isRefreshing?: boolean;
 }
 
 export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
@@ -44,7 +46,9 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
   setCustomEndDate,
   dateRangeLabel,
   comparisonBounds,
-  allBaseOrders
+  allBaseOrders,
+  onRefresh,
+  isRefreshing = false
 }) => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,9 +61,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
 
   // Selected Order for Detail Drawer
   const [selectedOrder, setSelectedOrder] = useState<StoredOrder | null>(null);
-
-  // Checkbox selection (for potential bulk visual / UI fidelity like screenshot)
-  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   // Custom date picker dropdown state
   const [showDatePickerDropdown, setShowDatePickerDropdown] = useState(false);
@@ -217,87 +218,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
     setStatusFilter('all');
     setSortBy('newest');
     setCurrentPage(1);
-  };
-
-  // CSV Export handler
-  const handleExportCsv = () => {
-    if (filteredAndSortedOrders.length === 0) {
-      alert('Không có dữ liệu đơn hàng để xuất danh sách.');
-      return;
-    }
-
-    const headers = [
-      'Mã đơn hàng',
-      'Ngày đặt',
-      'Trạng thái',
-      'Số lượng sản phẩm',
-      'Tạm tính',
-      'Giảm giá',
-      'Phí vận chuyển',
-      'Giá trị tính hoa hồng (không gồm ship)',
-      'Tỷ lệ hoa hồng (%)',
-      'Hoa hồng ghi nhận (VNĐ)', 'Thanh toán hoa hồng', 'Hoa hồng đã trả (VNĐ)', 'Ngày trả hoa hồng'
-    ];
-
-    const rows = filteredAndSortedOrders.map((ord) => {
-      const merchVal = typeof ord.affiliateMerchandiseValue === 'number'
-        ? ord.affiliateMerchandiseValue
-        : Math.max(0, (ord.subtotal || ord.totalPrice || 0) - (ord.discountAmount || 0));
-
-      const commRate = typeof ord.affiliateCommissionRate === 'number'
-        ? ord.affiliateCommissionRate
-        : (affiliateUser?.commissionRate || 10);
-
-      const commAmount = typeof ord.affiliateCommissionAmount === 'number'
-        ? ord.affiliateCommissionAmount
-        : Math.round((merchVal * commRate) / 100);
-
-      const itemCount = ord.itemDetails?.length || ord.items?.length || 1;
-      const dateStr = ord.createdAt
-        ? new Date(ord.createdAt).toLocaleString('vi-VN')
-        : (ord.date || '');
-
-      return [
-        `"${ord.id}"`,
-        `"${dateStr}"`,
-        `"${normalizeOrderStatus(ord.status)}"`,
-        itemCount,
-        ord.subtotal || ord.totalPrice || 0,
-        ord.discountAmount || 0,
-        ord.shippingFee || 0,
-        merchVal,
-        commRate,
-        commAmount,
-        ord.affiliateCommissionPaid ? 'Đã trả' : 'Chưa trả',
-        ord.affiliateCommissionPaid ? (ord.affiliateCommissionPaidAmount ?? commAmount) : 0,
-        `"${ord.affiliateCommissionPaidAt || ''}"`
-      ].join(',');
-    });
-
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `affiliate-orders-${affiliateUser?.affiliateCode || 'export'}-${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Checkbox toggle helpers
-  const handleToggleSelectAll = () => {
-    if (selectedOrderIds.length === paginatedOrders.length && paginatedOrders.length > 0) {
-      setSelectedOrderIds([]);
-    } else {
-      setSelectedOrderIds(paginatedOrders.map((o) => o.id));
-    }
-  };
-
-  const handleToggleSelectOrder = (id: string) => {
-    setSelectedOrderIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
   };
 
   return (
@@ -631,15 +551,15 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            {/* Export CSV Button (Matching Visual Reference) */}
-            <button
+            {onRefresh && <button
               type="button"
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              onClick={() => { void onRefresh(); }}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold transition-colors cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-wait"
             >
-              <Download className="w-3.5 h-3.5 text-rose-600" />
-              <span>Xuất danh sách</span>
-            </button>
+              <RefreshCw className={`w-3.5 h-3.5 text-rose-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Đang cập nhật...' : 'Cập nhật'}</span>
+            </button>}
 
             {/* Reset Filters if active */}
             {(searchQuery || statusFilter !== 'all' || sortBy !== 'newest') && (
@@ -690,14 +610,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-neutral-50/70 border-b border-neutral-100 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-                    <th className="py-3.5 px-4 w-10 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedOrderIds.length === paginatedOrders.length && paginatedOrders.length > 0}
-                        onChange={handleToggleSelectAll}
-                        className="rounded border-neutral-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
-                      />
-                    </th>
                     <th className="py-3.5 px-4">Mã đơn hàng</th>
                     <th className="py-3.5 px-4">Ngày đặt</th>
                     <th className="py-3.5 px-4 text-right">
@@ -730,7 +642,6 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                       : Math.round((merchVal * commRate) / 100);
 
                     const badgeConfig = getStatusBadgeConfig(ord.status);
-                    const isSelected = selectedOrderIds.includes(ord.id);
                     const isCurrentDetail = selectedOrder?.id === ord.id;
 
                     return (
@@ -740,27 +651,9 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                         className={`transition-colors cursor-pointer group ${
                           isCurrentDetail
                             ? 'bg-rose-50/40'
-                            : isSelected
-                            ? 'bg-rose-50/20'
                             : 'hover:bg-neutral-50/80'
                         }`}
                       >
-                        {/* Checkbox */}
-                        <td
-                          className="py-3.5 px-4 text-center"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleSelectOrder(ord.id);
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleSelectOrder(ord.id)}
-                            className="rounded border-neutral-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
-                          />
-                        </td>
-
                         {/* Order ID */}
                         <td className="py-3.5 px-4 font-mono font-bold text-neutral-900 whitespace-nowrap">
                           {ord.id}

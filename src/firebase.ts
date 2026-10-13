@@ -17,6 +17,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   setDoc,
   deleteDoc,
   deleteField,
@@ -1514,10 +1515,10 @@ export const deduplicateStoredOrders = (ordersList: StoredOrder[]): StoredOrder[
   });
 };
 
-export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<StoredOrder[]> => {
+export const fetchOrdersFromFirestore = async (forceRefresh = false, options: { requireServer?: boolean } = {}): Promise<StoredOrder[]> => {
   try {
     const now = Date.now();
-    if (!forceRefresh && ordersMemoryCache && ordersMemoryCache.expiresAt > now) {
+    if (!forceRefresh && !options.requireServer && ordersMemoryCache && ordersMemoryCache.expiresAt > now) {
       return ordersMemoryCache.data;
     }
 
@@ -1527,7 +1528,7 @@ export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<St
     // This guarantees orders without createdAt or with formatting differences are never omitted
     // Generous 20s timeout ensures slow network/cold starts connect without premature false timeouts
     const snap = await Promise.race([
-      getDocs(colRef),
+      options.requireServer ? getDocsFromServer(colRef) : getDocs(colRef),
       new Promise<any>((_, reject) =>
         setTimeout(() => reject(new Error('Mạng tải đơn hàng phản hồi chậm')), 20000)
       )
@@ -1585,6 +1586,8 @@ export const fetchOrdersFromFirestore = async (forceRefresh = false): Promise<St
     ordersMemoryCache = { data: deduplicated, expiresAt: now + 30000 };
     return deduplicated;
   } catch (err) {
+    // Explicit affiliate refresh must report failure rather than present cached orders as current.
+    if (options.requireServer) throw err;
     console.warn('Lưu ý khi tải đơn hàng từ Firestore (sử dụng bộ nhớ đệm):', err);
     if (ordersMemoryCache && ordersMemoryCache.data.length > 0) {
       return ordersMemoryCache.data;

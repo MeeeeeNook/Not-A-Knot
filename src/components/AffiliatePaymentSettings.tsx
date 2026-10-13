@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Download, Copy, QrCode, X } from 'lucide-react';
-import QRCode from 'qrcode';
 import type { AffiliatePaymentAccount } from '../types';
 import initialBanks from '../data/vietqrBanks.json';
 import { createCommissionQrRequest } from '../utils/affiliatePayment';
@@ -33,8 +32,8 @@ export function AffiliatePaymentSettings({ value, onChange, availableCommission,
     document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close);
   }, [open]);
   const update = (patch: Partial<AffiliatePaymentAccount>) => { onChange({ ...value, ...patch }); setQr(null); setError(''); };
-  const generate = async () => {
-    try { const request = createCommissionQrRequest(value, Number(amount), available, affiliateCode); if (preview) request.url = await QRCode.toDataURL('NOT A KNOT PREVIEW - KHONG CHUYEN TIEN', { width: 320, margin: 2 }); setQr(request); setError(''); setImageError(false); setNotice(''); }
+  const generate = () => {
+    try { const request = createCommissionQrRequest(value, Number(amount), available, affiliateCode); setQr(request); setError(''); setImageError(false); setNotice(''); }
     catch (e: any) { setError(e.message); }
   };
   const copy = async () => {
@@ -68,10 +67,11 @@ export function AffiliatePaymentSettings({ value, onChange, availableCommission,
       <p className="text-xs text-neutral-600">Hoa hồng đang có: <strong className="text-rose-700">{available.toLocaleString('vi-VN')}đ</strong></p>
       <div className="flex flex-wrap items-end gap-2"><div className="flex-1 min-w-36"><label htmlFor="commission-qr-amount" className="block text-xs font-semibold mb-1">Số tiền nhận hoa hồng (VNĐ)</label><input id="commission-qr-amount" type="number" min="1" max={available} step="1" value={amount} onChange={e => { setAmount(e.target.value); setQr(null); setError(''); }} className={inputClass} placeholder="Nhập số tiền" /></div><button type="button" disabled={available <= 0} onClick={() => { setAmount(String(available)); setQr(null); setError(''); }} className="rounded-xl border border-neutral-200 px-3 py-2.5 text-xs font-semibold disabled:opacity-50">Tất cả</button><button type="button" disabled={available <= 0} onClick={generate} className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2.5 text-white text-xs font-bold disabled:opacity-50"><QrCode className="w-4 h-4" />Tạo QR nhận hoa hồng</button></div>
       <p className="text-[11px] text-neutral-500">Số tiền tối đa là hoa hồng ghi nhận trừ các khoản admin đã đánh dấu trả. QR dùng để gửi quản trị viên chuyển khoản; tạo QR không tự ghi nhận đã thanh toán hoặc trừ số dư.</p>
+      {preview && <p className="text-[11px] text-neutral-500">Số dư trong preview là dữ liệu mẫu. VietQR tạo từ ngân hàng và STK bạn nhập vẫn dùng để chuyển khoản được.</p>}
       {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
     </div>
     {qr && <div role="dialog" aria-label="QR nhận hoa hồng" className="rounded-2xl bg-neutral-50 border border-neutral-200 p-4 space-y-3">
-      <div className="flex justify-between gap-2"><strong className="text-sm">{preview ? 'QR minh họa — không dùng chuyển tiền' : 'QR nhận hoa hồng'}: {qr.amount.toLocaleString('vi-VN')}đ</strong><button type="button" onClick={() => setQr(null)} aria-label="Đóng QR"><X className="w-4 h-4" /></button></div>
+      <div className="flex justify-between gap-2"><strong className="text-sm">QR nhận hoa hồng: {qr.amount.toLocaleString('vi-VN')}đ</strong><button type="button" onClick={() => setQr(null)} aria-label="Đóng QR"><X className="w-4 h-4" /></button></div>
       {imageError ? <p role="alert" className="text-xs text-rose-700">Chưa tải được VietQR. Vui lòng thử lại hoặc mở ảnh QR.</p> : <img src={qr.url} alt={`VietQR nhận hoa hồng ${qr.amount.toLocaleString('vi-VN')}đ`} onError={() => setImageError(true)} className="w-full max-w-xs mx-auto rounded-xl" />}
       <p className="text-xs text-neutral-600 break-words">{value.bankName} · {value.accountNumber} · {value.accountName}<br />Nội dung: {qr.description}</p>
       <div className="flex flex-wrap gap-2"><button type="button" onClick={download} className="inline-flex gap-1 items-center rounded-lg border bg-white px-3 py-2 text-xs"><Download className="w-3.5 h-3.5" />Tải ảnh QR</button><button type="button" onClick={copy} className="inline-flex gap-1 items-center rounded-lg border bg-white px-3 py-2 text-xs"><Copy className="w-3.5 h-3.5" />Sao chép link QR</button><a href={qr.url} target="_blank" rel="noopener noreferrer" className="rounded-lg border bg-white px-3 py-2 text-xs">Mở ảnh QR</a></div>

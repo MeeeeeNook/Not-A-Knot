@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  LayoutDashboard, ShoppingBag, BarChart3, Link2, BookOpen, Settings, Copy, Check, QrCode, ExternalLink, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, MousePointerClick, ArrowLeft, LogOut, Search, ChevronRight, X, Sparkles, CheckCircle2, Clock, Share2, Send, Smartphone, MessageSquare, Download, Lock, Tag, Save
+  LayoutDashboard, ShoppingBag, BarChart3, Link2, BookOpen, Settings, Copy, Check, QrCode, ExternalLink, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, MousePointerClick, ArrowLeft, LogOut, Search, ChevronRight, X, Sparkles, CheckCircle2, Clock, Share2, Send, Smartphone, MessageSquare, Download, Lock, Tag, Save, RefreshCw
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { SellerUser, StoredOrder, AffiliateSystemConfig, Product, CategoryItem, CollectionInfo } from '../types';
@@ -17,7 +17,6 @@ import { fetchOrdersFromFirestore, saveSellerToFirestore } from '../firebase';
 import { getStorefrontCategoryOptions, getVisibleCollections, isProductMatchingCategory } from '../utils/storefrontCatalog';
 import { AffiliateGuide } from './AffiliateGuide';
 import { getAffiliateCommissionDisplay } from '../utils/affiliateCommissionDisplay';
-import { AffiliateCommissionPolicy } from './AffiliateCommissionPolicy';
 import { AffiliatePaymentSettings } from './AffiliatePaymentSettings';
 import { emptyAffiliatePaymentAccount, formatAffiliatePayment, validateAffiliatePayment } from '../utils/affiliatePayment';
 import { getAffiliateCommissionPayments, isAffiliateOrder } from '../utils/affiliateCommissionPayments';
@@ -141,15 +140,27 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-  const [refreshingPayments, setRefreshingPayments] = useState(false);
-  const refreshPayments = async () => {
-    if (preview || orders) return;
-    setRefreshingPayments(true);
-    try { setFetchedOrders(await fetchOrdersFromFirestore(true) as StoredOrder[]); } finally { setRefreshingPayments(false); }
+  const [refreshingOrders, setRefreshingOrders] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<{ error: boolean; text: string } | null>(null);
+  const refreshInFlight = useRef(false);
+  const refreshOrders = async (showFeedback = true) => {
+    if (preview || refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setRefreshingOrders(true);
+    setRefreshMessage(null);
+    try {
+      setFetchedOrders(await fetchOrdersFromFirestore(true, { requireServer: true }) as StoredOrder[]);
+      if (showFeedback) setRefreshMessage({ error: false, text: 'Đơn hàng và hoa hồng đã được cập nhật.' });
+    } catch {
+      setRefreshMessage({ error: true, text: 'Không thể cập nhật đơn hàng. Dữ liệu trước đó vẫn được giữ nguyên. Vui lòng thử lại.' });
+    } finally {
+      refreshInFlight.current = false;
+      setRefreshingOrders(false);
+    }
   };
   useEffect(() => {
     if (preview || orders) return;
-    const refresh = () => { void refreshPayments(); };
+    const refresh = () => { void refreshOrders(false); };
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, [preview, orders]);
@@ -303,7 +314,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
   // Active orders list (from props or Firestore) with zero-trust customer privacy sanitization
   const activeOrdersList = useMemo(() => {
-    const rawList = orders && orders.length > 0 ? orders : fetchedOrders;
+    const rawList = fetchedOrders;
     // Strictly sanitize orders: customer name, customer phone, address, and items composition are omitted
     return rawList.map((ord) => ({
       id: ord.id,
@@ -334,7 +345,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       items: [],
       itemDetails: []
     } as unknown as StoredOrder));
-  }, [orders, fetchedOrders]);
+  }, [fetchedOrders]);
 
   // Base attributed orders for this affiliate (removes deleted/cancelled orders)
   const baseStats = useMemo(() => {
@@ -413,7 +424,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       label: `${startFormatted} - ${endFormatted}`,
       days
     };
-  }, [dateRange, customStartDate, customEndDate]);
+  }, [dateRange, customStartDate, customEndDate, fetchedOrders]);
 
   // Filter current period orders & previous period orders
   const { currentAttributedOrders, prevAttributedOrders } = useMemo(() => {
@@ -2297,6 +2308,30 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     );
   };
 
+  const renderCommissionPayments = () => (
+    <section aria-label="Sổ hoa hồng" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-bold text-neutral-900">Thanh toán hoa hồng</h2>
+        {!preview && <button type="button" disabled={refreshingOrders} onClick={() => refreshOrders()} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${refreshingOrders ? 'animate-spin' : ''}`} />{refreshingOrders ? 'Đang cập nhật...' : 'Cập nhật'}</button>}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {([['Hoa hồng ghi nhận', commissionPayments.earned], ['Đã thanh toán', commissionPayments.paid], ['Hoa hồng đang có', commissionPayments.available]] as const).map(([label, value]) => (
+          <div key={label} className="rounded-2xl border border-neutral-200 bg-white p-4">
+            <p className="text-xs text-neutral-500">{label}</p>
+            <strong className="text-lg text-rose-800">{value.toLocaleString('vi-VN')}đ</strong>
+            <p className="text-[10px] text-neutral-400 mt-1">Toàn thời gian</p>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={() => setShowPaymentHistory(!showPaymentHistory)} className="text-xs text-rose-700 font-semibold underline">{showPaymentHistory ? 'Ẩn' : 'Xem'} {commissionPayments.paidOrders} đơn đã trả hoa hồng</button>
+      {showPaymentHistory && <div className="rounded-xl border bg-white p-4 space-y-2">
+        <h3 className="font-bold text-sm">Lịch sử trả hoa hồng</h3>
+        {activeOrdersList.filter(order => affiliateUser && order.affiliateCommissionPaid && isAffiliateOrder(affiliateUser, order)).map(order => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs"><span className="font-mono">{order.id}</span><AffiliateCommissionPaymentBadge order={order} /></div>)}
+        {commissionPayments.paidOrders === 0 && <p className="text-xs text-neutral-500">Chưa có đơn được admin đánh dấu đã trả.</p>}
+      </div>}
+    </section>
+  );
+
   return (
     <div ref={dashboardRef} className="min-h-screen bg-neutral-50/50 text-neutral-900 flex flex-col lg:flex-row selection:bg-rose-500 selection:text-white font-sans">
       {/* 1. Left Sidebar Navigation */}
@@ -2309,8 +2344,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
         {/* Viewport Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full">
-          {!isLoading && <section aria-label="Sổ hoa hồng" className="space-y-3"><div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[['Hoa hồng ghi nhận', commissionPayments.earned], ['Đã thanh toán', commissionPayments.paid], ['Hoa hồng đang có', commissionPayments.available]].map(([label, value]) => <div key={label} className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs text-neutral-500">{label}</p><strong className="text-lg text-rose-800">{Number(value).toLocaleString('vi-VN')}đ</strong><p className="text-[10px] text-neutral-400 mt-1">Toàn thời gian</p></div>)}</div><div className="flex flex-wrap gap-3 text-xs"><button type="button" onClick={() => setShowPaymentHistory(!showPaymentHistory)} className="text-rose-700 font-semibold underline">{showPaymentHistory ? 'Ẩn' : 'Xem'} {commissionPayments.paidOrders} đơn đã trả hoa hồng</button>{!preview && !orders && <button type="button" disabled={refreshingPayments} onClick={refreshPayments} className="text-neutral-600 underline">{refreshingPayments ? 'Đang cập nhật...' : 'Cập nhật hoa hồng'}</button>}</div>{showPaymentHistory && <div className="rounded-xl border bg-white p-4 space-y-2"><h2 className="font-bold text-sm">Lịch sử trả hoa hồng</h2>{activeOrdersList.filter(order => affiliateUser && order.affiliateCommissionPaid && isAffiliateOrder(affiliateUser, order)).map(order => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs"><span className="font-mono">{order.id}</span><AffiliateCommissionPaymentBadge order={order} /></div>)}{commissionPayments.paidOrders === 0 && <p className="text-xs text-neutral-500">Chưa có đơn được admin đánh dấu đã trả.</p>}</div>}</section>}
-          {!isLoading && activeTab !== 'guide' && <AffiliateCommissionPolicy affiliate={affiliateUser} products={products} defaultRate={systemConfig.defaultCommissionRate} />}
+          {refreshMessage && <p role={refreshMessage.error ? 'alert' : 'status'} className={`rounded-xl border p-3 text-xs ${refreshMessage.error ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{refreshMessage.text}</p>}
           {isLoading ? (
             <div className="space-y-6 animate-pulse">
               <div className="h-44 bg-neutral-200/60 rounded-2xl" />
@@ -2353,10 +2387,12 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                     prevEnd: dateRangeBounds.prevEnd
                   }}
                   allBaseOrders={baseStats.attributedOrders}
+                  onRefresh={preview ? undefined : () => refreshOrders()}
+                  isRefreshing={refreshingOrders}
                 />
               )}
 
-              {activeTab === 'analytics' && renderAnalyticsSection()}
+              {activeTab === 'analytics' && <>{renderAnalyticsSection()}{renderCommissionPayments()}</>}
               {activeTab === 'links' && renderLinksSection()}
               {activeTab === 'guide' && <AffiliateGuide affiliate={affiliateUser} config={systemConfig} products={products} onOpenLinks={() => setActiveTab('links')} onOpenSettings={() => setActiveTab('settings')} onOpenOrders={() => setActiveTab('orders')} />}
               {activeTab === 'settings' && renderSettingsSection()}
