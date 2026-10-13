@@ -510,10 +510,14 @@ export default function App() {
     // Capture Affiliate Referral link click (?ref=AN001) - Last Click Attribution
     const refCode = queryParams.get('ref') || searchParams.get('ref');
     if (refCode) {
-      import('./utils/affiliateManager').then(({ fetchAffiliateByCode, setAffiliateReferral, recordAffiliateClick }) => {
+      import('./utils/affiliateManager').then(({ fetchAffiliateByCode, setAffiliateReferral, recordAffiliateClick, getActiveAffiliateReferral }) => {
         fetchAffiliateByCode(refCode).then((affUser) => {
-          if (!affUser || affUser.isActive === false) return;
-          setAffiliateReferral(refCode, affUser.cookieDurationDays || 30, affUser.maxOrdersPerCookieSession ?? 1);
+          if (affUser?.isActive === false) return;
+          // Keep the referral while the server is unavailable; authoritative settings
+          // replace the default when lookup succeeds, without resetting its first expiry.
+          const existing = getActiveAffiliateReferral();
+          const sameReferral = existing?.code === refCode.trim().toUpperCase();
+          setAffiliateReferral(refCode, affUser?.cookieDurationDays || 30, affUser?.maxOrdersPerCookieSession ?? (sameReferral ? existing.maxOrders ?? 1 : 1));
           void recordAffiliateClick(refCode).catch(() => {});
         }).catch(() => {});
       });
