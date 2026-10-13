@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { StoredOrder, SellerUser, OrderItemDetail } from '../types';
 import { normalizeOrderStatus, getStatusBadgeConfig } from '../utils/orderFormatters';
+import { AffiliateCommissionPaymentBadge } from './AffiliateCommissionPaymentBadge';
 
 export type OrdersDateRangePreset = 'all' | '7days' | '30days' | '90days' | 'custom';
 
@@ -235,7 +236,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
       'Phí vận chuyển',
       'Giá trị tính hoa hồng (không gồm ship)',
       'Tỷ lệ hoa hồng (%)',
-      'Hoa hồng ghi nhận (VNĐ)'
+      'Hoa hồng ghi nhận (VNĐ)', 'Thanh toán hoa hồng', 'Hoa hồng đã trả (VNĐ)', 'Ngày trả hoa hồng'
     ];
 
     const rows = filteredAndSortedOrders.map((ord) => {
@@ -266,7 +267,10 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
         ord.shippingFee || 0,
         merchVal,
         commRate,
-        commAmount
+        commAmount,
+        ord.affiliateCommissionPaid ? 'Đã trả' : 'Chưa trả',
+        ord.affiliateCommissionPaid ? (ord.affiliateCommissionPaidAmount ?? commAmount) : 0,
+        `"${ord.affiliateCommissionPaidAt || ''}"`
       ].join(',');
     });
 
@@ -706,6 +710,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                     </th>
                     <th className="py-3.5 px-4 text-center">Tỷ lệ HH</th>
                     <th className="py-3.5 px-4 text-right">Hoa hồng</th>
+                    <th className="py-3.5 px-4 text-center">Thanh toán HH</th>
                     <th className="py-3.5 px-4 text-center">Trạng thái</th>
                     <th className="py-3.5 px-4 text-center w-16">Thao tác</th>
                   </tr>
@@ -800,6 +805,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                         </td>
 
                         {/* Order Status Badge */}
+                        <td className="py-3.5 px-4 text-center"><AffiliateCommissionPaymentBadge order={ord} /></td>
                         <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium ${badgeConfig.badgeClass}`}>
                             {badgeConfig.label}
@@ -884,6 +890,7 @@ export const AffiliateOrdersPage: React.FC<AffiliateOrdersPageProps> = ({
                         <span className="font-mono font-bold text-rose-700 text-sm">
                           +{commAmount.toLocaleString('vi-VN')}đ
                         </span>
+                        <div className="mt-1"><AffiliateCommissionPaymentBadge order={ord} /></div>
                       </div>
                     </div>
                   </div>

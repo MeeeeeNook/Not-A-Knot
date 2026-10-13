@@ -4,6 +4,9 @@ import {
 } from 'lucide-react';
 import { SellerUser, StoredOrder, AffiliateSystemConfig, Product, CategoryItem, CollectionInfo } from '../../types';
 import { AffiliatePartnerWizard } from './AffiliatePartnerWizard';
+import { AffiliateHubPreview } from './AffiliateHubPreview';
+import { AffiliateCommissionPolicy } from '../AffiliateCommissionPolicy';
+import { getAffiliateCommissionDisplay } from '../../utils/affiliateCommissionDisplay';
 import { 
   fetchAffiliateSystemConfig, 
   saveAffiliateSystemConfig, 
@@ -11,7 +14,9 @@ import {
   getAffiliateReferralUrl, 
   DEFAULT_AFFILIATE_CONFIG
 } from '../../utils/affiliateManager';
-import { saveSellerToFirestore, deleteSellerFromFirestore } from '../../firebase';
+import { db, saveSellerToFirestore, deleteSellerFromFirestore } from '../../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import { getAffiliateCommissionPayments, isAffiliateOrder, setOrderCommissionPaid } from '../../utils/affiliateCommissionPayments';
 
 interface AdminAffiliatesTabProps {
   products: Product[];
@@ -19,6 +24,7 @@ interface AdminAffiliatesTabProps {
   collections: CollectionInfo[];
   sellers: SellerUser[];
   orders: StoredOrder[];
+  onUpdateOrders: (orders: StoredOrder[]) => void;
   onUpdateSellers: (updatedSellers: SellerUser[]) => void;
   currentAdmin?: SellerUser | null;
   isRootAdmin: boolean;
@@ -30,6 +36,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
   categories,
   collections,
   orders,
+  onUpdateOrders,
   onUpdateSellers,
   currentAdmin,
   isRootAdmin
@@ -44,6 +51,28 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [modelFilter, setModelFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [policyAffiliate, setPolicyAffiliate] = useState<SellerUser | null>(null);
+  const [savingPayment, setSavingPayment] = useState<string | null>(null);
+  const canManagePayments = Boolean(currentAdmin && currentAdmin.isActive !== false && ['root_admin', 'deputy_admin', 'member'].includes(currentAdmin.role));
+  const markCommissionPaid = async (order: StoredOrder, affiliate: SellerUser, paid: boolean) => {
+    if (!canManagePayments || !currentAdmin) return;
+    setSavingPayment(order.id);
+    try {
+      const updated = setOrderCommissionPaid(order, affiliate, paid, currentAdmin.name || currentAdmin.username, config.defaultCommissionRate);
+      await updateDoc(doc(db, 'orders', order.id), {
+        affiliateCommissionPaid: updated.affiliateCommissionPaid,
+        affiliateCommissionPaidAmount: updated.affiliateCommissionPaidAmount,
+        affiliateCommissionPaidAt: updated.affiliateCommissionPaidAt,
+        affiliateCommissionPaidBy: updated.affiliateCommissionPaidBy
+      });
+      onUpdateOrders(orders.map(item => item.id === updated.id ? updated : item));
+      showToast(paid ? `Đã ghi nhận trả hoa hồng đơn ${order.id}.` : `Đã bỏ đánh dấu trả hoa hồng đơn ${order.id}.`);
+    } catch (error: any) { showToast(error.message || 'Chưa lưu được trạng thái thanh toán.'); }
+    finally { setSavingPayment(null); }
+  };
 
   // Modal States
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
@@ -70,7 +99,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
 
   // Filter affiliates list from sellers
   const affiliatesList = useMemo(() => {
-    return sellers.filter((s) => s.role === 'affiliate' || Boolean(s.affiliateCode));
+    return sellers.filter((s) => s.role === 'affiliate');
   }, [sellers]);
 
   // Active non-deleted orders
@@ -105,6 +134,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
   // Filtered Affiliates by search and status
   const filteredAffiliates = useMemo(() => {
     return affiliatesList.filter((aff) => {
+      if (modelFilter !== 'all' && (aff.commissionModel || 'standard') !== modelFilter) return false;
       // Status filter
       if (statusFilter === 'active' && aff.isActive === false) return false;
       if (statusFilter === 'inactive' && aff.isActive !== false) return false;
@@ -115,12 +145,17 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
         const code = (aff.affiliateCode || '').toLowerCase();
         const name = (aff.name || '').toLowerCase();
         const username = (aff.username || '').toLowerCase();
-        return code.includes(q) || name.includes(q) || username.includes(q);
+        return code.includes(q) || name.includes(q) || username.includes(q) || (aff.googleEmail || aff.email || '').toLowerCase().includes(q);
       }
 
       return true;
+    }).sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'vi');
+      if (sortBy === 'commission') return calculateAffiliateStats(b, activeOrders).totalCommission - calculateAffiliateStats(a, activeOrders).totalCommission;
+      if (sortBy === 'revenue') return calculateAffiliateStats(b, activeOrders).totalMerchandiseValue - calculateAffiliateStats(a, activeOrders).totalMerchandiseValue;
+      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
     });
-  }, [affiliatesList, statusFilter, searchQuery]);
+  }, [affiliatesList, statusFilter, searchQuery, modelFilter, sortBy, activeOrders]);
 
   // Copy referral link
   const handleCopyLink = async (code: string) => {
@@ -219,6 +254,8 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
+      {isPreviewOpen && <AffiliateHubPreview admin={currentAdmin} config={config} products={products} categories={categories} collections={collections} onClose={() => setIsPreviewOpen(false)} />}
+      {policyAffiliate && <div role="dialog" aria-modal="true" aria-label={`Thông số đối tác ${policyAffiliate.name}`} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 w-full max-w-2xl max-h-[90dvh] overflow-y-auto space-y-4"><div className="flex justify-between items-center gap-2"><h2 className="font-bold">Thông số · {policyAffiliate.name}</h2><button type="button" onClick={() => setPolicyAffiliate(null)} aria-label="Đóng thông số"><X className="w-4 h-4" /></button></div><AffiliateCommissionPolicy affiliate={policyAffiliate} products={products} defaultRate={config.defaultCommissionRate} /><p className="text-xs text-slate-600">Cookie: {policyAffiliate.cookieDurationDays || config.cookieDurationDays} ngày · {policyAffiliate.maxOrdersPerCookieSession === 0 ? 'Không giới hạn đơn' : `${policyAffiliate.maxOrdersPerCookieSession ?? 1} đơn mỗi kỳ cookie`}</p><p className="text-xs text-slate-600 break-words">Thông tin thanh toán: {policyAffiliate.paymentInfo || 'Chưa cập nhật'}</p></div></div>}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-900 text-white text-xs font-bold shadow-2xl animate-in slide-in-from-bottom-2">
@@ -246,6 +283,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button type="button" onClick={() => setIsPreviewOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-800 text-xs font-bold"><Eye className="w-4 h-4" />Preview giao diện affiliate hub</button>
           {/* Configure System Settings button */}
           <button
             type="button"
@@ -346,7 +384,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm tên, mã tiếp thị..."
+                placeholder="Tìm tên, email, mã tiếp thị..."
                 className="w-44 sm:w-56 pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:border-amber-500 outline-none transition-colors"
               />
             </div>
@@ -361,6 +399,8 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
               <option value="active">Đang hoạt động</option>
               <option value="inactive">Đang tạm khóa</option>
             </select>
+            <select aria-label="Lọc cơ chế hoa hồng" value={modelFilter} onChange={e => setModelFilter(e.target.value)} className="py-1.5 px-3 rounded-xl border border-slate-200 text-xs bg-slate-50"><option value="all">Mọi cơ chế hoa hồng</option><option value="standard">Cố định</option><option value="by_product">Theo sản phẩm</option><option value="tiered">Theo bậc giá trị</option></select>
+            <select aria-label="Sắp xếp đối tác" value={sortBy} onChange={e => setSortBy(e.target.value)} className="py-1.5 px-3 rounded-xl border border-slate-200 text-xs bg-slate-50"><option value="newest">Mới nhất</option><option value="name">Tên A–Z</option><option value="commission">Hoa hồng cao nhất</option><option value="revenue">Doanh thu cao nhất</option></select>
           </div>
         </div>
 
@@ -461,7 +501,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex flex-col items-center gap-1">
                           <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold font-mono text-[11px] border border-purple-200">
-                            {rate}%
+                            {getAffiliateCommissionDisplay(aff, config.defaultCommissionRate).value}
                           </span>
                           {aff.commissionModel === 'by_product' && (
                             <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-50 text-amber-700 font-bold border border-amber-200 whitespace-nowrap" title={`${aff.productCommissions?.length || 0} sản phẩm có % riêng`}>
@@ -478,12 +518,12 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                             <span>&bull;</span>
                             <span title="Số đơn ghi nhận">{aff.maxOrdersPerCookieSession === 0 ? 'Vô hạn' : (aff.maxOrdersPerCookieSession && aff.maxOrdersPerCookieSession > 1 ? `${aff.maxOrdersPerCookieSession} đơn` : '1 đơn')}</span>
                           </div>
+                          <button type="button" onClick={() => setPolicyAffiliate(aff)} className="text-[10px] font-semibold text-rose-700 underline">Xem thông số & bậc</button>
                         </div>
                       </td>
 
                       {/* Orders Count */}
                       <td className="py-3.5 px-4 text-center font-bold text-slate-800">
-                        {stats.totalOrders > 0 ? (
                           <button
                             type="button"
                             onClick={() => setViewOrdersAffiliate(aff)}
@@ -492,9 +532,6 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                           >
                             {stats.totalOrders} đơn
                           </button>
-                        ) : (
-                          <span className="text-slate-400 font-mono">0</span>
-                        )}
                       </td>
 
                       {/* Merchandise Value */}
@@ -505,6 +542,8 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                       {/* Commission Earned */}
                       <td className="py-3.5 px-4 text-right font-mono font-black text-rose-800">
                         {stats.totalCommission.toLocaleString('vi-VN')}đ
+                        <p className="text-[10px] font-normal text-slate-500 mt-1">Đã trả: {getAffiliateCommissionPayments(aff, orders, config.defaultCommissionRate).paid.toLocaleString('vi-VN')}đ</p>
+                        <p className="text-[10px] font-normal text-emerald-700">Còn: {getAffiliateCommissionPayments(aff, orders, config.defaultCommissionRate).available.toLocaleString('vi-VN')}đ</p>
                       </td>
 
                       {/* Active Status Toggle */}
@@ -600,7 +639,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                   Đơn Hàng Ghi Nhận: {viewOrdersAffiliate.name}
                 </h3>
                 <span className="text-[11px] text-slate-500 font-mono">
-                  Mã tiếp thị: <strong className="text-rose-800">{viewOrdersAffiliate.affiliateCode || viewOrdersAffiliate.username}</strong> &bull; Tỷ lệ: {viewOrdersAffiliate.commissionRate ?? config.defaultCommissionRate}%
+                  Mã tiếp thị: <strong className="text-rose-800">{viewOrdersAffiliate.affiliateCode || viewOrdersAffiliate.username}</strong> &bull; {getAffiliateCommissionDisplay(viewOrdersAffiliate, config.defaultCommissionRate).value}
                 </span>
               </div>
               <button
@@ -615,7 +654,9 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
             <div className="flex-1 overflow-y-auto p-6">
               {(() => {
                 const stats = calculateAffiliateStats(viewOrdersAffiliate, activeOrders);
-                if (stats.attributedOrders.length === 0) {
+                const payment = getAffiliateCommissionPayments(viewOrdersAffiliate, orders, config.defaultCommissionRate);
+                const paymentOrders = [...stats.attributedOrders, ...orders.filter(order => order.affiliateCommissionPaid && isAffiliateOrder(viewOrdersAffiliate, order) && !stats.attributedOrders.some(item => item.id === order.id))];
+                if (paymentOrders.length === 0) {
                   return (
                     <div className="p-8 text-center text-slate-500 text-xs">
                       Chưa có đơn hàng nào được ghi nhận cho đối tác này.
@@ -624,6 +665,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                 }
                 return (
                   <div className="overflow-x-auto">
+                    <p className="text-xs mb-3 text-slate-600">Đã trả: <strong>{payment.paid.toLocaleString('vi-VN')}đ</strong> · Còn nhận: <strong>{payment.available.toLocaleString('vi-VN')}đ</strong>. Chỉ tích sau khi đã chuyển tiền; bỏ tích nếu đánh dấu nhầm.</p>
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-black uppercase tracking-wider text-slate-500">
@@ -633,10 +675,11 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                           <th className="py-2.5 px-3 text-right">Giá Trị Tính Hoa Hồng</th>
                           <th className="py-2.5 px-3 text-center">Tỷ Lệ</th>
                           <th className="py-2.5 px-3 text-right">Hoa Hồng</th>
+                          <th className="py-2.5 px-3 text-center">Đã trả hoa hồng</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs">
-                        {stats.attributedOrders.map((ord) => {
+                        {paymentOrders.map((ord) => {
                           const merchVal = typeof ord.affiliateMerchandiseValue === 'number'
                             ? ord.affiliateMerchandiseValue
                             : Math.max(0, (ord.subtotal || ord.totalPrice || 0) - (ord.discountAmount || 0));
@@ -657,6 +700,7 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
                               <td className="py-3 px-3 text-right font-mono font-bold">{merchVal.toLocaleString('vi-VN')}đ</td>
                               <td className="py-3 px-3 text-center font-mono">{rate}%</td>
                               <td className="py-3 px-3 text-right font-mono font-black text-rose-800">+{comm.toLocaleString('vi-VN')}đ</td>
+                              <td className="py-3 px-3 text-center"><label className="inline-flex flex-col items-center gap-1 text-[10px]"><input type="checkbox" aria-label={`Đã trả hoa hồng ${ord.id}`} checked={Boolean(ord.affiliateCommissionPaid)} disabled={Boolean(savingPayment) || !canManagePayments} onChange={e => markCommissionPaid(ord, viewOrdersAffiliate, e.target.checked)} className="h-4 w-4 accent-emerald-600" /><span>{ord.affiliateCommissionPaid ? `${(ord.affiliateCommissionPaidAmount ?? comm).toLocaleString('vi-VN')}đ · ${ord.affiliateCommissionPaidAt?.slice(0, 10) || ''}` : 'Chưa trả'}</span></label></td>
                             </tr>
                           );
                         })}

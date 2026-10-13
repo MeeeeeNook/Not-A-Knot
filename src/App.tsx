@@ -843,6 +843,7 @@ export default function App() {
           affiliateCode: matchedSeller?.affiliateCode,
           commissionRate: matchedSeller?.commissionRate,
           paymentInfo: matchedSeller?.paymentInfo,
+          paymentAccount: matchedSeller?.paymentAccount,
           cookieDurationDays: matchedSeller?.cookieDurationDays,
           maxOrdersPerCookieSession: matchedSeller?.maxOrdersPerCookieSession,
           commissionModel: matchedSeller?.commissionModel,

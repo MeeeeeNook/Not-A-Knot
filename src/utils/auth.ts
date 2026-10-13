@@ -396,6 +396,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       affiliateCode: resolvedAffiliateCode,
       commissionRate: matchedSeller?.commissionRate !== undefined ? matchedSeller.commissionRate : (assignedRole === 'affiliate' ? 10 : undefined),
       paymentInfo: matchedSeller?.paymentInfo,
+      paymentAccount: matchedSeller?.paymentAccount,
       cookieDurationDays: matchedSeller?.cookieDurationDays,
       maxOrdersPerCookieSession: matchedSeller?.maxOrdersPerCookieSession,
       commissionModel: matchedSeller?.commissionModel,
@@ -476,6 +477,7 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
         affiliateCode: (matchedSeller.affiliateCode || defaultGoogleCode).toUpperCase().trim(),
         commissionRate: matchedSeller.commissionRate !== undefined ? matchedSeller.commissionRate : 10,
         paymentInfo: matchedSeller.paymentInfo,
+        paymentAccount: matchedSeller.paymentAccount,
         googleEmail: email,
         googleUid: fbUser.uid
       };
