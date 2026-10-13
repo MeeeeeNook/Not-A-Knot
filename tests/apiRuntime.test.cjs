@@ -5,9 +5,9 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const ts = require('typescript');
 
-test('compiled ESM API graph starts in Node with JavaScript imports and no browser modules', () => {
+test('deployable API wrappers and CommonJS bundles start in Node without a TypeScript loader', () => {
   const output = fs.mkdtempSync(path.join(path.resolve('node_modules'), '.api-runtime-'));
-  const files = ['api/affiliate.ts', 'api/orders/create.ts', 'api/orders/track.ts', 'src/data/products.ts', 'src/data/vouchers.ts', 'src/data/vietnamLocations.ts', 'src/utils/voucherCalculation.ts'];
+  const files = ['api/affiliate.ts', 'api/orders/create.ts', 'api/orders/track.ts'];
   try {
     fs.writeFileSync(path.join(output, 'package.json'), JSON.stringify({ type: 'module' }));
     for (const file of files) {
@@ -15,6 +15,7 @@ test('compiled ESM API graph starts in Node with JavaScript imports and no brows
       const target = path.join(output, file.replace(/\.ts$/, '.js'));
       fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, emitted);
     }
+    fs.cpSync('server/compiled', path.join(output, 'server/compiled'), { recursive: true });
     const script = `
       import assert from 'node:assert/strict';
       import affiliate from './api/affiliate.js';
