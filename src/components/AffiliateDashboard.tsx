@@ -1,17 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  LayoutDashboard, ShoppingBag, BarChart3, Link2, BookOpen, Settings,
-  Copy, Check, QrCode, ExternalLink, ArrowUpRight, ArrowDownRight,
-  TrendingUp, Wallet, MousePointerClick, Calendar, ArrowLeft, LogOut,
-  Search, ShieldCheck, ChevronRight, X, AlertCircle, RefreshCw,
-  Sparkles, CheckCircle2, Clock, Truck, XCircle, HelpCircle,
-  Share2, Send, Smartphone, MessageSquare, Download, Lightbulb,
-  Layers, Lock, Tag, Globe, Edit3, Save
+  LayoutDashboard, ShoppingBag, BarChart3, Link2, BookOpen, Settings, Copy, Check, QrCode, ExternalLink, ArrowUpRight, ArrowDownRight, TrendingUp, Wallet, MousePointerClick, ArrowLeft, LogOut, Search, ChevronRight, X, Sparkles, CheckCircle2, Clock, Share2, Send, Smartphone, MessageSquare, Download, Lock, Tag, Save
 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { SellerUser, StoredOrder, AffiliateSystemConfig, Product } from '../types';
+import { SellerUser, StoredOrder, AffiliateSystemConfig, Product, CategoryItem, CollectionInfo } from '../types';
 import {
   calculateAffiliateStats,
+  calculateDetailedAffiliateCommission,
   getAffiliateReferralUrl,
   fetchAffiliateSystemConfig,
   fetchAffiliateClicks,
@@ -19,12 +14,15 @@ import {
   AffiliateClickRecord
 } from '../utils/affiliateManager';
 import { fetchOrdersFromFirestore, saveSellerToFirestore } from '../firebase';
-import { PRODUCTS } from '../data/products';
-import { DEFAULT_CATEGORIES } from '../data/categories';
-import { COLLECTIONS_DATA } from '../data/collections';
+import { getStorefrontCategoryOptions, getVisibleCollections, isProductMatchingCategory } from '../utils/storefrontCatalog';
+import { AffiliateGuide } from './AffiliateGuide';
 import { AffiliateOrdersPage, OrdersDateRangePreset } from './AffiliateOrdersPage';
 
 export interface AffiliateDashboardProps {
+  products: Product[];
+  categories: CategoryItem[];
+  collections: CollectionInfo[];
+  isCatalogLoading?: boolean;
   currentSeller: SellerUser | null;
   orders?: StoredOrder[];
   onLoginSuccess?: (user: SellerUser) => void;
@@ -44,6 +42,10 @@ export type AffiliateSidebarTab =
 
 export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   currentSeller,
+  products,
+  categories,
+  collections,
+  isCatalogLoading = false,
   orders,
   onLogout,
   onNavigateHome,
@@ -60,6 +62,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     }
     return 'overview';
   });
+
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activeTab]);
 
   // Date range filter: 'all' | '7days' | '30days' | '90days' | 'custom'
   const [dateRange, setDateRange] = useState<OrdersDateRangePreset>('30days');
@@ -103,8 +107,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
   // Custom affiliate link generator states
   const [destType, setDestType] = useState<'home' | 'catalog' | 'category' | 'collection' | 'custom'>('home');
-  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>('bracelets');
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('event_0209');
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>('');
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>('');
   const [customPathInput, setCustomPathInput] = useState<string>('');
   const [copiedCustomLink, setCopiedCustomLink] = useState<boolean>(false);
 
@@ -115,18 +119,11 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
   // Dedicated QR Code Tool state
   const [qrMode, setQrMode] = useState<'home' | 'product'>('home');
-  const [qrSelectedProduct, setQrSelectedProduct] = useState<Product | null>(() => PRODUCTS[0] || null);
+  const [qrSelectedProductId, setQrSelectedProductId] = useState('');
+  const qrSelectedProduct = products.find((p) => p.id === qrSelectedProductId) || products[0] || null;
   const [dedicatedQrDataUrl, setDedicatedQrDataUrl] = useState<string>('');
   const [copiedDedicatedQrLink, setCopiedDedicatedQrLink] = useState<boolean>(false);
   const qrSectionRef = useRef<HTMLDivElement | null>(null);
-  const templateSectionRef = useRef<HTMLDivElement | null>(null);
-
-  // Marketing content template states
-  const [activeTemplateTab, setActiveTemplateTab] = useState<'social' | 'chat' | 'review' | 'gift' | 'video'>('social');
-  const [templateProduct, setTemplateProduct] = useState<Product | null>(() => PRODUCTS[0] || null);
-  const [customTemplateText, setCustomTemplateText] = useState<string>('');
-  const [copiedTemplate, setCopiedTemplate] = useState<boolean>(false);
-
   // Profile Settings state (affiliate can edit name, phone, paymentInfo; affiliateCode and commissionRate are read-only)
   const [profileName, setProfileName] = useState<string>(() => affiliateUser?.name || '');
   const [profilePhone, setProfilePhone] = useState<string>(() => affiliateUser?.phone || '');
@@ -142,6 +139,21 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     return 'https://notaknot.id.vn';
   }, []);
 
+  const categoryOptions = useMemo(
+    () => getStorefrontCategoryOptions(products, categories, collections),
+    [products, categories, collections]
+  );
+  const linkCategories = categoryOptions.filter((c) => c.id !== 'all');
+  const visibleCollections = useMemo(() => getVisibleCollections(collections, categories), [collections, categories]);
+  const categoryKey = linkCategories.some((c) => c.id === selectedCategoryKey) ? selectedCategoryKey : (linkCategories[0]?.id || '');
+  const collectionId = visibleCollections.some((c) => c.id === selectedCollectionId) ? selectedCollectionId : (visibleCollections[0]?.id || '');
+  const activeProductCategory = categoryOptions.some((c) => c.id === productCategoryTab) ? productCategoryTab : 'all';
+  const cookieDays = affiliateUser?.cookieDurationDays || systemConfig.cookieDurationDays || 30;
+  const commissionRate = affiliateUser?.commissionRate ?? systemConfig.defaultCommissionRate;
+  const maxOrders = affiliateUser?.maxOrdersPerCookieSession ?? 1;
+  const orderLimitLabel = maxOrders === 0 ? 'Không giới hạn trong thời hạn cookie' : maxOrders === 1 ? '1 đơn đầu tiên' : `Tối đa ${maxOrders} đơn mỗi lượt giới thiệu`;
+  const commissionModelLabel = affiliateUser?.commissionModel === 'by_product' ? 'Theo từng sản phẩm' : affiliateUser?.commissionModel === 'tiered' ? 'Theo giá trị từng đơn' : 'Tỷ lệ cố định';
+
   // Compute custom destination URL
   const customGeneratedUrl = useMemo(() => {
     if (destType === 'home') {
@@ -150,11 +162,11 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     if (destType === 'catalog') {
       return `${siteOrigin}/?page=catalog&ref=${affiliateCode}`;
     }
-    if (destType === 'category') {
-      return `${siteOrigin}/?page=catalog&category=${encodeURIComponent(selectedCategoryKey)}&ref=${affiliateCode}`;
+    if (destType === 'category' && categoryKey) {
+      return `${siteOrigin}/?page=catalog&category=${encodeURIComponent(categoryKey)}&ref=${affiliateCode}`;
     }
-    if (destType === 'collection') {
-      return `${siteOrigin}/?collection=${encodeURIComponent(selectedCollectionId)}&ref=${affiliateCode}`;
+    if (destType === 'collection' && collectionId) {
+      return `${siteOrigin}/?collection=${encodeURIComponent(collectionId)}&ref=${affiliateCode}`;
     }
     if (destType === 'custom') {
       let p = customPathInput.trim();
@@ -164,7 +176,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       return `${siteOrigin}${p}${sep}ref=${affiliateCode}`;
     }
     return `${siteOrigin}/?ref=${affiliateCode}`;
-  }, [destType, selectedCategoryKey, selectedCollectionId, customPathInput, siteOrigin, affiliateCode]);
+  }, [destType, categoryKey, collectionId, customPathInput, siteOrigin, affiliateCode]);
 
   // Helper: get product affiliate URL
   const getProductAffiliateUrl = (productId: string) => {
@@ -181,6 +193,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
   // Generate high-res QR for active QR tool
   useEffect(() => {
+    let cancelled = false;
+    setDedicatedQrDataUrl('');
     if (activeQrTargetUrl) {
       QRCode.toDataURL(activeQrTargetUrl, {
         width: 320,
@@ -190,9 +204,10 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
           light: '#ffffff'
         }
       })
-        .then(setDedicatedQrDataUrl)
+        .then((url) => { if (!cancelled) setDedicatedQrDataUrl(url); })
         .catch((e) => console.warn('QR Code generation error:', e));
     }
+    return () => { cancelled = true; };
   }, [activeQrTargetUrl]);
 
   // Keep profile form synced if currentSeller changes
@@ -203,58 +218,6 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       setProfilePaymentInfo(affiliateUser.paymentInfo || '');
     }
   }, [affiliateUser]);
-
-  // Dynamic template content generator
-  useEffect(() => {
-    const prodName = templateProduct?.name || 'Vòng tay handmade Not a Knot';
-    const prodPrice = templateProduct?.price ? `${templateProduct.price.toLocaleString('vi-VN')}đ` : 'giá sinh viên';
-    const link = templateProduct ? getProductAffiliateUrl(templateProduct.id) : referralUrl;
-
-    if (activeTemplateTab === 'social') {
-      setCustomTemplateText(
-`✨ Chiếc phụ kiện handmade chân ái dành cho các bạn mê đồ thủ công tinh tế đây rồi!
-
-Mấy bữa nay đeo em "${prodName}" của Not a Knot mà ai cũng hỏi mua ở đâu vì các đường đan tay siêu chắc, tỉ mỉ mà phối đồ đi học, đi làm xinh xỉu luôn. Giá chỉ từ ${prodPrice}.
-
-👉 Xem chi tiết và đặt hàng trực tiếp tại đây nha:
-${link}
-
-(Được chọn phối màu dây và charm riêng theo sở thích nữa nè!) 💖`
-      );
-    } else if (activeTemplateTab === 'chat') {
-      setCustomTemplateText(
-`Chào bạn nè! Mình gửi bạn link mẫu "${prodName}" của Not a Knot mà mình vừa kể hôm trước nhé:
-${link}
-Đang có nhiều màu dây với charm xinh lắm, bạn bấm vào xem thử nha!`
-      );
-    } else if (activeTemplateTab === 'review') {
-      setCustomTemplateText(
-`[Góc Review Chân Thực] 🧵
-Trải nghiệm thực tế em "${prodName}" từ Not a Knot:
-- Chất liệu: Dây đan cao cấp chống nước, không xù lông hay phai màu.
-- Thiết kế: Đan tay 100%, nút thắt đều tăm tắp, phối charm rất sang.
-- Mức giá: ${prodPrice} — cực kỳ hợp lý cho một món đồ thủ công mang nhiều tâm huyết.
-
-Bạn nào thích phong cách nhẹ nhàng, tinh tế thì ghé link này tham khảo nhé:
-${link}`
-      );
-    } else if (activeTemplateTab === 'gift') {
-      setCustomTemplateText(
-`🎁 Gợi ý món quà kỷ niệm ý nghĩa cho bạn thân / người thương!
-Nếu bạn đang đau đầu tìm một món quà vừa độc đáo, vừa chứa đựng sự chân thành thì đừng bỏ qua "${prodName}". Mỗi chiếc vòng/móc khóa đều được làm thủ công tỉ mỉ kèm hộp quà và thiệp viết lời chúc xinh xắn.
-
-Xem ngay bộ sưu tập quà tặng tại:
-${link}`
-      );
-    } else if (activeTemplateTab === 'video') {
-      setCustomTemplateText(
-`[Gợi ý Caption / Script Video Ngắn] 🎬
-Hôm nay unbox cùng mình chiếc "${prodName}" siêu hot của Not a Knot nha! Nhìn tận mắt mới thấy nghệ nhân đan khéo thực sự, charm bóng loáng không tì vết. Link mua mình ghim ngay dưới bio trang cá nhân / comment này nhé! 👇
-Link: ${link}
-#notaknot #handmade #vongtayhandmade #phukienthoitrang #diy`
-      );
-    }
-  }, [activeTemplateTab, templateProduct, referralUrl, siteOrigin, affiliateCode]);
 
   // Load config & clicks & orders
   useEffect(() => {
@@ -656,7 +619,7 @@ Link: ${link}
     ];
 
     return (
-      <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-neutral-200/80 shrink-0 flex flex-col justify-between select-none">
+      <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-neutral-200/80 shrink-0 flex flex-col justify-between select-none lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:h-dvh lg:overflow-y-auto lg:overscroll-contain">
         <div>
           {/* Brand & Portal Header */}
           <div className="p-5 lg:p-6 border-b border-neutral-100 flex items-center justify-between">
@@ -872,7 +835,7 @@ Link: ${link}
           </div>
 
           <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed max-w-3xl">
-            Chia sẻ liên kết giới thiệu độc quyền của bạn để nhận <strong className="text-rose-700 font-semibold">{commissionRate}% hoa hồng</strong> trên giá trị sản phẩm sau giảm giá (không tính phí vận chuyển) cho đơn hàng hợp lệ đầu tiên sau khi khách hàng nhấn link.
+            Chia sẻ liên kết giới thiệu độc quyền của bạn với <strong className="text-rose-700 font-semibold">tỷ lệ cơ bản {commissionRate}%</strong> trên giá trị sản phẩm sau giảm giá (không tính phí vận chuyển) theo cơ chế {commissionModelLabel.toLowerCase()}. Số đơn ghi nhận: {orderLimitLabel.toLowerCase()}.
           </p>
 
           <div className="pt-2">
@@ -929,11 +892,11 @@ Link: ${link}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-500 pt-2 font-normal">
-              <span>Thời hạn cookie: <strong className="text-neutral-800 font-medium">{systemConfig.cookieDurationDays} ngày</strong></span>
+              <span>Thời hạn cookie: <strong className="text-neutral-800 font-medium">{cookieDays} ngày</strong></span>
               <span className="text-neutral-300">&bull;</span>
               <span>Ghi nhận: <strong className="text-neutral-800 font-medium">Last-Click</strong></span>
               <span className="text-neutral-300">&bull;</span>
-              <span>Tỷ lệ áp dụng: <strong className="text-rose-700 font-semibold">{commissionRate}%</strong></span>
+              <span>Tỷ lệ cơ bản: <strong className="text-rose-700 font-semibold">{commissionRate}%</strong></span>
             </div>
           </div>
         </div>
@@ -973,7 +936,7 @@ Link: ${link}
         title: 'Hoa hồng ghi nhận',
         value: currentMetrics.commission.toLocaleString('vi-VN'),
         unit: 'đ',
-        subtext: `Theo tỷ lệ hoa hồng ${commissionRate}%`,
+        subtext: `Cơ chế: ${commissionModelLabel.toLowerCase()}`,
         icon: Wallet,
         color: 'amber',
         highlight: true,
@@ -1326,78 +1289,6 @@ Link: ${link}
     );
   };
 
-  // Render Detailed Guide Page (/affiliate/guide tab)
-  const renderGuideSection = () => {
-    const commissionRate = affiliateUser?.commissionRate !== undefined
-      ? affiliateUser.commissionRate
-      : systemConfig.defaultCommissionRate;
-
-    return (
-      <div className="space-y-6 max-w-4xl">
-        <div className="bg-white rounded-2xl border border-neutral-200/80 shadow-2xs p-6 sm:p-8 space-y-4">
-          <div className="flex items-center gap-2.5 text-rose-700">
-            <BookOpen className="w-5 h-5" />
-            <h2 className="text-base sm:text-lg font-semibold text-neutral-900 tracking-tight">
-              Hướng dẫn cơ chế Tiếp thị liên kết (Affiliate Program)
-            </h2>
-          </div>
-          <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-            Hệ thống affiliate của Not a Knot vận hành theo nguyên tắc minh bạch, tự động và công bằng, giúp các đối tác an tâm phát triển nội dung và nhận hoa hồng xứng đáng.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/70 space-y-2">
-              <div className="flex items-center gap-2 text-neutral-900 font-semibold text-xs sm:text-sm">
-                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs">1</span>
-                <span>Thời hạn Cookie ({systemConfig.cookieDurationDays} ngày)</span>
-              </div>
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                Khi khách hàng nhấn vào link giới thiệu của bạn, trình duyệt sẽ lưu trữ cookie trong <strong className="text-neutral-900">{systemConfig.cookieDurationDays} ngày</strong>. Nếu khách hàng quay lại mua sắm trong thời hạn này, đơn hàng vẫn được ghi nhận cho bạn.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/70 space-y-2">
-              <div className="flex items-center gap-2 text-neutral-900 font-semibold text-xs sm:text-sm">
-                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs">2</span>
-                <span>Nguyên tắc Last-Click Attribution</span>
-              </div>
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                Nếu khách hàng nhấp vào nhiều liên kết tiếp thị của các đối tác khác nhau, đối tác mà khách hàng nhấp vào <strong className="text-neutral-900">gần nhất</strong> trước khi đặt hàng sẽ là người được ghi nhận đơn và hưởng hoa hồng.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/70 space-y-2">
-              <div className="flex items-center gap-2 text-neutral-900 font-semibold text-xs sm:text-sm">
-                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs">3</span>
-                <span>Chỉ tính đơn đầu tiên sau lượt nhấp</span>
-              </div>
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                Hoa hồng được tính cho <strong className="text-neutral-900">đơn hàng đầu tiên</strong> hợp lệ phát sinh sau lượt click. Sau khi hoàn tất đơn đầu tiên, cookie giới thiệu sẽ được giải phóng để bảo đảm tính khách quan.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200/70 space-y-2">
-              <div className="flex items-center gap-2 text-neutral-900 font-semibold text-xs sm:text-sm">
-                <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center text-xs">4</span>
-                <span>Công thức tính hoa hồng</span>
-              </div>
-              <p className="text-xs text-neutral-600 leading-relaxed">
-                Hoa hồng = <strong className="text-neutral-900">(Giá trị sản phẩm - Voucher giảm giá) × {commissionRate}%</strong>. Phí vận chuyển không nằm trong giá trị tính hoa hồng. Đơn bị xóa hoặc hủy sẽ tự động loại khỏi thống kê.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 space-y-1">
-            <span className="font-semibold block">Quy định đối soát & thanh toán</span>
-            <p className="text-[11px] leading-relaxed text-amber-800">
-              Bộ phận kế toán của Not a Knot sẽ định kỳ kiểm tra các đơn hàng đã giao thành công và liên hệ đối soát, chuyển khoản hoa hồng trực tiếp vào tài khoản ngân hàng của đối tác.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // ----------------------------------------------------
   // RENDER: REDESIGNED "LINK & CÔNG CỤ" MARKETING TOOLKIT
   // ----------------------------------------------------
@@ -1405,10 +1296,9 @@ Link: ${link}
     const commissionRate = affiliateUser?.commissionRate !== undefined
       ? affiliateUser.commissionRate
       : systemConfig.defaultCommissionRate;
-    const cookieDays = systemConfig.cookieDurationDays || 30;
 
     // Filtered products for Product Link Generator
-    const filteredCatalogProducts = PRODUCTS.filter((p) => {
+    const filteredCatalogProducts = products.filter((p) => {
       // 1. Search filter
       if (productSearch.trim()) {
         const q = productSearch.toLowerCase().trim();
@@ -1416,17 +1306,7 @@ Link: ${link}
         const matchId = (p.id || '').toLowerCase().includes(q);
         if (!matchName && !matchId) return false;
       }
-      // 2. Category tab
-      if (productCategoryTab !== 'all') {
-        if (productCategoryTab === 'bracelets') {
-          return p.category === 'bracelets' || p.category === 'charm_bracelet';
-        }
-        if (productCategoryTab === 'event') {
-          return p.isEvent0209 || p.isEvent2010 || p.category.includes('event');
-        }
-        return p.category === productCategoryTab;
-      }
-      return true;
+      return isProductMatchingCategory(p, activeProductCategory, collections);
     });
 
     // Quick sharing handlers
@@ -1520,39 +1400,11 @@ Link: ${link}
 
     const handleSelectProductForQr = (prod: Product) => {
       setQrMode('product');
-      setQrSelectedProduct(prod);
+      setQrSelectedProductId(prod.id);
       if (qrSectionRef.current) {
         qrSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       showLinksToast(`Đã tải sản phẩm "${prod.name}" vào công cụ tạo mã QR!`);
-    };
-
-    const handleSelectProductForTemplate = (prod: Product) => {
-      setTemplateProduct(prod);
-      if (templateSectionRef.current) {
-        templateSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-      showLinksToast(`Đã áp dụng sản phẩm "${prod.name}" vào mẫu nội dung!`);
-    };
-
-    const handleCopyTemplateText = async () => {
-      try {
-        if (navigator?.clipboard?.writeText) {
-          await navigator.clipboard.writeText(customTemplateText);
-        } else {
-          const ta = document.createElement('textarea');
-          ta.value = customTemplateText;
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
-        }
-        setCopiedTemplate(true);
-        showLinksToast('Đã sao chép mẫu nội dung tiếp thị!');
-        setTimeout(() => setCopiedTemplate(false), 2500);
-      } catch {
-        showLinksToast('Đã chọn nội dung mẫu để sao chép.');
-      }
     };
 
     const handleCopyDedicatedQrLink = async () => {
@@ -1665,17 +1517,17 @@ Link: ${link}
               <span className="text-[11px] text-neutral-500 block">Mã đối tác cá nhân</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="font-mono font-bold text-rose-700 text-sm">{affiliateCode}</span>
-                <span title="Mã tiếp thị do quản trị viên quản lý, cố định cho từng đối tác" className="cursor-help">
+                <span title="Mã tiếp thị cố định của bạn" className="cursor-help">
                   <Lock className="w-3 h-3 text-neutral-400" />
                 </span>
               </div>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-neutral-50/80 border border-neutral-200/70">
-              <span className="text-[11px] text-neutral-500 block">Tỷ lệ hoa hồng</span>
+              <span className="text-[11px] text-neutral-500 block">Tỷ lệ cơ bản</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="font-mono font-bold text-neutral-900 text-sm">{commissionRate}%</span>
-                <span title="Tỷ lệ hoa hồng được áp dụng cho mọi đơn hàng hợp lệ của bạn" className="cursor-help">
+                <span title="Tỷ lệ cơ bản; xem Hướng dẫn để biết cách tính theo sản phẩm hoặc giá trị đơn" className="cursor-help">
                   <Lock className="w-3 h-3 text-neutral-400" />
                 </span>
               </div>
@@ -1702,9 +1554,6 @@ Link: ${link}
             </div>
           </div>
 
-          <p className="text-[11px] text-neutral-400 leading-relaxed italic">
-            * Lưu ý: Mã đối tác và tỷ lệ hoa hồng được phân quyền bởi Quản trị viên để đảm bảo tính khách quan và đối soát tài chính minh bạch.
-          </p>
         </div>
 
         {/* ---------------------------------------------------- */}
@@ -1893,13 +1742,14 @@ Link: ${link}
                   Chọn danh mục mong muốn:
                 </label>
                 <select
-                  value={selectedCategoryKey}
+                  value={categoryKey}
                   onChange={(e) => setSelectedCategoryKey(e.target.value)}
                   className="w-full sm:w-80 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white text-xs text-neutral-800 outline-none focus:border-rose-500 font-medium"
                 >
-                  {DEFAULT_CATEGORIES.map((cat) => (
+                  {linkCategories.length === 0 && <option value="">Chưa có danh mục đang hiển thị</option>}
+                  {linkCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.label} ({cat.description || cat.id})
+                      {cat.label}
                     </option>
                   ))}
                 </select>
@@ -1913,13 +1763,14 @@ Link: ${link}
                   Chọn bộ sưu tập chủ đề:
                 </label>
                 <select
-                  value={selectedCollectionId}
+                  value={collectionId}
                   onChange={(e) => setSelectedCollectionId(e.target.value)}
                   className="w-full sm:w-80 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white text-xs text-neutral-800 outline-none focus:border-rose-500 font-medium"
                 >
-                  {COLLECTIONS_DATA.map((col) => (
+                  {visibleCollections.length === 0 && <option value="">Chưa có bộ sưu tập đang hiển thị</option>}
+                  {visibleCollections.map((col) => (
                     <option key={col.id} value={col.id}>
-                      {col.title} ({col.tag || col.id})
+                      {col.title}
                     </option>
                   ))}
                 </select>
@@ -2016,17 +1867,13 @@ Link: ${link}
 
           {/* Category Filter Pills */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-            {[
-              { id: 'all', label: 'Tất cả sản phẩm' },
-              { id: 'bracelets', label: 'Vòng tay handmade' },
-              { id: 'event', label: 'BST Sự kiện & Quà tặng' }
-            ].map((catTab) => (
+            {categoryOptions.map((catTab) => (
               <button
                 key={catTab.id}
                 type="button"
                 onClick={() => setProductCategoryTab(catTab.id)}
                 className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  productCategoryTab === catTab.id
+                  activeProductCategory === catTab.id
                     ? 'bg-neutral-900 text-white border-neutral-900 shadow-2xs'
                     : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
                 }`}
@@ -2036,10 +1883,14 @@ Link: ${link}
             ))}
           </div>
 
+          <p className="text-xs text-neutral-500">Hoa hồng minh họa cho 1 sản phẩm ở giá hiện tại, chưa áp dụng giảm giá hoặc tùy chọn thêm. Số thực tế được tính khi đặt đơn.</p>
+          {isCatalogLoading ? <p role="status" className="text-sm text-neutral-500">Đang cập nhật sản phẩm...</p> : filteredCatalogProducts.length === 0 && <p role="status" className="text-sm text-neutral-500">Không có sản phẩm phù hợp.</p>}
           {/* Products Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCatalogProducts.map((prod) => {
-              const estimatedComm = Math.round((prod.price * commissionRate) / 100);
+              const estimate = calculateDetailedAffiliateCommission(affiliateUser || { commissionRate } as SellerUser,
+                [{ productId: prod.id, price: prod.price, quantity: 1 }], prod.price, 0, commissionRate);
+              const estimatedComm = estimate.commissionAmount;
               const isCopied = copiedProductId === prod.id;
 
               return (
@@ -2073,7 +1924,7 @@ Link: ${link}
                           {prod.price.toLocaleString('vi-VN')}đ
                         </span>
                         <span className="text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
-                          +{estimatedComm.toLocaleString('vi-VN')}đ ({commissionRate}%)
+                          +{estimatedComm.toLocaleString('vi-VN')}đ ({estimate.effectiveRate}%)
                         </span>
                       </div>
                     </div>
@@ -2114,15 +1965,6 @@ Link: ${link}
                         <span>Tạo mã QR</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleSelectProductForTemplate(prod)}
-                        className="flex-1 py-1.5 px-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 text-[11px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1"
-                        title="Sử dụng sản phẩm này cho mẫu bài viết gợi ý"
-                      >
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        <span>Mẫu bài đăng</span>
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -2167,6 +2009,7 @@ Link: ${link}
             <button
               type="button"
               onClick={() => setQrMode('product')}
+              disabled={!qrSelectedProduct}
               className={`py-2 px-3.5 rounded-xl border font-semibold transition-colors cursor-pointer ${
                 qrMode === 'product'
                   ? 'bg-rose-50 border-rose-300 text-rose-800'
@@ -2199,7 +2042,7 @@ Link: ${link}
                   Đích đến của mã QR
                 </span>
                 <h4 className="text-sm sm:text-base font-bold text-neutral-900 mt-0.5">
-                  {qrMode === 'home' ? 'Trang chủ Not a Knot' : (qrSelectedProduct?.name || 'Sản phẩm đã chọn')}
+                  {qrMode === 'product' && qrSelectedProduct ? qrSelectedProduct.name : 'Trang chủ Not a Knot'}
                 </h4>
                 <div className="font-mono text-xs text-neutral-600 break-all mt-1 bg-white p-2 rounded-lg border border-neutral-200">
                   {activeQrTargetUrl}
@@ -2239,161 +2082,6 @@ Link: ${link}
           </div>
         </div>
 
-        {/* ---------------------------------------------------- */}
-        {/* 6. MARKETING CONTENT TEMPLATES ("Mẫu nội dung gợi ý") */}
-        {/* ---------------------------------------------------- */}
-        <div
-          ref={templateSectionRef}
-          id="marketing-templates-section"
-          className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-6"
-        >
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-rose-600" />
-              <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
-                Mẫu nội dung gợi ý (Sẵn sàng tùy chỉnh & sao chép)
-              </h3>
-            </div>
-            <p className="text-xs text-neutral-500 mt-1">
-              Các mẫu bài đăng, tin nhắn và kịch bản video bằng tiếng Việt tự nhiên, tự động đính kèm liên kết tiếp thị cá nhân của bạn.
-            </p>
-          </div>
-
-          {/* Template Format Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-            {[
-              { id: 'social', label: '1. Bài đăng MXH (Facebook / Threads)' },
-              { id: 'chat', label: '2. Tin nhắn ngắn (Messenger / Zalo)' },
-              { id: 'review', label: '3. Caption Review chi tiết' },
-              { id: 'gift', label: '4. Gợi ý Quà tặng ý nghĩa' },
-              { id: 'video', label: '5. Kịch bản video ngắn (TikTok/Reels)' }
-            ].map((tmpl) => (
-              <button
-                key={tmpl.id}
-                type="button"
-                onClick={() => setActiveTemplateTab(tmpl.id as any)}
-                className={`py-2 px-3 rounded-xl border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  activeTemplateTab === tmpl.id
-                    ? 'bg-rose-50 border-rose-300 text-rose-800 shadow-2xs'
-                    : 'bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100'
-                }`}
-              >
-                {tmpl.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Product plugged indicator */}
-          <div className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200/70 flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-neutral-500">Sản phẩm đang áp dụng:</span>
-              <span className="font-semibold text-neutral-900 truncate">
-                {templateProduct?.name || 'Tất cả sản phẩm Not a Knot'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const nextIdx = (PRODUCTS.indexOf(templateProduct as any) + 1) % PRODUCTS.length;
-                setTemplateProduct(PRODUCTS[nextIdx] || PRODUCTS[0]);
-              }}
-              className="text-rose-700 hover:text-rose-800 font-semibold hover:underline underline-offset-4 cursor-pointer whitespace-nowrap"
-            >
-              Đổi sản phẩm khác &rarr;
-            </button>
-          </div>
-
-          {/* Interactive Editable Textarea */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-neutral-500">
-              <span>Bạn có thể chỉnh sửa thêm bớt câu từ trước khi bấm sao chép:</span>
-              <span className="text-[11px] text-neutral-400 font-mono">
-                {customTemplateText.length} ký tự
-              </span>
-            </div>
-            <textarea
-              rows={8}
-              value={customTemplateText}
-              onChange={(e) => setCustomTemplateText(e.target.value)}
-              className="w-full p-4 rounded-2xl border border-neutral-200 bg-neutral-50/60 focus:bg-white text-xs sm:text-sm text-neutral-900 leading-relaxed outline-none focus:border-rose-500 shadow-inner font-sans transition-colors resize-y"
-            />
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleCopyTemplateText}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95"
-              >
-                {copiedTemplate ? (
-                  <>
-                    <Check className="w-4 h-4 text-white" />
-                    <span>Đã sao chép nội dung</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Sao chép nội dung</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ---------------------------------------------------- */}
-        {/* 7. HELPFUL SHARING TIPS ("Bí quyết tiếp thị hiệu quả") */}
-        {/* ---------------------------------------------------- */}
-        <div className="bg-white rounded-3xl border border-neutral-200/90 shadow-2xs p-6 sm:p-8 space-y-5">
-          <div className="flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-amber-500" />
-            <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight">
-              Bí quyết tiếp thị hiệu quả dành cho đối tác
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
-              <span className="font-bold text-neutral-900 block">1. Chọn sản phẩm đúng gu</span>
-              <p className="text-neutral-500 leading-relaxed text-[11px]">
-                Chọn các mẫu vòng tay, móc khóa phù hợp nhất với phong cách và đối tượng người theo dõi của bạn để tăng tỷ lệ click tự nhiên.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
-              <span className="font-bold text-neutral-900 block">2. Hình ảnh & Trải nghiệm thực tế</span>
-              <p className="text-neutral-500 leading-relaxed text-[11px]">
-                Người xem luôn tin tưởng các video trên tay, đeo thử và cảm nhận độ chắc chắn của dây đan thủ công hơn là hình ảnh quảng cáo chung chung.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
-              <span className="font-bold text-neutral-900 block">3. Đặt liên kết ở vị trí dễ thấy</span>
-              <p className="text-neutral-500 leading-relaxed text-[11px]">
-                Đặt link ở phần Bio TikTok / Instagram và đính kèm lời nhắn nhắc nhở người xem bấm vào để nhận ưu đãi từ cửa hàng.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5">
-              <span className="font-bold text-neutral-900 block">4. Nêu bật giá trị thủ công</span>
-              <p className="text-neutral-500 leading-relaxed text-[11px]">
-                Kể về sự tỉ mỉ của các nút đan tay, độ bền chống nước và ý nghĩa gắn kết của Not a Knot để tạo cảm xúc chân thành.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/70 space-y-1.5 md:col-span-2">
-              <span className="font-bold text-neutral-900 block">5. Nắm rõ quy chế đối soát</span>
-              <p className="text-neutral-500 leading-relaxed text-[11px]">
-                Hoa hồng được tính cho đơn đầu tiên hợp lệ theo cơ chế Last-Click. Bạn có thể xem toàn bộ bảng đối soát và thời hạn thanh toán tại trang Hướng dẫn.
-              </p>
-              <button
-                type="button"
-                onClick={() => setActiveTab('guide')}
-                className="text-rose-700 hover:text-rose-800 font-bold hover:underline underline-offset-4 pt-1 inline-flex items-center gap-1 cursor-pointer"
-              >
-                <span>Xem tài liệu hướng dẫn tiếp thị đầy đủ &rarr;</span>
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
@@ -2460,7 +2148,7 @@ Link: ${link}
             {/* Editable Name */}
             <div>
               <label className="block font-bold text-neutral-800 mb-1">
-                Họ và tên đối tác (Có thể chỉnh sửa) <span className="text-rose-500">*</span>
+                Họ và tên đối tác <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -2503,7 +2191,7 @@ Link: ${link}
             {/* Read-only system values */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">
               <h3 className="font-bold text-neutral-900 text-xs uppercase tracking-wider text-neutral-400">
-                Thông số hệ thống (Quản lý bởi Admin)
+                Thông số hệ thống
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2518,9 +2206,9 @@ Link: ${link}
                 <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200/70">
                   <span className="text-[11px] text-neutral-500 block">Tỷ lệ hoa hồng cơ bản</span>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="font-mono font-bold text-neutral-900 text-sm">{affiliateUser?.commissionRate || systemConfig.defaultCommissionRate}%</span>
+                    <span className="font-mono font-bold text-neutral-900 text-sm">{commissionRate}%</span>
                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-neutral-200 text-neutral-700 font-medium">
-                      {affiliateUser?.commissionModel === 'by_product' ? 'Có SP riêng' : (affiliateUser?.commissionModel === 'tiered' ? 'Theo bậc DT' : 'Cố định')}
+                      {affiliateUser?.commissionModel === 'by_product' ? 'Có SP riêng' : (affiliateUser?.commissionModel === 'tiered' ? 'Theo giá trị đơn' : 'Cố định')}
                     </span>
                   </div>
                 </div>
@@ -2582,7 +2270,7 @@ Link: ${link}
       {renderSidebar()}
 
       {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Top Header - Rendered on Overview and other pages */}
         {activeTab !== 'orders' && renderHeader()}
 
@@ -2635,7 +2323,7 @@ Link: ${link}
 
               {activeTab === 'analytics' && renderAnalyticsSection()}
               {activeTab === 'links' && renderLinksSection()}
-              {activeTab === 'guide' && renderGuideSection()}
+              {activeTab === 'guide' && <AffiliateGuide affiliate={affiliateUser} config={systemConfig} products={products} onOpenLinks={() => setActiveTab('links')} onOpenSettings={() => setActiveTab('settings')} onOpenOrders={() => setActiveTab('orders')} />}
               {activeTab === 'settings' && renderSettingsSection()}
             </>
           )}
