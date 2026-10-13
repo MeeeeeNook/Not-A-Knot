@@ -3612,6 +3612,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'affiliates' && (
           <AdminAffiliatesTab
+            products={products}
+            categories={localCategories}
+            collections={localCollections}
             sellers={sellers}
             orders={orders as any}
             onUpdateSellers={handleUpdateSellers}

@@ -19,6 +19,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  deleteField,
   updateDoc,
   query,
   orderBy,
@@ -3161,6 +3162,14 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         googleEmail: data.googleEmail || data.email || '',
         googleUid: data.googleUid || '',
         linkedGoogleAt: data.linkedGoogleAt || '',
+        affiliateCode: data.affiliateCode,
+        commissionRate: typeof data.commissionRate === 'number' ? data.commissionRate : undefined,
+        paymentInfo: data.paymentInfo || '',
+        cookieDurationDays: typeof data.cookieDurationDays === 'number' ? data.cookieDurationDays : undefined,
+        maxOrdersPerCookieSession: typeof data.maxOrdersPerCookieSession === 'number' ? data.maxOrdersPerCookieSession : undefined,
+        commissionModel: data.commissionModel,
+        productCommissions: Array.isArray(data.productCommissions) ? data.productCommissions : [],
+        tieredCommissions: Array.isArray(data.tieredCommissions) ? data.tieredCommissions : [],
         ipHistory: parsedHistory
       });
     });
@@ -3270,6 +3279,11 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
       id: sellerId,
       updatedAt: new Date().toISOString()
     });
+    // An empty per-partner duration means follow the shop default, including after editing.
+    // Undefined fields are normally omitted by cleanFirestoreData; explicitly clear this override.
+    if (seller.role === 'affiliate' && Object.prototype.hasOwnProperty.call(seller, 'cookieDurationDays') && seller.cookieDurationDays === undefined) {
+      (payload as any).cookieDurationDays = deleteField();
+    }
     await setDoc(docRef, payload, { merge: true });
     recordOperation('write', 1, JSON.stringify(payload).length);
 
