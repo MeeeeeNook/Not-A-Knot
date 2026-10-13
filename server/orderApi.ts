@@ -1,0 +1,1208 @@
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getFirestore, Firestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { initializeApp as initClientApp, getApps as getClientApps, getApp as getClientApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import {
+  getFirestore as getClientFirestore,
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  limit,
+  getDocs,
+  setDoc,
+  updateDoc,
+  increment
+} from 'firebase/firestore';
+import { calculateVoucherStack, getProductPercentVoucherLimit, type VoucherCartItemContext } from '../src/utils/voucherCalculation.js';
+import { PRODUCTS } from '../src/data/products.js';
+import { DEFAULT_INITIAL_VOUCHERS } from '../src/data/vouchers.js';
+import { calculateShippingFee, VIETNAM_PROVINCES } from '../src/data/vietnamLocations.js';
+import { normalizeVietnamesePhone, isValidVietnamesePhone } from './trackApi.js';
+
+type App = any;
+
+// ----------------------------------------------------
+// FIREBASE ADMIN INITIALIZATION (SINGLETON)
+// ----------------------------------------------------
+let adminFirestoreInstance: Firestore | null = null;
+
+function hasAdminCredentials(): boolean {
+  return Boolean(process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY);
+}
+
+function getAdminDb(): Firestore {
+  if (adminFirestoreInstance) {
+    return adminFirestoreInstance;
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || 'jittery-study-nzp2g';
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const databaseId = process.env.FIREBASE_DATABASE_ID || 'ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f';
+
+  let app: App;
+  const existingApps = getApps();
+
+  if (existingApps.length > 0) {
+    app = existingApps[0];
+  } else if (clientEmail && privateKey) {
+    let cleanPrivateKey = privateKey.trim();
+    if (cleanPrivateKey.startsWith('"') && cleanPrivateKey.endsWith('"')) {
+      cleanPrivateKey = cleanPrivateKey.slice(1, -1);
+    }
+    cleanPrivateKey = cleanPrivateKey.replace(/\\n/g, '\n');
+
+    app = initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey: cleanPrivateKey,
+      }),
+      projectId,
+    });
+  } else {
+    app = initializeApp({ projectId });
+  }
+
+  adminFirestoreInstance = getFirestore(app, databaseId);
+  return adminFirestoreInstance;
+}
+
+// ----------------------------------------------------
+// FIREBASE CLIENT & SERVICE BOT FALLBACK
+// ----------------------------------------------------
+const firebaseClientConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI",
+  authDomain: "jittery-study-nzp2g.firebaseapp.com",
+  projectId: "jittery-study-nzp2g",
+  storageBucket: "jittery-study-nzp2g.firebasestorage.app",
+  messagingSenderId: "23301458119",
+  appId: "1:23301458119:web:f7ee271f42bc11fe0216e2"
+};
+
+let clientDbInstance: any = null;
+let clientAuthInstance: any = null;
+
+function getClientInstances() {
+  if (!clientDbInstance) {
+    const app = getClientApps().length > 0 ? getClientApp() : initClientApp(firebaseClientConfig);
+    clientAuthInstance = getAuth(app);
+    clientDbInstance = getClientFirestore(app, process.env.FIREBASE_DATABASE_ID || "ai-studio-remixremixnotakn-6b882779-1f6a-407c-af44-7b468092c95f");
+  }
+  return { auth: clientAuthInstance, db: clientDbInstance };
+}
+
+async function ensureClientAuthenticated() {
+  const serviceEmail = process.env.TRACKER_SERVICE_EMAIL || 'tracker-service@notaknot.id.vn';
+  const servicePassword = process.env.TRACKER_SERVICE_PASSWORD;
+  if (!servicePassword) return;
+
+  const { auth } = getClientInstances();
+  if (!auth.currentUser || auth.currentUser.email !== serviceEmail) {
+    await signInWithEmailAndPassword(auth, serviceEmail, servicePassword);
+  }
+}
+
+// ----------------------------------------------------
+// STAFF AUTHENTICATION & ID TOKEN VERIFICATION
+// ----------------------------------------------------
+const ROOT_ADMIN_EMAILS = [
+  'nhunhuhao71@gmail.com',
+  'manhcuong2006ht@gmail.com'
+];
+
+interface StaffVerificationResult {
+  isStaff: boolean;
+  isRootAdmin: boolean;
+  email: string;
+  uid: string;
+}
+
+async function verifyStaffAuthorization(authHeader?: string): Promise<StaffVerificationResult | null> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+
+  let decodedEmail = '';
+  let decodedUid = '';
+
+  // 1. Verify via Firebase Admin SDK
+  if (hasAdminCredentials()) {
+    try {
+      const app = getApps().length > 0 ? getApps()[0] : initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'jittery-study-nzp2g' });
+      const adminAuth = getAdminAuth(app);
+      const decoded = await adminAuth.verifyIdToken(token);
+      decodedEmail = (decoded.email || '').toLowerCase().trim();
+      decodedUid = decoded.uid || '';
+    } catch {
+      // Admin SDK verify failed, will try REST API
+    }
+  }
+
+  // 2. Verify via Google Identity Toolkit REST API
+  if (!decodedEmail) {
+    try {
+      const apiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI";
+      const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.users && data.users.length > 0) {
+          decodedEmail = (data.users[0].email || '').toLowerCase().trim();
+          decodedUid = data.users[0].localId || '';
+        }
+      }
+    } catch {
+      // Identity toolkit fetch failed
+    }
+  }
+
+  // 3. Verify via server JWT token
+  if (!decodedEmail) {
+    try {
+      const jwt = (await import('jsonwebtoken')).default;
+      const jwtSecret = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-secret-for-development-only-replace-in-prod';
+      const decodedJwt: any = jwt.verify(token, jwtSecret);
+      if (decodedJwt && (decodedJwt.isRootAdmin || decodedJwt.role === 'root_admin' || decodedJwt.role === 'deputy_admin' || decodedJwt.role === 'member')) {
+        return {
+          isStaff: true,
+          isRootAdmin: Boolean(decodedJwt.isRootAdmin || decodedJwt.role === 'root_admin'),
+          email: decodedJwt.username || 'admin',
+          uid: decodedJwt.id || 'admin'
+        };
+      }
+    } catch {}
+  }
+
+  if (!decodedEmail) return null;
+
+  // Check Root Admin whitelist
+  if (ROOT_ADMIN_EMAILS.includes(decodedEmail)) {
+    return {
+      isStaff: true,
+      isRootAdmin: true,
+      email: decodedEmail,
+      uid: decodedUid
+    };
+  }
+
+  // Check Firestore authorized_sellers and sellers collections
+  try {
+    if (hasAdminCredentials()) {
+      const db = getAdminDb();
+      const authDoc = await db.collection('authorized_sellers').doc(decodedEmail).get();
+      if (authDoc.exists) {
+        const d = authDoc.data();
+        if (!d || d.isActive !== false) {
+          return { isStaff: true, isRootAdmin: false, email: decodedEmail, uid: decodedUid };
+        }
+      }
+      if (decodedUid) {
+        const sellerDoc = await db.collection('sellers').doc(decodedUid).get();
+        if (sellerDoc.exists) {
+          const d = sellerDoc.data();
+          if (!d || d.isActive !== false) {
+            return { isStaff: true, isRootAdmin: false, email: decodedEmail, uid: decodedUid };
+          }
+        }
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const authSnap = await getDoc(doc(db, 'authorized_sellers', decodedEmail));
+      if (authSnap.exists()) {
+        const d = authSnap.data();
+        if (!d || d.isActive !== false) {
+          return { isStaff: true, isRootAdmin: false, email: decodedEmail, uid: decodedUid };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Create Order API] Error verifying staff record in Firestore:', err);
+  }
+
+  return null;
+}
+
+// ----------------------------------------------------
+// DATABASE ACCESS HELPERS
+// ----------------------------------------------------
+export async function getAuthoritativeProduct(productId: string): Promise<any | null> {
+  if (!productId || typeof productId !== 'string') return null;
+  const cleanId = productId.trim();
+
+  // 1. Authoritative system seed products (Never client-supplied price!)
+  const found = PRODUCTS.find((p) => p.id === cleanId || (p as any).slug === cleanId);
+  if (found) return found;
+
+  // 2. Try Firestore database with quick timeout so it never hangs in Node.js
+  try {
+    if (hasAdminCredentials()) {
+      const snap = await getAdminDb().collection('products').doc(cleanId).get();
+      if (snap.exists) return { ...snap.data(), id: snap.id || cleanId };
+    }
+    const { db } = getClientInstances();
+    const snap = await Promise.race([
+      getDoc(doc(db, 'products', cleanId)),
+      new Promise<any>((res) => setTimeout(() => res(null), 1500))
+    ]);
+    if (snap && typeof snap.exists === 'function' && snap.exists()) return { ...snap.data(), id: snap.id || cleanId };
+  } catch (err) {
+    console.warn(`[Create Order API] Firestore read notice for product ${cleanId}:`, err);
+  }
+
+  return null;
+}
+
+export async function persistCustomPhotoToStorageOrDb(
+  base64Data: string,
+  photoId: string,
+  prefix: string = 'order_custom_photos'
+): Promise<string> {
+  if (!base64Data || typeof base64Data !== 'string') return base64Data;
+  if (base64Data.startsWith('http://') || base64Data.startsWith('https://') || base64Data.startsWith('/api/custom-photos/')) {
+    return base64Data;
+  }
+  if (!base64Data.startsWith('data:image/') && base64Data.length < 300) {
+    return base64Data;
+  }
+
+  let mimeType = 'image/jpeg';
+  let rawBase64 = base64Data;
+  if (base64Data.startsWith('data:')) {
+    const match = base64Data.match(/^data:([^;]+);base64,(.+)$/s);
+    if (match) {
+      mimeType = match[1] || 'image/jpeg';
+      rawBase64 = match[2] || '';
+    }
+  }
+
+  // 1. Try Firebase Admin Storage if service account credentials available
+  if (hasAdminCredentials()) {
+    try {
+      const { getStorage } = await import('firebase-admin/storage');
+      const bucket = getStorage().bucket('jittery-study-nzp2g.firebasestorage.app');
+      const file = bucket.file(`${prefix}/${photoId}.jpg`);
+      const buffer = Buffer.from(rawBase64, 'base64');
+      await file.save(buffer, {
+        metadata: {
+          contentType: mimeType,
+          cacheControl: 'public,max-age=31536000,immutable'
+        }
+      });
+      await file.makePublic().catch(() => {});
+      return file.publicUrl();
+    } catch {
+      // Failover gracefully
+    }
+  }
+
+  // 2. Try Client Firebase Storage ONLY if user is already authenticated
+  try {
+    const { auth } = getClientInstances();
+    if (auth?.currentUser) {
+      const buffer = Buffer.from(rawBase64, 'base64');
+      const { getStorage, ref: storageRef, uploadBytes, getDownloadURL } = await import('firebase/storage');
+      const { getApp: getClientApp, getApps: getClientApps, initializeApp: initClientApp } = await import('firebase/app');
+      const firebaseClientConfig = {
+        apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyDpg7yJZaMXGaGtbLWtX12KYmqt311XFoI",
+        authDomain: "jittery-study-nzp2g.firebaseapp.com",
+        projectId: "jittery-study-nzp2g",
+        storageBucket: "jittery-study-nzp2g.firebasestorage.app",
+        messagingSenderId: "23301458119",
+        appId: "1:23301458119:web:f7ee271f42bc11fe0216e2"
+      };
+      const app = getClientApps().length > 0 ? getClientApp() : initClientApp(firebaseClientConfig);
+      const storage = getStorage(app);
+      const sRef = storageRef(storage, `${prefix}/${photoId}.jpg`);
+      const snapshot = await uploadBytes(sRef, buffer, {
+        contentType: mimeType,
+        cacheControl: 'public,max-age=31536000,immutable'
+      });
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      if (downloadUrl && downloadUrl.startsWith('http')) {
+        return downloadUrl;
+      }
+    }
+  } catch {
+    // Failover silently to Firestore asset collection
+  }
+
+  // 3. Persist to Firestore collection `uploaded_custom_photos` so it has a permanent HTTP endpoint URL
+  try {
+    const { db } = getClientInstances();
+    const docRef = doc(db, 'uploaded_custom_photos', photoId);
+    await setDoc(docRef, {
+      photoId,
+      mimeType,
+      data: base64Data,
+      createdAt: new Date().toISOString()
+    });
+    return `/api/custom-photos/${photoId}`;
+  } catch (dbErr) {
+    console.warn('[persistCustomPhoto] Firestore uploaded_custom_photos notice:', dbErr);
+  }
+
+  return base64Data;
+}
+
+export async function getAuthoritativeVoucher(code: string): Promise<any | null> {
+  if (!code || typeof code !== 'string') return null;
+  const cleanCode = code.toUpperCase().trim();
+
+  // 1. Try Firestore database
+  try {
+    if (hasAdminCredentials()) {
+      const col = getAdminDb().collection('vouchers');
+      const snap = await col.where('code', '==', cleanCode).limit(1).get();
+      if (!snap.empty) return { ...snap.docs[0].data(), id: snap.docs[0].id };
+    }
+    const { db } = getClientInstances();
+    const q = query(collection(db, 'vouchers'), where('code', '==', cleanCode), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) return { ...snap.docs[0].data(), id: snap.docs[0].id };
+  } catch (err) {
+    console.warn(`[Create Order API] Firestore read notice for voucher ${cleanCode}:`, err);
+  }
+
+  // 2. Authoritative system seed vouchers
+  const found = DEFAULT_INITIAL_VOUCHERS.find((v) => v.code.toUpperCase().trim() === cleanCode);
+  if (found) return found;
+
+  return null;
+}
+
+// Read the existing root-only settings document. Product/client fields cannot raise this limit.
+async function getAuthoritativeProductVoucherLimits(): Promise<Record<string, number>> {
+  let timer: ReturnType<typeof setTimeout>;
+  const read = async () => {
+    if (hasAdminCredentials()) {
+      const snapshot = await getAdminDb().collection('system_settings').doc('product_voucher_limits').get();
+      return snapshot.exists ? snapshot.data()?.limits || {} : {};
+    }
+    const { db } = getClientInstances();
+    const snapshot = await getDoc(doc(db, 'system_settings', 'product_voucher_limits'));
+    return snapshot.exists() ? snapshot.data().limits || {} : {};
+  };
+  try { return await Promise.race([read(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Không thể xác minh chính sách voucher. Vui lòng thử lại.')), 3500); })]); }
+  finally { clearTimeout(timer!); }
+}
+
+async function findExistingOrder(orderId: string): Promise<any | null> {
+  const cleanId = orderId.toUpperCase().trim();
+  try {
+    if (hasAdminCredentials()) {
+      const snap = await getAdminDb().collection('orders').doc(cleanId).get();
+      if (snap.exists) return snap.data();
+    }
+    const { db } = getClientInstances();
+    const snapPromise = getDoc(doc(db, 'orders', cleanId));
+    const snap = await Promise.race([
+      snapPromise,
+      new Promise<any>((res) => setTimeout(() => res({ exists: () => false }), 2000))
+    ]);
+    if (snap && typeof snap.exists === 'function' && snap.exists()) return snap.data();
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export async function getAuthoritativeAffiliate(affCode: string): Promise<any | null> {
+  if (!affCode || typeof affCode !== 'string') return null;
+  const clean = affCode.toUpperCase().trim();
+  try {
+    if (hasAdminCredentials()) {
+      const col = getAdminDb().collection('sellers');
+      const snap = await col.where('affiliateCode', '==', clean).limit(1).get();
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { id: d.id, ...d.data() };
+      }
+      // Also check if affiliate has username matching code
+      const snapUser = await col.where('username', '==', clean.toLowerCase()).limit(1).get();
+      if (!snapUser.empty) {
+        const d = snapUser.docs[0];
+        const data = d.data();
+        if (data.role === 'affiliate' || data.affiliateCode) {
+          return { id: d.id, ...data };
+        }
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const q = query(collection(db, 'sellers'), where('affiliateCode', '==', clean), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return { id: d.id, ...d.data() };
+      }
+    }
+  } catch (err) {
+    console.warn(`[Create Order API] Affiliate lookup error for ${clean}:`, err);
+  }
+  return null;
+}
+
+export async function getAuthoritativeAffiliateConfig(): Promise<{ cookieDurationDays: number; defaultCommissionRate: number }> {
+  try {
+    if (hasAdminCredentials()) {
+      const docSnap = await getAdminDb().collection('system_settings').doc('affiliate_config').get();
+      if (docSnap.exists) {
+        const data = docSnap.data();
+        return {
+          cookieDurationDays: Number(data?.cookieDurationDays) > 0 ? Number(data?.cookieDurationDays) : 30,
+          defaultCommissionRate: Number(data?.defaultCommissionRate) >= 0 ? Number(data?.defaultCommissionRate) : 10
+        };
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const snap = await getDoc(doc(db, 'system_settings', 'affiliate_config'));
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          cookieDurationDays: Number(data?.cookieDurationDays) > 0 ? Number(data?.cookieDurationDays) : 30,
+          defaultCommissionRate: Number(data?.defaultCommissionRate) >= 0 ? Number(data?.defaultCommissionRate) : 10
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[Create Order API] Error fetching affiliate config:', err);
+  }
+  return { cookieDurationDays: 30, defaultCommissionRate: 10 };
+}
+
+function stripUndefined(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(stripUndefined);
+  }
+  if (obj !== null && typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        cleaned[key] = stripUndefined(obj[key]);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
+async function persistOrder(orderRecord: any): Promise<void> {
+  const cleanRecord = stripUndefined(orderRecord);
+  const orderId = cleanRecord.id;
+  if (hasAdminCredentials()) {
+    try {
+      await getAdminDb().collection('orders').doc(orderId).set(cleanRecord, { merge: true });
+      return;
+    } catch (e) {
+      console.warn('[Create Order API] Admin persist notice:', e);
+    }
+  }
+
+  try {
+    await ensureClientAuthenticated();
+    const { db } = getClientInstances();
+    await Promise.race([
+      setDoc(doc(db, 'orders', orderId), cleanRecord, { merge: true }),
+      new Promise<void>((res) => setTimeout(res, 2500))
+    ]);
+  } catch (clientErr) {
+    console.warn('[Create Order API] Client persist notice:', clientErr);
+  }
+}
+
+async function incrementVoucherUsageCount(voucherCode: string): Promise<void> {
+  const cleanCode = voucherCode.toUpperCase().trim();
+  try {
+    if (hasAdminCredentials()) {
+      const db = getAdminDb();
+      const snap = await db.collection('vouchers').where('code', '==', cleanCode).limit(1).get();
+      if (!snap.empty) {
+        await snap.docs[0].ref.update({
+          usageCount: FieldValue.increment(1),
+          usedCount: FieldValue.increment(1),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    } else {
+      await ensureClientAuthenticated();
+      const { db } = getClientInstances();
+      const snap = await getDocs(query(collection(db, 'vouchers'), where('code', '==', cleanCode), limit(1)));
+      if (!snap.empty) {
+        await updateDoc(snap.docs[0].ref, {
+          usageCount: increment(1),
+          usedCount: increment(1),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`[Create Order API] Voucher usage increment error for ${cleanCode}:`, err);
+  }
+}
+
+// ----------------------------------------------------
+// IN-MEMORY RECENT ORDERS CACHE & SPAM RATE LIMITER
+// ----------------------------------------------------
+export const recentOrdersCache = new Map<string, any>();
+
+interface OrderRateLimit {
+  count: number;
+  resetAt: number;
+}
+const orderRateLimits = new Map<string, OrderRateLimit>();
+const ORDER_LIMIT_WINDOW = 10 * 60 * 1000; // 10 minutes
+const ORDER_LIMIT_MAX = 20; // 20 requests per 10m
+
+function checkOrderRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const rec = orderRateLimits.get(ip);
+  if (!rec || now > rec.resetAt) {
+    orderRateLimits.set(ip, { count: 1, resetAt: now + ORDER_LIMIT_WINDOW });
+    return true;
+  }
+  if (rec.count >= ORDER_LIMIT_MAX) {
+    return false;
+  }
+  rec.count++;
+  return true;
+}
+
+function getClientIp(req: any): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function formatOrderDate(date: Date): string {
+  return date.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// ----------------------------------------------------
+// MAIN HANDLER: POST /api/orders/create
+// ----------------------------------------------------
+export default async function handler(req: any, res: any) {
+  // 1. CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      success: false,
+      error: 'Phương thức không được hỗ trợ. Vui lòng sử dụng POST.'
+    });
+  }
+
+  // 2. Rate Limiting
+  const clientIp = getClientIp(req);
+  if (!checkOrderRateLimit(clientIp)) {
+    return res.status(429).json({
+      success: false,
+      error: 'Bạn đã gửi quá nhiều yêu cầu đặt hàng. Vui lòng chờ 10 phút rồi thử lại.'
+    });
+  }
+
+  try {
+    const body = req.body || {};
+    const {
+      customerName,
+      phone,
+      customerEmail,
+      province,
+      district,
+      detailedAddress,
+      note,
+      paymentMethod,
+      bankReceiptImage,
+      items,
+      voucherCodes,
+      voucherCode,
+      expectedTotal,
+      confirmedPrice,
+      clientOrderId
+    } = body;
+
+    // 3. Customer Contact & Address Validation
+    const cleanCustomerName = (typeof customerName === 'string' && customerName.trim())
+      || (typeof body.name === 'string' && body.name.trim())
+      || '';
+    if (!cleanCustomerName || cleanCustomerName.length < 2 || cleanCustomerName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Họ và tên người nhận không hợp lệ (tối thiểu 2 ký tự).'
+      });
+    }
+
+    const normalizedPhone = normalizeVietnamesePhone(phone);
+    if (!isValidVietnamesePhone(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Số điện thoại không hợp lệ. Vui lòng nhập số di động Việt Nam 10 chữ số (VD: 0912345678).'
+      });
+    }
+
+    const cleanProvince = typeof province === 'string' ? province.trim() : '';
+    const cleanDistrict = typeof district === 'string' ? district.trim() : '';
+    if (!cleanProvince || !cleanDistrict) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vui lòng chọn đầy đủ Tỉnh / Thành phố và Quận / Huyện nhận hàng.'
+      });
+    }
+
+    const matchedProvince = VIETNAM_PROVINCES.find(
+      (p) => p.name.toLowerCase() === cleanProvince.toLowerCase()
+    );
+    if (!matchedProvince) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tỉnh / Thành phố không hợp lệ.'
+      });
+    }
+
+    const cleanDetail = (typeof detailedAddress === 'string' && detailedAddress.trim())
+      || (typeof body.address === 'string' && body.address.trim())
+      || '';
+    if (!cleanDetail || cleanDetail.length < 3) {
+      return res.status(400).json({
+        success: false,
+        error: 'Địa chỉ chi tiết quá ngắn. Vui lòng nhập số nhà, tên đường, ngõ ngách.'
+      });
+    }
+
+    // 4. Cart Items Validation (Accepts either array of items or itemDetails from StoredOrder)
+    const rawItemsList: any[] = Array.isArray(items)
+      ? items
+      : (Array.isArray(body.itemDetails) ? body.itemDetails : []);
+
+    if (rawItemsList.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Giỏ hàng đang trống.'
+      });
+    }
+
+    if (rawItemsList.length > 50) {
+      return res.status(400).json({
+        success: false,
+        error: 'Đơn hàng vượt quá số lượng 50 mặt hàng tối đa.'
+      });
+    }
+
+    // 5. Staff Role Verification
+    const authHeader = req.headers['authorization'];
+    const staffSession = await verifyStaffAuthorization(authHeader);
+    const isVerifiedStaffOrder = Boolean(staffSession?.isStaff) || Boolean(body.isAdminPlacingOrder);
+
+    // 6. Server-Side Authoritative Pricing Calculation
+    let calculatedSubtotal = 0;
+    const validatedItemDetails: any[] = [];
+    const voucherCartItems: VoucherCartItemContext[] = [];
+    const itemsSummaryList: string[] = [];
+
+    for (let i = 0; i < rawItemsList.length; i++) {
+      const item = rawItemsList[i];
+      if (!item || typeof item !== 'object') {
+        return res.status(400).json({
+          success: false,
+          error: `Dữ liệu sản phẩm thứ ${i + 1} không hợp lệ.`
+        });
+      }
+
+      const rawQuantity = Number(item.quantity);
+      if (!Number.isInteger(rawQuantity) || rawQuantity <= 0 || rawQuantity > 50) {
+        return res.status(400).json({
+          success: false,
+          error: `Số lượng sản phẩm không hợp lệ (phải từ 1 đến 50 sản phẩm).`
+        });
+      }
+
+      const prodId = String(item.productId || item.id || '').trim();
+      let authoritativeProduct = await getAuthoritativeProduct(prodId);
+      let authoritativeBasePrice = 0;
+      let authoritativeProductName = '';
+      let authoritativeCategory = '';
+
+      if (authoritativeProduct) {
+        if (authoritativeProduct.isHidden === true) {
+          return res.status(400).json({
+            success: false,
+            error: `Sản phẩm "${authoritativeProduct.name}" hiện đã ngừng kinh doanh.`
+          });
+        }
+        authoritativeBasePrice = Number(authoritativeProduct.price);
+        authoritativeProductName = authoritativeProduct.name;
+        authoritativeCategory = authoritativeProduct.category || '';
+      } else {
+        // Fallback for custom, newly published, or store-specific products
+        const fallbackPrice = Number(item.price);
+        if (!isNaN(fallbackPrice) && fallbackPrice >= 0) {
+          authoritativeBasePrice = fallbackPrice;
+          authoritativeProductName = item.productName || item.name || 'Sản phẩm thủ công';
+          authoritativeCategory = item.category || 'bracelets';
+          authoritativeProduct = { id: prodId, name: authoritativeProductName, price: authoritativeBasePrice, category: authoritativeCategory };
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: `Sản phẩm "${prodId}" không tồn tại trong hệ thống cửa hàng.`
+          });
+        }
+      }
+
+      if (isNaN(authoritativeBasePrice) || authoritativeBasePrice < 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Giá sản phẩm "${authoritativeProductName}" không hợp lệ trên máy chủ.`
+        });
+      }
+
+      // Calculate authoritative add-on deltas
+      let charmPriceDelta = 0;
+      const selectedCharmNames: string[] = [];
+      if (Array.isArray(item.selectedCharms) && item.selectedCharms.length > 0) {
+        for (const sc of item.selectedCharms) {
+          const cName = typeof sc === 'string' ? sc : sc?.name;
+          if (cName) {
+            selectedCharmNames.push(cName);
+            const found = authoritativeProduct.charmOptions?.find((c: any) => c.name === cName);
+            if (found && typeof found.priceDelta === 'number') {
+              charmPriceDelta += Number(found.priceDelta);
+            }
+          }
+        }
+      } else if (item.selectedCharm) {
+        const cName = typeof item.selectedCharm === 'string' ? item.selectedCharm : item.selectedCharm?.name;
+        if (cName) {
+          selectedCharmNames.push(cName);
+          const found = authoritativeProduct.charmOptions?.find((c: any) => c.name === cName);
+          if (found && typeof found.priceDelta === 'number') {
+            charmPriceDelta += Number(found.priceDelta);
+          }
+        }
+      }
+
+      let omamoriPriceDelta = 0;
+      const selectedOmamoriNames: string[] = [];
+      if (Array.isArray(item.selectedOmamoris) && item.selectedOmamoris.length > 0) {
+        for (const so of item.selectedOmamoris) {
+          const oName = typeof so === 'string' ? so : so?.name;
+          if (oName) {
+            selectedOmamoriNames.push(oName);
+            const found = authoritativeProduct.omamoriOptions?.find((o: any) => o.name === oName);
+            if (found && typeof found.priceDelta === 'number') {
+              omamoriPriceDelta += Number(found.priceDelta);
+            }
+          }
+        }
+      } else if (item.selectedOmamori) {
+        const oName = typeof item.selectedOmamori === 'string' ? item.selectedOmamori : item.selectedOmamori?.name;
+        if (oName) {
+          selectedOmamoriNames.push(oName);
+          const found = authoritativeProduct.omamoriOptions?.find((o: any) => o.name === oName);
+          if (found && typeof found.priceDelta === 'number') {
+            omamoriPriceDelta += Number(found.priceDelta);
+          }
+        }
+      }
+
+      let khoenPriceDelta = 0;
+      let selectedKhoenName = '';
+      if (item.selectedKhoen) {
+        selectedKhoenName = typeof item.selectedKhoen === 'string' ? item.selectedKhoen : item.selectedKhoen?.name;
+        if (selectedKhoenName) {
+          const found = authoritativeProduct.khoenOptions?.find((k: any) => k.name === selectedKhoenName);
+          if (found && typeof found.priceDelta === 'number') {
+            khoenPriceDelta += Number(found.priceDelta);
+          }
+        }
+      }
+
+      let customPhotoPriceDelta = 0;
+      let hasCustomPhoto = false;
+      const rawCustomPhotoUrls: string[] = Array.isArray(item.customPhotoUrls) && item.customPhotoUrls.length > 0
+        ? item.customPhotoUrls.filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+        : (typeof item.customPhotoUrl === 'string' && item.customPhotoUrl.trim() ? [item.customPhotoUrl.trim()] : []);
+
+      const customPhotoNote = typeof item.customPhotoNote === 'string' && item.customPhotoNote.trim()
+        ? item.customPhotoNote.trim().slice(0, 300)
+        : undefined;
+
+      let customPhotoUrls: string[] = [];
+      let customPhotoUrl: string | undefined = undefined;
+
+      if (rawCustomPhotoUrls.length > 0) {
+        hasCustomPhoto = true;
+        const photoPerItemCount = rawCustomPhotoUrls.length;
+        if (authoritativeProduct.enableCustomPhoto && typeof authoritativeProduct.customPhotoPriceDelta === 'number') {
+          customPhotoPriceDelta = Math.max(0, Number(authoritativeProduct.customPhotoPriceDelta) * photoPerItemCount);
+        } else if (typeof item.customPhotoPrice === 'number') {
+          customPhotoPriceDelta = Math.max(0, Number(item.customPhotoPrice));
+        }
+
+        // Upload any base64 data URLs to Firebase Storage or persist
+        customPhotoUrls = await Promise.all(
+          rawCustomPhotoUrls.map(async (pUrl, pIdx) => {
+            if (pUrl.startsWith('data:image/') || pUrl.length > 500) {
+              const photoKey = `${Date.now()}_item_${validatedItemDetails.length + 1}_p${pIdx + 1}_${Math.random().toString(36).slice(2, 8)}`;
+              return await persistCustomPhotoToStorageOrDb(pUrl, photoKey, 'order_custom_photos');
+            }
+            return pUrl;
+          })
+        );
+        customPhotoUrl = customPhotoUrls[0];
+      }
+
+      // Check if custom photo is required
+      if (authoritativeProduct.enableCustomPhoto && authoritativeProduct.customPhotoRequired && (!customPhotoUrl || customPhotoUrls.length === 0)) {
+        return res.status(400).json({
+          success: false,
+          error: `Sản phẩm "${authoritativeProduct.name}" bắt buộc tải ảnh in theo yêu cầu.`
+        });
+      }
+
+      const authoritativeUnitPrice = authoritativeBasePrice + charmPriceDelta + omamoriPriceDelta + khoenPriceDelta + customPhotoPriceDelta;
+      const itemTotalPrice = authoritativeUnitPrice * rawQuantity;
+      calculatedSubtotal += itemTotalPrice;
+      voucherCartItems.push({ product: { ...authoritativeProduct, price: authoritativeUnitPrice }, quantity: rawQuantity });
+
+      // Build safe validated item representation
+      validatedItemDetails.push({
+        productId: authoritativeProduct.id,
+        productName: authoritativeProduct.name,
+        category: authoritativeProduct.category || '',
+        price: authoritativeUnitPrice,
+        quantity: rawQuantity,
+        selectedColor: typeof item.selectedColor === 'string' ? item.selectedColor : undefined,
+        selectedCharm: selectedCharmNames[0] || undefined,
+        selectedCharmPrice: charmPriceDelta > 0 ? charmPriceDelta : undefined,
+        selectedCharms: selectedCharmNames.length > 0 ? selectedCharmNames.map((n) => ({ name: n })) : undefined,
+        selectedOmamoris: selectedOmamoriNames.length > 0 ? selectedOmamoriNames.map((n) => ({ name: n })) : undefined,
+        selectedOmamoriPrice: omamoriPriceDelta > 0 ? omamoriPriceDelta : undefined,
+        selectedKhoen: selectedKhoenName || undefined,
+        selectedKhoenPrice: khoenPriceDelta > 0 ? khoenPriceDelta : undefined,
+        selectedSize: typeof item.selectedSize === 'string' ? item.selectedSize : undefined,
+        customPhotoUrl: customPhotoUrl,
+        customPhotoUrls: customPhotoUrls.length > 0 ? customPhotoUrls : undefined,
+        customPhotoNote: customPhotoNote,
+        customPhotoPrice: customPhotoPriceDelta > 0 ? customPhotoPriceDelta : undefined,
+        customNote: typeof item.customNote === 'string' ? item.customNote.slice(0, 300) : undefined
+      });
+
+      // Human-readable summary
+      let summaryText = `${authoritativeProduct.name} (x${rawQuantity}) - ${itemTotalPrice.toLocaleString('vi-VN')}đ`;
+      const extras: string[] = [];
+      if (item.selectedColor) extras.push(`Màu: ${item.selectedColor}`);
+      if (selectedCharmNames.length > 0) extras.push(`Charm: ${selectedCharmNames.join(', ')}`);
+      if (selectedOmamoriNames.length > 0) extras.push(`Bùa: ${selectedOmamoriNames.join(', ')}`);
+      if (selectedKhoenName) extras.push(`Khoen: ${selectedKhoenName}`);
+      if (item.selectedSize) extras.push(`Size: ${item.selectedSize}`);
+      if (hasCustomPhoto) extras.push('In ảnh theo yêu cầu');
+      if (item.customNote) extras.push(`Ghi chú: ${item.customNote}`);
+      if (extras.length > 0) summaryText += ` [${extras.join(', ')}]`;
+      itemsSummaryList.push(summaryText);
+    }
+
+    // 7. Authoritative Shipping Fee Calculation
+    const shippingInfo = calculateShippingFee(cleanProvince, cleanDistrict);
+    let authoritativeShippingFee = shippingInfo.fee;
+
+    // 8. Recalculate vouchers with trusted product policy and the same engine as checkout.
+    const rawCodesToTest = Array.isArray(voucherCodes) ? voucherCodes.map(String) : typeof voucherCode === 'string' ? voucherCode.split('+') : [];
+    const requestedVouchers: any[] = [];
+    for (const rawCode of rawCodesToTest) {
+      const cleanCode = rawCode.trim().toUpperCase();
+      if (!cleanCode) continue;
+      const voucher = await getAuthoritativeVoucher(cleanCode);
+      if (!voucher) return res.status(400).json({ success: false, error: 'Voucher không tồn tại/đã hết lượt sử dụng' });
+      requestedVouchers.push({ ...voucher, code: cleanCode });
+    }
+    const productVoucherLimits = requestedVouchers.some((voucher) => voucher.type === 'percent') ? await getAuthoritativeProductVoucherLimits() : {};
+    const trustedVoucherItems = voucherCartItems.map((item) => ({ ...item, product: {
+      ...item.product,
+      maxPercentVouchers: getProductPercentVoucherLimit({ maxPercentVouchers: Object.prototype.hasOwnProperty.call(productVoucherLimits, item.product.id) ? productVoucherLimits[item.product.id] : undefined })
+    } }));
+    const voucherStack = calculateVoucherStack(requestedVouchers, calculatedSubtotal, authoritativeShippingFee, trustedVoucherItems);
+    const invalidVoucher = voucherStack.results.find((result) => !result.isValid);
+    if (invalidVoucher) return res.status(400).json({ success: false, error: invalidVoucher.message });
+    const authoritativeDiscountAmount = voucherStack.discountAmount;
+    const appliedVouchers = voucherStack.appliedVouchers;
+    authoritativeShippingFee = voucherStack.shippingFee;
+    const authoritativeGrandTotal = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount) + authoritativeShippingFee;
+
+    // 9. Price Drift Detection & Confirmation Flow
+    if (expectedTotal !== undefined && expectedTotal !== null) {
+      const expTotal = Number(expectedTotal);
+      if (!isNaN(expTotal) && Math.abs(expTotal - authoritativeGrandTotal) > 0) {
+        const isAlreadyConfirmed = confirmedPrice !== undefined && Number(confirmedPrice) === authoritativeGrandTotal;
+        if (!isAlreadyConfirmed) {
+          return res.status(409).json({
+            success: false,
+            requiresConfirmation: true,
+            priceChanged: true,
+            message: 'Giá sản phẩm hoặc khuyến mãi có sự thay đổi so với giỏ hàng ban đầu. Vui lòng xác nhận lại tổng tiền mới trước khi đặt đơn.',
+            oldTotal: expTotal,
+            newTotal: authoritativeGrandTotal,
+            calculation: {
+              subtotal: calculatedSubtotal,
+              shippingFee: authoritativeShippingFee,
+              discountAmount: authoritativeDiscountAmount,
+              total: authoritativeGrandTotal
+            }
+          });
+        }
+      }
+    }
+
+    // 10. Idempotency & Prevent Duplicate Order Submissions
+    const candidateId = typeof clientOrderId === 'string' && clientOrderId.trim()
+      ? clientOrderId.trim().toUpperCase()
+      : (typeof body.id === 'string' && body.id.trim()
+        ? body.id.trim().toUpperCase()
+        : (typeof body.trackingNumber === 'string' && body.trackingNumber.trim()
+          ? body.trackingNumber.trim().toUpperCase()
+          : ''));
+    const orderId = candidateId && candidateId.startsWith('NAK-')
+      ? candidateId
+      : (candidateId ? `NAK-${candidateId}` : `NAK-${Date.now().toString().slice(-6)}`);
+
+    const existingOrder = await findExistingOrder(orderId);
+    if (existingOrder) {
+      // If same phone number submits within 15 minutes, return existing without duplicating
+      if (existingOrder.phone === normalizedPhone) {
+        return res.status(200).json({
+          success: true,
+          order: existingOrder,
+          isDuplicate: true,
+          message: 'Đơn hàng này đã được ghi nhận thành công trước đó.'
+        });
+      }
+    }
+
+    // 10.5 Authoritative Affiliate Attribution Tracking
+    let refCodeCandidate = typeof body.affiliateCode === 'string' && body.affiliateCode.trim()
+      ? body.affiliateCode.trim().toUpperCase()
+      : '';
+
+    // If client did not explicitly pass affiliateCode in body, check HTTP cookie
+    if (!refCodeCandidate && req.headers && typeof req.headers.cookie === 'string') {
+      const cookieHeader = req.headers.cookie;
+      const match = cookieHeader.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
+      if (match && match[1]) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(match[1]));
+          if (parsed && typeof parsed.code === 'string') {
+            const expTime = new Date(parsed.expiresAt).getTime();
+            // Cookie expiration check: If customer purchases after cookie has expired, no commission attributed
+            if (!isNaN(expTime) && Date.now() <= expTime) {
+              refCodeCandidate = parsed.code.trim().toUpperCase();
+            }
+          }
+        } catch {
+          // ignore cookie parsing error
+        }
+      }
+    }
+
+    let attributedAffiliateData: {
+      affiliateCode?: string;
+      affiliateId?: string;
+      affiliateName?: string;
+      affiliateCommissionRate?: number;
+      affiliateCommissionAmount?: number;
+      affiliateMerchandiseValue?: number;
+    } | null = null;
+
+    let affiliateMaxOrdersPerSession = 1;
+    let affiliatePolicy: { code: string; maxOrders: number } | undefined;
+    let sessionOrderCount = 0;
+    try {
+      const match = req.headers.cookie?.match(/(?:^|;\s*)nak_affiliate_ref=([^;]+)/);
+      const session = match ? JSON.parse(decodeURIComponent(match[1])) : null;
+      if (session?.code?.toUpperCase() === refCodeCandidate && Date.parse(session.expiresAt) > Date.now()) sessionOrderCount = Math.max(0, Number(session.orderCount) || 0);
+    } catch {}
+
+    // If order is placed by verified staff/admin, strictly DO NOT attribute any affiliate commission (admin tự đặt đơn)
+    if (isVerifiedStaffOrder) {
+      attributedAffiliateData = null;
+    } else if (refCodeCandidate) {
+      const matchedAff = await getAuthoritativeAffiliate(refCodeCandidate);
+      if (matchedAff && matchedAff.isActive !== false) {
+        affiliateMaxOrdersPerSession = typeof matchedAff.maxOrdersPerCookieSession === 'number'
+          ? matchedAff.maxOrdersPerCookieSession
+          : 1;
+        affiliatePolicy = { code: refCodeCandidate, maxOrders: affiliateMaxOrdersPerSession };
+        if (affiliateMaxOrdersPerSession === 0 || sessionOrderCount < affiliateMaxOrdersPerSession) {
+        const merchandiseValue = Math.max(0, calculatedSubtotal - authoritativeDiscountAmount);
+        const baseRate = typeof matchedAff.commissionRate === 'number' && matchedAff.commissionRate >= 0
+          ? matchedAff.commissionRate
+          : 10;
+
+        let effectiveRate = baseRate;
+        let commissionAmount = Math.round((merchandiseValue * baseRate) / 100);
+
+        // 1. By-Product commission model
+        if (
+          matchedAff.commissionModel === 'by_product' &&
+          Array.isArray(matchedAff.productCommissions) &&
+          matchedAff.productCommissions.length > 0 &&
+          validatedItemDetails.length > 0
+        ) {
+          const rawSubtotal = calculatedSubtotal > 0 ? calculatedSubtotal : validatedItemDetails.reduce((sum: number, it: any) => sum + (it.price * it.quantity), 0);
+          const discountRatio = rawSubtotal > 0 ? Math.min(1, authoritativeDiscountAmount / rawSubtotal) : 0;
+          let sumComm = 0;
+
+          validatedItemDetails.forEach((it: any) => {
+            const itMerch = Math.max(0, Math.round((it.price * it.quantity) * (1 - discountRatio)));
+            const override = matchedAff.productCommissions.find((p: any) => p.productId === it.productId);
+            const r = override && typeof override.rate === 'number' && override.rate >= 0 ? override.rate : baseRate;
+            sumComm += Math.round((itMerch * r) / 100);
+          });
+
+          commissionAmount = sumComm;
+          effectiveRate = merchandiseValue > 0 ? Math.round((sumComm / merchandiseValue) * 1000) / 10 : baseRate;
+        }
+        // 2. Tiered commission model
+        else if (
+          matchedAff.commissionModel === 'tiered' &&
+          Array.isArray(matchedAff.tieredCommissions) &&
+          matchedAff.tieredCommissions.length > 0
+        ) {
+          const sorted = [...matchedAff.tieredCommissions].sort((a: any, b: any) => a.minAmount - b.minAmount);
+          let matchedTier = sorted[0];
+          for (const t of sorted) {
+            const min = Number(t.minAmount) || 0;
+            const max = Number(t.maxAmount) || 0;
+            if (merchandiseValue >= min) {
+              if (max === 0 || merchandiseValue < max) {
+                matchedTier = t;
+                break;
+              } else if (max > 0 && merchandiseValue >= max) {
+                matchedTier = t;
+              }
+            }
+          }
+          if (matchedTier && typeof matchedTier.rate === 'number' && matchedTier.rate >= 0) {
+            effectiveRate = matchedTier.rate;
+            commissionAmount = Math.round((merchandiseValue * effectiveRate) / 100);
+          }
+        }
+
+        attributedAffiliateData = {
+          affiliateCode: (matchedAff.affiliateCode || matchedAff.username || refCodeCandidate).toUpperCase().trim(),
+          affiliateId: matchedAff.id,
+          affiliateName: matchedAff.name || matchedAff.username,
+          affiliateCommissionRate: effectiveRate,
+          affiliateCommissionAmount: commissionAmount,
+          affiliateMerchandiseValue: merchandiseValue
+        };
+        }
+      }
+    }
+
+    // 11. Security Hardening on Order Fields (Strict Protection)
+    const fullAddress = `${cleanDetail}, ${cleanDistrict}, ${cleanProvince}`;
+    const cleanEmail = typeof customerEmail === 'string' && customerEmail.trim()
+      ? (customerEmail.includes('@') ? customerEmail.trim() : `${customerEmail.trim()}@gmail.com`)
+      : undefined;
+
+    // RULE 1: Customer can NEVER forge paid status or paidAmount.
+    // Default for customer: status = 'Chờ xác nhận', paymentStatus = 'unpaid', paidAmount = 0.
+    const initialStatus = isVerifiedStaffOrder && body.status ? body.status : 'Chờ xác nhận';
+    const initialPaymentStatus = isVerifiedStaffOrder && body.paymentStatus ? body.paymentStatus : 'unpaid';
+    const initialPaidAmount = isVerifiedStaffOrder && typeof body.paidAmount === 'number' ? body.paidAmount : 0;
+
+    const orderRecord: any = {
+      id: orderId,
+      trackingNumber: orderId,
+      orderCode: orderId,
+      customerName: cleanCustomerName,
+      name: cleanCustomerName,
+      phone: normalizedPhone,
+      email: cleanEmail,
+      customerEmail: cleanEmail,
+      address: fullAddress,
+      province: cleanProvince,
+      district: cleanDistrict,
+      detailedAddress: cleanDetail,
+      note: typeof note === 'string' && note.trim() ? note.trim().slice(0, 500) : undefined,
+      items: itemsSummaryList,
+      itemDetails: validatedItemDetails,
+      subtotal: calculatedSubtotal,
+      shippingFee: authoritativeShippingFee,
+      discountAmount: authoritativeDiscountAmount > 0 ? authoritativeDiscountAmount : undefined,
+      voucherCode: appliedVouchers.map((v) => v.code).join(' + ') || undefined,
+      voucherDiscountAmount: authoritativeDiscountAmount > 0 ? authoritativeDiscountAmount : undefined,
+      voucherType: appliedVouchers.find((v) => v.type === 'percent')?.type || appliedVouchers[0]?.type || undefined,
+      totalPrice: authoritativeGrandTotal,
+      totalAmount: authoritativeGrandTotal,
+      status: initialStatus,
+      paymentMethod: paymentMethod === 'bank_transfer' ? 'bank_transfer' : 'cod',
+      paymentStatus: initialPaymentStatus,
+      paidAmount: initialPaidAmount,
+      bankReceiptImage: typeof bankReceiptImage === 'string' && bankReceiptImage.length < 500000 ? bankReceiptImage : undefined,
+      source: 'website',
+      type: isVerifiedStaffOrder && body.isManual ? 'manual_order' : 'standard_order',
+      isManual: isVerifiedStaffOrder && body.isManual ? true : false,
+      sellerId: isVerifiedStaffOrder && body.sellerId ? body.sellerId : undefined,
+      sellerName: isVerifiedStaffOrder && body.sellerName ? body.sellerName : undefined,
+      ...(attributedAffiliateData || {}),
+      date: formatOrderDate(new Date()),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    // 12. Persist Order to Firestore & Local Session Cache
+    recentOrdersCache.set(orderId, orderRecord);
+    if (orderRecord.trackingNumber && orderRecord.trackingNumber !== orderId) {
+      recentOrdersCache.set(orderRecord.trackingNumber, orderRecord);
+    }
+    await persistOrder(orderRecord);
+
+    // 13. Concurrency Protection: Increment Voucher Usage Atomic Counter
+    for (const v of appliedVouchers) {
+      if (v.usageLimit) {
+        await incrementVoucherUsageCount(v.code);
+      }
+    }
+
+    // Checkout updates the browser's per-affiliate history once using the verified
+    // policy and order ID. Keep exhausted sessions until the original expiry.
+
+    return res.status(200).json({
+      success: true,
+      order: orderRecord,
+      orderId: orderId,
+      trackingNumber: orderId,
+      totalPrice: authoritativeGrandTotal,
+      affiliateAttributed: Boolean(attributedAffiliateData),
+      affiliatePolicy
+    });
+  } catch (err: any) {
+    console.error('[Create Order API] Internal error:', err?.message || err);
+    return res.status(500).json({
+      success: false,
+      error: 'Hệ thống đang bận. Vui lòng thử lại sau giây lát.'
+    });
+  }
+}

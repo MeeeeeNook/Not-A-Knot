@@ -14,7 +14,7 @@ export const getDocs=async(ref)=>{const f=globalThis.__orderFixture;const filter
 export const setDoc=async(ref,data)=>globalThis.__orderFixture.writes.push({ref,data}); export const updateDoc=async()=>{};export const increment=(n)=>n;
 `;
 test.before(async()=>{
-  const result=await esbuild.build({entryPoints:['api/orders/create.ts','api/affiliate.ts'],outdir:'fixture-bundles',bundle:true,write:false,format:'cjs',platform:'node',packages:'external',logLevel:'silent',plugins:[{name:'fixtures',setup(build){
+  const result=await esbuild.build({entryPoints:['server/orderApi.ts','server/affiliateApi.ts'],outdir:'fixture-bundles',bundle:true,write:false,format:'cjs',platform:'node',packages:'external',logLevel:'silent',plugins:[{name:'fixtures',setup(build){
     build.onResolve({filter:/^(firebase|firebase-admin)\//},args=>({path:args.path,namespace:'fixtures'}));
     build.onResolve({filter:/(voucherManager|data\/products|orders\/track)\.ts$/},args=>({path:args.path,namespace:'fixtures'}));
     build.onResolve({filter:/^\.\/track\.ts$/},args=>({path:'orders/track.ts',namespace:'fixtures'}));
@@ -32,7 +32,7 @@ test.before(async()=>{
   }}]});
   for (const output of result.outputFiles) {
     const mod={exports:{}}; new Function('require','module','exports',output.text)(createRequire(__filename),mod,mod.exports);
-    if (output.path.endsWith('/affiliate.js')) affiliateHandler=mod.exports.default; else handler=mod.exports.default;
+    if (output.path.endsWith('/affiliateApi.js')) affiliateHandler=mod.exports.default; else handler=mod.exports.default;
   }
 });
 test.beforeEach(()=>{
