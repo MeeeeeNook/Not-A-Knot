@@ -40,6 +40,33 @@ service cloud.firestore {
     }
 
     // Order Security Guard: Enforces strict initial status, paymentStatus, and paidAmount
+    // Only approved staff with a verified Firebase email can record commission payouts.
+    // These new payout fields do not change the existing access rules for other fields.
+    function canRecordAffiliateCommissionPayment() {
+      return isAuthenticated() && request.auth.token.get('email_verified', false) && (
+        isRootAdmin() || (
+          userEmail() != '' &&
+          exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
+          get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('role', '') in ['deputy_admin', 'member'] &&
+          get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('isActive', true) != false
+        )
+      );
+    }
+
+    function validInitialAffiliateCommissionPayment() {
+      let data = request.resource.data;
+      return data.get('affiliateCommissionPaid', false) == false &&
+        data.get('affiliateCommissionPaidAmount', 0) == 0 &&
+        data.get('affiliateCommissionPaidAt', '') == '' &&
+        data.get('affiliateCommissionPaidBy', '') == '';
+    }
+
+    function affiliateCommissionPaymentUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'affiliateCommissionPaid', 'affiliateCommissionPaidAmount', 'affiliateCommissionPaidAt', 'affiliateCommissionPaidBy'
+      ]);
+    }
+
     function validPublicOrderCreation() {
       let data = request.resource.data;
       return (
@@ -108,8 +135,9 @@ service cloud.firestore {
     // Customers can submit new orders with strict initial status enforcement ('Chờ xác nhận', 'unpaid', paidAmount = 0).
     // Direct Firestore reading/listing of orders is strictly restricted to authorized staff to prevent privacy leaks.
     match /orders/{orderId} {
-      allow create: if isAuthorizedStaff() || validPublicOrderCreation();
-      allow read, update, delete: if isAuthorizedStaff();
+      allow create: if (isAuthorizedStaff() || validPublicOrderCreation()) && (canRecordAffiliateCommissionPayment() || validInitialAffiliateCommissionPayment());
+      allow read, delete: if isAuthorizedStaff();
+      allow update: if isAuthorizedStaff() && (canRecordAffiliateCommissionPayment() || affiliateCommissionPaymentUnchanged());
     }
 
     // 5. Contact inquiries & consultation requests

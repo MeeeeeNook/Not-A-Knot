@@ -3422,7 +3422,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         productsCount={products.length}
         categoriesCount={localCategories.length}
         collectionsCount={localCollections.length}
-        sellersCount={sellers.length}
+        sellersCount={sellers.filter(s => s.role !== 'affiliate').length}
         seoIssuesCount={seoIssuesCount}
         isMaintenanceActive={maintenanceConfig.enabled}
         onBackToStore={onBackToStore}
@@ -3515,7 +3515,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             { id: 'categories', label: `Danh mục (${localCategories.length})` },
             { id: 'vouchers', label: 'Vouchers' },
             { id: 'messages', label: unreadMessagesCount > 0 ? `Tin nhắn (${unreadMessagesCount} mới)` : 'Tin nhắn' },
-            { id: 'sellers', label: `Quản trị (${sellers.length})`, rootOnly: true },
+            { id: 'sellers', label: `Quản trị (${sellers.filter(s => s.role !== 'affiliate').length})`, rootOnly: true },
             { id: 'site_editor', label: 'Giao diện' },
             { id: 'social_feed', label: 'Social' },
             { id: 'trash', label: trashOrders.length > 0 ? `Thùng rác (${trashOrders.length})` : 'Thùng rác' },
@@ -3637,6 +3637,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             sellers={sellers}
             orders={orders as any}
             onUpdateSellers={handleUpdateSellers}
+            onUpdateOrders={updated => setOrders(updated as any)}
             currentAdmin={currentSeller}
             isRootAdmin={isRootAdmin}
           />

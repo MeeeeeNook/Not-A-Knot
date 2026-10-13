@@ -17,6 +17,11 @@ import { fetchOrdersFromFirestore, saveSellerToFirestore } from '../firebase';
 import { getStorefrontCategoryOptions, getVisibleCollections, isProductMatchingCategory } from '../utils/storefrontCatalog';
 import { AffiliateGuide } from './AffiliateGuide';
 import { getAffiliateCommissionDisplay } from '../utils/affiliateCommissionDisplay';
+import { AffiliateCommissionPolicy } from './AffiliateCommissionPolicy';
+import { AffiliatePaymentSettings } from './AffiliatePaymentSettings';
+import { emptyAffiliatePaymentAccount, formatAffiliatePayment, validateAffiliatePayment } from '../utils/affiliatePayment';
+import { getAffiliateCommissionPayments, isAffiliateOrder } from '../utils/affiliateCommissionPayments';
+import { AffiliateCommissionPaymentBadge } from './AffiliateCommissionPaymentBadge';
 import { AffiliateOrdersPage, OrdersDateRangePreset } from './AffiliateOrdersPage';
 
 export interface AffiliateDashboardProps {
@@ -31,6 +36,7 @@ export interface AffiliateDashboardProps {
   onNavigateHome: () => void;
   brandName?: string;
   logoUrl?: string;
+  preview?: { config: AffiliateSystemConfig; clicks: AffiliateClickRecord[] };
 }
 
 export type AffiliateSidebarTab =
@@ -48,10 +54,12 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   collections,
   isCatalogLoading = false,
   orders,
+  onLoginSuccess,
   onLogout,
   onNavigateHome,
   brandName = 'NOT A KNOT',
-  logoUrl
+  logoUrl,
+  preview
 }) => {
   // Navigation tab (Support starting at 'orders' if route URL is /affiliate/orders)
   const [activeTab, setActiveTab] = useState<AffiliateSidebarTab>(() => {
@@ -64,7 +72,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     return 'overview';
   });
 
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activeTab]);
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (preview) dashboardRef.current?.parentElement?.scrollTo({ top: 0 }); else window.scrollTo({ top: 0, behavior: 'instant' }); }, [activeTab, Boolean(preview)]);
 
   // Date range filter: 'all' | '7days' | '30days' | '90days' | 'custom'
   const [dateRange, setDateRange] = useState<OrdersDateRangePreset>('30days');
@@ -128,8 +137,22 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   // Profile Settings state (affiliate can edit name, phone, paymentInfo; affiliateCode and commissionRate are read-only)
   const [profileName, setProfileName] = useState<string>(() => affiliateUser?.name || '');
   const [profilePhone, setProfilePhone] = useState<string>(() => affiliateUser?.phone || '');
-  const [profilePaymentInfo, setProfilePaymentInfo] = useState<string>(() => affiliateUser?.paymentInfo || '');
+  const [profilePaymentAccount, setProfilePaymentAccount] = useState(() => affiliateUser?.paymentAccount || emptyAffiliatePaymentAccount());
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [refreshingPayments, setRefreshingPayments] = useState(false);
+  const refreshPayments = async () => {
+    if (preview || orders) return;
+    setRefreshingPayments(true);
+    try { setFetchedOrders(await fetchOrdersFromFirestore(true) as StoredOrder[]); } finally { setRefreshingPayments(false); }
+  };
+  useEffect(() => {
+    if (preview || orders) return;
+    const refresh = () => { void refreshPayments(); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [preview, orders]);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
 
   // Build full origin
@@ -217,12 +240,19 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     if (affiliateUser) {
       setProfileName(affiliateUser.name || '');
       setProfilePhone(affiliateUser.phone || '');
-      setProfilePaymentInfo(affiliateUser.paymentInfo || '');
+      setProfilePaymentAccount(affiliateUser.paymentAccount || emptyAffiliatePaymentAccount());
     }
   }, [affiliateUser]);
 
   // Load config & clicks & orders
   useEffect(() => {
+    if (preview) {
+      setSystemConfig(preview.config);
+      setClicks(preview.clicks);
+      setFetchedOrders(orders || []);
+      setIsLoading(false);
+      return;
+    }
     let isMounted = true;
     setIsLoading(true);
 
@@ -253,7 +283,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [affiliateCode, orders]);
+  }, [affiliateCode, orders, preview]);
 
   // Generate QR code for referral URL
   useEffect(() => {
@@ -284,6 +314,10 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       affiliateCommissionRate: ord.affiliateCommissionRate,
       affiliateCommissionAmount: ord.affiliateCommissionAmount,
       affiliateMerchandiseValue: ord.affiliateMerchandiseValue,
+      affiliateCommissionPaid: ord.affiliateCommissionPaid,
+      affiliateCommissionPaidAmount: ord.affiliateCommissionPaidAmount,
+      affiliateCommissionPaidAt: ord.affiliateCommissionPaidAt,
+      affiliateCommissionPaidBy: ord.affiliateCommissionPaidBy,
       subtotal: ord.subtotal,
       totalPrice: ord.totalPrice,
       discountAmount: ord.discountAmount,
@@ -309,6 +343,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     }
     return calculateAffiliateStats(affiliateUser, activeOrdersList);
   }, [affiliateUser, activeOrdersList]);
+  const commissionPayments = useMemo(() => getAffiliateCommissionPayments(affiliateUser, activeOrdersList, systemConfig.defaultCommissionRate), [affiliateUser, activeOrdersList, systemConfig.defaultCommissionRate]);
 
   // Date range cutoff timestamps & previous period comparison window
   const dateRangeBounds = useMemo(() => {
@@ -621,7 +656,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     ];
 
     return (
-      <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-neutral-200/80 shrink-0 flex flex-col justify-between select-none lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:h-dvh lg:overflow-y-auto lg:overscroll-contain">
+      <aside className={`w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-neutral-200/80 shrink-0 flex flex-col justify-between select-none lg:fixed lg:left-0 lg:z-30 lg:overflow-y-auto lg:overscroll-contain ${preview ? 'lg:top-12 lg:bottom-0 lg:h-[calc(100dvh-3rem)]' : 'lg:inset-y-0 lg:h-dvh'}`}>
         <div>
           {/* Brand & Portal Header */}
           <div className="p-5 lg:p-6 border-b border-neutral-100 flex items-center justify-between">
@@ -723,11 +758,11 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
             {/* Logout Action */}
             <button
               type="button"
-              onClick={onLogout}
+              onClick={() => setConfirmLogout(true)}
               className="w-full flex items-center gap-2 px-3 py-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5 text-rose-500" />
-              <span>Đăng xuất tài khoản</span>
+              <span>{preview ? 'Thoát bản xem thử' : 'Đăng xuất tài khoản'}</span>
             </button>
           </div>
         </div>
@@ -755,7 +790,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
         {/* Controls: Date range filter & Profile snapshot */}
         <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
           {/* Date range filter segmented control */}
-          <div className="flex items-center rounded-xl bg-neutral-100 p-1 border border-neutral-200/70 text-xs">
+          {(activeTab === 'overview' || activeTab === 'analytics') && <div className="flex items-center rounded-xl bg-neutral-100 p-1 border border-neutral-200/70 text-xs" aria-label="Lọc ngày thống kê">
             {(['7days', '30days', '90days', 'all'] as OrdersDateRangePreset[]).map((preset) => {
               const labelMap: Record<OrdersDateRangePreset, string> = {
                 '7days': '7 ngày',
@@ -780,7 +815,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                 </button>
               );
             })}
-          </div>
+          </div>}
 
           {/* User profile summary pill */}
           <div className="flex items-center gap-2.5 pl-2 sm:border-l border-neutral-200">
@@ -1218,6 +1253,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                   <th className="py-3 px-4 text-right">Giá trị tính hoa hồng</th>
                   <th className="py-3 px-4 text-center">Tỷ lệ áp dụng</th>
                   <th className="py-3 px-4 sm:px-6 text-right">Hoa hồng ghi nhận</th>
+                  <th className="py-3 px-4 text-center">Thanh toán hoa hồng</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -1280,6 +1316,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
                       <td className="py-3.5 px-4 sm:px-6 text-right font-mono font-semibold text-rose-700 text-xs sm:text-sm">
                         +{commAmount.toLocaleString('vi-VN')}đ
                       </td>
+                      <td className="py-3.5 px-4 text-center"><AffiliateCommissionPaymentBadge order={ord} /></td>
                     </tr>
                   );
                 })}
@@ -2099,15 +2136,20 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       setProfileSuccessMsg(null);
 
       try {
+        const hasPayment = Object.values(profilePaymentAccount).some(value => value.trim());
+        const paymentError = hasPayment ? validateAffiliatePayment(profilePaymentAccount) : null;
+        if (paymentError) throw new Error(paymentError);
         const updatedUser: SellerUser = {
           ...affiliateUser,
           name: profileName.trim() || affiliateUser.name,
           phone: profilePhone.trim() || affiliateUser.phone,
-          paymentInfo: profilePaymentInfo.trim() || affiliateUser.paymentInfo
+          paymentInfo: hasPayment ? formatAffiliatePayment(profilePaymentAccount) : affiliateUser.paymentInfo,
+          paymentAccount: hasPayment ? { ...profilePaymentAccount, accountNumber: profilePaymentAccount.accountNumber.trim(), accountName: profilePaymentAccount.accountName.trim() } : undefined
         };
 
-        await saveSellerToFirestore(updatedUser);
-        setProfileSuccessMsg('Đã lưu thông tin tài khoản thành công!');
+        if (!preview) await saveSellerToFirestore(updatedUser);
+        onLoginSuccess?.(updatedUser);
+        setProfileSuccessMsg(preview ? 'Đã cập nhật bản xem thử. Dữ liệu thật không thay đổi.' : 'Đã lưu thông tin tài khoản thành công!');
         setTimeout(() => setProfileSuccessMsg(null), 3000);
       } catch (err: any) {
         alert(err?.message || 'Có lỗi khi lưu thông tin tài khoản.');
@@ -2177,18 +2219,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
             </div>
 
             {/* Editable Payment Info */}
-            <div>
-              <label className="block font-bold text-neutral-800 mb-1">
-                Thông tin nhận hoa hồng (STK, Tên ngân hàng, Chủ tài khoản)
-              </label>
-              <textarea
-                rows={3}
-                value={profilePaymentInfo}
-                onChange={(e) => setProfilePaymentInfo(e.target.value)}
-                placeholder="VD: MB Bank - STK: 0987654321 - Chủ TK: NGUYEN HOANG AN"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-900 focus:bg-white focus:border-rose-500 outline-none transition-colors"
-              />
-            </div>
+            <AffiliatePaymentSettings value={profilePaymentAccount} onChange={setProfilePaymentAccount} availableCommission={commissionPayments.available} affiliateCode={affiliateCode} legacyPaymentInfo={affiliateUser?.paymentInfo} preview={Boolean(preview)} />
 
             {/* Read-only system values */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">
@@ -2267,7 +2298,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-neutral-50/50 text-neutral-900 flex flex-col lg:flex-row selection:bg-rose-500 selection:text-white font-sans">
+    <div ref={dashboardRef} className="min-h-screen bg-neutral-50/50 text-neutral-900 flex flex-col lg:flex-row selection:bg-rose-500 selection:text-white font-sans">
       {/* 1. Left Sidebar Navigation */}
       {renderSidebar()}
 
@@ -2278,6 +2309,8 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
 
         {/* Viewport Content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl w-full">
+          {!isLoading && <section aria-label="Sổ hoa hồng" className="space-y-3"><div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[['Hoa hồng ghi nhận', commissionPayments.earned], ['Đã thanh toán', commissionPayments.paid], ['Hoa hồng đang có', commissionPayments.available]].map(([label, value]) => <div key={label} className="rounded-2xl border border-neutral-200 bg-white p-4"><p className="text-xs text-neutral-500">{label}</p><strong className="text-lg text-rose-800">{Number(value).toLocaleString('vi-VN')}đ</strong><p className="text-[10px] text-neutral-400 mt-1">Toàn thời gian</p></div>)}</div><div className="flex flex-wrap gap-3 text-xs"><button type="button" onClick={() => setShowPaymentHistory(!showPaymentHistory)} className="text-rose-700 font-semibold underline">{showPaymentHistory ? 'Ẩn' : 'Xem'} {commissionPayments.paidOrders} đơn đã trả hoa hồng</button>{!preview && !orders && <button type="button" disabled={refreshingPayments} onClick={refreshPayments} className="text-neutral-600 underline">{refreshingPayments ? 'Đang cập nhật...' : 'Cập nhật hoa hồng'}</button>}</div>{showPaymentHistory && <div className="rounded-xl border bg-white p-4 space-y-2"><h2 className="font-bold text-sm">Lịch sử trả hoa hồng</h2>{activeOrdersList.filter(order => affiliateUser && order.affiliateCommissionPaid && isAffiliateOrder(affiliateUser, order)).map(order => <div key={order.id} className="flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-xs"><span className="font-mono">{order.id}</span><AffiliateCommissionPaymentBadge order={order} /></div>)}{commissionPayments.paidOrders === 0 && <p className="text-xs text-neutral-500">Chưa có đơn được admin đánh dấu đã trả.</p>}</div>}</section>}
+          {!isLoading && activeTab !== 'guide' && <AffiliateCommissionPolicy affiliate={affiliateUser} products={products} defaultRate={systemConfig.defaultCommissionRate} />}
           {isLoading ? (
             <div className="space-y-6 animate-pulse">
               <div className="h-44 bg-neutral-200/60 rounded-2xl" />
@@ -2333,6 +2366,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       </div>
 
       {/* QR Code Modal Shortcut */}
+      {confirmLogout && <div role="dialog" aria-modal="true" aria-label="Xác nhận đăng xuất" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><div className="rounded-2xl bg-white p-6 max-w-sm w-full space-y-4"><h2 className="font-bold text-lg">{preview ? 'Thoát bản xem thử?' : 'Đăng xuất tài khoản?'}</h2><p className="text-sm text-neutral-600">{preview ? 'Phiên đăng nhập admin vẫn được giữ nguyên.' : 'Bạn cần đăng nhập lại để xem đơn hàng và hoa hồng của mình.'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setConfirmLogout(false)} className="rounded-xl border px-4 py-2 text-sm">Hủy</button><button type="button" onClick={() => { setConfirmLogout(false); onLogout(); }} className="rounded-xl bg-rose-700 text-white px-4 py-2 text-sm">{preview ? 'Thoát preview' : 'Đăng xuất'}</button></div></div></div>}
       {showQrModal && qrDataUrl && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border border-neutral-100 text-center space-y-4">

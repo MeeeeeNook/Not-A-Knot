@@ -252,6 +252,14 @@ export interface RevenueTierCommission {
   rate: number; // Commission percentage (e.g. 12 for 12%)
 }
 
+export interface AffiliatePaymentAccount {
+  bankBin: string;
+  bankCode: string;
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+}
+
 export interface SellerUser {
   id: string;
   username: string;
@@ -271,6 +279,7 @@ export interface SellerUser {
   affiliateCode?: string; // Unique uppercase affiliate code, e.g. "AN001"
   commissionRate?: number; // Configurable base commission percentage (e.g. 10 for 10%)
   paymentInfo?: string; // Optional banking note for manual payout
+  paymentAccount?: AffiliatePaymentAccount;
   cookieDurationDays?: number; // Custom cookie duration for this affiliate in days (e.g. 30, 60, 90). Falls back to system config if undefined.
   maxOrdersPerCookieSession?: number; // Max orders per cookie session: 1 = first order only (default), 2, 3... or 0 for unlimited.
   commissionModel?: 'standard' | 'by_product' | 'tiered'; // Advanced commission calculation mode
@@ -299,7 +308,7 @@ export interface SellerUser {
 export interface AuthorizedSellerItem {
   email: string;
   name?: string;
-  role: 'deputy_admin' | 'member';
+  role: 'deputy_admin' | 'member' | 'affiliate';
   addedBy: string;
   createdAt: string;
   isActive: boolean;
@@ -374,6 +383,10 @@ export interface OrderRecord {
   affiliateName?: string; // Affiliate's display name
   affiliateCommissionRate?: number; // Snapshot of commission percentage at the time of order placement (e.g. 10 for 10%)
   affiliateCommissionAmount?: number; // Computed commission = merchandiseValueAfterDiscounts * rate / 100
+  affiliateCommissionPaid?: boolean;
+  affiliateCommissionPaidAmount?: number;
+  affiliateCommissionPaidAt?: string;
+  affiliateCommissionPaidBy?: string;
   affiliateMerchandiseValue?: number; // Merchandise value after discounts (excluding shipping)
   isAdminPlacingOrder?: boolean; // Flag indicating if an authenticated admin/staff placed this order
 }

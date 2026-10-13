@@ -52,7 +52,7 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
       <section className={card}>
         <h3 className="text-base font-bold text-neutral-900">1. Bắt đầu chia sẻ</h3>
         <ol className="list-decimal pl-5 space-y-3">
-          <li>Vào <strong>Cài đặt</strong>, kiểm tra tên, số điện thoại và thông tin nhận hoa hồng: tên ngân hàng, số tài khoản, chủ tài khoản. Nhấn <strong>Lưu thay đổi</strong>.</li>
+          <li>Vào <strong>Cài đặt → Thông tin thanh toán</strong>, chọn ngân hàng, nhập số tài khoản và chủ tài khoản. Nhấn <strong>Lưu thay đổi</strong>. Bạn có thể chọn số tiền trong phạm vi hoa hồng ghi nhận, tạo VietQR rồi tải ảnh hoặc sao chép link gửi quản trị viên để đối soát.</li>
           <li>Mở <strong>Link &amp; Công cụ</strong>. Sao chép link trang chủ hoặc chọn danh mục, bộ sưu tập hay sản phẩm muốn giới thiệu. Danh sách lấy từ dữ liệu đang hiển thị trên cửa hàng.</li>
           <li>Dùng nút mở liên kết để kiểm tra đúng trang đích. Khi chia sẻ, giữ nguyên phần <strong>ref=</strong> kèm mã đối tác trong link để hệ thống nhận diện bạn.</li>
           <li>Nếu cần QR, chọn <strong>Tạo mã QR</strong> trên sản phẩm hoặc dùng QR trang chủ, rồi tải ảnh PNG. QR chứa liên kết giới thiệu; khách cần mở liên kết sau khi quét để ghi nhận lượt truy cập.</li>
@@ -116,7 +116,8 @@ export function AffiliateGuide({ affiliate, config, products, onOpenLinks, onOpe
           <li><strong>Tổng quan / Thống kê:</strong> theo dõi lượt nhấp, số đơn, giá trị sản phẩm và hoa hồng theo khoảng thời gian đã chọn.</li>
           <li><strong>Đơn hàng:</strong> tra mã đơn, xem trạng thái, giá trị ghi nhận và hoa hồng. Thông tin cá nhân khách hàng được ẩn.</li>
           <li>Đơn bị hủy hoặc xóa bị loại khỏi tổng hoa hồng. Hoa hồng đang hiển thị không đồng nghĩa với tiền đã được chuyển cho bạn.</li>
-          <li>Thông tin ngân hàng trong <strong>Cài đặt</strong> được dùng để đối soát và chuyển khoản thủ công. Trang này chưa có chức năng rút tiền hoặc lịch thanh toán tự động; liên hệ Not A Knot để xác nhận kỳ đối soát và khoản thanh toán.</li>
+          <li><strong>Sổ hoa hồng</strong> hiển thị tổng ghi nhận, số admin đã đánh dấu trả và số còn có thể nhận. Chọn <strong>Xem đơn đã trả hoa hồng</strong> để xem mã đơn, số tiền và ngày trả. Admin chỉ đánh dấu sau khi chuyển khoản; nếu đánh dấu nhầm có thể bỏ tích.</li>
+          <li>Trong <strong>Cài đặt → Thông tin thanh toán</strong>, chọn số tiền không vượt quá hoa hồng đang có hoặc chọn <strong>Tất cả</strong> rồi tạo QR gửi admin. Tạo QR không tự chuyển tiền, không đánh dấu đơn đã trả và không tự trừ số dư.</li>
         </ul>
         <button type="button" onClick={onOpenOrders} className="inline-flex items-center gap-1 font-semibold text-rose-700 text-xs">Xem đơn hàng của bạn <ChevronRight className="h-4 w-4" /></button>
       </section>

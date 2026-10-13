@@ -14,7 +14,6 @@ import {
 } from '../types';
 import { StoredOrder, saveOrderToFirestore, saveProductToFirestore } from '../firebase';
 import { formatOrderDateWithoutSeconds, generateTrackingNumber } from '../utils/orderFormatters';
-import { Lock } from './common/LockIcon';
 import {
   UserCheck,
   MapPin,
@@ -115,7 +114,7 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
 
     if (Array.isArray(sellers) && sellers.length > 0) {
       sellers.forEach((s) => {
-        if (s?.name && s.name.trim()) {
+        if (s?.name && s.role !== 'affiliate' && s.name.trim()) {
           rawList.push(s.name.trim());
         }
       });
@@ -1168,58 +1167,14 @@ export const AdminManualOrderForm: React.FC<AdminManualOrderFormProps> = ({
               </div>
 
               {/* Seller / Staff Dropdown */}
-              <div>
-                {(() => {
-                  const isLockedSeller = orderSource === 'website' || orderSource === 'mạng xã hội';
-                  return (
-                    <>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          {isLockedSeller ? (
-                            <Lock className="w-3.5 h-3.5 text-slate-500" />
-                          ) : (
-                            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-                          )}
-                          <span>
-                            Người bán / Nhân viên phụ trách {isLockedSeller ? '(Đã khóa)' : '*'}
-                          </span>
-                        </span>
-                        <span
-                          className={`text-[10px] ${
-                            isLockedSeller ? 'text-slate-400 font-medium' : 'text-slate-500 font-normal'
-                          }`}
-                        >
-                          {isLockedSeller ? 'Không áp dụng' : 'Ghi nhận doanh số'}
-                        </span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          disabled={isLockedSeller}
-                          value={isLockedSeller ? '' : selectedSellerName}
-                          onChange={(e) => setSelectedSellerName(e.target.value)}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                            isLockedSeller
-                              ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed select-none'
-                              : 'bg-amber-50/50 border border-amber-300 text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs'
-                          }`}
-                        >
-                          {isLockedSeller ? (
-                            <option value="">
-                              Đơn {orderSource === 'website' ? 'Website' : 'Mạng xã hội'} — Tự động ghi nhận
-                            </option>
-                          ) : (
-                            sortedSellers.map((name, idx) => (
-                              <option key={`seller-opt-${name}-${idx}`} value={name}>
-                                {name}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
+              {orderSource === 'trực tiếp' && <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <span className="flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-amber-600" />Người bán / Nhân viên phụ trách *</span>
+                </label>
+                <select aria-label="Người bán / Nhân viên phụ trách" value={selectedSellerName} onChange={(e) => setSelectedSellerName(e.target.value)} className="w-full px-3 py-2 rounded-lg text-xs font-semibold bg-amber-50/50 border border-amber-300 text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 cursor-pointer shadow-2xs">
+                  {sortedSellers.map((name, idx) => <option key={`seller-opt-${name}-${idx}`} value={name}>{name}</option>)}
+                </select>
+              </div>}
 
               {/* Customer Name */}
               <div>

@@ -491,6 +491,7 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   // Filtered sellers list
   const filteredSellers = useMemo(() => {
     return sellers.filter((s) => {
+      if (s.role === 'affiliate') return false;
       const matchSearch = 
         s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1165,8 +1166,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
   }
 
   const staffAuthorizedList = useMemo(() => {
-    return authorizedEmails.filter(a => !AUTHORIZED_ROOT_ADMIN_EMAILS.includes(a.email.trim().toLowerCase()));
-  }, [authorizedEmails]);
+    return authorizedEmails.filter((a): a is AuthorizedSellerItem & { role: 'deputy_admin' | 'member' } => a.role !== 'affiliate' && !sellers.some(s => s.role === 'affiliate' && s.googleEmail?.toLowerCase() === a.email.toLowerCase()) && !AUTHORIZED_ROOT_ADMIN_EMAILS.includes(a.email.trim().toLowerCase()));
+  }, [authorizedEmails, sellers]);
   const totalCount = 2 + staffAuthorizedList.length;
   const deputyCount = staffAuthorizedList.filter(a => a.role === 'deputy_admin').length;
   const memberCount = staffAuthorizedList.filter(a => a.role !== 'deputy_admin').length;
