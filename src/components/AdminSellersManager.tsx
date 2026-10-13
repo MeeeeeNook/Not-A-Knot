@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import { AdminTabHeader } from './admin/AdminTabHeader';
-import { AdminAffiliatesTab } from './admin/AdminAffiliatesTab';
+import { AffiliateAccountEmailTable } from './admin/AffiliateAccountEmailTable';
 import { initializeApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { SellerUser, SystemLogItem, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, Product, CategoryItem, CollectionInfo, StoredOrder as AffiliateStoredOrder } from '../types';
+import { SellerUser, SystemLogItem, AuthorizedSellerItem, UnauthorizedLoginAttemptItem } from '../types';
 import { 
   db, 
   firebaseConfig, 
@@ -46,16 +46,11 @@ import {
 import { fetchSystemLogsFromFirestore, subscribeToSystemLogs, logAdminLogin } from '../utils/logger';
 
 interface AdminSellersManagerProps {
-  products: Product[];
-  categories: CategoryItem[];
-  collections: CollectionInfo[];
   sellers: SellerUser[];
   orders: StoredOrder[];
-  affiliateOrders: AffiliateStoredOrder[];
   currentAdmin: SellerUser | null;
   onUpdateSellers: (newSellers: SellerUser[]) => void;
   onUpdateCurrentAdmin?: (updatedAdmin: SellerUser) => void;
-  onUpdateOrders: (orders: AffiliateStoredOrder[]) => void;
 }
 
 // Helper to convert 2-letter ISO country code or country name to flag emoji
@@ -142,18 +137,12 @@ function getSellerPresenceInfo(seller: SellerUser, logs: SystemLogItem[]) {
 }
 
 export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
-  products,
-  categories,
-  collections,
   sellers,
   orders,
-  affiliateOrders,
   currentAdmin,
   onUpdateSellers,
-  onUpdateCurrentAdmin,
-  onUpdateOrders
+  onUpdateCurrentAdmin
 }) => {
-  const [accountGroup, setAccountGroup] = useState<'admin' | 'affiliate'>('admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<'all' | 'root_admin' | 'deputy_admin' | 'member'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -1186,10 +1175,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
 
   return (
     <div className="space-y-6 sm:space-y-8 text-slate-900 animate-fadeIn pb-24 sm:pb-12">
-      <nav aria-label="Nhóm tài khoản" className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2">
-        {([['admin', 'Admin', totalCount], ['affiliate', 'Affiliate', sellers.filter(s => s.role === 'affiliate').length]] as const).map(([group, label, count]) => <button key={group} type="button" aria-pressed={accountGroup === group} onClick={() => setAccountGroup(group)} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${accountGroup === group ? 'bg-rose-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>{label} ({count})</button>)}
-      </nav>
-      {accountGroup === 'affiliate' ? <AdminAffiliatesTab products={products} categories={categories} collections={collections} sellers={sellers} orders={affiliateOrders} currentAdmin={currentAdmin} isRootAdmin={isRootAdmin} onUpdateSellers={onUpdateSellers} onUpdateOrders={onUpdateOrders} /> : <>
       {/* 1. Header Banner & Quick Actions - Unified Header */}
       <AdminTabHeader
         icon={<ShieldCheck className="w-5 h-5 text-amber-900" />}
@@ -1619,6 +1604,8 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         </div>
       </div>
 
+      <AffiliateAccountEmailTable sellers={sellers} authorizedEmails={authorizedEmails} reservedEmails={getRootAdminEmails()} onUpdateSellers={onUpdateSellers} />
+
       {/* 3. BẢNG NHẬT KÝ CÁC LƯỢT ĐĂNG NHẬP KHÔNG ĐƯỢC XÁC THỰC (UNAUTHORIZED ATTEMPTS LOG) */}
       <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-rose-50/40">
@@ -2038,7 +2025,6 @@ export const AdminSellersManager: React.FC<AdminSellersManagerProps> = ({
         </div>
       )}
 
-      </>}
     </div>
   );
 };

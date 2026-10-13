@@ -863,10 +863,6 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
         <div className="relative max-w-4xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-600 mb-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Chương trình Tiếp thị liên kết chính thức</span>
-              </div>
               <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
                 Xin chào, {affiliateUser?.name || affiliateUser?.username || 'bạn'}!
               </h2>
