@@ -411,6 +411,8 @@ export interface ContactMessage {
   timestamp: number;
   isRead?: boolean;
   status?: 'unread' | 'read' | 'replied';
+  type?: 'contact' | 'affiliate_request';
+  facebookUrl?: string;
 }
 
 export interface CollectionInfo {

@@ -17,6 +17,7 @@ interface FooterProps {
   onOpenOrderTracker?: () => void;
   onOpenPolicy?: (tab?: 'privacy' | 'terms' | 'returns' | 'shipping_payment' | 'transparency') => void;
   onOpenAffiliate?: () => void;
+  affiliateHref?: string;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -24,6 +25,7 @@ export const Footer: React.FC<FooterProps> = ({
   categories = [],
   onOpenAdmin,
   onOpenAffiliate,
+  affiliateHref = '/affiliate/join',
   onSelectCollection,
   onSelectCategory,
   onOpenAllCatalog,
@@ -267,13 +269,13 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="/affiliate"
+                  href={affiliateHref}
                   onClick={(e) => {
                     e.preventDefault();
                     if (onOpenAffiliate) {
                       onOpenAffiliate();
                     } else {
-                      window.location.href = '/affiliate';
+                      window.location.href = affiliateHref;
                     }
                   }}
                   className="hover:text-rose-400 transition-colors inline-flex items-center gap-1.5 text-rose-300/90 font-medium"

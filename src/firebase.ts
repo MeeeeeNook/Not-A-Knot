@@ -2934,7 +2934,9 @@ export const fetchContactMessagesFromFirestore = async (): Promise<ContactMessag
         createdAt: data.createdAt || new Date().toISOString(),
         timestamp: data.timestamp || Date.now(),
         isRead: data.isRead ?? false,
-        status: data.status || (data.isRead ? 'read' : 'unread')
+        status: data.status || (data.isRead ? 'read' : 'unread'),
+        type: data.type === 'affiliate_request' ? 'affiliate_request' : undefined,
+        facebookUrl: typeof data.facebookUrl === 'string' ? data.facebookUrl : undefined
       });
       recordOperation('read');
     });
@@ -2979,7 +2981,9 @@ export const subscribeToContactMessagesFromFirestore = (
             createdAt: data.createdAt || new Date().toISOString(),
             timestamp: data.timestamp || Date.now(),
             isRead: data.isRead ?? false,
-            status: data.status || (data.isRead ? 'read' : 'unread')
+            status: data.status || (data.isRead ? 'read' : 'unread'),
+            type: data.type === 'affiliate_request' ? 'affiliate_request' : undefined,
+            facebookUrl: typeof data.facebookUrl === 'string' ? data.facebookUrl : undefined
           });
         });
         results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -2997,7 +3001,8 @@ export const subscribeToContactMessagesFromFirestore = (
   }
 };
 
-export const saveContactMessageToFirestore = async (msg: ContactMessage): Promise<void> => {
+export const saveContactMessageToFirestore = async (msg: ContactMessage, options: { requireServer?: boolean } = {}): Promise<void> => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     const msgId = msg.id || `msg-${Date.now()}`;
     const docRef = doc(db, 'contact_messages', msgId);
@@ -3009,7 +3014,11 @@ export const saveContactMessageToFirestore = async (msg: ContactMessage): Promis
       isRead: msg.isRead ?? false,
       status: msg.status || 'unread'
     });
-    await setDoc(docRef, payload, { merge: true });
+    const write = setDoc(docRef, payload, { merge: true });
+    await (options.requireServer ? Promise.race([write, new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Chưa xác nhận được yêu cầu. Vui lòng thử lại.')), 20000);
+    })]) : write);
+    clearTimeout(timeout);
     recordOperation('write', 1, JSON.stringify(payload).length);
 
     // Also update local cache
@@ -3022,6 +3031,8 @@ export const saveContactMessageToFirestore = async (msg: ContactMessage): Promis
       // ignore
     }
   } catch (err) {
+    clearTimeout(timeout);
+    if (options.requireServer) throw err;
     console.warn('Lưu tin nhắn liên hệ vào Firestore:', err);
     // Ensure saved to local cache even if Firestore fails
     try {

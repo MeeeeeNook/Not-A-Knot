@@ -44,6 +44,7 @@ const AdminLoginPage = React.lazy(() => import('./components/AdminLoginPage').th
 const MaintenanceScreen = React.lazy(() => import('./components/MaintenanceScreen').then((m) => ({ default: m.MaintenanceScreen })));
 const LegalPoliciesModal = React.lazy(() => import('./components/LegalPoliciesModal').then((m) => ({ default: m.LegalPoliciesModal })));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
+const AffiliateLandingPage = React.lazy(() => import('./components/AffiliateLandingPage').then(m => ({ default: m.AffiliateLandingPage })));
 const AffiliateDashboard = React.lazy(() => import('./components/AffiliateDashboard').then((m) => ({ default: m.AffiliateDashboard })));
 const NotFoundPage = React.lazy(() => import('./components/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const CookieConsentBanner = React.lazy(() => import('./components/CookieConsentBanner').then((m) => ({ default: m.CookieConsentBanner })));
@@ -92,6 +93,7 @@ import {
   setCatalogSEO,
   setAboutSEO,
   setContactSEO,
+  setAffiliateIntroSEO,
   setOrderTrackerSEO,
   setCartSEO,
   setAdminSEO,
@@ -148,7 +150,7 @@ const ViewLoadingFallback = () => (
 
 export default function App() {
   // Navigation & View State (Landing, Collection Detail, Full Catalog, Standalone About Page, Standalone Contact Page, Standalone Admin Page, Standalone Product Detail Page, Order Tracking Page, Full Cart Page, Custom 404 Page, Dedicated Affiliate Portal)
-  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart' | 'not-found' | 'affiliate'>('landing');
+  const [currentView, setCurrentView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'product-detail' | 'order-tracker' | 'cart' | 'not-found' | 'affiliate' | 'affiliate-intro'>('landing');
   const [previousView, setPreviousView] = useState<'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin'>('catalog');
   const [activeCollectionId, setActiveCollectionId] = useState<string>('event_0209');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -617,7 +619,19 @@ export default function App() {
       return;
     }
 
+    if (routePath === 'affiliate/join') {
+      if (getAdminSession()?.role === 'affiliate' && auth.currentUser) {
+        window.history.replaceState(null, '', '/affiliate');
+      } else {
+        setCurrentView('affiliate-intro');
+        setIsAdminLoginModalOpen(false);
+        setIsCartOpen(false);
+        return;
+      }
+    }
+
     if (
+      routePath === 'affiliate/join' ||
       routePath === 'affiliate' ||
       routePath === 'affiliates' ||
       routePath === 'affiliate/guide' ||
@@ -954,6 +968,8 @@ export default function App() {
       setAboutSEO();
     } else if (currentView === 'contact') {
       setContactSEO();
+    } else if (currentView === 'affiliate-intro') {
+      setAffiliateIntroSEO();
     } else if (currentView === 'order-tracker') {
       setOrderTrackerSEO(orderTrackerInitialCode);
     } else if (currentView === 'cart') {
@@ -2240,6 +2256,12 @@ export default function App() {
           </React.Suspense>
         )}
 
+        {currentView === 'affiliate-intro' && !isMaintenanceActiveForUser && (
+          <React.Suspense fallback={<ViewLoadingFallback />}>
+            <AffiliateLandingPage products={visibleProducts} onLogin={() => navigateTo('/affiliate')} />
+          </React.Suspense>
+        )}
+
         {/* VIEW 6: Dedicated Standalone Admin Portal Page with Strict Auth Gating */}
         {currentView === 'admin' && (
           (currentSeller && auth.currentUser) ? (
@@ -2430,10 +2452,8 @@ export default function App() {
           onOpenContact={handleOpenContact}
           onOpenOrderTracker={() => handleOpenOrderTracker()}
           onOpenPolicy={handleOpenPolicy}
-          onOpenAffiliate={() => {
-            setCurrentView('affiliate');
-            navigateTo('/affiliate');
-          }}
+          affiliateHref={currentSeller?.role === 'affiliate' && auth.currentUser ? '/affiliate' : '/affiliate/join'}
+          onOpenAffiliate={() => navigateTo(currentSeller?.role === 'affiliate' && auth.currentUser ? '/affiliate' : '/affiliate/join')}
         />
       )}
 
