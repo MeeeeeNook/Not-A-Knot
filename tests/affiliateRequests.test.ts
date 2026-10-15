@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAffiliateRequest, normalizeFacebookUrl } from '../src/utils/affiliateRequests.ts';
+import { buildAffiliateRequest, normalizeFacebookUrl, validateAffiliateRequestStep } from '../src/utils/affiliateRequests.ts';
 
 test('affiliate application is one unread contact record containing all applicant details', () => {
   const message = buildAffiliateRequest({ name: ' An Nguyễn ', email: ' An@Example.com ', zaloPhone: '+1 202 555 0123', facebookUrl: 'facebook.com/an.nguyen' }, 'request-1', new Date('2026-10-15T08:00:00Z'));
@@ -38,4 +38,15 @@ test('Zalo phone is optional; a valid email remains required for contact', () =>
   assert.ok(!message.message.includes('SĐT Zalo:'));
   assert.equal(buildAffiliateRequest({ ...form, zaloPhone: '   ' }, 'blank-phone').phone, undefined);
   for (const email of ['', 'not-an-email', 'test@', '@example.com']) assert.throws(() => buildAffiliateRequest({ ...form, email }, 'invalid-email'));
+});
+
+test('each application step validates only its own fields; final submission requires both steps', () => {
+  const identityOnly = { name: 'An', email: 'an@example.com', facebookUrl: '', zaloPhone: '' };
+  assert.doesNotThrow(() => validateAffiliateRequestStep(identityOnly, 0));
+  assert.throws(() => validateAffiliateRequestStep(identityOnly, 1), /Facebook/);
+  assert.throws(() => buildAffiliateRequest(identityOnly, 'incomplete'), /Facebook/);
+  const contactOnly = { ...identityOnly, name: '', email: '', facebookUrl: 'facebook.com/an' };
+  assert.doesNotThrow(() => validateAffiliateRequestStep(contactOnly, 1));
+  assert.throws(() => validateAffiliateRequestStep(contactOnly, 0), /tên/);
+  assert.throws(() => buildAffiliateRequest(contactOnly, 'incomplete'), /tên/);
 });
