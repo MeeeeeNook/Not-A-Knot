@@ -55,6 +55,7 @@ test('editing preserves account identity/history while clearing optional setting
   assert.equal(result.cookieDurationDays, undefined); assert(Object.hasOwn(result, 'cookieDurationDays'));
   assert.equal(result.phone, ''); assert.equal(result.paymentInfo, '');
   assert.deepEqual(result.productCommissions, []); assert.deepEqual(result.tieredCommissions, []);
+  assert.equal(buildAffiliatePartner(draft, { ...existing, createdAt: '' }, [existing]).createdAt, '');
 });
 
 test('new partners receive unique IDs/usernames and a normalized Google email', () => {
@@ -64,4 +65,5 @@ test('new partners receive unique IDs/usernames and a normalized Google email', 
   const second = buildAffiliatePartner(draft, null, [occupied]);
   assert.notEqual(first.id, second.id); assert.equal(first.username, 'aff_new_1'); assert.equal(first.googleEmail, 'new@example.com');
   assert.equal(first.linkedGoogleAt, undefined); assert.equal(first.googleUid, undefined);
+  assert.ok(Number.isFinite(Date.parse(first.createdAt)));
 });

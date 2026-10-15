@@ -96,6 +96,6 @@ export function buildAffiliatePartner(draft: AffiliatePartnerDraft, editing: Sel
     productCommissions: draft.model === 'by_product' ? draft.productRates.map((p) => ({ ...p })) : [],
     tieredCommissions: draft.model === 'tiered' ? [...draft.tiers].sort((a, b) => a.minAmount - b.minAmount) : [],
     phone: draft.phone.trim(), paymentInfo: draft.paymentInfo.trim(),
-    avatarColor: editing?.avatarColor || '#991B1B', createdAt: editing?.createdAt || now
+    avatarColor: editing?.avatarColor || '#991B1B', createdAt: editing ? editing.createdAt : now
   };
 }

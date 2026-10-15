@@ -260,6 +260,17 @@ export interface AffiliatePaymentAccount {
   accountName: string;
 }
 
+export type AffiliateActivityAction = 'login' | 'hub_open' | 'tab_view' | 'orders_refresh' | 'profile_update' | 'payment_qr' | 'logout';
+
+export interface AffiliateActivityEntry {
+  id: string;
+  action: AffiliateActivityAction;
+  timestamp: string;
+  ip?: string;
+  device?: string;
+  tab?: string;
+}
+
 export interface SellerUser {
   id: string;
   username: string;
@@ -292,6 +303,7 @@ export interface SellerUser {
   lastLoginCountryCode?: string;
   lastSeenAt?: string;
   lastDevice?: string;
+  affiliateActivity?: AffiliateActivityEntry[];
   avatarColor?: string;
   phone?: string;
   isAutoCreated?: boolean;
