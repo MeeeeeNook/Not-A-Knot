@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowRight, ArrowUpRight, Check, CheckCircle2, Link2, X } from 'lucide-react';
 import type { Product } from '../types';
@@ -8,11 +8,22 @@ import { LazyProductImage } from './LazyProductImage';
 
 export function AffiliateLandingPage({ products, onLogin }: { products: Product[]; onLogin: () => void }) {
   const [showForm, setShowForm] = useState(false), [sent, setSent] = useState(false), [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ name: '', zaloPhone: '', facebookUrl: '' });
+  const [form, setForm] = useState({ name: '', email: '', zaloPhone: '', facebookUrl: '' });
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null), requestId = useRef(''), submittingRef = useRef(false);
   const photos = products.filter(product => product.image || product.images?.length).slice(0, 2);
   const close = () => setShowForm(false);
+  useLayoutEffect(() => {
+    // Reset after the lazy page has mounted, when Safari may retain the footer's scroll position.
+    const resetScroll = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+    resetScroll();
+    const frame = requestAnimationFrame(resetScroll);
+    return () => cancelAnimationFrame(frame);
+  }, []);
   useEffect(() => {
     if (!showForm) return;
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -49,7 +60,7 @@ export function AffiliateLandingPage({ products, onLogin }: { products: Product[
   const openForm = () => setShowForm(true);
   const photoSrc = (product: Product) => resolveAssetUrl(product.image || product.images?.[0] || '');
 
-  return <div className="bg-[#FAF9F6] text-[#38272b]">
+  return <div id="affiliate-landing-page" className="bg-[#FAF9F6] text-[#38272b]" style={{ overflowAnchor: 'none' }}>
     <div className="mx-auto max-w-6xl px-5 pb-12 pt-10 sm:px-8 sm:pb-16 sm:pt-14 lg:pt-20">
       <section className="grid items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-12" aria-labelledby="affiliate-intro-title">
         <div className="relative z-10">
@@ -88,12 +99,12 @@ export function AffiliateLandingPage({ products, onLogin }: { products: Product[
     {showForm && createPortal(<div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#24141b]/55 p-4 backdrop-blur-sm" onClick={event => { if (event.target === event.currentTarget) close(); }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="affiliate-request-title" aria-describedby="affiliate-request-description" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl bg-[#fffdf9] p-6 text-[#38272b] shadow-2xl sm:p-8">
         <button type="button" onClick={close} aria-label="Đóng đăng ký affiliate" className="absolute right-4 top-4 rounded-full p-2 text-[#9b858b] hover:bg-rose-50"><X className="h-4 w-4" /></button>
-        {sent ? <div className="py-7 text-center"><CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-rose-800" /><h2 id="affiliate-request-title" data-success-title tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none">Đã nhận đăng ký của bạn!</h2><p id="affiliate-request-description" className="mt-3 text-sm leading-7 text-[#8a787d]">Not A Knot sẽ xem yêu cầu và liên hệ với bạn qua Zalo hoặc Facebook đã cung cấp.</p><button type="button" onClick={close} className="mt-6 inline-flex items-center gap-2 rounded-full bg-rose-800 px-6 py-3 text-sm font-semibold text-white">Xong rồi<Check className="h-4 w-4" /></button></div> : <>
+        {sent ? <div className="py-7 text-center"><CheckCircle2 className="mx-auto mb-5 h-12 w-12 text-rose-800" /><h2 id="affiliate-request-title" data-success-title tabIndex={-1} className="text-2xl font-semibold tracking-tight outline-none">Đã nhận đăng ký của bạn!</h2><p id="affiliate-request-description" className="mt-3 text-sm leading-7 text-[#8a787d]">Not A Knot sẽ xem yêu cầu và liên hệ qua thông tin bạn đã cung cấp.</p><button type="button" onClick={close} className="mt-6 inline-flex items-center gap-2 rounded-full bg-rose-800 px-6 py-3 text-sm font-semibold text-white">Xong rồi<Check className="h-4 w-4" /></button></div> : <>
           <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-rose-800">LET'S CONNECT</p>
           <h2 id="affiliate-request-title" className="pr-5 text-2xl font-semibold tracking-tight">Làm quen một chút nhé.</h2>
           <p id="affiliate-request-description" className="mt-3 text-xs leading-6 text-[#8a787d]">Để lại thông tin, chúng mình sẽ liên hệ về đăng ký affiliate của bạn.</p>
           <form onSubmit={submit} noValidate className="mt-6 space-y-4">
-            {([['name', 'Tên của bạn', 'Bạn tên là…', 'text', 'name'], ['zaloPhone', 'Số điện thoại Zalo', 'Số điện thoại bạn dùng Zalo', 'tel', 'tel'], ['facebookUrl', 'Link Facebook', 'https://www.facebook.com/…', 'text', 'url']] as const).map(([key, label, placeholder, type, autoComplete]) => <div key={key}><label htmlFor={`affiliate-request-${key}`} className="mb-2 block text-xs font-semibold">{label}</label><input id={`affiliate-request-${key}`} type={type} autoComplete={autoComplete} inputMode={key === 'facebookUrl' ? 'url' : key === 'zaloPhone' ? 'tel' : 'text'} maxLength={key === 'facebookUrl' ? 2000 : key === 'name' ? 120 : 60} value={form[key]} onChange={event => { setForm({ ...form, [key]: event.target.value }); setError(''); }} disabled={submitting} required className="w-full rounded-xl border border-[#e7ded9] bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-[#b6a5a8] focus:border-rose-700 focus:ring-2 focus:ring-rose-100 disabled:opacity-60" placeholder={placeholder} /></div>)}
+            {([['name', 'Tên của bạn', 'Bạn tên là…', 'text', 'name'], ['email', 'Email', 'ban@email.com', 'email', 'email'], ['facebookUrl', 'Link Facebook', 'https://www.facebook.com/…', 'text', 'url'], ['zaloPhone', 'Số điện thoại Zalo', 'Số điện thoại bạn dùng Zalo', 'tel', 'tel']] as const).map(([key, label, placeholder, type, autoComplete]) => <div key={key}><label htmlFor={`affiliate-request-${key}`} className="mb-2 block text-xs font-semibold">{label}{key === 'zaloPhone' ? ' (tùy chọn)' : ' *'}</label><input id={`affiliate-request-${key}`} type={type} autoComplete={autoComplete} inputMode={key === 'facebookUrl' ? 'url' : key === 'email' ? 'email' : key === 'zaloPhone' ? 'tel' : 'text'} maxLength={key === 'facebookUrl' ? 2000 : key === 'name' ? 120 : key === 'email' ? 254 : 60} value={form[key]} onChange={event => { setForm({ ...form, [key]: event.target.value }); setError(''); }} disabled={submitting} required={key !== 'zaloPhone'} className="w-full rounded-xl border border-[#e7ded9] bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-[#b6a5a8] focus:border-rose-700 focus:ring-2 focus:ring-rose-100 disabled:opacity-60" placeholder={placeholder} /></div>)}
             {error && <p role="alert" className="rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-800">{error}</p>}
             <p className="text-[11px] leading-5 text-[#9b858b]">Thông tin này chỉ dùng để liên hệ và xử lý đăng ký affiliate của bạn.</p>
             <button type="submit" disabled={submitting} className="flex w-full items-center justify-center gap-3 rounded-full bg-rose-800 px-5 py-3.5 text-sm font-semibold text-white hover:bg-rose-900 disabled:cursor-wait disabled:opacity-60">{submitting ? 'Đang gửi yêu cầu…' : 'Gửi yêu cầu'}{!submitting && <ArrowRight className="h-4 w-4" />}</button>
