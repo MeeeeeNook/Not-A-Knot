@@ -22,6 +22,7 @@ import { emptyAffiliatePaymentAccount, formatAffiliatePayment, validateAffiliate
 import { getAffiliateCommissionPayments, isAffiliateOrder } from '../utils/affiliateCommissionPayments';
 import { AffiliateCommissionPaymentBadge } from './AffiliateCommissionPaymentBadge';
 import { AffiliateOrdersPage, OrdersDateRangePreset } from './AffiliateOrdersPage';
+import { useAffiliateActivity } from '../hooks/useAffiliateActivity';
 
 export interface AffiliateDashboardProps {
   products: Product[];
@@ -72,6 +73,21 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
   });
 
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const trackActivity = useAffiliateActivity(currentSeller, activeTab, Boolean(preview));
+  const [loggingOut, setLoggingOut] = useState(false);
+  const confirmAffiliateLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    let timer: ReturnType<typeof setTimeout>;
+    try {
+      await Promise.race([trackActivity('logout'), new Promise<void>(resolve => { timer = setTimeout(resolve, 1500); })]);
+    } finally {
+      clearTimeout(timer!);
+      setConfirmLogout(false);
+      onLogout();
+      setLoggingOut(false);
+    }
+  };
   useEffect(() => { if (preview) dashboardRef.current?.parentElement?.scrollTo({ top: 0 }); else window.scrollTo({ top: 0, behavior: 'instant' }); }, [activeTab, Boolean(preview)]);
 
   // Date range filter: 'all' | '7days' | '30days' | '90days' | 'custom'
@@ -150,6 +166,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
     setRefreshMessage(null);
     try {
       setFetchedOrders(await fetchOrdersFromFirestore(true, { requireServer: true }) as StoredOrder[]);
+      if (showFeedback) void trackActivity('orders_refresh');
       if (showFeedback) setRefreshMessage({ error: false, text: 'Đơn hàng và hoa hồng đã được cập nhật.' });
     } catch {
       setRefreshMessage({ error: true, text: 'Không thể cập nhật đơn hàng. Dữ liệu trước đó vẫn được giữ nguyên. Vui lòng thử lại.' });
@@ -2154,7 +2171,10 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
           paymentAccount: hasPayment ? { ...profilePaymentAccount, accountNumber: profilePaymentAccount.accountNumber.trim(), accountName: profilePaymentAccount.accountName.trim() } : undefined
         };
 
-        if (!preview) await saveSellerToFirestore(updatedUser);
+        if (!preview) {
+          await saveSellerToFirestore(updatedUser);
+          void trackActivity('profile_update');
+        }
         onLoginSuccess?.(updatedUser);
         setProfileSuccessMsg(preview ? 'Đã cập nhật bản xem thử. Dữ liệu thật không thay đổi.' : 'Đã lưu thông tin tài khoản thành công!');
         setTimeout(() => setProfileSuccessMsg(null), 3000);
@@ -2226,7 +2246,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
             </div>
 
             {/* Editable Payment Info */}
-            <AffiliatePaymentSettings value={profilePaymentAccount} onChange={setProfilePaymentAccount} availableCommission={commissionPayments.available} affiliateCode={affiliateCode} legacyPaymentInfo={affiliateUser?.paymentInfo} preview={Boolean(preview)} />
+            <AffiliatePaymentSettings value={profilePaymentAccount} onChange={setProfilePaymentAccount} availableCommission={commissionPayments.available} affiliateCode={affiliateCode} legacyPaymentInfo={affiliateUser?.paymentInfo} preview={Boolean(preview)} onCreateQr={() => { void trackActivity('payment_qr'); }} />
 
             {/* Read-only system values */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">
@@ -2398,7 +2418,7 @@ export const AffiliateDashboard: React.FC<AffiliateDashboardProps> = ({
       </div>
 
       {/* QR Code Modal Shortcut */}
-      {confirmLogout && <div role="dialog" aria-modal="true" aria-label="Xác nhận đăng xuất" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><div className="rounded-2xl bg-white p-6 max-w-sm w-full space-y-4"><h2 className="font-bold text-lg">{preview ? 'Thoát bản xem thử?' : 'Đăng xuất tài khoản?'}</h2><p className="text-sm text-neutral-600">{preview ? 'Phiên đăng nhập admin vẫn được giữ nguyên.' : 'Bạn cần đăng nhập lại để xem đơn hàng và hoa hồng của mình.'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setConfirmLogout(false)} className="rounded-xl border px-4 py-2 text-sm">Hủy</button><button type="button" onClick={() => { setConfirmLogout(false); onLogout(); }} className="rounded-xl bg-rose-700 text-white px-4 py-2 text-sm">{preview ? 'Thoát preview' : 'Đăng xuất'}</button></div></div></div>}
+      {confirmLogout && <div role="dialog" aria-modal="true" aria-label="Xác nhận đăng xuất" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"><div className="rounded-2xl bg-white p-6 max-w-sm w-full space-y-4"><h2 className="font-bold text-lg">{preview ? 'Thoát bản xem thử?' : 'Đăng xuất tài khoản?'}</h2><p className="text-sm text-neutral-600">{preview ? 'Phiên đăng nhập admin vẫn được giữ nguyên.' : 'Bạn cần đăng nhập lại để xem đơn hàng và hoa hồng của mình.'}</p><div className="flex justify-end gap-2"><button type="button" onClick={() => setConfirmLogout(false)} className="rounded-xl border px-4 py-2 text-sm">Hủy</button><button type="button" disabled={loggingOut} onClick={() => { void confirmAffiliateLogout(); }} className="rounded-xl bg-rose-700 text-white px-4 py-2 text-sm disabled:opacity-50">{loggingOut ? 'Đang đăng xuất…' : preview ? 'Thoát preview' : 'Đăng xuất'}</button></div></div></div>}
       {showQrModal && qrDataUrl && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border border-neutral-100 text-center space-y-4">

@@ -8,7 +8,7 @@ type Bank = typeof initialBanks[number];
 const searchable = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
 const inputClass = 'w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-xs text-neutral-900 focus:bg-white focus:border-rose-500 outline-none';
 
-export function AffiliatePaymentSettings({ value, onChange, availableCommission, affiliateCode, legacyPaymentInfo, preview = false }: { value: AffiliatePaymentAccount; onChange: (account: AffiliatePaymentAccount) => void; availableCommission: number; affiliateCode: string; legacyPaymentInfo?: string; preview?: boolean }) {
+export function AffiliatePaymentSettings({ value, onChange, availableCommission, affiliateCode, legacyPaymentInfo, preview = false, onCreateQr }: { value: AffiliatePaymentAccount; onChange: (account: AffiliatePaymentAccount) => void; availableCommission: number; affiliateCode: string; legacyPaymentInfo?: string; preview?: boolean; onCreateQr?: () => void }) {
   const [banks, setBanks] = useState<Bank[]>(initialBanks);
   const [open, setOpen] = useState(false), [query, setQuery] = useState('');
   const [amount, setAmount] = useState(''), [error, setError] = useState(''), [qr, setQr] = useState<ReturnType<typeof createCommissionQrRequest> | null>(null);
@@ -33,7 +33,7 @@ export function AffiliatePaymentSettings({ value, onChange, availableCommission,
   }, [open]);
   const update = (patch: Partial<AffiliatePaymentAccount>) => { onChange({ ...value, ...patch }); setQr(null); setError(''); };
   const generate = () => {
-    try { const request = createCommissionQrRequest(value, Number(amount), available, affiliateCode); setQr(request); setError(''); setImageError(false); setNotice(''); }
+    try { const request = createCommissionQrRequest(value, Number(amount), available, affiliateCode); setQr(request); onCreateQr?.(); setError(''); setImageError(false); setNotice(''); }
     catch (e: any) { setError(e.message); }
   };
   const copy = async () => {

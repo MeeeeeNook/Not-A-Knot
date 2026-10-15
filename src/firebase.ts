@@ -28,9 +28,11 @@ import {
   limit,
   writeBatch,
   arrayUnion,
+  runTransaction,
   onSnapshot
 } from 'firebase/firestore';
-import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, VersionBackup, BackupScheduleConfig, SocialFeedConfig, OrderItemDetail } from './types';
+import { Product, CategoryItem, CollectionInfo, SiteContentConfig, ContactMessage, SellerUser, AuthorizedSellerItem, UnauthorizedLoginAttemptItem, VersionBackup, BackupScheduleConfig, SocialFeedConfig, OrderItemDetail, AffiliateActivityEntry } from './types';
+import { mergeAffiliateActivity, validAccountDate } from './utils/affiliateActivity';
 import { DEFAULT_CATEGORIES } from './data/categories';
 import {
   saveProductToIDB,
@@ -3172,7 +3174,7 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         isRootAdmin: !!data.isRootAdmin,
         role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
         isActive: data.isActive !== false,
-        createdAt: data.createdAt || new Date().toISOString(),
+        createdAt: data.role === 'affiliate' ? validAccountDate(data.createdAt) : data.createdAt || new Date().toISOString(),
         lastLoginAt: data.lastLoginAt,
         lastLoginIp: data.lastLoginIp || '',
         lastLoginCity: data.lastLoginCity || '',
@@ -3192,7 +3194,8 @@ export const fetchSellersFromFirestore = async (): Promise<SellerUser[]> => {
         commissionModel: data.commissionModel,
         productCommissions: Array.isArray(data.productCommissions) ? data.productCommissions : [],
         tieredCommissions: Array.isArray(data.tieredCommissions) ? data.tieredCommissions : [],
-        ipHistory: parsedHistory
+        ipHistory: parsedHistory,
+        affiliateActivity: mergeAffiliateActivity(data.affiliateActivity)
       });
     });
 
@@ -3288,6 +3291,10 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
     const docRef = doc(db, 'sellers', sellerId);
     
     const sellerCopy = { ...seller };
+    if (seller.role === 'affiliate') {
+      // Activity is updated atomically, never overwritten by a stale profile/settings save.
+      for (const field of ['affiliateActivity', 'lastLoginAt', 'lastLoginIp', 'lastSeenAt', 'lastDevice', 'ipHistory']) delete (sellerCopy as any)[field];
+    }
     // DO NOT OVERWRITE passwordHash / passwordSalt in Firestore with empty strings
     if (!sellerCopy.passwordHash) {
       delete (sellerCopy as any).passwordHash;
@@ -3385,7 +3392,7 @@ export const fetchAuthorizedSellersFromFirestore = async (): Promise<AuthorizedS
           name: data.name || '',
           role: data.role || 'member',
           addedBy: data.addedBy || '',
-          createdAt: data.createdAt || new Date().toISOString(),
+          createdAt: data.role === 'affiliate' ? validAccountDate(data.createdAt) : data.createdAt || new Date().toISOString(),
           isActive: data.isActive !== false
         });
       }
@@ -3514,6 +3521,27 @@ export const clearAllUnauthorizedLoginAttemptsFromFirestore = async (): Promise<
 /**
  * Updates seller's online presence, latest IP and device info on Firestore.
  */
+export const recordAffiliateActivityInFirestore = async (sellerId: string, entry: AffiliateActivityEntry): Promise<void> => {
+  if (!sellerId || !auth.currentUser) return;
+  const ref = doc(db, 'sellers', sellerId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists() || snapshot.data().role !== 'affiliate') return;
+    const data = snapshot.data();
+    const history = mergeAffiliateActivity(data.affiliateActivity, entry);
+    const latest = history[0];
+    const patch: Record<string, any> = { affiliateActivity: history };
+    // Concurrent tabs may deliver older events after newer ones.
+    if (!data.lastSeenAt || Date.parse(latest.timestamp) >= Date.parse(data.lastSeenAt)) {
+      patch.lastSeenAt = latest.timestamp;
+      if (latest.ip) patch.lastLoginIp = latest.ip;
+      if (latest.device) patch.lastDevice = latest.device;
+    }
+    if (entry.action === 'login' && (!data.lastLoginAt || Date.parse(entry.timestamp) >= Date.parse(data.lastLoginAt))) patch.lastLoginAt = entry.timestamp;
+    transaction.update(ref, patch);
+  });
+};
+
 export const updateSellerPresence = async (
   sellerId: string, 
   presenceData: {
