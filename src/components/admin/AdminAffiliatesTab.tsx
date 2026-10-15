@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users, Share2, Plus, Settings, Search, Edit3, Trash2, Copy, Check, ExternalLink, TrendingUp, ShoppingBag, DollarSign, Eye, CheckCircle2, X
 } from 'lucide-react';
-import { SellerUser, StoredOrder, AffiliateSystemConfig, Product, CategoryItem, CollectionInfo } from '../../types';
+import { SellerUser, StoredOrder, AffiliateSystemConfig, Product, CategoryItem, CollectionInfo, ContactMessage } from '../../types';
+import { AffiliateRequestsPanel } from './AffiliateRequestsPanel';
 import { AffiliatePartnerWizard } from './AffiliatePartnerWizard';
 import { AffiliateHubPreview } from './AffiliateHubPreview';
 import { AffiliateCommissionPolicy } from '../AffiliateCommissionPolicy';
@@ -28,6 +29,8 @@ interface AdminAffiliatesTabProps {
   onUpdateSellers: (updatedSellers: SellerUser[]) => void;
   currentAdmin?: SellerUser | null;
   isRootAdmin: boolean;
+  contactMessages?: ContactMessage[];
+  onMarkRequestRead?: (message: ContactMessage) => void;
 }
 
 export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
@@ -39,7 +42,9 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
   onUpdateOrders,
   onUpdateSellers,
   currentAdmin,
-  isRootAdmin
+  isRootAdmin,
+  contactMessages = [],
+  onMarkRequestRead
 }) => {
   // System Configuration State
   const [config, setConfig] = useState<AffiliateSystemConfig>(DEFAULT_AFFILIATE_CONFIG);
@@ -305,6 +310,8 @@ export const AdminAffiliatesTab: React.FC<AdminAffiliatesTabProps> = ({
           </button>
         </div>
       </div>
+
+      <AffiliateRequestsPanel messages={contactMessages} onMarkRead={onMarkRequestRead} />
 
       {/* KPI METRICS OVERVIEW */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -3639,6 +3639,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             onUpdateSellers={handleUpdateSellers}
             onUpdateOrders={updated => setOrders(updated as any)}
             currentAdmin={currentSeller}
+            contactMessages={contactMessages}
+            onMarkRequestRead={handleMarkMessageRead}
             isRootAdmin={isRootAdmin}
           />
         )}
@@ -9556,6 +9558,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         {/* ======================================================== */}
         {activeTab === 'messages' && (
           <AdminMessagesManager
+            incomingMessages={contactMessages}
             onNotify={showAdminToast}
             onUpdateUnreadCount={(cnt) => setUnreadMessagesCount(cnt)}
           />

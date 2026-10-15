@@ -552,6 +552,16 @@ export function setAboutSEO() {
 /**
  * Apply SEO for Contact Page
  */
+export function setAffiliateIntroSEO() {
+  applyPageSEO({
+    title: 'Trở thành Affiliate | NOT A KNOT',
+    description: 'Chia sẻ phụ kiện thủ công Not A Knot bằng link riêng và nhận hoa hồng. Đăng ký affiliate hoặc đăng nhập tài khoản đối tác của bạn.',
+    canonicalUrl: `${SITE_DOMAIN}/affiliate/join`
+  });
+  removeProductSchemaJsonLd();
+  removeCollectionSchemaJsonLd();
+}
+
 export function setContactSEO() {
   applyPageSEO({
     title: 'Liên Hệ & Hỗ Trợ Khách Hàng | NOT A KNOT',

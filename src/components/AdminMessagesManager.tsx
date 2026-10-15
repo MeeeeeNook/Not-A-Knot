@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ContactMessage } from '../types';
 import { AdminTabHeader } from './admin/AdminTabHeader';
+import { normalizeFacebookUrl } from '../utils/affiliateRequests';
 import {
   fetchContactMessagesFromFirestore,
   updateContactMessageStatusInFirestore,
@@ -29,9 +30,10 @@ import {
 interface AdminMessagesManagerProps {
   onNotify?: (msg: string) => void;
   onUpdateUnreadCount?: (count: number) => void;
+  incomingMessages?: ContactMessage[];
 }
 
-export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNotify, onUpdateUnreadCount }) => {
+export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNotify, onUpdateUnreadCount, incomingMessages }) => {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -76,8 +78,15 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
   };
 
   useEffect(() => {
-    loadMessages();
+    if (incomingMessages === undefined) loadMessages();
   }, []);
+
+  useEffect(() => {
+    if (incomingMessages === undefined) return;
+    setMessages(incomingMessages);
+    setIsLoading(false);
+    setSelectedMessage(previous => previous ? incomingMessages.find(message => message.id === previous.id) || null : null);
+  }, [incomingMessages]);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -324,6 +333,7 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
                           <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
                             {msg.name || 'Khách hàng ẩn danh'}
                           </h4>
+                          {msg.type === 'affiliate_request' && <span className="shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[9px] font-bold text-rose-700">Đăng ký affiliate</span>}
                           {!msg.isRead && (
                             <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider shadow-2xs">
                               MỚI
@@ -513,6 +523,8 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
                 </div>
               </div>
 
+              {selectedMessage.type === 'affiliate_request' && normalizeFacebookUrl(selectedMessage.facebookUrl || '') && <a href={normalizeFacebookUrl(selectedMessage.facebookUrl || '')!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">Facebook của người đăng ký<ExternalLink className="h-3.5 w-3.5" /></a>}
+
               {/* Action shortcuts if phone or email */}
               {(selectedMessage.phone || selectedMessage.email || selectedMessage.contactInfo) && (
                 <div className="flex items-center gap-2">
@@ -611,6 +623,8 @@ export const AdminMessagesManager: React.FC<AdminMessagesManagerProps> = ({ onNo
                   </span>
                 </div>
               </div>
+
+              {selectedMessage.type === 'affiliate_request' && normalizeFacebookUrl(selectedMessage.facebookUrl || '') && <a href={normalizeFacebookUrl(selectedMessage.facebookUrl || '')!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">Facebook của người đăng ký<ExternalLink className="h-3.5 w-3.5" /></a>}
 
               {/* Action Buttons: Call, Email, Copy */}
               <div className="flex items-center gap-2">
