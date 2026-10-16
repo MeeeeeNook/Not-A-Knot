@@ -24,12 +24,43 @@ if (typeof window !== 'undefined') {
       msg.includes('Disconnecting idle stream') ||
       msg.includes('Timed out waiting for new targets') ||
       msg.includes("RPC 'Listen' stream") ||
-      msg.includes('GrpcConnection RPC')
+      msg.includes('GrpcConnection RPC') ||
+      msg.includes('Pending promise was never set') ||
+      msg.includes('INTERNAL ASSERTION FAILED')
     ) {
       return;
     }
     originalConsoleError.apply(console, args);
   };
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const msg = String(reason?.message || reason || '');
+    if (
+      msg.includes('Pending promise was never set') ||
+      msg.includes('INTERNAL ASSERTION FAILED') ||
+      msg.includes('cancelled-popup-request') ||
+      msg.includes('popup-closed-by-user') ||
+      msg.includes('Disconnecting idle stream') ||
+      msg.includes('Timed out waiting for new targets')
+    ) {
+      event.preventDefault();
+      return;
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    const msg = String(event.message || event.error?.message || '');
+    if (
+      msg.includes('Pending promise was never set') ||
+      msg.includes('INTERNAL ASSERTION FAILED') ||
+      msg.includes('cancelled-popup-request') ||
+      msg.includes('popup-closed-by-user')
+    ) {
+      event.preventDefault();
+      return;
+    }
+  });
 }
 
 // Educational Project Console Notice

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Product, CollectionInfo } from '../types';
+import { Product, CollectionInfo, SellerUser } from '../types';
+import { getAdminSession, isAuthorizedAdminStaff } from '../utils/auth';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { 
   ArrowLeft, 
@@ -38,6 +39,7 @@ interface CollectionDetailPageProps {
   products: Product[];
   collections?: CollectionInfo[];
   isAdminLoggedIn?: boolean;
+  currentSeller?: SellerUser | null;
   onBackToLanding: () => void;
   onSelectCollection: (collectionId: string) => void;
   onOpenProductDetail: (product: Product) => void;
@@ -177,7 +179,8 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
   collectionId,
   products,
   collections = COLLECTIONS_DATA,
-  isAdminLoggedIn = false,
+  isAdminLoggedIn: rawIsAdminLoggedIn = false,
+  currentSeller,
   onBackToLanding,
   onSelectCollection,
   onOpenProductDetail,
@@ -185,6 +188,9 @@ export const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({
   onPreorderSuccess,
   onUpdateCollections
 }) => {
+  const isAdminLoggedIn = Boolean(
+    rawIsAdminLoggedIn && isAuthorizedAdminStaff(currentSeller !== undefined ? currentSeller : getAdminSession())
+  );
   const currentCollection = useMemo(() => {
     return collections.find((c) => c.id === collectionId) || collections[0] || COLLECTIONS_DATA[0];
   }, [collectionId, collections]);

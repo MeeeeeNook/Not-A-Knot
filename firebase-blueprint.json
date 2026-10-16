@@ -167,6 +167,16 @@
         "type": { "type": "string", "description": "Loại giảm giá (percent, fixed, shipping)" },
         "isActive": { "type": "boolean", "description": "Trạng thái kích hoạt" }
       }
+    },
+    "UploadedCustomPhoto": {
+      "description": "Ảnh khách hàng tải lên để in ấn sản phẩm theo yêu cầu",
+      "fields": {
+        "photoId": { "type": "string", "description": "Mã ảnh" },
+        "mimeType": { "type": "string", "description": "Loại tệp ảnh" },
+        "prefix": { "type": "string", "description": "Tiền tố ảnh", "optional": true },
+        "data": { "type": "string", "description": "Dữ liệu ảnh base64", "optional": true },
+        "createdAt": { "type": "string", "description": "Thời gian tạo ISO" }
+      }
     }
   },
   "firestore": {
@@ -279,6 +289,15 @@
       "allow": {
         "read": "true",
         "write": "true"
+      }
+    },
+    "/uploaded_custom_photos/{photoId}": {
+      "schema": "UploadedCustomPhoto",
+      "allow": {
+        "read": "true",
+        "create": "true",
+        "update": "true",
+        "delete": "isAuthorizedStaff()"
       }
     }
   },

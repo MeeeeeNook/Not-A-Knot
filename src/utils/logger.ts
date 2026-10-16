@@ -93,6 +93,16 @@ export function isIgnorableClientError(message: string, stack?: string): boolean
     return true;
   }
 
+  // 5. Firebase Auth benign popup cancellation / grace timer assertion
+  if (
+    lowerMsg.includes('pending promise was never set') ||
+    lowerMsg.includes('popup-closed-by-user') ||
+    lowerMsg.includes('cancelled-popup-request') ||
+    (lowerMsg.includes('internal assertion failed') && lowerMsg.includes('@firebase/auth'))
+  ) {
+    return true;
+  }
+
   return false;
 }
 

@@ -338,15 +338,20 @@ export async function persistCustomPhotoToStorageOrDb(
   try {
     const { db } = getClientInstances();
     const docRef = doc(db, 'uploaded_custom_photos', photoId);
-    await setDoc(docRef, {
+    const photoDocData: Record<string, any> = {
       photoId,
       mimeType,
-      data: base64Data,
       createdAt: new Date().toISOString()
-    });
+    };
+    if (base64Data.length <= 900_000) {
+      photoDocData.data = base64Data;
+    } else {
+      photoDocData.isLargePhoto = true;
+    }
+    await setDoc(docRef, photoDocData);
     return `/api/custom-photos/${photoId}`;
   } catch (dbErr) {
-    console.warn('[persistCustomPhoto] Firestore uploaded_custom_photos notice:', dbErr);
+    console.info('[persistCustomPhoto] Firestore uploaded_custom_photos notice:', (dbErr as any)?.message || dbErr);
   }
 
   return base64Data;

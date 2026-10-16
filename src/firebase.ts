@@ -130,16 +130,56 @@ export const dispatchSafeEvent = (name: string, detail?: any): void => {
  * Sign in with Google Popup using Firebase Authentication
  */
 let activeGooglePopupPromise: Promise<FirebaseUser> | null = null;
+let lastPopupCallTime = 0;
 
 export async function signInWithGooglePopup(): Promise<FirebaseUser> {
+  // 1. If already authenticated with Google, reuse existing session
+  if (auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.email) {
+    return auth.currentUser;
+  }
+
+  // 2. Prevent concurrent or rapid double-click popups
+  const now = Date.now();
   if (activeGooglePopupPromise) {
     return activeGooglePopupPromise;
   }
+  if (now - lastPopupCallTime < 1200) {
+    // Wait slightly if user tapped twice in rapid succession
+    await new Promise((r) => setTimeout(r, 400));
+    if (auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.email) {
+      return auth.currentUser;
+    }
+    if (activeGooglePopupPromise) {
+      return activeGooglePopupPromise;
+    }
+  }
+  lastPopupCallTime = now;
+
   const provider = getGoogleAuthProvider();
   activeGooglePopupPromise = (async () => {
     try {
       const result = await signInWithPopup(auth, provider);
       return result.user;
+    } catch (err: any) {
+      // Check if user authenticated despite popup assertion timing error
+      if (auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.email) {
+        return auth.currentUser;
+      }
+      const msg = String(err?.message || err || '');
+      if (
+        msg.includes('Pending promise was never set') ||
+        msg.includes('INTERNAL ASSERTION FAILED') ||
+        msg.includes('cancelled-popup-request')
+      ) {
+        // Wait briefly for Firebase Auth state to emit in case the popup completed
+        for (let i = 0; i < 6; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          if (auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.email) {
+            return auth.currentUser;
+          }
+        }
+      }
+      throw err;
     } finally {
       activeGooglePopupPromise = null;
     }
@@ -180,6 +220,27 @@ export async function signOutFirebaseAuth(): Promise<void> {
 export function subscribeToFirebaseAuthState(callback: (user: FirebaseUser | null) => void): () => void {
   return onAuthStateChanged(auth, callback);
 }
+
+/**
+ * Resolves active authenticated non-anonymous Firebase user, waiting for initial auth resolution if needed
+ */
+export const waitForFirebaseAuth = async (timeoutMs = 2000): Promise<FirebaseUser | null> => {
+  if (auth.currentUser && !auth.currentUser.isAnonymous) return auth.currentUser;
+  return new Promise((resolve) => {
+    let timer: any;
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u && !u.isAnonymous) {
+        if (timer) clearTimeout(timer);
+        unsub();
+        resolve(u);
+      }
+    });
+    timer = setTimeout(() => {
+      unsub();
+      resolve(auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null);
+    }, timeoutMs);
+  });
+};
 
 const targetDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
   ? firebaseConfig.firestoreDatabaseId
@@ -1419,9 +1480,13 @@ export const saveProductToFirestore = async (prod: Product): Promise<void> => {
     await setDoc(docRef, payload);
     productsMemoryCache = null;
     recordOperation('write', 1, prodSize);
-  } catch (err) {
+  } catch (err: any) {
     if (isQuotaExhaustedError(err)) {
       console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ an toàn trong IndexedDB:', err);
+      return;
+    }
+    if (err?.code === 'permission-denied' || err?.message?.includes('Missing or insufficient permissions')) {
+      console.warn('⚠️ Quyền lưu sản phẩm Firestore: Người dùng chưa đăng nhập quản trị viên trên Firebase Auth. Sản phẩm đã lưu an toàn trong IndexedDB & LocalStorage.');
       return;
     }
     console.error('Lỗi lưu sản phẩm lên Firestore:', err);
@@ -1451,9 +1516,13 @@ export const deleteProductFromFirestore = async (productId: string): Promise<voi
 
     productsMemoryCache = null;
     recordOperation('delete', 1, -1500);
-  } catch (err) {
+  } catch (err: any) {
     if (isQuotaExhaustedError(err)) {
       console.warn('⚠️ Firestore Write Quota đạt giới hạn trong ngày. Dữ liệu tiếp tục lưu trữ cục bộ:', err);
+      return;
+    }
+    if (err?.code === 'permission-denied' || err?.message?.includes('Missing or insufficient permissions')) {
+      console.warn('⚠️ Quyền xóa sản phẩm Firestore: Người dùng chưa có quyền quản trị viên trên Firebase Auth. Đã xóa cục bộ.');
       return;
     }
     console.error('Lỗi xóa sản phẩm trên Firestore:', err);
@@ -1608,6 +1677,106 @@ export const fetchOrdersFromFirestore = async (forceRefresh = false, options: { 
 };
 
 export const getOrdersFromFirestore = fetchOrdersFromFirestore;
+
+export const fetchAffiliateOrdersFromFirestore = async (
+  affiliateCode?: string,
+  affiliateId?: string,
+  options: { requireServer?: boolean } = {}
+): Promise<StoredOrder[]> => {
+  const cleanCode = (affiliateCode || '').trim().toUpperCase();
+  const cleanId = (affiliateId || '').trim();
+  if (!cleanCode && !cleanId) return [];
+
+  try {
+    recordOperation('read');
+    const colRef = collection(db, 'orders');
+    const queries: Promise<any>[] = [];
+    const runQuery = (q: any) => (options.requireServer ? getDocsFromServer(q) : getDocs(q));
+
+    if (cleanCode) {
+      queries.push(runQuery(query(colRef, where('affiliateCode', '==', cleanCode))));
+    }
+    if (cleanId) {
+      queries.push(runQuery(query(colRef, where('affiliateId', '==', cleanId))));
+    }
+
+    const settled = await Promise.race([
+      Promise.allSettled(queries),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Mạng tải đơn hàng phản hồi chậm')), 20000)
+      )
+    ]);
+
+    const results: StoredOrder[] = [];
+    let anyFulfilled = false;
+    let firstError: unknown = null;
+
+    for (const item of settled) {
+      if (item.status === 'fulfilled') {
+        anyFulfilled = true;
+        item.value.forEach((docSnap: any) => {
+          const data = docSnap.data();
+          const orderId = docSnap.id;
+          const tracking = data.trackingNumber || (orderId.startsWith('NAK-') ? orderId : orderId);
+          results.push({
+            ...data,
+            id: orderId,
+            date: data.date ? formatOrderDateWithoutSeconds(data.date) : formatOrderDateWithoutSeconds(data.createdAt || new Date()),
+            createdAt: safeIsoDateString(data.createdAt || data.date),
+            name: data.name || data.customerName || '',
+            customerName: data.customerName || data.name || '',
+            phone: data.phone || '',
+            address: data.address || '',
+            province: data.province || '',
+            district: data.district || '',
+            detailedAddress: data.detailedAddress || '',
+            note: data.note || '',
+            items: data.items || [],
+            itemDetails: data.itemDetails || [],
+            totalPrice: data.totalPrice !== undefined ? Number(data.totalPrice) : (Number(data.totalAmount) || 0),
+            totalAmount: data.totalAmount !== undefined ? Number(data.totalAmount) : (Number(data.totalPrice) || 0),
+            shippingFee: Number(data.shippingFee) || 0,
+            discountAmount: Number(data.discountAmount) || 0,
+            voucherCode: data.voucherCode || undefined,
+            voucherDiscountAmount: data.voucherDiscountAmount !== undefined ? Number(data.voucherDiscountAmount) : undefined,
+            voucherType: data.voucherType || undefined,
+            craftingStageNote: data.craftingStageNote || '',
+            source: data.source || 'website',
+            type: data.type || 'standard_order',
+            status: data.status || 'Chờ xác nhận',
+            paymentMethod: data.paymentMethod || (data.bankReceiptImage ? 'bank_transfer' : 'cod'),
+            paymentStatus: data.paymentStatus || (data.bankReceiptImage ? 'paid' : 'unpaid'),
+            bankReceiptImage: data.bankReceiptImage || '',
+            paidAmount: data.paidAmount !== undefined ? Number(data.paidAmount) : (data.paymentStatus === 'paid' ? (Number(data.totalPrice) || 0) : 0),
+            bankTransferRef: data.bankTransferRef || '',
+            sellerId: data.sellerId || '',
+            sellerName: data.sellerName || '',
+            trackingNumber: tracking,
+            shippingCarrier: data.shippingCarrier || '',
+            shippingCode: data.shippingCode || '',
+            estimatedDelivery: data.estimatedDelivery || '',
+            statusHistory: data.statusHistory || [],
+            isDeleted: data.isDeleted === true,
+            deletedAt: data.deletedAt || undefined
+          });
+          recordOperation('read');
+        });
+      } else if (!firstError) {
+        firstError = item.reason;
+      }
+    }
+
+    if (!anyFulfilled && firstError) {
+      throw firstError;
+    }
+
+    return deduplicateStoredOrders(results);
+  } catch (err) {
+    if (options.requireServer) throw err;
+    console.warn('Lưu ý khi tải đơn hàng affiliate từ Firestore:', err);
+    return [];
+  }
+};
 
 // Helper to sanitize itemDetails: strip all heavy base64 images completely so order payload contains purely clean text metadata (< 2KB)
 function sanitizeItemDetailsForFirestore(itemDetails: any[]): any[] {
@@ -2918,6 +3087,15 @@ export const fetchSocialFeedFromFirestore = async (): Promise<SocialFeedConfig |
 // Contact Messages CRUD
 // ----------------------------------------------------
 export const fetchContactMessagesFromFirestore = async (): Promise<ContactMessage[]> => {
+  const currentAuth = await waitForFirebaseAuth();
+  if (!currentAuth || currentAuth.isAnonymous) {
+    try {
+      const cached = localStorage.getItem('nak_contact_messages');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  }
+
   try {
     recordOperation('read');
     const colRef = collection(db, 'contact_messages');
@@ -3321,14 +3499,15 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
       const cleanEmail = seller.googleEmail.trim().toLowerCase();
       try {
         const authRef = doc(db, 'authorized_sellers', cleanEmail);
-        await setDoc(authRef, {
+        await setDoc(authRef, cleanFirestoreData({
           email: cleanEmail,
           sellerId: sellerId,
           username: seller.username,
           role: seller.role || (seller.isRootAdmin ? 'root_admin' : 'member'),
           isActive: seller.isActive !== false,
+          affiliateCode: seller.affiliateCode ? seller.affiliateCode.trim().toUpperCase() : undefined,
           updatedAt: new Date().toISOString()
-        }, { merge: true });
+        }), { merge: true });
       } catch (authErr) {
         console.warn('Could not sync to authorized_sellers collection:', authErr);
       }
@@ -3337,6 +3516,131 @@ export const saveSellerToFirestore = async (seller: SellerUser): Promise<void> =
     console.error('Lỗi lưu tài khoản người bán trên Firestore:', err);
     throw err;
   }
+};
+
+export const updateAffiliateProfileInFirestore = async (
+  sellerId: string,
+  profile: {
+    name: string;
+    phone?: string;
+    paymentInfo?: string;
+    paymentAccount?: SellerUser['paymentAccount'];
+  }
+): Promise<void> => {
+  if (!sellerId) throw new Error('Thiếu mã định danh tài khoản Affiliate.');
+  const docRef = doc(db, 'sellers', sellerId);
+  const payload = cleanFirestoreData({
+    name: profile.name.trim(),
+    phone: (profile.phone || '').trim(),
+    paymentInfo: (profile.paymentInfo || '').trim(),
+    paymentAccount: profile.paymentAccount,
+    updatedAt: new Date().toISOString()
+  });
+  await updateDoc(docRef, payload);
+  recordOperation('write', 1, JSON.stringify(payload).length);
+};
+
+export const bindAffiliateGoogleIdentityInFirestore = async (
+  sellerId: string,
+  googleUid: string,
+  linkedGoogleAt: string
+): Promise<void> => {
+  if (!sellerId || !googleUid) return;
+  try {
+    const docRef = doc(db, 'sellers', sellerId);
+    await updateDoc(docRef, {
+      googleUid,
+      linkedGoogleAt,
+      updatedAt: new Date().toISOString()
+    });
+    recordOperation('write', 1, 120);
+  } catch (err) {
+    console.warn('Could not bind Google UID to affiliate profile:', err);
+  }
+};
+
+export const fetchOwnSellerProfileFromFirestore = async (
+  sellerId?: string,
+  email?: string,
+  uid?: string
+): Promise<SellerUser | null> => {
+  if (!auth.currentUser) return null;
+  try {
+    const cleanId = (sellerId || '').trim();
+    const cleanEmail = (email || auth.currentUser.email || '').trim().toLowerCase();
+    const cleanUid = (uid || auth.currentUser.uid || '').trim();
+
+    if (cleanId) {
+      const snap = await getDoc(doc(db, 'sellers', cleanId));
+      if (snap.exists()) {
+        const data = snap.data();
+        return {
+          ...data,
+          id: snap.id,
+          username: data.username || snap.id,
+          name: data.name || data.username || '',
+          isRootAdmin: !!data.isRootAdmin,
+          role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: data.isActive !== false
+        } as SellerUser;
+      }
+    }
+
+    if (cleanEmail) {
+      const authSnap = await getDoc(doc(db, 'authorized_sellers', cleanEmail));
+      if (authSnap.exists()) {
+        const authData = authSnap.data();
+        if (authData.sellerId) {
+          const linkedSnap = await getDoc(doc(db, 'sellers', authData.sellerId));
+          if (linkedSnap.exists()) {
+            const data = linkedSnap.data();
+            return {
+              ...data,
+              id: linkedSnap.id,
+              username: data.username || linkedSnap.id,
+              name: data.name || data.username || '',
+              isRootAdmin: !!data.isRootAdmin,
+              role: authData.role === 'affiliate' || data.role === 'affiliate' ? 'affiliate' : (data.role || authData.role || 'member'),
+              isActive: authData.isActive !== false && data.isActive !== false
+            } as SellerUser;
+          }
+        }
+      }
+      const qSnap = await getDocs(query(collection(db, 'sellers'), where('googleEmail', '==', cleanEmail), limit(1)));
+      if (!qSnap.empty) {
+        const docSnap = qSnap.docs[0];
+        const data = docSnap.data();
+        return {
+          ...data,
+          id: docSnap.id,
+          username: data.username || docSnap.id,
+          name: data.name || data.username || '',
+          isRootAdmin: !!data.isRootAdmin,
+          role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: data.isActive !== false
+        } as SellerUser;
+      }
+    }
+
+    if (cleanUid) {
+      const uidSnap = await getDoc(doc(db, 'sellers', cleanUid));
+      if (uidSnap.exists()) {
+        const data = uidSnap.data();
+        return {
+          ...data,
+          id: uidSnap.id,
+          username: data.username || uidSnap.id,
+          name: data.name || data.username || '',
+          isRootAdmin: !!data.isRootAdmin,
+          role: data.role || (data.isRootAdmin ? 'root_admin' : 'member'),
+          isActive: data.isActive !== false
+        } as SellerUser;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch own seller profile from Firestore:', err);
+  }
+  return null;
 };
 
 export const saveSellersToFirestore = async (sellersList: SellerUser[]): Promise<void> => {
@@ -3368,7 +3672,8 @@ export const deleteSellerFromFirestore = async (sellerId: string, googleEmail?: 
 // Authorized Google Emails Management for Staff / Sellers
 // ----------------------------------------------------
 export const fetchAuthorizedSellersFromFirestore = async (): Promise<AuthorizedSellerItem[]> => {
-  if (!auth.currentUser) {
+  const currentAuth = await waitForFirebaseAuth();
+  if (!currentAuth || currentAuth.isAnonymous) {
     return [];
   }
   try {
@@ -3468,6 +3773,10 @@ export const recordUnauthorizedLoginAttempt = async (attempt: {
 };
 
 export const fetchUnauthorizedLoginAttemptsFromFirestore = async (): Promise<UnauthorizedLoginAttemptItem[]> => {
+  const currentAuth = await waitForFirebaseAuth();
+  if (!currentAuth || currentAuth.isAnonymous) {
+    return [];
+  }
   try {
     recordOperation('read', 1);
     const colRef = collection(db, 'unauthorized_login_attempts');
@@ -3764,23 +4073,26 @@ export const fetchBackupsFromFirestore = async (): Promise<VersionBackup[]> => {
   const cloudDocIds = new Set<string>();
 
   // 1. Query Firestore FIRST (Primary Cloud source of truth across all devices)
-  try {
-    recordOperation('read');
-    const colRef = collection(db, 'backups');
-    const snap = await getDocs(colRef);
-    snap.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (data && data.createdAt) {
-        cloudDocIds.add(docSnap.id);
-        backupMap.set(docSnap.id, {
-          id: docSnap.id,
-          ...data,
-          syncedToCloud: true
-        } as VersionBackup);
-      }
-    });
-  } catch (err) {
-    console.warn('Không thể tải backup từ Firestore, sử dụng bộ nhớ cục bộ:', err);
+  const currentAuth = await waitForFirebaseAuth();
+  if (currentAuth && !currentAuth.isAnonymous) {
+    try {
+      recordOperation('read');
+      const colRef = collection(db, 'backups');
+      const snap = await getDocs(colRef);
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && data.createdAt) {
+          cloudDocIds.add(docSnap.id);
+          backupMap.set(docSnap.id, {
+            id: docSnap.id,
+            ...data,
+            syncedToCloud: true
+          } as VersionBackup);
+        }
+      });
+    } catch (err) {
+      console.warn('Không thể tải backup từ Firestore, sử dụng bộ nhớ cục bộ:', err);
+    }
   }
 
   // 2. Read from IndexedDB (local cache fallback / enrichment)

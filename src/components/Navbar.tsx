@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { COLLECTIONS_DATA } from '../data/collections';
 import { CategoryItem, CollectionInfo, SiteContentConfig, SellerUser } from '../types';
+import { isAuthorizedAdminStaff, isAuthorizedAffiliate } from '../utils/auth';
 import { stripBstPrefix } from '../utils/orderFormatters';
 
 interface NavbarProps {
@@ -21,6 +22,7 @@ interface NavbarProps {
   onOpenContact: () => void;
   onOpenOrderTracker?: () => void;
   onOpenAdmin?: () => void;
+  onOpenAffiliatePortal?: () => void;
   currentView: 'landing' | 'collection' | 'catalog' | 'about' | 'contact' | 'admin' | 'track-order' | string;
   activeCollectionId: string;
   currentSeller?: SellerUser | null;
@@ -41,12 +43,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenContact,
   onOpenOrderTracker,
   onOpenAdmin,
+  onOpenAffiliatePortal,
   currentView,
   activeCollectionId,
   currentSeller,
   isAdminLoggedIn = false
 }) => {
   const brandName = siteContent?.brandName || 'NOT A KNOT';
+  const canAccessAdmin = Boolean(isAdminLoggedIn && isAuthorizedAdminStaff(currentSeller));
+  const canAccessAffiliate = Boolean(isAuthorizedAffiliate(currentSeller));
+  const handleAffiliateClick = onOpenAffiliatePortal || onOpenAdmin;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileCollectionsExpanded, setMobileCollectionsExpanded] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -312,32 +318,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Action Icons: Admin (if logged in) + Cart Button + Animated 3-Line Menu */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Admin / Affiliate Header Button - ONLY shown when logged in */}
-            {isAdminLoggedIn && onOpenAdmin && (
-              currentSeller?.role === 'affiliate' ? (
-                <button
-                  id="nav-admin-header-btn"
-                  onClick={onOpenAdmin}
-                  className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
-                  title={`Affiliate hub (${currentSeller?.name || 'Affiliate'})`}
-                >
-                  <Share2 className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform shrink-0" />
-                  <span className="hidden sm:inline">Affiliate hub</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
-                </button>
-              ) : (
-                <button
-                  id="nav-admin-header-btn"
-                  onClick={onOpenAdmin}
-                  className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
-                  title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
-                  <span className="hidden sm:inline">Quản Trị</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
-                </button>
-              )
-            )}
+            {/* Admin / Affiliate Header Button - Strictly separated by verified role */}
+            {canAccessAffiliate && handleAffiliateClick ? (
+              <button
+                id="nav-admin-header-btn"
+                onClick={handleAffiliateClick}
+                className="px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
+                title={`Affiliate hub (${currentSeller?.name || 'Affiliate'})`}
+              >
+                <Share2 className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="hidden sm:inline">Affiliate hub</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
+              </button>
+            ) : canAccessAdmin && onOpenAdmin ? (
+              <button
+                id="nav-admin-header-btn"
+                onClick={onOpenAdmin}
+                className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-200 border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs group whitespace-nowrap shrink-0"
+                title={`Trang Quản Trị Hệ Thống (${currentSeller?.name || 'Admin'})`}
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+                <span className="hidden sm:inline">Quản Trị</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5 shrink-0" title="Đang đăng nhập" />
+              </button>
+            ) : null}
 
             {/* Cart Button */}
             <button
@@ -584,11 +588,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Admin / Affiliate Mobile Link */}
-          {isAdminLoggedIn && onOpenAdmin && (
+          {(canAccessAffiliate || canAccessAdmin) && (
             <div className="pt-2 border-t border-neutral-800">
-              {currentSeller?.role === 'affiliate' ? (
+              {canAccessAffiliate && handleAffiliateClick ? (
                 <button
-                  onClick={() => handleNavClick(onOpenAdmin)}
+                  onClick={() => handleNavClick(handleAffiliateClick)}
                   className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-rose-300 bg-rose-500/15 border border-rose-500/30 hover:bg-rose-500/25 cursor-pointer transition-all active:scale-[0.99]"
                 >
                   <div className="flex items-center gap-2.5">
@@ -602,7 +606,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Vào Affiliate hub
                   </span>
                 </button>
-              ) : (
+              ) : canAccessAdmin && onOpenAdmin ? (
                 <button
                   onClick={() => handleNavClick(onOpenAdmin)}
                   className="w-full text-left py-3 px-3.5 rounded-xl font-bold flex items-center justify-between text-amber-300 bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer transition-all active:scale-[0.99]"
@@ -618,7 +622,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Vào Quản Trị
                   </span>
                 </button>
-              )}
+              ) : null}
             </div>
           )}
         </div>

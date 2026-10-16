@@ -8,18 +8,39 @@ service cloud.firestore {
     }
 
     function userEmail() {
-      return isAuthenticated() && 'email' in request.auth.token ? request.auth.token.email : '';
+      return isAuthenticated() && 'email' in request.auth.token && request.auth.token.email is string
+        ? request.auth.token.email.lower()
+        : '';
     }
 
     // Root Administrators Whitelist (Supreme Privileges)
     function isRootAdmin() {
       return isAuthenticated() && (
-        userEmail() == 'nhunhuhao71@gmail.com' ||
-        userEmail() == 'manhcuong2006ht@gmail.com'
+        (userEmail() != '' && (
+          userEmail() == 'nhunhuhao71@gmail.com' ||
+          userEmail() == 'manhcuong2006ht@gmail.com'
+        )) ||
+        (request.auth.token.get('email', '') != '' && (
+          request.auth.token.email == 'nhunhuhao71@gmail.com' ||
+          request.auth.token.email == 'manhcuong2006ht@gmail.com' ||
+          request.auth.token.email.lower() == 'nhunhuhao71@gmail.com' ||
+          request.auth.token.email.lower() == 'manhcuong2006ht@gmail.com'
+        ))
       );
     }
 
-    // Authorized Staff / Sellers (Active staff approved by Root Admin)
+    function isStaffRole(data) {
+      return data.get('isActive', true) != false &&
+        data.get('role', 'member') in ['root_admin', 'deputy_admin', 'member'] &&
+        data.get('role', '') != 'affiliate';
+    }
+
+    function isAffiliateRole(data) {
+      return data.get('isActive', true) != false &&
+        data.get('role', '') == 'affiliate';
+    }
+
+    // Authorized Staff / Sellers (Active staff only — strictly excludes affiliate accounts)
     function isAuthorizedStaff() {
       return isAuthenticated() && (
         isRootAdmin() ||
@@ -28,20 +49,163 @@ service cloud.firestore {
         (
           userEmail() != '' &&
           exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
-          (!('isActive' in get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data) ||
-           get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.isActive != false)
+          isStaffRole(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data) &&
+          (
+            get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', '') == '' ||
+            !exists(/databases/$(database)/documents/sellers/$(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', ''))) ||
+            isStaffRole(get(/databases/$(database)/documents/sellers/$(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', '')).data)
+          )
         ) ||
         (
           exists(/databases/$(database)/documents/sellers/$(request.auth.uid)) &&
-          (!('isActive' in get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data) ||
-           get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.isActive != false)
+          isStaffRole(get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data)
+        ) ||
+        (
+          userEmail() != '' &&
+          exists(/databases/$(database)/documents/sellers/$( 'seller-' + request.auth.uid )) &&
+          isStaffRole(get(/databases/$(database)/documents/sellers/$( 'seller-' + request.auth.uid )).data)
+        )
+      );
+    }
+
+    // Active Affiliate Partner (Approved & active affiliate account)
+    function isActiveAffiliate() {
+      return isAuthenticated() && !isAuthorizedStaff() && (
+        (
+          userEmail() != '' &&
+          exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
+          isAffiliateRole(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data) &&
+          (
+            get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', '') == '' ||
+            !exists(/databases/$(database)/documents/sellers/$(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', ''))) ||
+            isAffiliateRole(get(/databases/$(database)/documents/sellers/$(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.get('sellerId', '')).data)
+          )
+        ) ||
+        (
+          exists(/databases/$(database)/documents/sellers/$(request.auth.uid)) &&
+          isAffiliateRole(get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data)
+        )
+      );
+    }
+
+    function currentAffiliateSellerId() {
+      return userEmail() != '' &&
+        exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
+        'sellerId' in get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data
+        ? get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.sellerId
+        : '';
+    }
+
+    function currentAffiliateCodeFromAuthDoc() {
+      return userEmail() != '' &&
+        exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) &&
+        'affiliateCode' in get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data
+        ? get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data.affiliateCode
+        : '';
+    }
+
+    function currentAffiliateCodeFromSellerDoc() {
+      return currentAffiliateSellerId() != '' &&
+        exists(/databases/$(database)/documents/sellers/$(currentAffiliateSellerId())) &&
+        'affiliateCode' in get(/databases/$(database)/documents/sellers/$(currentAffiliateSellerId())).data
+        ? get(/databases/$(database)/documents/sellers/$(currentAffiliateSellerId())).data.affiliateCode
+        : (
+          exists(/databases/$(database)/documents/sellers/$(request.auth.uid)) &&
+          'affiliateCode' in get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data
+            ? get(/databases/$(database)/documents/sellers/$(request.auth.uid)).data.affiliateCode
+            : ''
+        );
+    }
+
+    function isOwnAffiliateOrder() {
+      return isActiveAffiliate() && (
+        (currentAffiliateCodeFromAuthDoc() != '' && resource.data.affiliateCode == currentAffiliateCodeFromAuthDoc()) ||
+        (currentAffiliateCodeFromSellerDoc() != '' && resource.data.affiliateCode == currentAffiliateCodeFromSellerDoc()) ||
+        resource.data.affiliateId == request.auth.uid ||
+        (currentAffiliateSellerId() != '' && resource.data.affiliateId == currentAffiliateSellerId())
+      );
+    }
+
+    function isOwnAffiliateClick() {
+      return isActiveAffiliate() && (
+        (currentAffiliateCodeFromAuthDoc() != '' && resource.data.code == currentAffiliateCodeFromAuthDoc()) ||
+        (currentAffiliateCodeFromSellerDoc() != '' && resource.data.code == currentAffiliateCodeFromSellerDoc())
+      );
+    }
+
+    function isOwnSellerDoc(sellerId) {
+      return isAuthenticated() && (
+        sellerId == request.auth.uid ||
+        (currentAffiliateSellerId() != '' && sellerId == currentAffiliateSellerId()) ||
+        (
+          resource != null && (
+            resource.data.get('googleUid', '') == request.auth.uid ||
+            (userEmail() != '' && resource.data.get('googleEmail', '') == userEmail()) ||
+            (userEmail() != '' && resource.data.get('email', '') == userEmail())
+          )
+        )
+      );
+    }
+
+    function canAffiliateUpdateOwnProfile(sellerId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return isAuthenticated() &&
+        !isAuthorizedStaff() &&
+        resource != null &&
+        isOwnSellerDoc(sellerId) &&
+        resource.data.get('isActive', true) != false &&
+        resource.data.get('role', '') == 'affiliate' &&
+        (
+          userEmail() == '' ||
+          !exists(/databases/$(database)/documents/authorized_sellers/$(userEmail())) ||
+          isAffiliateRole(get(/databases/$(database)/documents/authorized_sellers/$(userEmail())).data)
+        ) &&
+        changedKeys.hasOnly(['name', 'phone', 'paymentInfo', 'paymentAccount', 'googleUid', 'linkedGoogleAt', 'updatedAt']) &&
+        request.resource.data.get('role', '') == 'affiliate' &&
+        request.resource.data.get('isRootAdmin', false) == false &&
+        request.resource.data.get('isActive', true) == resource.data.get('isActive', true) &&
+        request.resource.data.get('affiliateCode', '') == resource.data.get('affiliateCode', '') &&
+        request.resource.data.get('googleEmail', '') == resource.data.get('googleEmail', '') &&
+        request.resource.data.get('email', '') == resource.data.get('email', '') &&
+        request.resource.data.get('username', '') == resource.data.get('username', '') &&
+        (
+          !('googleUid' in changedKeys) || (
+            (resource.data.get('googleUid', '') == '' || resource.data.get('googleUid', '') == request.auth.uid) &&
+            request.resource.data.get('googleUid', '') == request.auth.uid
+          )
+        ) &&
+        request.resource.data.get('name', '') is string &&
+        request.resource.data.get('name', '').size() > 0 &&
+        request.resource.data.get('name', '').size() <= 120 &&
+        (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 30)) &&
+        (!('paymentInfo' in request.resource.data) || (request.resource.data.paymentInfo is string && request.resource.data.paymentInfo.size() <= 500)) &&
+        (!('paymentAccount' in request.resource.data) || request.resource.data.paymentAccount is map);
+    }
+
+    function canStaffWriteSellerDoc(sellerId) {
+      return isRootAdmin() || (
+        isAuthorizedStaff() && (
+          // Staff can create/update affiliate partner profiles, but never grant staff/admin roles
+          (
+            request.resource.data.get('role', '') == 'affiliate' &&
+            request.resource.data.get('isRootAdmin', false) == false &&
+            (resource == null || resource.data.get('role', '') == 'affiliate')
+          ) ||
+          // Staff can update their own profile/presence without changing role, root status, or active status
+          (
+            resource != null &&
+            isOwnSellerDoc(sellerId) &&
+            resource.data.get('role', 'member') in ['deputy_admin', 'member'] &&
+            request.resource.data.get('role', 'member') == resource.data.get('role', 'member') &&
+            request.resource.data.get('isRootAdmin', false) == false &&
+            request.resource.data.get('isActive', true) == resource.data.get('isActive', true)
+          )
         )
       );
     }
 
     // Order Security Guard: Enforces strict initial status, paymentStatus, and paidAmount
     // Only approved staff with a verified Firebase email can record commission payouts.
-    // These new payout fields do not change the existing access rules for other fields.
     function canRecordAffiliateCommissionPayment() {
       return isAuthenticated() && request.auth.token.get('email_verified', false) && (
         isRootAdmin() || (
@@ -132,12 +296,21 @@ service cloud.firestore {
 
     // 4. Orders:
     // Staff can create, read, update, and delete any order.
+    // Affiliates can ONLY read orders attributed to their own affiliateCode/affiliateId, and cannot modify/delete orders.
     // Customers can submit new orders with strict initial status enforcement ('Chờ xác nhận', 'unpaid', paidAmount = 0).
-    // Direct Firestore reading/listing of orders is strictly restricted to authorized staff to prevent privacy leaks.
     match /orders/{orderId} {
       allow create: if (isAuthorizedStaff() || validPublicOrderCreation()) && (canRecordAffiliateCommissionPayment() || validInitialAffiliateCommissionPayment());
-      allow read, delete: if isAuthorizedStaff();
+      allow get: if isAuthorizedStaff() || isOwnAffiliateOrder();
+      allow list: if isAuthorizedStaff() || (
+        isAuthenticated() && (
+          (currentAffiliateCodeFromAuthDoc() != '' && resource.data.affiliateCode == currentAffiliateCodeFromAuthDoc()) ||
+          (currentAffiliateCodeFromSellerDoc() != '' && resource.data.affiliateCode == currentAffiliateCodeFromSellerDoc()) ||
+          resource.data.affiliateId == request.auth.uid ||
+          (currentAffiliateSellerId() != '' && resource.data.affiliateId == currentAffiliateSellerId())
+        )
+      );
       allow update: if isAuthorizedStaff() && (canRecordAffiliateCommissionPayment() || affiliateCommissionPaymentUnchanged());
+      allow delete: if isAuthorizedStaff();
     }
 
     // 5. Contact inquiries & consultation requests
@@ -146,21 +319,36 @@ service cloud.firestore {
       allow read, update, delete: if isAuthorizedStaff(); // Only staff can read/manage
     }
 
-    // 6. Authorized Staff Emails (Read exclusively by Staff, Write exclusively by Root Admin)
+    // 6. Authorized Staff & Affiliate Emails
+    // Staff can read all; an authenticated user can only get their own email record.
+    // Root Admin can write any; Staff can only sync affiliate entries (never grant/change staff roles).
     match /authorized_sellers/{email} {
-      allow read: if isAuthorizedStaff();
-      allow write: if isRootAdmin();
+      allow get: if isAuthorizedStaff() || (isAuthenticated() && userEmail() != '' && userEmail() == email);
+      allow list: if isAuthorizedStaff();
+      allow create, update: if isRootAdmin() || (
+        isAuthorizedStaff() &&
+        request.resource.data.get('role', '') == 'affiliate' &&
+        request.resource.data.get('isRootAdmin', false) == false &&
+        (resource == null || resource.data.get('role', '') == 'affiliate')
+      );
+      allow delete: if isRootAdmin();
     }
 
-    // 7. Team members & seller profiles (Read/Write exclusively by active Staff)
+    // 7. Team members & affiliate profiles
+    // Staff can read all; an affiliate can only read their own active profile.
+    // Affiliates can only update their own allowed personal fields (name, phone, paymentInfo, paymentAccount).
     match /sellers/{sellerId} {
-      allow read, write: if isAuthorizedStaff();
+      allow get: if isAuthorizedStaff() || (isOwnSellerDoc(sellerId) && (resource == null || resource.data.get('isActive', true) != false));
+      allow list: if isAuthorizedStaff() || isAuthenticated();
+      allow create: if canStaffWriteSellerDoc(sellerId);
+      allow update: if canStaffWriteSellerDoc(sellerId) || canAffiliateUpdateOwnProfile(sellerId);
+      allow delete: if isRootAdmin();
     }
 
     // 8. System configurations & maintenance mode
     match /system_settings/{settingId} {
-      allow read: if true; // Website reads maintenance mode status
-      allow write: if isRootAdmin(); // Only Root Admin can toggle maintenance
+      allow read: if true; // Website reads maintenance mode & affiliate default config
+      allow write: if isRootAdmin() || (settingId == 'affiliate_config' && isAuthorizedStaff());
     }
 
     // 9. Email dispatch logs (Server sync & dispatch logging, staff review)
@@ -187,13 +375,14 @@ service cloud.firestore {
 
     // 13. Customer uploaded custom photos
     match /uploaded_custom_photos/{photoId} {
-      allow create, read: if true;
-      allow update, delete: if isAuthorizedStaff();
+      allow create, update, read: if true;
+      allow delete: if isAuthorizedStaff();
     }
 
     // 14. Affiliate link click tracking
     match /affiliate_clicks/{clickId} {
-      allow create, read: if true;
+      allow create: if true;
+      allow read: if isAuthorizedStaff() || isOwnAffiliateClick();
       allow update, delete: if isAuthorizedStaff();
     }
   }

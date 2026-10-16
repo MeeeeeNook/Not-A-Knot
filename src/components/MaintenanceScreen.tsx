@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowRight, Phone, MessageSquare, ExternalLink, ShieldAlert } from 'lucide-react';
 import { Lock } from './common/LockIcon';
 import { MaintenanceConfig } from '../types';
+import { getAdminSession, isAuthorizedAdminStaff } from '../utils/auth';
 import { MaintenanceIllustration } from './MaintenanceIllustration';
 
 interface MaintenanceScreenProps {
@@ -27,11 +28,11 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
   useEffect(() => {
     if (!config.autoRedirect || !config.autoRedirectUrl) return;
 
-    // Do NOT auto-redirect if an admin is logged in or if on an admin path
+    // Do NOT auto-redirect if an authorized admin staff member is logged in or if on an admin path
     try {
-      const adminSession = localStorage.getItem('nak_admin_session');
+      const adminSession = getAdminSession();
       const currentUrl = window.location.pathname + window.location.hash;
-      if (adminSession || currentUrl.includes('admin')) {
+      if (isAuthorizedAdminStaff(adminSession) || currentUrl.includes('admin')) {
         return;
       }
     } catch {}

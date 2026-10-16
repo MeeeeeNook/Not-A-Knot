@@ -59,7 +59,7 @@ import {
   safeOrderTimestamp,
   parseAnyDate
 } from '../utils/orderFormatters';
-import { createDefaultSellers, deduplicateSellers, isRootAdminUser } from '../utils/auth';
+import { createDefaultSellers, deduplicateSellers, isAuthorizedAdminStaff, isRootAdminUser, getAdminSession } from '../utils/auth';
 import { DEFAULT_CHARM_PRESETS } from '../data/sampleCharms';
 import { DEFAULT_OMAMORI_PRESETS } from '../data/sampleOmamori';
 import { DEFAULT_KHOEN_PRESETS } from '../data/sampleKhoen';
@@ -152,7 +152,30 @@ export type AdminTabType =
   | 'maintenance'
   | 'email';
 
-export const AdminPage: React.FC<AdminPageProps> = ({
+export const AdminPage: React.FC<AdminPageProps> = (props) => {
+  const { currentSeller, onBackToStore } = props;
+  const sessionUser = currentSeller || (getAdminSession() as SellerUser | null);
+  const hasAdminAccess = isAuthorizedAdminStaff(sessionUser);
+
+  useEffect(() => {
+    if (!hasAdminAccess) {
+      onBackToStore();
+    }
+  }, [hasAdminAccess, onBackToStore]);
+
+  if (!hasAdminAccess) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] w-full flex flex-col items-center justify-center p-8 bg-neutral-950 text-white select-none">
+        <div className="w-12 h-12 rounded-2xl border-4 border-amber-500/20 border-t-amber-500 animate-spin mb-4 shadow-lg shadow-amber-500/10" />
+        <p className="text-xs sm:text-sm text-slate-300 font-normal">Đang nạp không gian quản trị...</p>
+      </div>
+    );
+  }
+
+  return <AdminPageInner {...props} currentSeller={currentSeller || sessionUser || undefined} />;
+};
+
+const AdminPageInner: React.FC<AdminPageProps> = ({
   products,
   categories = DEFAULT_CATEGORIES,
   collections = COLLECTIONS_DATA,

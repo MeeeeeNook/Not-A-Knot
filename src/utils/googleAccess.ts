@@ -19,24 +19,52 @@ export async function withDeadline<T>(operation: Promise<T>, milliseconds: numbe
 }
 
 export async function checkGoogleAccess(email: string, uid: string): Promise<GoogleAccessResult> {
+  const cleanEmail = (email || '').trim().toLowerCase();
   const reads = await Promise.allSettled([
-    getDoc(doc(db, 'authorized_sellers', email)),
-    getDocs(query(collection(db, 'sellers'), where('googleEmail', '==', email), limit(1))),
-    getDocs(query(collection(db, 'sellers'), where('email', '==', email), limit(1))),
-    getDoc(doc(db, 'sellers', uid))
+    cleanEmail ? getDoc(doc(db, 'authorized_sellers', cleanEmail)) : Promise.reject(new Error('no-email')),
+    cleanEmail ? getDocs(query(collection(db, 'sellers'), where('googleEmail', '==', cleanEmail), limit(1))) : Promise.reject(new Error('no-email')),
+    cleanEmail ? getDocs(query(collection(db, 'sellers'), where('email', '==', cleanEmail), limit(1))) : Promise.reject(new Error('no-email')),
+    uid ? getDoc(doc(db, 'sellers', uid)) : Promise.reject(new Error('no-uid'))
   ]);
   const authDoc = reads[0].status === 'fulfilled' && reads[0].value.exists() ? reads[0].value.data() : null;
   let seller: SellerUser | undefined;
   for (const read of [reads[1], reads[2]]) {
     if (read.status === 'fulfilled' && !read.value.empty) {
-      const found = read.value.docs[0]; seller = { ...found.data(), id: found.id } as SellerUser; break;
+      const found = read.value.docs[0];
+      seller = { ...found.data(), id: found.id } as SellerUser;
+      break;
     }
   }
   const uidDoc = reads[3];
-  if (!seller && uidDoc.status === 'fulfilled' && uidDoc.value.exists()) seller = { ...uidDoc.value.data(), id: uidDoc.value.id } as SellerUser;
-  if (authDoc?.isActive === false || seller?.isActive === false) return { isAuthorized: false, conclusive: true, error: GOOGLE_ACCESS_DENIED };
-  if (authDoc || seller) return { isAuthorized: true, conclusive: true, seller, role: seller?.role || authDoc?.role || 'member' };
-  const networkFailed = reads.some((read) => read.status === 'rejected' && read.reason?.code !== 'permission-denied');
+  if (!seller && uidDoc.status === 'fulfilled' && uidDoc.value.exists()) {
+    seller = { ...uidDoc.value.data(), id: uidDoc.value.id } as SellerUser;
+  }
+  if (!seller && authDoc?.sellerId && typeof authDoc.sellerId === 'string') {
+    try {
+      const linkedSnap = await getDoc(doc(db, 'sellers', authDoc.sellerId));
+      if (linkedSnap.exists()) {
+        seller = { ...linkedSnap.data(), id: linkedSnap.id } as SellerUser;
+      }
+    } catch {}
+  }
+  if (authDoc?.isActive === false || seller?.isActive === false) {
+    return { isAuthorized: false, conclusive: true, error: GOOGLE_ACCESS_DENIED };
+  }
+  if (authDoc || seller) {
+    const resolvedRole: SellerUser['role'] =
+      authDoc?.role === 'affiliate' || seller?.role === 'affiliate'
+        ? 'affiliate'
+        : (seller?.role || authDoc?.role || 'member');
+    const normalizedSeller = seller ? { ...seller, role: resolvedRole, isActive: true } : undefined;
+    return { isAuthorized: true, conclusive: true, seller: normalizedSeller, role: resolvedRole };
+  }
+  const networkFailed = reads.some(
+    (read) =>
+      read.status === 'rejected' &&
+      read.reason?.code !== 'permission-denied' &&
+      read.reason?.message !== 'no-email' &&
+      read.reason?.message !== 'no-uid'
+  );
   return { isAuthorized: false, conclusive: !networkFailed, error: networkFailed ? GOOGLE_ACCESS_TIMEOUT : GOOGLE_ACCESS_DENIED };
 }
 

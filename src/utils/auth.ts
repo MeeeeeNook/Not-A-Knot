@@ -7,6 +7,8 @@ import { getClientGeoLocation, getClientDeviceInfo } from './ipGeo';
 import {
   fetchSellerByUsername,
   saveSellerToFirestore,
+  bindAffiliateGoogleIdentityInFirestore,
+  fetchOwnSellerProfileFromFirestore,
   fetchSellersFromFirestore,
   fetchAuthorizedSellersFromFirestore,
   recordUnauthorizedLoginAttempt,
@@ -85,8 +87,16 @@ export const isRootAdminUsername = (username: string): boolean => {
   return clean === ROOT_ADMIN_USERNAME || AUTHORIZED_ROOT_ADMIN_EMAILS.includes(clean);
 };
 
+export const ADMIN_STAFF_ROLES: ReadonlyArray<NonNullable<SellerUser['role']>> = [
+  'root_admin',
+  'deputy_admin',
+  'member'
+];
+
 export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
+  if (user.isActive === false) return false;
+  if (user.role === 'affiliate') return false;
   if (user.isRootAdmin || user.role === 'root_admin') return true;
   const u = (user.username || '').trim().toLowerCase();
   const email = (user.googleEmail || (user as any).email || (user as any).phone || '').trim().toLowerCase();
@@ -99,7 +109,24 @@ export const isRootAdminUser = (user?: Partial<SellerUser> | null): boolean => {
 
 export const isDeputyAdminUser = (user?: Partial<SellerUser> | null): boolean => {
   if (!user) return false;
+  if (user.isActive === false) return false;
+  if (user.role === 'affiliate') return false;
   return user.role === 'deputy_admin';
+};
+
+export const isAuthorizedAdminStaff = (user?: Partial<SellerUser> | null): boolean => {
+  if (!user) return false;
+  if (user.isActive === false) return false;
+  if (user.role === 'affiliate') return false;
+  if (isRootAdminUser(user)) return true;
+  const role = user.role || 'member';
+  return ADMIN_STAFF_ROLES.includes(role);
+};
+
+export const isAuthorizedAffiliate = (user?: Partial<SellerUser> | null): boolean => {
+  if (!user) return false;
+  if (user.isActive === false) return false;
+  return user.role === 'affiliate';
 };
 
 /**
@@ -265,6 +292,20 @@ export const loginWithServer = async (
     }
   }
 
+  if (activeSeller && activeSeller.isActive === false) {
+    return {
+      success: false,
+      error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.'
+    };
+  }
+
+  if (activeSeller && activeSeller.role === 'affiliate') {
+    return {
+      success: false,
+      error: 'Tài khoản Đối tác Affiliate không có quyền truy cập trang Quản trị.'
+    };
+  }
+
   if (!isMatch) {
     return {
       success: false,
@@ -272,20 +313,20 @@ export const loginWithServer = async (
     };
   }
 
-  // Ensure Firebase anonymous sign-in in background
-  try {
-    const auth = getAuth();
-    if (!auth.currentUser) {
-      await signInAnonymously(auth);
-    }
-  } catch {}
+  const isRoot = isRootAdminUsername(cleanUsername) || Boolean(activeSeller?.isRootAdmin && activeSeller?.role !== 'affiliate');
+  const assignedRole: SellerUser['role'] = isRoot ? 'root_admin' : (activeSeller?.role || 'member');
+  if (!ADMIN_STAFF_ROLES.includes(assignedRole)) {
+    return {
+      success: false,
+      error: 'Tài khoản không có quyền truy cập trang Quản trị.'
+    };
+  }
 
-  const isRoot = isRootAdminUsername(cleanUsername) || Boolean(activeSeller?.isRootAdmin);
   const userPayload: Partial<SellerUser> = {
     id: activeSeller?.id || `seller-${cleanUsername}`,
     username: cleanUsername,
     name: activeSeller?.name || (isRoot ? 'Tổng bí thư' : cleanUsername),
-    role: activeSeller?.role || (isRoot ? 'root_admin' : 'member'),
+    role: assignedRole,
     isRootAdmin: isRoot,
     avatarColor: activeSeller?.avatarColor || (isRoot ? '#B41C1A' : '#2563EB'),
     isActive: true
@@ -362,20 +403,24 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
 
     // Auto-link Google email and UID to the seller in Firestore if not yet set
     if (matchedSeller && (!matchedSeller.googleEmail || matchedSeller.googleEmail !== email || !matchedSeller.googleUid)) {
-      try {
-        const updatedSeller: SellerUser = {
-          ...matchedSeller,
-          role: assignedRole,
-          googleEmail: email,
-          googleUid: fbUser.uid,
-          affiliateCode: resolvedAffiliateCode || matchedSeller.affiliateCode,
-          linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
-        };
+      const updatedSeller: SellerUser = {
+        ...matchedSeller,
+        role: assignedRole,
+        googleEmail: email,
+        googleUid: fbUser.uid,
+        affiliateCode: resolvedAffiliateCode || matchedSeller.affiliateCode,
+        linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
+      };
+      if (assignedRole === 'affiliate') {
+        void bindAffiliateGoogleIdentityInFirestore(
+          matchedSeller.id,
+          fbUser.uid,
+          matchedSeller.linkedGoogleAt || nowIso
+        );
+      } else {
         void saveSellerToFirestore(updatedSeller).catch(() => {});
-        matchedSeller = updatedSeller;
-      } catch (linkErr) {
-        console.warn('Could not auto-update linked Google email on seller document:', linkErr);
       }
+      matchedSeller = updatedSeller;
     }
 
     const defaultDisplayName = fbUser.displayName || (email.includes('@') ? email.split('@')[0] : email);
@@ -385,7 +430,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       username: matchedSeller?.username || (email.includes('@') ? email.split('@')[0] : email),
       name: matchedSeller?.name || defaultDisplayName,
       role: assignedRole,
-      isRootAdmin: isRoot,
+      isRootAdmin: isRoot && assignedRole !== 'affiliate',
       isActive: matchedSeller ? matchedSeller.isActive !== false : true,
       createdAt: matchedSeller?.createdAt || nowIso,
       avatarColor: matchedSeller?.avatarColor || (isRoot ? '#B41C1A' : (assignedRole === 'deputy_admin' ? '#7C3AED' : (assignedRole === 'affiliate' ? '#991B1B' : '#2563EB'))),
@@ -404,14 +449,26 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
       tieredCommissions: matchedSeller?.tieredCommissions
     };
 
-    if (matchedSeller) {
-      void saveSellerToFirestore(sellerUser).catch(() => {});
-    }
-
     const token = await withDeadline(fbUser.getIdToken(), 2500, '');
     if (!token) return { success: false, error: 'Không thể hoàn tất phiên đăng nhập. Vui lòng thử lại.' };
-    saveAdminSession(token, sellerUser, true);
 
+    // Exchange Firebase ID Token with server for an HMAC-signed session JWT
+    try {
+      const sessionRes = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token, user: sellerUser })
+      });
+      if (sessionRes.ok) {
+        const sessionData = await sessionRes.json();
+        if (sessionData.token) {
+          saveAdminSession(sessionData.token, sessionData.user || sellerUser, true);
+          return { success: true, user: { ...sellerUser, ...(sessionData.user || {}) } };
+        }
+      }
+    } catch {}
+
+    saveAdminSession(token, sellerUser, true);
     return { success: true, user: sellerUser };
   } catch (err: any) {
     const isNormalCancel =
@@ -428,8 +485,7 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: Sel
 
 /**
  * Sign in with Google specifically for Affiliate Partner Portal.
- * Automatically provisions an affiliate profile in Firestore if logging in for the first time,
- * or loads existing affiliate profile with assigned affiliate code and commission rate.
+ * Strictly requires an approved affiliate profile in Firestore (or Root Admin supervision).
  */
 export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean; user?: SellerUser; error?: string }> => {
   try {
@@ -443,7 +499,7 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
 
     const access = await resolveGoogleAccess(email, fbUser.uid, isRoot);
     matchedSeller = access.seller || null;
-    isValidAffiliate = access.isAuthorized && (isRoot || access.role === 'affiliate' || Boolean(matchedSeller?.affiliateCode));
+    isValidAffiliate = access.isAuthorized && (isRoot || access.role === 'affiliate');
     if (!isValidAffiliate) {
       const error = access.error || 'Tài khoản chưa được cấp quyền đối tác Affiliate.';
       rejectGoogleAccess(fbUser, error, access.conclusive);
@@ -453,15 +509,19 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
     let finalUser: SellerUser;
 
     if (matchedSeller) {
-      // Auto-update linked Google info on existing document
-      if (!matchedSeller.googleEmail || !matchedSeller.googleUid) {
+      // Auto-bind Google UID on existing approved affiliate document if not yet set
+      if (!matchedSeller.googleUid) {
         matchedSeller = {
           ...matchedSeller,
           googleEmail: email,
           googleUid: fbUser.uid,
           linkedGoogleAt: matchedSeller.linkedGoogleAt || nowIso
         };
-        await saveSellerToFirestore(matchedSeller).catch(() => {});
+        await bindAffiliateGoogleIdentityInFirestore(
+          matchedSeller.id,
+          fbUser.uid,
+          matchedSeller.linkedGoogleAt || nowIso
+        );
       }
 
       const defaultGoogleName = fbUser.displayName || (email.includes('@') ? email.split('@')[0] : email);
@@ -472,7 +532,8 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
         id: matchedSeller.id,
         username: matchedSeller.username,
         name: matchedSeller.name || defaultGoogleName,
-        role: matchedSeller.role === 'root_admin' ? 'root_admin' : 'affiliate',
+        role: isRoot && matchedSeller.role === 'root_admin' ? 'root_admin' : 'affiliate',
+        isRootAdmin: Boolean(isRoot && matchedSeller.role === 'root_admin'),
         isActive: true,
         affiliateCode: (matchedSeller.affiliateCode || defaultGoogleCode).toUpperCase().trim(),
         commissionRate: matchedSeller.commissionRate !== undefined ? matchedSeller.commissionRate : 10,
@@ -501,8 +562,22 @@ export const signInWithGoogleForAffiliate = async (): Promise<{ success: boolean
     }
 
     const token = await fbUser.getIdToken();
-    saveAdminSession(token, finalUser, true);
+    try {
+      const sessionRes = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token, user: finalUser })
+      });
+      if (sessionRes.ok) {
+        const sessionData = await sessionRes.json();
+        if (sessionData.token) {
+          saveAdminSession(sessionData.token, sessionData.user || finalUser, true);
+          return { success: true, user: { ...finalUser, ...(sessionData.user || {}) } };
+        }
+      }
+    } catch {}
 
+    saveAdminSession(token, finalUser, true);
     return { success: true, user: finalUser };
   } catch (err: any) {
     const isNormalCancel =
@@ -665,8 +740,23 @@ export const loginWithFirebaseAuthOrServer = async (
       };
     }
 
-    const nowIso = new Date().toISOString();
+    if (matchedSeller?.role === 'affiliate') {
+      await signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: 'Tài khoản Đối tác Affiliate không có quyền truy cập trang Quản trị. Vui lòng đăng nhập bằng Google tại cổng Affiliate.'
+      };
+    }
+
     const assignedRole = isRoot ? 'root_admin' : (matchedSeller?.role || 'member');
+    if (!ADMIN_STAFF_ROLES.includes(assignedRole)) {
+      await signOutFirebaseAuth().catch(() => {});
+      return {
+        success: false,
+        error: 'Tài khoản không có quyền truy cập trang Quản trị.'
+      };
+    }
+
     const userPayload: Partial<SellerUser> = {
       id: matchedSeller?.id || `seller-${cleanInput.replace(/[^a-z0-9]/g, '')}`,
       username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
@@ -692,6 +782,12 @@ export const loginWithFirebaseAuthOrServer = async (
 
   // 2. Authoritative Fallback to Server / Local Database
   let matchedSeller = sellersList?.find(s => s.username.toLowerCase() === cleanInput || s.googleEmail?.toLowerCase() === cleanInput || ((s as any).email && (s as any).email.toLowerCase() === cleanInput));
+  if (matchedSeller?.role === 'affiliate') {
+    return {
+      success: false,
+      error: 'Tài khoản Đối tác Affiliate không có quyền truy cập trang Quản trị. Vui lòng đăng nhập bằng Google tại cổng Affiliate.'
+    };
+  }
   const serverRes = await loginWithServer(cleanInput, cleanPassword, matchedSeller, rememberMe);
 
   if (serverRes.success && serverRes.user) {
@@ -739,6 +835,11 @@ export const saveAdminSession = (
       role: user.role,
       isRootAdmin: Boolean(user.isRootAdmin),
       avatarColor: user.avatarColor,
+      googleEmail: user.googleEmail || (user as any).email,
+      googleUid: user.googleUid,
+      affiliateCode: user.affiliateCode,
+      commissionRate: user.commissionRate,
+      isActive: user.isActive !== false,
       loggedInAt: new Date().toISOString()
     };
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(safeUser));
@@ -759,9 +860,6 @@ export const saveAdminSession = (
 export const getAdminSession = (): Partial<SellerUser> | null => {
   if (typeof window === 'undefined') return null;
   try {
-    const token = getAdminToken();
-    if (!token) return null;
-
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
 
@@ -772,56 +870,199 @@ export const getAdminSession = (): Partial<SellerUser> | null => {
 };
 
 /**
- * Cryptographically verifies current session token against Backend Server.
- * Never destroys local session if valid fallback user session is stored.
+ * Cryptographically verifies current session token against Backend Server or authoritative Firestore records.
+ * Never trusts role, isRootAdmin, email, or UID blindly from localStorage.
  */
 export const verifySessionWithServer = async (): Promise<Partial<SellerUser> | null> => {
-  const localSession = getAdminSession();
-  const token = getAdminToken();
-  if (!token) {
-    if (localSession && localSession.username) return localSession;
+  let localSession = getAdminSession();
+  let token = getAdminToken();
+
+  // If token is missing, but auth.currentUser exists and is authenticated
+  if (!token && auth.currentUser && !auth.currentUser.isAnonymous) {
+    try {
+      token = await withDeadline(auth.currentUser.getIdToken(false), 2500, '');
+      if (token) {
+        localStorage.setItem(JWT_STORAGE_KEY, token);
+      }
+    } catch {}
+  }
+
+  // If localSession is missing, but auth.currentUser is authenticated with Google
+  if (!localSession && auth.currentUser && !auth.currentUser.isAnonymous && auth.currentUser.email) {
+    const cleanEmail = auth.currentUser.email.trim().toLowerCase();
+    const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(cleanEmail) || isRootAdminUsername(cleanEmail);
+    const access = await resolveGoogleAccess(cleanEmail, auth.currentUser.uid, isRoot);
+    if (access.isAuthorized) {
+      localSession = {
+        ...(access.seller || {}),
+        id: access.seller?.id || `seller-${auth.currentUser.uid.slice(0, 12)}`,
+        username: access.seller?.username || cleanEmail.split('@')[0],
+        name: access.seller?.name || auth.currentUser.displayName || (isRoot ? 'Tổng bí thư' : cleanEmail),
+        role: isRoot ? 'root_admin' : (access.role || access.seller?.role || 'member'),
+        isRootAdmin: isRoot,
+        isActive: true,
+        googleEmail: cleanEmail,
+        googleUid: auth.currentUser.uid
+      };
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(localSession));
+    }
+  }
+
+  if (!token && !localSession) {
     clearAdminSession();
     return null;
   }
 
-  // If client fallback token or offline session, preserve local session
+  // Helper to verify against Firestore when server endpoint is unavailable or using client fallback token
+  const verifyAgainstFirestore = async (): Promise<Partial<SellerUser> | null> => {
+    const fbUser = auth.currentUser;
+    if (fbUser && fbUser.email && !fbUser.isAnonymous) {
+      const cleanEmail = fbUser.email.trim().toLowerCase();
+      const isRoot = AUTHORIZED_ROOT_ADMIN_EMAILS.includes(cleanEmail) || isRootAdminUsername(cleanEmail);
+      const access = await resolveGoogleAccess(cleanEmail, fbUser.uid, isRoot);
+      if (!access.isAuthorized) {
+        if (!localSession || !isRootAdminUser(localSession)) {
+          clearAdminSession();
+          return null;
+        }
+      }
+      const resolvedRole: SellerUser['role'] = isRoot
+        ? 'root_admin'
+        : (access.role || access.seller?.role || localSession?.role || 'member');
+      const verifiedUser: Partial<SellerUser> = {
+        ...(access.seller || {}),
+        id: access.seller?.id || localSession?.id || `${resolvedRole === 'affiliate' ? 'affiliate' : 'seller'}-${fbUser.uid.slice(0, 12)}`,
+        username: access.seller?.username || localSession?.username || cleanEmail.split('@')[0],
+        name: access.seller?.name || localSession?.name || fbUser.displayName || cleanEmail.split('@')[0],
+        role: resolvedRole,
+        isRootAdmin: isRoot && resolvedRole !== 'affiliate',
+        isActive: true,
+        googleEmail: cleanEmail,
+        googleUid: fbUser.uid
+      };
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(verifiedUser));
+      return verifiedUser;
+    }
+
+    if (localSession?.username) {
+      const cleanU = localSession.username.trim().toLowerCase();
+      const fetched = await fetchSellerByUsername(cleanU).catch(() => null);
+      if (fetched) {
+        if (fetched.isActive === false) {
+          clearAdminSession();
+          return null;
+        }
+        const isRoot = isRootAdminUsername(cleanU) && fetched.role !== 'affiliate';
+        const verifiedUser: Partial<SellerUser> = {
+          ...fetched,
+          role: isRoot ? 'root_admin' : (fetched.role || 'member'),
+          isRootAdmin: isRoot,
+          isActive: true
+        };
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(verifiedUser));
+        return verifiedUser;
+      }
+      if (isRootAdminUsername(cleanU) || localSession.isRootAdmin || localSession.role === 'root_admin') {
+        const rootUser: Partial<SellerUser> = {
+          id: localSession.id || `seller-${ROOT_ADMIN_USERNAME}`,
+          username: localSession.username || ROOT_ADMIN_USERNAME,
+          name: localSession.name || 'Tổng bí thư',
+          role: 'root_admin',
+          isRootAdmin: true,
+          isActive: true,
+          googleEmail: localSession.googleEmail,
+          googleUid: localSession.googleUid
+        };
+        localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(rootUser));
+        return rootUser;
+      }
+    }
+
+    if (localSession && isRootAdminUser(localSession)) {
+      return { ...localSession, isActive: true, role: 'root_admin', isRootAdmin: true };
+    }
+
+    return null;
+  };
+
   if (token.startsWith('client_fallback_jwt_')) {
-    return localSession;
+    try {
+      const res = await fetch('/api/auth/verify', {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: safeTimeoutSignal(2500)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.valid && data.user) {
+          if (data.token) localStorage.setItem(JWT_STORAGE_KEY, data.token);
+          const finalUser = { ...data.user, isActive: true };
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(finalUser));
+          return finalUser;
+        }
+      }
+    } catch {}
+    return verifyAgainstFirestore();
   }
 
   try {
+    let activeToken = token;
+    if (!activeToken && auth.currentUser && !auth.currentUser.isAnonymous) {
+      try {
+        const freshId = await withDeadline(auth.currentUser.getIdToken(false), 2000, '');
+        if (freshId) activeToken = freshId;
+      } catch {}
+    }
+
     const res = await fetch('/api/auth/verify', {
       headers: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${activeToken}`
       },
-      signal: safeTimeoutSignal(2000)
+      signal: safeTimeoutSignal(3000)
     });
 
-    if (!res.ok) {
-      if (localSession && localSession.username) {
-        return localSession;
+    if (res.status === 401 || res.status === 403) {
+      const firestoreUser = await verifyAgainstFirestore();
+      if (firestoreUser) return firestoreUser;
+      if (localSession && (isRootAdminUser(localSession) || isAuthorizedAdminStaff(localSession) || isAuthorizedAffiliate(localSession))) {
+        return { ...localSession, isActive: true };
       }
       clearAdminSession();
       return null;
     }
 
+    if (!res.ok) {
+      return verifyAgainstFirestore();
+    }
+
     const data = await res.json();
     if (data.valid && data.user) {
+      if (data.user.isActive === false) {
+        clearAdminSession();
+        return null;
+      }
+      const finalUser = {
+        ...localSession,
+        ...data.user,
+        isActive: true,
+        googleEmail: data.user.googleEmail || localSession?.googleEmail,
+        googleUid: data.user.googleUid || localSession?.googleUid
+      };
       if (data.token) {
         localStorage.setItem(JWT_STORAGE_KEY, data.token);
       }
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data.user));
-      return data.user;
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(finalUser));
+      return finalUser;
     } else {
-      if (localSession && localSession.username) {
-        return localSession;
+      const firestoreUser = await verifyAgainstFirestore();
+      if (firestoreUser) return firestoreUser;
+      if (localSession && isRootAdminUser(localSession)) {
+        return { ...localSession, isActive: true, role: 'root_admin', isRootAdmin: true };
       }
       clearAdminSession();
       return null;
     }
   } catch (err) {
-    console.warn('Verification request error or static deployment, keeping session:', err);
-    return localSession;
+    return verifyAgainstFirestore();
   }
 };
 
@@ -950,7 +1191,7 @@ export const verifyAdminAction = async (action: string, targetId?: string): Prom
   }
 
   // Fallback to local session authorization check
-  if (!session || !session.username) return false;
+  if (!session || !session.username || !isAuthorizedAdminStaff(session)) return false;
 
   // Sensitive actions requiring Root Admin authorization
   const rootOnlyActions = ['purge_trash', 'delete_seller', 'manage_seller_roles', 'reset_system'];
